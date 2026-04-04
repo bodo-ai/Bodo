@@ -7,6 +7,7 @@
 #include "../libs/_distributed.h"
 #include "../libs/_table_builder.h"
 #include "../libs/_table_builder_utils.h"
+#include "gpu_table_batcher.h"
 #include "operator.h"
 
 inline bool gpu_capable(duckdb::LogicalLimit& logical_limit) { return true; }
@@ -19,7 +20,12 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
    public:
     explicit PhysicalGPULimit(uint64_t nrows,
                               std::shared_ptr<bodo::Schema> input_schema)
-        : n(nrows), local_remaining(nrows), output_schema(input_schema) {}
+        : n(nrows),
+          local_remaining(nrows),
+          collected_rows(get_gpu_streaming_batch_size()),
+          output_schema(input_schema) {
+        arrow_output_schema = output_schema->ToArrowSchema();
+    }
 
     virtual ~PhysicalGPULimit() = default;
 
@@ -31,23 +37,19 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
      *
      */
     void FinalizeSink() override {
-        int n_pes = 0;
-        int myrank = 0;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);   // total ranks
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);  // my rank
+        GpuMpiManager gpu_mpi;
+
+        int n_pes = gpu_mpi.get_num_ranks();  // total gpus
+        int myrank = gpu_mpi.get_rank();
 
         // Gather how many rows are on each rank
         std::vector<uint64_t> row_counts(n_pes);
 
-        // Sum up total rows this rank has collected.
-        uint64_t cur_rows = 0;
-        for (auto it = collected_rows->builder->begin();
-             it != collected_rows->builder->end(); ++it) {
-            cur_rows += (*it)->nrows();
-        }
+        // Get total rows on this GPU.
+        uint64_t cur_rows = collected_rows.size();
         CHECK_MPI(MPI_Allgather(&cur_rows, 1, MPI_UNSIGNED_LONG_LONG,
                                 row_counts.data(), 1, MPI_UNSIGNED_LONG_LONG,
-                                MPI_COMM_WORLD),
+                                gpu_mpi.get_mpi_comm()),
                   "PhysicalGPULimit: MPI error on MPI_Allgather:");
 
         uint64_t local_remaining = 0;
@@ -60,45 +62,10 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
             n -= num_from_rank;
         }
 
-        auto reduced_collected_rows =
-            std::make_unique<ChunkedTableBuilderState>(
-                collected_rows->table_schema,
-                collected_rows->builder->active_chunk_capacity);
-        while (!collected_rows->builder->empty()) {
-            auto next_batch = collected_rows->builder->PopChunk();
-            uint64_t select_local =
-                std::min(local_remaining, (uint64_t)std::get<1>(next_batch));
-            auto unified_table = unify_dictionary_arrays_helper(
-                std::get<0>(next_batch), reduced_collected_rows->dict_builders,
-                0);
-            reduced_collected_rows->builder->AppendBatch(
-                unified_table, get_n_rows(select_local));
-            reduced_collected_rows->builder->FinalizeActiveChunk();
-            local_remaining -= select_local;
-        }
-
-        collected_rows = std::move(reduced_collected_rows);
+        collected_rows.keep_first_n_rows(local_remaining);
     }
 
     void FinalizeSource() override {}
-
-    /**
-     * @brief get_n_rows - utility function to get a fixed number of rows from a
-     * cudf::table
-     *
-     * param input_batch - the table to return a subset of
-     * param num_rows - the number of rows of the table to return
-     *
-     * returns std::shared_ptr<table_info> - the table restriced to num_rows
-     * rows.
-     */
-    std::vector<int64_t> get_n_rows(uint64_t num_rows) {
-        std::vector<int64_t> rowInds(num_rows);
-        for (uint64_t i = 0; i < num_rows; ++i) {
-            rowInds[i] = i;
-        }
-        return rowInds;
-    }
 
     /**
      * @brief Do limit.
@@ -110,18 +77,16 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        if (!collected_rows) {
-            collected_rows = std::make_unique<ChunkedTableBuilderState>(
-                input_batch->schema(), get_streaming_batch_size());
-        }
         // Every rank will collect n rows.  We remove extras in Finalize.
-        uint64_t select_local = std::min(local_remaining, input_batch->nrows());
+        uint64_t select_local =
+            std::min(local_remaining,
+                     static_cast<uint64_t>(input_batch.table->num_rows()));
         if (select_local > 0) {
-            auto unified_table = unify_dictionary_arrays_helper(
-                input_batch, collected_rows->dict_builders, 0);
-            collected_rows->builder->AppendBatch(unified_table,
-                                                 get_n_rows(select_local));
-            collected_rows->builder->FinalizeActiveChunk();
+            std::unique_ptr<cudf::table> first_select_local_rows =
+                std::make_unique<cudf::table>(
+                    cudf::slice(input_batch.table->view(),
+                                {0, (int)select_local}, se->stream)[0]);
+            collected_rows.push_table(std::move(first_select_local_rows));
             local_remaining -= select_local;
         }
         return (local_remaining == 0 ||
@@ -145,17 +110,18 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
      *
      * returns std::pair<GPU_DATA, OperatorResult>
      */
-    std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU() override {
+    std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
+        std::shared_ptr<StreamAndEvent> se) override {
         if (!is_gpu_rank()) {
-            return {GPU_DATA(nullptr, out_schema->ToArrowSchema(), se),
+            return {GPU_DATA(nullptr, arrow_output_schema, se),
                     OperatorResult::FINISHED};
         }
 
-        auto next_batch = collected_rows->builder->PopChunk(true);
-        return {std::get<0>(next_batch),
-                collected_rows->builder->empty()
-                    ? OperatorResult::FINISHED
-                    : OperatorResult::HAVE_MORE_OUTPUT};
+        auto next_batch = collected_rows.get_batch();
+        GPU_DATA out_table_info(std::move(next_batch), arrow_output_schema, se);
+        return {out_table_info, collected_rows.empty()
+                                    ? OperatorResult::FINISHED
+                                    : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
     /**
@@ -169,6 +135,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
 
    private:
     uint64_t n, local_remaining;
-    std::unique_ptr<ChunkedTableBuilderState> collected_rows;
+    TableFifoBatcher collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
+    std::shared_ptr<arrow::Schema> arrow_output_schema;
 };

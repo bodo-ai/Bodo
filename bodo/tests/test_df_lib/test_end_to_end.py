@@ -688,7 +688,6 @@ def test_series_head(datapath):
     assert len(bodo_df3) == 3
 
 
-@pytest.mark.gpu
 def test_head(datapath):
     """Test for head pushed down to read parquet."""
 

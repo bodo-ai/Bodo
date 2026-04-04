@@ -208,3 +208,18 @@ def test_gpu_join_bloom_filter(datapath, broadcast):
             result_bodo = pd.read_parquet(out_path_bodo)
             result_pd = pd.read_parquet(out_path_pd)
             _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
+
+
+def test_head(datapath):
+    """Test head.  Using sum aggregate to prevent pushdowns."""
+    with tempfile.TemporaryDirectory() as tmp:
+        df1_path = datapath("dataframe_library/df1.parquet")
+        df1_bodo = bd.read_parquet(df1_path)
+        out_path_bodo = os.path.join(tmp, "out_bodo.pq")
+        df1_agg = getattr(
+            df1_bodo.groupby("D", as_index=False, sort=False)["A"], "sum"
+        )().head(3)
+        df1_agg.to_parquet(out_path_bodo)
+
+        result_bodo = pd.read_parquet(out_path_bodo)
+        assert len(result_bodo) == 3

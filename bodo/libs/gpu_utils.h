@@ -259,6 +259,7 @@ class GpuMpiManager {
     ~GpuMpiManager();
 
     int get_rank() const { return rank; }
+    int get_num_ranks() const { return n_ranks; }
 
     /**
      * @brief Get the underlying CUDA stream
