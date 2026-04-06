@@ -163,10 +163,13 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
 
     std::unique_ptr<cudf::table> global_pivots = nullptr;
     if (!all_sample_views.empty()) {
-        std::unique_ptr<cudf::table> combined_samples =
-            cudf::concatenate(all_sample_views, stream);
-        std::unique_ptr<cudf::table> sorted_samples = cudf::sort(
-            combined_samples->view(), column_order, null_precedence, stream);
+        // Since each rank's samples are already sorted, we can merge them
+        // instead of concatenating and re-sorting.
+        std::vector<cudf::size_type> sample_key_indices(key_indices.size());
+        std::iota(sample_key_indices.begin(), sample_key_indices.end(), 0);
+        std::unique_ptr<cudf::table> sorted_samples =
+            cudf::merge(all_sample_views, sample_key_indices, column_order,
+                        null_precedence, stream);
 
         // Select P-1 pivots
         cudf::size_type n_total_samples = sorted_samples->num_rows();
