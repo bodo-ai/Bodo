@@ -905,8 +905,7 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         if (scalar_func_data.arrow_func_name == "ends_with" ||
             scalar_func_data.arrow_func_name == "starts_with") {
             extract_string_arg_from_python();
-        }
-        if (scalar_func_data.arrow_func_name == "round") {
+        } else if (scalar_func_data.arrow_func_name == "round") {
             extract_round_arg_from_python();
         }
     }
