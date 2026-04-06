@@ -65,7 +65,6 @@ int get_node_id() {
                               MPI_COMM_WORLD),
                   "dist_get_ranks_on_node: MPI error on MPI_Scatter:");
     }
-    std::cout << "Rank " << rank << " on node " << node_id << std::endl;
 
     cached_node_id = node_id;
     cache_initialized = true;
@@ -79,7 +78,9 @@ int get_node_id() {
  *
  * Use MPI_Comm_split to create a communicator for each node based on node_id
  * (node id is a unique id based on output of MPI_Get_processor_name). This
- * works around issues with MPI_Comm_split_type for CUDA-Aware MPICH
+ * works around issues with MPI_Comm_split_type for CUDA-Aware MPICH.
+ * TODO: use hwloc approach for all platforms and make sure it's packaged
+ * properly.
  */
 std::tuple<int, int> dist_get_ranks_on_node() {
     static std::tuple<int, int> cached_result;
