@@ -40,12 +40,9 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
         GpuMpiManager gpu_mpi;
 
         if (!is_gpu_rank()) {
-            std::cout << "gpu limit finalizesink start" << std::endl;
-            std::cout << "gpu limit finalizesink end" << std::endl;
             return;
         }
 
-        std::cout << "gpu limit finalizesink start" << std::endl;
         int n_pes = gpu_mpi.get_num_ranks();  // total gpus
         int myrank = gpu_mpi.get_rank();
 
@@ -70,7 +67,6 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
         }
 
         collected_rows.keep_first_n_rows(local_remaining);
-        std::cout << "gpu limit finalizesink end" << std::endl;
     }
 
     void FinalizeSource() override {}
@@ -85,9 +81,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        std::cout << "gpu limit consumebatchgpu start" << std::endl;
         if (!is_gpu_rank()) {
-            std::cout << "gpu limit consumebatchgpu end" << std::endl;
             return OperatorResult::FINISHED;
         }
         // Every rank will collect n rows.  We remove extras in Finalize.
@@ -102,7 +96,6 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
             collected_rows.push_table(std::move(first_select_local_rows));
             local_remaining -= select_local;
         }
-        std::cout << "gpu limit consumebatchgpu end" << std::endl;
         return (local_remaining == 0 ||
                 prev_op_result == OperatorResult::FINISHED)
                    ? OperatorResult::FINISHED
@@ -126,16 +119,13 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
      */
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
-        std::cout << "gpu limit producebatchgpu start" << std::endl;
         if (!is_gpu_rank()) {
-            std::cout << "gpu limit producebatchgpu end" << std::endl;
             return {GPU_DATA(nullptr, arrow_output_schema, se),
                     OperatorResult::FINISHED};
         }
 
         auto next_batch = collected_rows.get_batch();
         GPU_DATA out_table_info(std::move(next_batch), arrow_output_schema, se);
-        std::cout << "gpu limit producebatchgpu end" << std::endl;
         return {out_table_info, collected_rows.empty()
                                     ? OperatorResult::FINISHED
                                     : OperatorResult::HAVE_MORE_OUTPUT};
