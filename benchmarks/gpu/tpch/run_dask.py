@@ -47,22 +47,13 @@ def q5(root: str) -> DataFrame:
     return gb.reset_index().sort_values("REVENUE", ascending=False)
 
 
-def run_q5_with_timings(
-    root: str, out_path: str | None = None, print_output=False
-) -> float:
+def run_q5_with_timing(root: str) -> float:
     """Function for running Q5 on a cluster and getting the total execution time."""
     start_time = time.time()
-    if out_path:
-        q5(root).to_parquet(out_path, compute=True)
-    else:
-        result = q5(root).compute()
-        if print_output:
-            print(result)
+    result = q5(root).compute()
+    total_time = time.time() - start_time
 
-    end_time = time.time()
-    total_time = end_time - start_time
-
-    return total_time
+    return result, total_time
 
 
 def main():
@@ -115,12 +106,6 @@ def main():
         default=None,
         help="Subnet ID for EC2 instances (within us-east-2)",
     )
-    parser.add_argument(
-        "--output_path",
-        type=str,
-        default=None,
-        help="S3 path for output data for multi-node runs",
-    )
 
     args = parser.parse_args()
 
@@ -140,13 +125,6 @@ def main():
 
     if args.run_multi_node:
         from dask_cloudprovider.aws import EC2Cluster
-
-        if args.output_path and not args.output_path.startswith("s3://"):
-            raise ValueError("Output path must start with 's3://' for multi-node.")
-        if args.print_output:
-            raise ValueError(
-                "Printing output on multi-node clusters is not allowed, use --output_path <path> instead."
-            )
 
         # Use GPU AMI with Nvidia drivers pre-installed to speed up cluster startup time
         # The specific AMI below was obtained from the following command:
@@ -174,7 +152,7 @@ def main():
             worker_class="dask_cuda.CUDAWorker",
             worker_options={"rmm_managed_memory": True},
             docker_args="--shm-size=256m -e EXTRA_CONDA_PACKAGES=s3fs",
-            n_workers=args.num_workers,
+            n_workers=args.n_workers,
             filesystem_size=250,  # GB
             region="us-east-2",
             subnet_id=args.subnet_id,
@@ -189,23 +167,23 @@ def main():
         dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
         dask.config.set({"distributed.comm.timeouts.connect": "600s"})
 
-        cluster = LocalCUDACluster(
-            n_workers=args.n_workers, rmm_managed_memory=True, enable_cudf_spill=True
-        )
+        cluster = LocalCUDACluster(n_workers=args.n_workers, enable_cudf_spill=True)
         client = Client(cluster)
 
     if args.warmup:
         try:
             print("Running warmup...")
-            client.submit(run_q5_with_timings, args.root).result()
+            client.submit(run_q5_with_timing, args.root).result()
             print("Warmup complete.")
         except Exception as e:
             print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
-            total_time = client.submit(
-                run_q5_with_timings, args.root, args.output_path, args.print_output
-            ).result()
+            res, total_time = client.submit(run_q5_with_timing, args.root).result()
+
+            if args.print_output:
+                print(res)
+
             print(
                 f"Q5 dask (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
             )
