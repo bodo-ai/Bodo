@@ -131,6 +131,11 @@ def main():
         type=str,
         default=None,
     )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default=None,
+    )
 
     args = parser.parse_args()
 
@@ -205,8 +210,11 @@ def main():
         try:
             t0 = time.time()
             result = q5(args.root, pd_impl)
-            if args.library == "bodo":
+            if args.output_path:
+                result.to_parquet(args.output_path)
+            elif args.library == "bodo":
                 result = result.execute_plan()
+
             total_time = time.time() - t0
             print(
                 f"Q5 {args.library} (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
