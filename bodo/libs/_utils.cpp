@@ -1,5 +1,4 @@
 #include "_utils.h"
-#include <mpi.h>
 
 #ifdef __linux__
 #include <unistd.h>
