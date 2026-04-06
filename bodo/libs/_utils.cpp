@@ -13,18 +13,71 @@
 #include "_distributed.h"
 #include "_mpi.h"
 
+int get_node_id() {
+    static int cached_node_id;
+    static bool cache_initialized = false;
+
+    if (cache_initialized) {
+        return cached_node_id;
+    }
+
+    int rank, n_pes;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    char hostname[MPI_MAX_PROCESSOR_NAME];
+    int len;
+    CHECK_MPI(MPI_Get_processor_name(hostname, &len),
+              "dist_get_ranks_on_node: MPI error on MPI_Get_processor_name:");
+
+    std::vector<char> all_hostnames;
+    if (rank == 0) {
+        all_hostnames.resize(n_pes * MPI_MAX_PROCESSOR_NAME);
+    }
+
+    CHECK_MPI(MPI_Gather(hostname, MPI_MAX_PROCESSOR_NAME, MPI_CHAR,
+                         all_hostnames.data(), MPI_MAX_PROCESSOR_NAME, MPI_CHAR,
+                         0, MPI_COMM_WORLD),
+              "dist_get_ranks_on_node: MPI error on MPI_Gather:");
+
+    int node_id;
+    if (rank == 0) {
+        std::map<std::string, int> node_map;
+        int next_id = 0;
+
+        std::vector<int> node_ids(n_pes);
+
+        for (int i = 0; i < n_pes; ++i) {
+            std::string h(&all_hostnames[i * MPI_MAX_PROCESSOR_NAME]);
+
+            if (node_map.count(h) == 0) {
+                node_map[h] = next_id++;
+            }
+            node_ids[i] = node_map[h];
+        }
+
+        CHECK_MPI(MPI_Scatter(node_ids.data(), 1, MPI_INT, &node_id, 1, MPI_INT,
+                              0, MPI_COMM_WORLD),
+                  "dist_get_ranks_on_node: MPI error on MPI_Scatter:");
+    } else {
+        CHECK_MPI(MPI_Scatter(nullptr, 1, MPI_INT, &node_id, 1, MPI_INT, 0,
+                              MPI_COMM_WORLD),
+                  "dist_get_ranks_on_node: MPI error on MPI_Scatter:");
+    }
+
+    cached_node_id = node_id;
+    cache_initialized = true;
+    return cached_node_id;
+}
+
 #ifdef USE_CUDF
 
-#include <hwloc.h>
-
 /**
- * @brief Detect the number of physical cores on the node and the current rank's
- * position on the node. This assumes that the cluster is homogeneous and that
- * the number of physical cores is the same on each node. This version avoids
- * creating MPI sub-communicators since CUDA-aware MPICH doesn't seem to support
- * MPI_COMM_TYPE_SHARED properly.
- * TODO: use hwloc approach for all platforms and make sure it's packaged
- * properly.
+ * @brief Get the number of ranks on this node and the current rank's position.
+ *
+ * Use MPI_Comm_split to create a communicator for each node based on node_id
+ * (node id is a unique id based on output of MPI_Get_processor_name). This
+ * works around issues with MPI_Comm_split_type for CUDA-Aware MPICH.
  *
  * @return std::tuple<int, int> number of cores on the node, rank's position on
  * the node
@@ -37,38 +90,19 @@ std::tuple<int, int> dist_get_ranks_on_node() {
         return cached_result;
     }
 
-    hwloc_topology_t topo;
-    int err;
+    int node_id = get_node_id();
+    MPI_Comm node_comm;
+    // Passing zero as key reuses ordering from the original communicator.
+    CHECK_MPI(MPI_Comm_split(MPI_COMM_WORLD, node_id, 0, &node_comm),
+              "dist_get_ranks_on_node: MPI error on MPI_Comm_split:");
 
-    err = hwloc_topology_init(&topo);
-    if (err) {
-        throw std::runtime_error("Failed to initialize hwloc topology");
-    }
+    int npes_node, rank_on_node;
+    MPI_Comm_size(node_comm, &npes_node);
+    MPI_Comm_rank(node_comm, &rank_on_node);
 
-    err = hwloc_topology_load(topo);
-    if (err) {
-        hwloc_topology_destroy(topo);
-        throw std::runtime_error("Failed to load hwloc topology");
-    }
+    MPI_Comm_free(&node_comm);
 
-    int ncores_on_node = hwloc_get_nbobjs_by_type(topo, HWLOC_OBJ_CORE);
-
-    hwloc_topology_destroy(topo);
-
-    int is_initialized;
-    MPI_Initialized(&is_initialized);
-    if (!is_initialized) {
-        CHECK_MPI(MPI_Init(nullptr, nullptr),
-                  "dist_get_ranks_on_node: MPI error on MPI_Init:");
-    }
-
-    int rank;
-    CHECK_MPI(MPI_Comm_rank(MPI_COMM_WORLD, &rank),
-              "dist_get_ranks_on_node: MPI error on MPI_Comm_rank:");
-
-    int rank_on_node = rank % ncores_on_node;
-
-    cached_result = std::make_tuple(ncores_on_node, rank_on_node);
+    cached_result = std::make_tuple(npes_node, rank_on_node);
     cache_initialized = true;
 
     return cached_result;

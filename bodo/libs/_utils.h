@@ -13,6 +13,15 @@
 #include "_array_build_buffer.h"
 
 /**
+ * @brief Get a unique id for the current node this rank is located on.
+ *
+ * @note this is a collective operation and therefore all ranks must call it.
+ *
+ * @return int Unique id for the current node this rank is located on.
+ */
+[[maybe_unused]] int get_node_id();
+
+/**
  * @brief Get the number of ranks on this node and the
  * current rank's position.
  *
