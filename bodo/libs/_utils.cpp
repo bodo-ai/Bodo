@@ -80,6 +80,9 @@ int get_node_id() {
  * works around issues with MPI_Comm_split_type for CUDA-Aware MPICH.
  * TODO: use hwloc approach for all platforms and make sure it's packaged
  * properly.
+ *
+ * @return std::tuple<int, int> number of cores on the node, rank's position on
+ * the node
  */
 std::tuple<int, int> dist_get_ranks_on_node() {
     static std::tuple<int, int> cached_result;
