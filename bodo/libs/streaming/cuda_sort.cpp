@@ -35,7 +35,10 @@ void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
     if (table->num_rows() == 0) {
         return;
     }
-    accumulation_buffer.push_back(std::move(table));
+    std::unique_ptr<cudf::table> sorted_table =
+        cudf::sort_by_key(table->view(), table->select(key_indices),
+                          column_order, null_precedence, input_se->stream);
+    accumulation_buffer.push_back(std::move(sorted_table));
 }
 
 bool CudaSortState::FinalizeAccumulation(bool local_is_last) {
@@ -82,18 +85,15 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
         return;
     }
 
-    // Concatenate all accumulated batches
+    // Merge all accumulated (sorted) batches
     if (!accumulation_buffer.empty()) {
         std::vector<cudf::table_view> views;
         for (const auto& table : accumulation_buffer) {
             views.push_back(table->view());
         }
-        local_table = cudf::concatenate(views, stream);
+        local_table = cudf::merge(views, key_indices, column_order,
+                                  null_precedence, stream);
         accumulation_buffer.clear();
-
-        local_table = cudf::sort_by_key(local_table->view(),
-                                        local_table->select(key_indices),
-                                        column_order, null_precedence, stream);
     } else {
         local_table = empty_table_from_arrow_schema(schema->ToArrowSchema());
     }
