@@ -30,6 +30,7 @@
 #include <cudf/column/column_factories.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/datetime.hpp>
+#include <cudf/round.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
 #include <cudf/strings/find.hpp>
@@ -895,14 +896,17 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
           result_type(std::move(_result_type)) {
         if (scalar_func_data.arrow_func_name != "ends_with" &&
             scalar_func_data.arrow_func_name != "starts_with" &&
-            scalar_func_data.arrow_func_name != "year") {
+            scalar_func_data.arrow_func_name != "year" &&
+            scalar_func_data.arrow_func_name != "round") {
             throw std::runtime_error(
                 "PhysicalGPUArrowExpression only supports ends_with, "
-                "starts_with and year for now.");
+                "starts_with, year and round for now.");
         }
         if (scalar_func_data.arrow_func_name == "ends_with" ||
             scalar_func_data.arrow_func_name == "starts_with") {
             extract_string_arg_from_python();
+        } else if (scalar_func_data.arrow_func_name == "round") {
+            extract_round_arg_from_python();
         }
     }
 
@@ -933,6 +937,15 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             result =
                 cudf::cast(result->view(),
                            cudf::data_type(cudf::type_id::INT64), se->stream);
+        } else if (scalar_func_data.arrow_func_name == "round") {
+// NOTE: cudf::round is deprecated but still used here in cudf:
+// https://github.com/rapidsai/cudf/blob/1ed06c6105fb31bba18fc7cf69e2529f9c6a7a22/python/cudf/cudf/core/column/numerical_base.py#L252
+// cudf::round_decimal doesn't support floating point data for some reason.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+            result = cudf::round(in_as_array->result->view(), round_ndigits,
+                                 cudf::rounding_method::HALF_EVEN, se->stream);
+#pragma GCC diagnostic pop
         } else {
             throw std::runtime_error(
                 fmt::format("Unsupported Arrow function: {}",
@@ -995,9 +1008,26 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             std::make_shared<cudf::string_scalar>(std::string(c_str), true);
     }
 
+    void extract_round_arg_from_python() {
+        if (PyTuple_Check(scalar_func_data.args) &&
+            PyTuple_Size(scalar_func_data.args) == 1) {
+            // Get the first element (borrowed reference)
+            PyObject *py_digits = PyTuple_GetItem(scalar_func_data.args, 0);
+
+            if (!PyLong_Check(py_digits)) {
+                throw std::runtime_error(
+                    fmt::format("{} args element is not a Python int.",
+                                scalar_func_data.arrow_func_name));
+            }
+            round_ndigits = static_cast<int32_t>(PyLong_AsLong(py_digits));
+        }
+    }
+
     // Keeping reference to the cudf string scalar created from the Python
     // string argument to ensure it stays alive during processing.
     std::shared_ptr<cudf::string_scalar> str_scalar_in;
+
+    int32_t round_ndigits = 0;
 };
 
 struct PhysicalGPUUDFExpressionMetrics {
