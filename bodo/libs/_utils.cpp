@@ -65,7 +65,6 @@ int get_node_id() {
                               MPI_COMM_WORLD),
                   "dist_get_ranks_on_node: MPI error on MPI_Scatter:");
     }
-    std::cout << "Rank " << rank << " on node " << node_id << std::endl;
 
     cached_node_id = node_id;
     cache_initialized = true;
@@ -74,6 +73,16 @@ int get_node_id() {
 
 #ifdef USE_CUDF
 
+/**
+ * @brief Get the number of ranks on this node and the current rank's position.
+ *
+ * Use MPI_Comm_split to create a communicator for each node based on node_id
+ * (node id is a unique id based on output of MPI_Get_processor_name). This
+ * works around issues with MPI_Comm_split_type for CUDA-Aware MPICH.
+ *
+ * @return std::tuple<int, int> number of cores on the node, rank's position on
+ * the node
+ */
 std::tuple<int, int> dist_get_ranks_on_node() {
     static std::tuple<int, int> cached_result;
     static bool cache_initialized = false;
@@ -84,6 +93,7 @@ std::tuple<int, int> dist_get_ranks_on_node() {
 
     int node_id = get_node_id();
     MPI_Comm node_comm;
+    // Passing zero as key reuses ordering from the original communicator.
     CHECK_MPI(MPI_Comm_split(MPI_COMM_WORLD, node_id, 0, &node_comm),
               "dist_get_ranks_on_node: MPI error on MPI_Comm_split:");
 

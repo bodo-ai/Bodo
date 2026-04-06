@@ -97,6 +97,8 @@ enum class PhysicalExpressionType {
     ARROW
 };
 
+arrow::Datum fill_null(arrow::Datum &src, const arrow::Datum &val);
+
 /**
  * @brief Superclass for Bodo Physical expression tree nodes. Like duckdb
  *        it is convenient to store child nodes here because many expr
@@ -128,6 +130,7 @@ class PhysicalExpression {
                           void **left_data, void **right_data,
                           void **left_null_bitmap, void **right_null_bitmap,
                           int64_t left_index, int64_t right_index);
+
     static void join_expr_batch(
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
@@ -673,6 +676,18 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         // We know we have two children so process them first.
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
+        std::shared_ptr<ScalarExprResult> left_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        // Implement short-circuit for scalars.
+        if (left_as_scalar) {
+            bool left_bool = left_as_scalar->result->at<bool>(0);
+            if (comparator == "and" && !left_bool) {
+                return left_res;
+            }
+            if (comparator == "or" && left_bool) {
+                return left_res;
+            }
+        }
         std::shared_ptr<ExprResult> right_res =
             children[1]->ProcessBatch(input_batch);
 
@@ -688,6 +703,31 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         arrow::Datum left_datum = children[0]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
+        // Implement short-circuit for scalars.
+        if (left_datum.is_scalar()) {
+            auto left_scalar = left_datum.scalar();
+            if (left_scalar->type->id() == arrow::Type::BOOL) {
+                auto bool_sc =
+                    std::static_pointer_cast<arrow::BooleanScalar>(left_scalar);
+                if (bool_sc->is_valid) {
+                    bool left_bool = bool_sc->value;
+                    if (comparator == "and" && !left_bool) {
+                        return left_datum;
+                    }
+                    if (comparator == "or" && left_bool) {
+                        return left_datum;
+                    }
+                } else {
+                    throw std::runtime_error(
+                        "join_expr_internal for conjunction left_datum was "
+                        "null bool.");
+                }
+            } else {
+                throw std::runtime_error(
+                    "join_expr_internal for conjunction left_datum wasn't "
+                    "bool.");
+            }
+        }
         arrow::Datum right_datum = children[1]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
@@ -1132,10 +1172,8 @@ class PhysicalUDFExpression : public PhysicalExpression {
         }
 
         return res_scalar.ValueOrDie();
-
-        throw std::runtime_error(
-            "PhysicalUDFExpression::join_expr_internal unimplemented ");
     }
+
     void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
         metrics_out.push_back(
             TimerMetric("run_func_cpp_to_py_time", metrics.cpp_to_py_time));
@@ -1242,6 +1280,25 @@ class PhysicalArrowExpression : public PhysicalExpression {
             }
 
             arrow::compute::MatchSubstringOptions opts(c_str);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "round") {
+            int64_t digits = 0;
+            if (PyTuple_Check(scalar_func_data.args) &&
+                PyTuple_Size(scalar_func_data.args) == 1) {
+                // Get the first element (borrowed reference)
+                PyObject *py_digits = PyTuple_GetItem(scalar_func_data.args, 0);
+
+                if (!PyLong_Check(py_digits)) {
+                    throw std::runtime_error(
+                        fmt::format("{} args element is not a Python int.",
+                                    scalar_func_data.arrow_func_name));
+                }
+
+                digits = PyLong_AsLong(py_digits);
+            }
+
+            arrow::compute::RoundOptions opts(digits);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else {

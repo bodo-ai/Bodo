@@ -1202,6 +1202,17 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
+        # If the number of possible values is small then it will be faster to run them as
+        # a conjunction of equality checks rather than with an expensive UDF.
+        if not isinstance(values, BodoSeries) and len(values) <= 4:
+            ret = None
+            for val in values:
+                if ret is None:
+                    ret = self == val
+                else:
+                    ret = ret | (self == val)
+            return ret
+
         new_metadata = pd.Series(
             dtype=pd.ArrowDtype(pa.bool_()),
             name=self.name,
@@ -2933,6 +2944,7 @@ def _get_series_func_plan(
         "str.match",
         "str.startswith",
         "str.endswith",
+        "round",
     )
 
     def get_arrow_func(name):
@@ -2952,6 +2964,8 @@ def _get_series_func_plan(
             return "ends_with"
         if name.startswith("str."):
             return "utf8_" + name.split(".")[1]
+        if name == "round":
+            return "round"
         return name.split(".")[1]
 
     if func in arrow_compute_list and len(kwargs) == 0:

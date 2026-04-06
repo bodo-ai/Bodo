@@ -711,6 +711,8 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
         "bodo/tests/test_streaming/test_ping_pong.cpp"
         "bodo/tests/test_streaming/test_gpu_batch_gen.cpp"
         "bodo/tests/test_streaming/test_gpu_bloom_filter.cpp"
+        "bodo/tests/test_streaming/test_cuda_sort.cpp"
+
         )
   endif()
   list(APPEND sources_list "${test_list}")
@@ -735,6 +737,7 @@ if (USE_CUDF)
     "bodo/pandas/physical/gpu_reduce.cpp"
     "bodo/libs/streaming/cuda_join.cpp"
     "bodo/libs/streaming/cuda_groupby.cpp"
+    "bodo/libs/streaming/cuda_sort.cpp"
     "bodo/libs/gpu_bloom_filter.cu"
     "bodo/libs/gpu_utils.cu"
     )
