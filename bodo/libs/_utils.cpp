@@ -78,8 +78,6 @@ int get_node_id() {
  * Use MPI_Comm_split to create a communicator for each node based on node_id
  * (node id is a unique id based on output of MPI_Get_processor_name). This
  * works around issues with MPI_Comm_split_type for CUDA-Aware MPICH.
- * TODO: use hwloc approach for all platforms and make sure it's packaged
- * properly.
  *
  * @return std::tuple<int, int> number of cores on the node, rank's position on
  * the node
@@ -94,6 +92,7 @@ std::tuple<int, int> dist_get_ranks_on_node() {
 
     int node_id = get_node_id();
     MPI_Comm node_comm;
+    // Passing zero as key reuses ordering from the original communicator.
     CHECK_MPI(MPI_Comm_split(MPI_COMM_WORLD, node_id, 0, &node_comm),
               "dist_get_ranks_on_node: MPI error on MPI_Comm_split:");
 
