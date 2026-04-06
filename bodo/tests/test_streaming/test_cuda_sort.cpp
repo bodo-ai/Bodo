@@ -256,7 +256,7 @@ static bodo::tests::suite cuda_sort_tests([] {
                                   std::vector<int64_t> vals;
                                   if (rank == 0) {
                                       vals = {50, 10, 80, 30};
-                                  } else if (rank == 1 % n_ranks) {
+                                  } else if (rank == 1) {
                                       vals = {20, 70, 40, 60};
                                   }
                                   rows_count = vals.size();
@@ -277,7 +277,7 @@ static bodo::tests::suite cuda_sort_tests([] {
                     int null_count = 2;
                     if (rank == 0) {
                         vals = {0, 50, 0, 10};
-                    } else if (rank == 1 % n_ranks) {
+                    } else if (rank == 1) {
                         vals = {80, 0, 30, 0};
                     } else {
                         mask_bytes = {0b00000000};
@@ -300,7 +300,7 @@ static bodo::tests::suite cuda_sort_tests([] {
                                   std::vector<int64_t> vals;
                                   if (rank == 0) {
                                       vals = {10, 50, 30, 80};
-                                  } else if (rank == 1 % n_ranks) {
+                                  } else if (rank == 1) {
                                       vals = {60, 40, 70, 20};
                                   }
                                   rows_count = vals.size();
@@ -321,7 +321,7 @@ static bodo::tests::suite cuda_sort_tests([] {
                     if (rank == 0) {
                         keys = {50, 10, 80, 30};
                         data = {1, 2, 3, 4};
-                    } else if (rank == 1 % n_ranks) {
+                    } else if (rank == 1) {
                         keys = {20, 70, 40, 60};
                         data = {5, 6, 7, 8};
                     }

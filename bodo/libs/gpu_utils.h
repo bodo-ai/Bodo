@@ -424,6 +424,12 @@ class GpuTableAllGatherManager : public GpuTableBroadcastManager {
     }
 };
 
+/**
+ * @brief Class for managing async shuffle of cudf::tables using MPI where
+ * tables are shuffled based on range partitioning. Each rank sends one table
+ * to each other rank, where the table sent to rank i contains rows for which
+ * the partitioning column value falls within the range assigned to rank i.
+ */
 class GpuRangeShuffleManager : public GpuTableManager {
    private:
     struct RangeShuffleTableInfo {
