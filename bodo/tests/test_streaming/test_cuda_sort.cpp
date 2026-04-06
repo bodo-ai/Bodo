@@ -96,6 +96,10 @@ void run_cuda_sort_test(
         create_input_fn,
     std::function<void(cudf::table_view, int, int, MPI_Comm)> extra_verify_fn =
         nullptr) {
+    rmm::cuda_device_id device_id = get_gpu_id();
+    if (device_id.value() >= 0) {
+        cudaSetDevice(device_id.value());
+    }
     CudaSortState sort_state(schema, key_indices, column_order,
                              null_precedence);
     if (!is_gpu_rank()) {
