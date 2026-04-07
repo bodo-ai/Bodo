@@ -7,7 +7,6 @@
 #include "../libs/_distributed.h"
 #include "../libs/_table_builder.h"
 #include "../libs/_table_builder_utils.h"
-#include "gpu_table_batcher.h"
 #include "operator.h"
 
 inline bool gpu_capable(duckdb::LogicalLimit& logical_limit) { return true; }
@@ -22,7 +21,10 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                               std::shared_ptr<bodo::Schema> input_schema)
         : n(nrows),
           local_remaining(nrows),
-          collected_rows(get_gpu_streaming_batch_size()),
+          collected_rows(GPU_DATA(empty_table_from_arrow_schema(
+                                      input_schema->ToArrowSchema()),
+                                  input_schema->ToArrowSchema(), nullptr),
+                         get_gpu_streaming_batch_size()),
           output_schema(input_schema) {
         arrow_output_schema = output_schema->ToArrowSchema();
     }
@@ -50,13 +52,13 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
         std::vector<uint64_t> row_counts(n_pes);
 
         // Get total rows on this GPU.
-        uint64_t cur_rows = collected_rows.size();
+        uint64_t cur_rows = collected_rows.collected_rows;
         CHECK_MPI(MPI_Allgather(&cur_rows, 1, MPI_UNSIGNED_LONG_LONG,
                                 row_counts.data(), 1, MPI_UNSIGNED_LONG_LONG,
                                 gpu_mpi.get_mpi_comm()),
                   "PhysicalGPULimit: MPI error on MPI_Allgather:");
 
-        uint64_t local_remaining = 0;
+        local_remaining = 0;
 
         for (int32_t i = 0; i < n_pes && n > 0; ++i) {
             uint64_t num_from_rank = std::min(n, row_counts[i]);
@@ -65,8 +67,6 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
             }
             n -= num_from_rank;
         }
-
-        collected_rows.keep_first_n_rows(local_remaining);
     }
 
     void FinalizeSource() override {}
@@ -93,7 +93,8 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                 std::make_unique<cudf::table>(
                     cudf::slice(input_batch.table->view(),
                                 {0, (int)select_local}, se->stream)[0]);
-            collected_rows.push_table(std::move(first_select_local_rows));
+            collected_rows.append_batch(GPU_DATA(
+                std::move(first_select_local_rows), arrow_output_schema, se));
             local_remaining -= select_local;
         }
         return (local_remaining == 0 ||
@@ -124,11 +125,22 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                     OperatorResult::FINISHED};
         }
 
-        auto next_batch = collected_rows.get_batch();
-        GPU_DATA out_table_info(std::move(next_batch), arrow_output_schema, se);
-        return {out_table_info, collected_rows.empty()
-                                    ? OperatorResult::FINISHED
-                                    : OperatorResult::HAVE_MORE_OUTPUT};
+        auto next_batch = collected_rows.next(se, true);
+        if (next_batch.table->num_rows() >=
+            static_cast<cudf::size_type>(local_remaining)) {
+            cudf::table_view tv = next_batch.table->view();
+            std::vector<cudf::size_type> offsets = {
+                0, static_cast<cudf::size_type>(local_remaining)};
+            auto slices = cudf::slice(tv, offsets);
+            next_batch.table = std::make_shared<cudf::table>(slices[0]);
+
+            local_remaining = 0;
+        } else {
+            local_remaining -= next_batch.table->num_rows();
+        }
+        return {next_batch, local_remaining == 0
+                                ? OperatorResult::FINISHED
+                                : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
     /**
@@ -142,7 +154,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
 
    private:
     uint64_t n, local_remaining;
-    TableFifoBatcher collected_rows;
+    GPUBatchGenerator collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
     std::shared_ptr<arrow::Schema> arrow_output_schema;
 };
