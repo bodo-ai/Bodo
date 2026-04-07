@@ -172,12 +172,11 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
         if (input_batch.table != nullptr && input_batch.table->num_rows() > 0) {
-            cuda_sort_state->ConsumeBatch(input_batch.table,
-                                          input_batch.stream_event);
+            cuda_sort_state->ConsumeBatch(input_batch.table, se);
         }
 
-        bool global_is_last = cuda_sort_state->FinalizeAccumulation(
-            local_is_last, input_batch.stream_event);
+        bool global_is_last =
+            cuda_sort_state->FinalizeAccumulation(local_is_last, se);
 
         this->metrics.consume_time += end_timer(start_consume);
         return global_is_last ? OperatorResult::FINISHED
