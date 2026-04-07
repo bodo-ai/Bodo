@@ -47,8 +47,6 @@ bool CudaSortState::FinalizeAccumulation(
         if (is_gpu_rank()) {
             this->ExecutePsrsStep1(input_se->stream);
         }
-        std::cout << "State transition: ACCUMULATING -> GATHERING_SAMPLES"
-                  << std::endl;
         state = State::GATHERING_SAMPLES;
     }
 
@@ -63,8 +61,6 @@ bool CudaSortState::FinalizeAccumulation(
             if (is_gpu_rank()) {
                 this->ExecutePsrsStep2(input_se->stream);
             }
-            std::cout << "State transition: GATHERING_SAMPLES -> SHUFFLING"
-                      << std::endl;
             state = State::SHUFFLING;
         }
     }
@@ -75,14 +71,11 @@ bool CudaSortState::FinalizeAccumulation(
 
         for (auto& chunk : shuffled_chunks) {
             if (chunk && chunk->num_rows() > 0) {
-                std::cout << "Received shuffled chunk with "
-                          << chunk->num_rows() << " rows" << std::endl;
                 received_tables.push_back(std::move(chunk));
             }
         }
 
         if (shuffle_manager.sync_is_last(true)) {
-            std::cout << "State transition: SHUFFLING -> MERGING" << std::endl;
             state = State::MERGING;
         }
     }
@@ -247,8 +240,6 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
 
 std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
     bool& out_is_last, rmm::cuda_stream_view stream) {
-    std::cout << "GetOutputBatch called in state: " << static_cast<int>(state)
-              << std::endl;
     if (state != State::MERGING) {
         out_is_last = false;
         return empty_table_from_arrow_schema(schema->ToArrowSchema());
