@@ -47,26 +47,6 @@ def q5(root: str) -> DataFrame:
     return gb.reset_index().sort_values("REVENUE", ascending=False)
 
 
-def run_query_with_timing(root: str) -> tuple[DataFrame, float]:
-    """Function for running Q5 and getting the result and total execution time."""
-    start_time = time.time()
-    result = q5(root).compute()
-    total_time = time.time() - start_time
-
-    return result, total_time
-
-
-def run_query_dispatch(
-    root: str, client: Client, run_multi_node: bool
-) -> tuple[DataFrame, float]:
-    """Dispatches the query to the Dask cluster and returns the result and execution time."""
-    if run_multi_node:
-        future = client.submit(run_query_with_timing, root)
-        return future.result()
-    else:
-        return run_query_with_timing(root)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -148,7 +128,7 @@ def main():
         #     --output text
         ami = "ami-0600d0aaccc95db72"
 
-        # Instance profile with permissions required for writing and potentially reading from S3
+        # Instance profile with permissions for reading from S3 (if not passing default credentials).
         instance_profile = (
             None
             if args.instance_profile_name is None
@@ -183,20 +163,21 @@ def main():
     if args.warmup:
         try:
             print("Running warmup...")
-            run_query_dispatch(args.root, client, args.run_multi_node)
+            q5(args.root).compute()
             print("Warmup complete.")
         except Exception as e:
             print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
-            res, total_time = run_query_dispatch(args.root, client, args.run_multi_node)
-
-            if args.print_output:
-                print(res)
-
+            t0 = time.time()
+            result = q5(args.root).compute()
+            total_time = time.time() - t0
             print(
                 f"Q5 dask (sf={scale_factor}, n_workers={args.n_workers}): {i} took {total_time:.4f} s"
             )
+
+            if args.print_output:
+                print(result)
 
             if args.log_timings:
                 extra_params = (
