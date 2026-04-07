@@ -47,6 +47,8 @@ bool CudaSortState::FinalizeAccumulation(
         if (is_gpu_rank()) {
             this->ExecutePsrsStep1(input_se->stream);
         }
+        std::cout << "State transition: ACCUMULATING -> GATHERING_SAMPLES"
+                  << std::endl;
         state = State::GATHERING_SAMPLES;
     }
 
@@ -61,6 +63,8 @@ bool CudaSortState::FinalizeAccumulation(
             if (is_gpu_rank()) {
                 this->ExecutePsrsStep2(input_se->stream);
             }
+            std::cout << "State transition: GATHERING_SAMPLES -> SHUFFLING"
+                      << std::endl;
             state = State::SHUFFLING;
         }
     }
@@ -76,6 +80,7 @@ bool CudaSortState::FinalizeAccumulation(
         }
 
         if (shuffle_manager.sync_is_last(true)) {
+            std::cout << "State transition: SHUFFLING -> MERGING" << std::endl;
             state = State::MERGING;
         }
     }
