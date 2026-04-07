@@ -41,8 +41,9 @@ void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
     accumulation_buffer.push_back(std::move(sorted_table));
 }
 
-bool CudaSortState::FinalizeAccumulation(bool local_is_last) {
-    rmm::cuda_stream_view stream = cudf::get_default_stream();
+bool CudaSortState::FinalizeAccumulation(
+    bool local_is_last, std::shared_ptr<StreamAndEvent> input_se) {
+    rmm::cuda_stream_view stream = input_se->stream;
 
     if (state == State::ACCUMULATING && local_is_last) {
         this->ExecutePsrsStep1(stream);

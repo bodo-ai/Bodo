@@ -176,8 +176,8 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
                                           input_batch.stream_event);
         }
 
-        bool global_is_last =
-            cuda_sort_state->FinalizeAccumulation(local_is_last);
+        bool global_is_last = cuda_sort_state->FinalizeAccumulation(
+            local_is_last, input_batch.stream_event);
 
         this->metrics.consume_time += end_timer(start_consume);
         return global_is_last ? OperatorResult::FINISHED

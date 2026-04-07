@@ -29,9 +29,11 @@ class CudaSortState {
     /**
      * @brief Finalize the accumulation phase and perform the distributed sort.
      * @param local_is_last Whether this is the last batch on this rank.
+     * @param input_se Stream and event for synchronization.
      * @return Global is last flag.
      */
-    bool FinalizeAccumulation(bool local_is_last);
+    bool FinalizeAccumulation(bool local_is_last,
+                              std::shared_ptr<StreamAndEvent> input_se);
 
     /**
      * @brief Get the sorted output batch.
