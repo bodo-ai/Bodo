@@ -171,7 +171,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
-        if (input_batch.table != nullptr) {
+        if (input_batch.table != nullptr && input_batch.table->num_rows() > 0) {
             cuda_sort_state->ConsumeBatch(input_batch.table,
                                           input_batch.stream_event);
         }
