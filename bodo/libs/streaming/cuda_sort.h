@@ -2,7 +2,6 @@
 
 #include <mpi.h>
 #include <cudf/table/table.hpp>
-#include "../../pandas/physical/operator.h"
 #include "../_bodo_common.h"
 #include "../gpu_utils.h"
 
@@ -57,7 +56,7 @@ class CudaSortState {
     std::vector<cudf::null_order> null_precedence;
 
     // Accumulation buffer for local batches
-    std::vector<GPU_DATA> accumulation_buffer;
+    std::vector<std::shared_ptr<cudf::table>> accumulation_buffer;
 
     // Received tables from shuffle
     std::vector<std::shared_ptr<cudf::table>> received_tables;
