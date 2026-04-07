@@ -13,12 +13,18 @@ fi
 export SETUPTOOLS_SCM_PRETEND_VERSION="$PKG_VERSION"
 export CMAKE_GENERATOR='Ninja'
 
+cmake_gpu_define=""
+if [[ "$gpu" == "true" ]]; then
+    cmake_gpu_define="--config-settings=cmake.define.USE_CUDF=ON"
+fi
+
 # Build the wheel. We can use this for only-Pip wheel builds
 $PYTHON -m pip install \
     --no-deps --no-build-isolation -vv \
     --config-settings=build.verbose=true \
     --config-settings=logging.level="DEBUG" \
     --config-settings=cmake.args="-DCMAKE_INSTALL_PREFIX=$PREFIX;-DCMAKE_INSTALL_LIBDIR=lib;-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY" \
+    $cmake_gpu_define \
     .
 
 sccache --show-stats

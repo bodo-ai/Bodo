@@ -30,3 +30,10 @@ c_compiler:    # [win]
   - vs2022     # [win]
 cxx_compiler:  # [win]
   - vs2022     # [win]
+
+gpu:
+  - false
+  - true
+
+cuda_compiler:
+  - cuda-nvcc
