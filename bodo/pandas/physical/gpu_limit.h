@@ -21,10 +21,11 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                               std::shared_ptr<bodo::Schema> input_schema)
         : n(nrows),
           local_remaining(nrows),
-          collected_rows(GPU_DATA(empty_table_from_arrow_schema(
-                                      input_schema->ToArrowSchema()),
-                                  input_schema->ToArrowSchema(), nullptr),
-                         get_gpu_streaming_batch_size()),
+          collected_rows(
+              GPU_DATA(
+                  empty_table_from_arrow_schema(input_schema->ToArrowSchema()),
+                  input_schema->ToArrowSchema(), make_stream_and_event(false)),
+              get_gpu_streaming_batch_size()),
           output_schema(input_schema) {
         arrow_output_schema = output_schema->ToArrowSchema();
     }
