@@ -183,6 +183,8 @@ void GpuTableManager::do_shuffle() {
 std::vector<std::shared_ptr<cudf::table>> GpuTableManager::progress(
     const bool is_last) {
     if (mpi_comm == MPI_COMM_NULL || this->global_is_last) {
+        std::cout << "No GPU or global is last, skipping shuffle progress."
+                  << std::endl;
         return {};
     }
 
@@ -193,6 +195,10 @@ std::vector<std::shared_ptr<cudf::table>> GpuTableManager::progress(
 
     // recv data first, but avoid receiving too much data at once
     if ((this->recv_states.size() == 0) || !this->BuffersFull()) {
+        std::cout << "Posting new Irecvs. Current inflight recvs: "
+                  << this->recv_states.size()
+                  << ", inflight tags: " << this->inflight_tags.size()
+                  << std::endl;
         this->shuffle_irecv();
     }
 

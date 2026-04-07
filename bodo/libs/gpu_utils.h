@@ -448,17 +448,6 @@ class GpuRangeShuffleManager : public GpuTableManager {
     std::vector<RangeShuffleTableInfo> tables_to_shuffle;
 
     bool tableReadyToSend() override {
-        if (!this->tables_to_shuffle.empty()) {
-            std::cout
-                << "Checking if table ready to send. Tables to shuffle size: "
-                << tables_to_shuffle.size();
-            std::cout << "Event ready: "
-                      << (tables_to_shuffle.empty()
-                              ? "N/A"
-                              : (tables_to_shuffle.back().event.ready() ? "Yes"
-                                                                        : "No"))
-                      << std::endl;
-        }
         return !this->tables_to_shuffle.empty() &&
                this->tables_to_shuffle.back().event.ready();
     }
