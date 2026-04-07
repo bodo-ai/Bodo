@@ -1499,6 +1499,7 @@ def test_dataframe_copy(index_val):
     _test_equal(df1, pdf_from_bodo, sort_output=True)
 
 
+@pytest.mark.gpu
 def test_dataframe_sort(datapath):
     """Very simple test for sorting for sanity checking."""
     with assert_executed_plan_count(0):
@@ -1523,6 +1524,7 @@ def test_dataframe_sort(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_sort(datapath):
     """Very simple test for sorting for sanity checking."""
     with assert_executed_plan_count(0):
