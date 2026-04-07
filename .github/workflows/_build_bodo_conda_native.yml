@@ -50,10 +50,8 @@ jobs:
         with:
           environment-name: bodo_build
           create-args: >-
-            python=3.11 
-            conda==25.9.1
-            conda-libmamba-solver==25.4.0
-            conda-build==25.9.0 
+            conda-libmamba-solver
+            conda-build
             anaconda-client 
             python-libarchive-c 
             setuptools_scm 

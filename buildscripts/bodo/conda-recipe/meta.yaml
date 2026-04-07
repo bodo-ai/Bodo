@@ -26,6 +26,9 @@ requirements:
     - {{ compiler('cxx') }}
     - sccache
     - mold  # [linux]
+    - cmake <4.0,>=3.23
+    - make
+    - ninja
 
   host:
     - python
@@ -36,9 +39,6 @@ requirements:
     - cython >=3.0
     - setuptools_scm >=8
     - scikit-build-core
-    - cmake <4.0,>=3.23
-    - make
-    - ninja
     - mpi4py >=4.0
     - numba >=0.62,<0.64
     # Compatible with Numba requirements.
@@ -58,18 +58,15 @@ requirements:
     # Corresponding dependency is automatically added in reqs/run.
     - aws-sdk-cpp
     - zstd
-    - pytz
 
   run:
     - python
     - {{ pin_compatible('numpy') }}
     - pandas >=2.2
-    - pytz
     - fsspec >=2021.09
     - pyarrow =23.0
     - numba >=0.62,<0.64
     - requests
-    - pytz
     - zstd
     - cloudpickle >=3.0
     - psutil
