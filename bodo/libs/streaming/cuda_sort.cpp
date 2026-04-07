@@ -67,7 +67,7 @@ bool CudaSortState::FinalizeAccumulation(
 
     if (state == State::SHUFFLING) {
         std::vector<std::shared_ptr<cudf::table>> shuffled_chunks =
-            shuffle_manager.progress(local_is_last);
+            shuffle_manager.progress(true);
 
         for (auto& chunk : shuffled_chunks) {
             if (chunk->num_rows() > 0) {
@@ -75,7 +75,7 @@ bool CudaSortState::FinalizeAccumulation(
             }
         }
 
-        if (shuffle_manager.sync_is_last(local_is_last)) {
+        if (shuffle_manager.sync_is_last(true)) {
             state = State::MERGING;
         }
     }
