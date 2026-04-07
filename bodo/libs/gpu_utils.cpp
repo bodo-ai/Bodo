@@ -202,6 +202,8 @@ std::vector<std::shared_ptr<cudf::table>> GpuTableManager::progress(
     // Remove send state if recv done
     std::erase_if(this->send_states, [&](GpuShuffleSendState& s) {
         bool done = s.sendDone();
+        std::cout << "Checking send state with tag " << s.get_starting_msg_tag()
+                  << ": done=" << done << std::endl;
         if (done) {
             inflight_tags.erase(s.get_starting_msg_tag());
         }
@@ -210,6 +212,8 @@ std::vector<std::shared_ptr<cudf::table>> GpuTableManager::progress(
 
     // TODO(ehsan): decide when to shuffle based on buffer size
     if (this->tableReadyToSend()) {
+        std::cout << "Starting new shuffle with " << this->recv_states.size()
+                  << " inflight recvs" << std::endl;
         this->do_shuffle();
     }
 
