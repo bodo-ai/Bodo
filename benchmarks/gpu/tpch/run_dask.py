@@ -117,10 +117,8 @@ def main():
     if args.run_multi_node:
         from dask_cloudprovider.aws import EC2Cluster
 
-        # Use GPU AMI with Nvidia drivers pre-installed to speed up cluster startup time
+        # Use GPU AMI with Nvidia drivers pre-installed to speed up cluster startup time.
         # The specific AMI below was obtained from the following command:
-        # AMI with Nvidia drivers and docker pre-installed:
-        # (Avoid bootstrap time)
         # aws ssm get-parameter \
         #     --region us-east-2 \
         #     --name /aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id \
