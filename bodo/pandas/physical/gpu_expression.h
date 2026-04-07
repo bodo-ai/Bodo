@@ -897,10 +897,11 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         if (scalar_func_data.arrow_func_name != "ends_with" &&
             scalar_func_data.arrow_func_name != "starts_with" &&
             scalar_func_data.arrow_func_name != "year" &&
-            scalar_func_data.arrow_func_name != "round") {
+            scalar_func_data.arrow_func_name != "round" &&
+            scalar_func_data.arrow_func_name != "is_null") {
             throw std::runtime_error(
                 "PhysicalGPUArrowExpression only supports ends_with, "
-                "starts_with, year and round for now.");
+                "starts_with, year, round and is_null for now.");
         }
         if (scalar_func_data.arrow_func_name == "ends_with" ||
             scalar_func_data.arrow_func_name == "starts_with") {
@@ -946,6 +947,8 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             result = cudf::round(in_as_array->result->view(), round_ndigits,
                                  cudf::rounding_method::HALF_EVEN, se->stream);
 #pragma GCC diagnostic pop
+        } else if (scalar_func_data.arrow_func_name == "is_null") {
+            result = cudf::is_null(in_as_array->result->view(), se->stream);
         } else {
             throw std::runtime_error(
                 fmt::format("Unsupported Arrow function: {}",
