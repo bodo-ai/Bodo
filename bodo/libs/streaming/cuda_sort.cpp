@@ -70,8 +70,6 @@ bool CudaSortState::FinalizeAccumulation(
     }
 
     if (state == State::SHUFFLING) {
-        std::cout << "Progressing shuffle, waiting for shuffled chunks..."
-                  << std::endl;
         std::vector<std::shared_ptr<cudf::table>> shuffled_chunks =
             shuffle_manager.progress(true);
 
