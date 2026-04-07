@@ -150,6 +150,7 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
     // Start Broadcast of local samples
     local_samples = std::move(sample_table);
     auto se = std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper());
+    se->event.record(stream);
     sample_gatherer.append_batch(local_samples, se);
 }
 
@@ -241,6 +242,7 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
 
     // Start Shuffle
     auto se = std::make_shared<StreamAndEvent>(stream, cuda_event_wrapper());
+    se->event.record(stream);
     shuffle_manager.append_batch(std::move(local_table),
                                  std::move(split_indices), se);
 }
