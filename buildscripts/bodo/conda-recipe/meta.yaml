@@ -16,6 +16,7 @@ build:
     - AWS_SECRET_ACCESS_KEY
     # Flag for disabling sccache in the build environment
     - DISABLE_SCCACHE_IN_BUILD
+    - BODO_USE_CUDA={{ "1" if gpu else "0" }}
   rpaths:
     - lib
     - {{ PREFIX }}/lib
@@ -107,7 +108,7 @@ requirements:
     - psutil
     - pytz
 
-    - {{ pin_compatible("cuda-version", lower_bound="x", upper_bound="x") }}  # [gpu]
+    - {{ pin_compatible("cuda-version") }}  # [gpu]
 
   # run_constrained means these packages are not required deps
   # but will restrict them if they are present in the conda env.
