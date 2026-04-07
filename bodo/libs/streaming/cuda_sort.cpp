@@ -247,6 +247,8 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
 
 std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
     bool& out_is_last, rmm::cuda_stream_view stream) {
+    std::cout << "GetOutputBatch called in state: " << static_cast<int>(state)
+              << std::endl;
     if (state != State::MERGING) {
         out_is_last = false;
         return empty_table_from_arrow_schema(schema->ToArrowSchema());
