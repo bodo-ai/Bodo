@@ -1,8 +1,9 @@
 #include "physical/gpu_reduce.h"
 #include <arrow/array/util.h>
 #include <mpi.h>
-#include <cstdint>
 #include <cudf/aggregation.hpp>
+#include <cudf/ast/expressions.hpp>
+#include <cudf/binaryop.hpp>
 #include <cudf/column/column_view.hpp>
 #include <cudf/reduction.hpp>
 #include <memory>
@@ -17,6 +18,15 @@ std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_cudf_scalar(
     std::unique_ptr<cudf::scalar> scalar) {
     std::vector<std::unique_ptr<cudf::scalar>> out;
     out.emplace_back(std::move(scalar));
+    return out;
+}
+
+std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_two_cudf_scalars(
+    std::unique_ptr<cudf::scalar> scalar1,
+    std::unique_ptr<cudf::scalar> scalar2) {
+    std::vector<std::unique_ptr<cudf::scalar>> out;
+    out.emplace_back(std::move(scalar1));
+    out.emplace_back(std::move(scalar2));
     return out;
 }
 
@@ -165,8 +175,21 @@ void GPUReductionFunction::Finalize(MPI_Comm comm) {
         // Copy the reduced CPU result back to cudf scalar
         std::shared_ptr<arrow::Scalar> arrow_scalar =
             arrow_table->column(0)->GetScalar(0).ValueOrDie();
-        this->results[i] = std::move(arrow_scalar_to_cudf(arrow_scalar));
+        this->results[i] = arrow_scalar_to_cudf(arrow_scalar);
     }
+}
+
+void GPUReductionFunctionMean::Finalize(MPI_Comm comm) {
+    // Combine across ranks
+    GPUReductionFunction::Finalize(comm);
+
+    // Output is sum/count
+    std::unique_ptr<cudf::column> res_col = cudf::binary_operation(
+        *cudf::make_column_from_scalar(*this->results[0], 1), *this->results[1],
+        cudf::binary_operator::TRUE_DIV, this->results[0]->type());
+
+    this->results =
+        make_vector_of_cudf_scalar(cudf::get_element(res_col->view(), 0));
 }
 
 OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
@@ -209,6 +232,12 @@ OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
                     std::make_unique<GPUReductionFunctionCount>(
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
+            } else if (func_name == "mean") {
+                reduction_functions.push_back(
+                    std::make_unique<GPUReductionFunctionMean>(
+                        this->out_schema->column_types[i]->ToArrowDataType(),
+                        se->stream));
+
             } else {
                 throw std::runtime_error("Unsupported reduction function: " +
                                          func_name);
