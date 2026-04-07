@@ -83,7 +83,7 @@ def main():
     parser.add_argument(
         "--run_multi_node",
         action="store_true",
-        help="If set, run the query in a multi-node Dask cluster (requires dask cloud provider).",
+        help="If set, run the query in a multi-node Dask cluster using Dask Cloud Provider",
     )
     parser.add_argument(
         "--instance_profile_name",
