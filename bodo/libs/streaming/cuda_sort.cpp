@@ -75,9 +75,9 @@ bool CudaSortState::FinalizeAccumulation(
 
         for (auto& chunk : shuffled_chunks) {
             if (chunk && chunk->num_rows() > 0) {
-                received_tables.push_back(std::move(chunk));
                 std::cout << "Received shuffled chunk with "
                           << chunk->num_rows() << " rows" << std::endl;
+                received_tables.push_back(std::move(chunk));
             }
         }
 
