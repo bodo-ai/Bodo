@@ -155,7 +155,9 @@ def main():
         dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
         dask.config.set({"distributed.comm.timeouts.connect": "600s"})
 
-        cluster = LocalCUDACluster(n_workers=args.n_workers, enable_cudf_spill=True)
+        cluster = LocalCUDACluster(
+            n_workers=args.n_workers, rmm_pool_size="90GB", enable_cudf_spill=True
+        )
     client = Client(cluster)
 
     if args.warmup:
