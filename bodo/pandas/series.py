@@ -2944,6 +2944,7 @@ def _get_series_func_plan(
         "str.match",
         "str.startswith",
         "str.endswith",
+        "round",
     )
 
     def get_arrow_func(name):
@@ -2963,6 +2964,8 @@ def _get_series_func_plan(
             return "ends_with"
         if name.startswith("str."):
             return "utf8_" + name.split(".")[1]
+        if name == "round":
+            return "round"
         return name.split(".")[1]
 
     if func in arrow_compute_list and len(kwargs) == 0:

@@ -1282,6 +1282,25 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::MatchSubstringOptions opts(c_str);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "round") {
+            int64_t digits = 0;
+            if (PyTuple_Check(scalar_func_data.args) &&
+                PyTuple_Size(scalar_func_data.args) == 1) {
+                // Get the first element (borrowed reference)
+                PyObject *py_digits = PyTuple_GetItem(scalar_func_data.args, 0);
+
+                if (!PyLong_Check(py_digits)) {
+                    throw std::runtime_error(
+                        fmt::format("{} args element is not a Python int.",
+                                    scalar_func_data.arrow_func_name));
+                }
+
+                digits = PyLong_AsLong(py_digits);
+            }
+
+            arrow::compute::RoundOptions opts(digits);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);

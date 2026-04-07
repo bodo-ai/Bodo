@@ -29,6 +29,8 @@
 #include <cudf/binaryop.hpp>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/copying.hpp>
+#include <cudf/datetime.hpp>
+#include <cudf/round.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
 #include <cudf/strings/find.hpp>
@@ -307,10 +309,10 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUNullExpression::join_expr_internal unimplemented ");
     }
@@ -362,10 +364,10 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
         }
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUNullExpression::join_expr_internal unimplemented ");
     }
@@ -416,10 +418,10 @@ class PhysicalGPUConstantExpression : public PhysicalGPUExpression {
         }
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUConstantExpression::join_expr_internal unimplemented ");
     }
@@ -470,10 +472,10 @@ class PhysicalGPUColumnRefExpression : public PhysicalGPUExpression {
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
@@ -549,10 +551,10 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
@@ -605,10 +607,10 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -696,10 +698,10 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -763,8 +765,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -794,10 +796,10 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -828,8 +830,8 @@ class PhysicalGPUCaseExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // Process children first.
         std::shared_ptr<ExprGPUResult> when_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -842,10 +844,10 @@ class PhysicalGPUCaseExpression : public PhysicalGPUExpression {
         return std::make_shared<ArrayExprGPUResult>(std::move(result), "Case");
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -893,10 +895,18 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
           scalar_func_data(_scalar_func_data),
           result_type(std::move(_result_type)) {
         if (scalar_func_data.arrow_func_name != "ends_with" &&
-            scalar_func_data.arrow_func_name != "starts_with") {
+            scalar_func_data.arrow_func_name != "starts_with" &&
+            scalar_func_data.arrow_func_name != "year" &&
+            scalar_func_data.arrow_func_name != "round") {
             throw std::runtime_error(
-                "PhysicalGPUArrowExpression only supports ends_with and "
-                "starts_with for now.");
+                "PhysicalGPUArrowExpression only supports ends_with, "
+                "starts_with, year and round for now.");
+        }
+        if (scalar_func_data.arrow_func_name == "ends_with" ||
+            scalar_func_data.arrow_func_name == "starts_with") {
+            extract_string_arg_from_python();
+        } else if (scalar_func_data.arrow_func_name == "round") {
+            extract_round_arg_from_python();
         }
     }
 
@@ -906,35 +916,6 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
      */
     std::shared_ptr<ExprGPUResult> ProcessBatch(
         GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
-        // Extract string argument from scalar_func_data.args for ends_with and
-        // starts_with
-        if (!PyTuple_Check(scalar_func_data.args) ||
-            PyTuple_Size(scalar_func_data.args) != 1) {
-            throw std::runtime_error(
-                fmt::format("{} args not a 1-element tuple.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        // Get the first element (borrowed reference)
-        PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
-
-        if (!PyUnicode_Check(py_str)) {
-            throw std::runtime_error(
-                fmt::format("{} args element is not a Python string.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        // Convert to UTF‑8 C string
-        const char *c_str = PyUnicode_AsUTF8(py_str);
-        if (!c_str) {
-            throw std::runtime_error(
-                fmt::format("{} error extracting Python string.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        str_scalar_in = std::make_shared<cudf::string_scalar>(
-            std::string(c_str), true, se->stream);
-
         std::shared_ptr<ExprGPUResult> in_res =
             children[0]->ProcessBatch(input_batch, se);
 
@@ -948,6 +929,23 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         } else if (scalar_func_data.arrow_func_name == "starts_with") {
             result = cudf::strings::starts_with(in_as_array->result->view(),
                                                 *str_scalar_in, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "year") {
+            result = cudf::datetime::extract_datetime_component(
+                in_as_array->result->view(),
+                cudf::datetime::datetime_component::YEAR, se->stream);
+            // Cast int16 to int64 to match frontend (and CPU side)
+            result =
+                cudf::cast(result->view(),
+                           cudf::data_type(cudf::type_id::INT64), se->stream);
+        } else if (scalar_func_data.arrow_func_name == "round") {
+// NOTE: cudf::round is deprecated but still used here in cudf:
+// https://github.com/rapidsai/cudf/blob/1ed06c6105fb31bba18fc7cf69e2529f9c6a7a22/python/cudf/cudf/core/column/numerical_base.py#L252
+// cudf::round_decimal doesn't support floating point data for some reason.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+            result = cudf::round(in_as_array->result->view(), round_ndigits,
+                                 cudf::rounding_method::HALF_EVEN, se->stream);
+#pragma GCC diagnostic pop
         } else {
             throw std::runtime_error(
                 fmt::format("Unsupported Arrow function: {}",
@@ -979,9 +977,57 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     const duckdb::LogicalType result_type;
     PhysicalGPUArrowExpressionMetrics metrics;
 
+    void extract_string_arg_from_python() {
+        // Extract string argument from scalar_func_data.args for ends_with and
+        // starts_with
+        if (!PyTuple_Check(scalar_func_data.args) ||
+            PyTuple_Size(scalar_func_data.args) != 1) {
+            throw std::runtime_error(
+                fmt::format("{} args not a 1-element tuple.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        // Get the first element (borrowed reference)
+        PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
+
+        if (!PyUnicode_Check(py_str)) {
+            throw std::runtime_error(
+                fmt::format("{} args element is not a Python string.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        // Convert to UTF‑8 C string
+        const char *c_str = PyUnicode_AsUTF8(py_str);
+        if (!c_str) {
+            throw std::runtime_error(
+                fmt::format("{} error extracting Python string.",
+                            scalar_func_data.arrow_func_name));
+        }
+
+        str_scalar_in =
+            std::make_shared<cudf::string_scalar>(std::string(c_str), true);
+    }
+
+    void extract_round_arg_from_python() {
+        if (PyTuple_Check(scalar_func_data.args) &&
+            PyTuple_Size(scalar_func_data.args) == 1) {
+            // Get the first element (borrowed reference)
+            PyObject *py_digits = PyTuple_GetItem(scalar_func_data.args, 0);
+
+            if (!PyLong_Check(py_digits)) {
+                throw std::runtime_error(
+                    fmt::format("{} args element is not a Python int.",
+                                scalar_func_data.arrow_func_name));
+            }
+            round_ndigits = static_cast<int32_t>(PyLong_AsLong(py_digits));
+        }
+    }
+
     // Keeping reference to the cudf string scalar created from the Python
     // string argument to ensure it stays alive during processing.
     std::shared_ptr<cudf::string_scalar> str_scalar_in;
+
+    int32_t round_ndigits = 0;
 };
 
 struct PhysicalGPUUDFExpressionMetrics {

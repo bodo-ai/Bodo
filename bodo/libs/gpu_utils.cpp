@@ -77,6 +77,20 @@ void GpuTableBroadcastManager::broadcast_table(
     this->tables_to_broadcast.emplace_back(table, se->event);
 }
 
+void GpuRangeShuffleManager::append_batch(
+    std::shared_ptr<cudf::table> table,
+    std::vector<cudf::size_type> split_indices,
+    std::shared_ptr<StreamAndEvent> se) {
+    if (mpi_comm == MPI_COMM_NULL) {
+        return;
+    }
+    if (table->num_rows() == 0) {
+        return;
+    }
+    this->tables_to_shuffle.emplace_back(std::move(table),
+                                         std::move(split_indices), se->event);
+}
+
 std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables(
     bool& do_broadcast) {
     do_broadcast = false;
@@ -121,6 +135,25 @@ std::vector<cudf::packed_table> GpuTableBroadcastManager::getNextPerRankTables(
     // By doing only one return value signifies a broadcast.
     packed_tables.emplace_back(
         tv, cudf::pack(tv, stream, get_cuda_memory_resource_ref()));
+    return packed_tables;
+}
+
+std::vector<cudf::packed_table> GpuRangeShuffleManager::getNextPerRankTables(
+    bool& do_broadcast) {
+    if (do_broadcast) {
+        throw std::runtime_error(
+            "GpuRangeShuffleManager does not support broadcast tables");
+    }
+    if (!tableReadyToSend()) {
+        throw std::runtime_error("getNextPerRankTables has no data");
+    }
+
+    RangeShuffleTableInfo info = std::move(this->tables_to_shuffle.back());
+    this->tables_to_shuffle.pop_back();
+
+    auto packed_tables =
+        cudf::contiguous_split(info.table->view(), info.split_indices, stream,
+                               get_cuda_memory_resource_ref());
     return packed_tables;
 }
 
