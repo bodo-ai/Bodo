@@ -82,3 +82,16 @@ You can also run on multiple GPUs using the `--n_workers` argument:
 ``` shell
 python run_dask.py --root s3://your-bucket/tpch-dask/SF1000 --warmup --n_workers 4
 ```
+
+Dask can also run on multiple nodes using [Dask CloudProvider](https://cloudprovider.dask.org/en/latest/) with the `--run_multi_node ` argument:
+
+``` shell
+python run_dask.py \
+  --root s3://your-bucket/tpch-dask/SF1000 \
+  --warmup \
+  --n_workers 4 \
+  --run_multi_node
+```
+
+This command will launch 4 `g7e.12xlarge` instances (plus one scheduler instance) in the `us-east-2` region.
+You may also need to pass `--subnet_id` if those instances are not available in your default subnet's availability zone.
