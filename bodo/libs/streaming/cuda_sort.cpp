@@ -43,10 +43,10 @@ void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
 
 bool CudaSortState::FinalizeAccumulation(
     bool local_is_last, std::shared_ptr<StreamAndEvent> input_se) {
-    rmm::cuda_stream_view stream = input_se->stream;
-
     if (state == State::ACCUMULATING && local_is_last) {
-        this->ExecutePsrsStep1(stream);
+        if (is_gpu_rank()) {
+            this->ExecutePsrsStep1(input_se->stream);
+        }
         state = State::GATHERING_SAMPLES;
     }
 
@@ -58,7 +58,9 @@ bool CudaSortState::FinalizeAccumulation(
         }
 
         if (sample_gatherer.sync_is_last(true)) {
-            this->ExecutePsrsStep2(stream);
+            if (is_gpu_rank()) {
+                this->ExecutePsrsStep2(input_se->stream);
+            }
             state = State::SHUFFLING;
         }
     }

@@ -102,11 +102,10 @@ void run_cuda_sort_test(
     }
     CudaSortState sort_state(schema, key_indices, column_order,
                              null_precedence);
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
     if (!is_gpu_rank()) {
         bool global_is_last = false;
         while (!global_is_last) {
-            global_is_last = sort_state.FinalizeAccumulation(true, se);
+            global_is_last = sort_state.FinalizeAccumulation(true, nullptr);
         }
         return;
     }
@@ -119,6 +118,7 @@ void run_cuda_sort_test(
     size_t local_input_rows_count = 0;
     auto input_table =
         create_input_fn(gpu_rank, n_gpu_ranks, local_input_rows_count);
+    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(false);
 
     sort_state.ConsumeBatch(std::move(input_table), se);
 
