@@ -27,7 +27,8 @@ inline bool gpu_capable_reduce(duckdb::LogicalAggregate& logical_aggregate) {
             agg_expr.function.name != "max" &&
             agg_expr.function.name != "min" &&
             agg_expr.function.name != "product" &&
-            agg_expr.function.name != "count") {
+            agg_expr.function.name != "count" &&
+            agg_expr.function.name != "mean") {
             return false;
         }
     }
@@ -95,6 +96,16 @@ std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_one_nullptr();
 std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_cudf_scalar(
     std::unique_ptr<cudf::scalar> scalar);
 
+/**
+ * @brief Create a vector of two unique_ptr<cudf::scalar> values that contains
+ * the given scalars. Needed as a function to avoid unique_ptr compiler
+ * restrictions in constructors.
+ *
+ */
+std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_two_cudf_scalars(
+    std::unique_ptr<cudf::scalar> scalar1,
+    std::unique_ptr<cudf::scalar> scalar2);
+
 struct GPUReductionFunctionMax : public GPUReductionFunction {
     GPUReductionFunctionMax(std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
@@ -139,6 +150,21 @@ struct GPUReductionFunctionCount : public GPUReductionFunction {
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   arrow::MakeScalar(dt, 0).ValueOrDie(), output_stream)),
               dt, MPI_SUM) {}
+};
+
+struct GPUReductionFunctionMean : public GPUReductionFunction {
+    GPUReductionFunctionMean(std::shared_ptr<arrow::DataType> dt,
+                             rmm::cuda_stream_view& output_stream)
+        : GPUReductionFunction(
+              {"sum", "count"}, {"add", "add"},
+              {GPUReductionType::AGGREGATION, GPUReductionType::AGGREGATION},
+              make_vector_of_two_cudf_scalars(
+                  arrow_scalar_to_cudf(arrow::MakeScalar(dt, 0).ValueOrDie(),
+                                       output_stream),
+                  arrow_scalar_to_cudf(arrow::MakeScalar(dt, 0).ValueOrDie(),
+                                       output_stream)),
+              dt, MPI_SUM) {}
+    void Finalize(MPI_Comm comm) override;
 };
 
 /**

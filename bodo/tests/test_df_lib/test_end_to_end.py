@@ -2494,7 +2494,7 @@ def test_series_min_max_unsupported_types():
         pytest.param("sum", marks=pytest.mark.gpu),
         pytest.param("product", marks=pytest.mark.gpu),
         pytest.param("count", marks=pytest.mark.gpu),
-        "mean",
+        pytest.param("mean", marks=pytest.mark.gpu),
         "std",
     ],
 )

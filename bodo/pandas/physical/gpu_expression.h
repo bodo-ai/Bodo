@@ -309,10 +309,10 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUNullExpression::join_expr_internal unimplemented ");
     }
@@ -364,10 +364,10 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
         }
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUNullExpression::join_expr_internal unimplemented ");
     }
@@ -418,10 +418,10 @@ class PhysicalGPUConstantExpression : public PhysicalGPUExpression {
         }
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUConstantExpression::join_expr_internal unimplemented ");
     }
@@ -472,10 +472,10 @@ class PhysicalGPUColumnRefExpression : public PhysicalGPUExpression {
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
@@ -551,10 +551,10 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
@@ -607,10 +607,10 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -698,10 +698,10 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -765,8 +765,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -796,10 +796,10 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -830,8 +830,8 @@ class PhysicalGPUCaseExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // Process children first.
         std::shared_ptr<ExprGPUResult> when_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -844,10 +844,10 @@ class PhysicalGPUCaseExpression : public PhysicalGPUExpression {
         return std::make_shared<ArrayExprGPUResult>(std::move(result), "Case");
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
