@@ -13,7 +13,7 @@
 
 inline bool gpu_capable(duckdb::LogicalOrder& op) { return true; }
 
-inline bool gpu_capable(duckdb::LogicalTopN& op) { return true; }
+inline bool gpu_capable(duckdb::LogicalTopN& op) { return false; }
 
 struct PhysicalGPUSortMetrics {
     using stat_t = MetricBase::StatValue;
