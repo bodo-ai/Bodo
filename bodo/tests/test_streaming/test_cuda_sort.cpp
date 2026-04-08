@@ -100,7 +100,7 @@ void run_cuda_sort_test(
     if (device_id.value() >= 0) {
         cudaSetDevice(device_id.value());
     }
-    CudaSortState sort_state(schema, schema, key_indices, column_order,
+    CudaSortState sort_state(schema, key_indices, column_order,
                              null_precedence);
     if (!is_gpu_rank()) {
         bool global_is_last = false;

@@ -119,8 +119,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         }
 
         this->cuda_sort_state = std::make_unique<CudaSortState>(
-            input_schema, output_schema, key_indices, column_order,
-            null_precedence);
+            input_schema, key_indices, column_order, null_precedence);
 
         this->metrics.init_time = end_timer(start_init);
     }
@@ -199,7 +198,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         }
 
         // Keep only the selected columns in desired order from kept_cols.
-        std::unique_ptr<cudf::table> out_table;
+        std::unique_ptr<cudf::table> out_table = nullptr;
         if (this->kept_cols.size() == (size_t)sorted_table->num_columns()) {
             bool identity = true;
             for (size_t i = 0; i < this->kept_cols.size(); i++) {

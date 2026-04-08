@@ -13,8 +13,7 @@ class CudaSortState {
     // Implements Parallel Sample Sort (PSRS) for distributed sorting of cudf
     // tables across GPU ranks.
    public:
-    CudaSortState(std::shared_ptr<bodo::Schema> input_schema,
-                  std::shared_ptr<bodo::Schema> output_schema,
+    CudaSortState(std::shared_ptr<bodo::Schema> schema,
                   std::vector<cudf::size_type> const& key_indices,
                   std::vector<cudf::order> const& column_order,
                   std::vector<cudf::null_order> const& null_precedence);
@@ -52,8 +51,7 @@ class CudaSortState {
     MPI_Comm get_mpi_comm() { return shuffle_manager.get_mpi_comm(); }
 
    private:
-    std::shared_ptr<bodo::Schema> input_schema;
-    std::shared_ptr<bodo::Schema> output_schema;
+    std::shared_ptr<bodo::Schema> schema;
     std::vector<cudf::size_type> key_indices;
     std::vector<cudf::order> column_order;
     std::vector<cudf::null_order> null_precedence;
