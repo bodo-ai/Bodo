@@ -56,7 +56,12 @@ def main():
             os.path.dirname(__file__), os.pardir, "data", "tpch", "SF10"
         ),
     )
-    parser.add_argument("--n_workers", type=int, default=1)
+    parser.add_argument(
+        "--n_workers",
+        type=int,
+        default=1,
+        help="Number of Dask workers (GPUs) to use. For multi-node runs, this specifies the number of instances to launch and Dask-CUDA will launch one worker per GPU.",
+    )
     parser.add_argument("--n_iters", type=int, default=1)
     parser.add_argument(
         "--warmup",
@@ -73,11 +78,33 @@ def main():
         "--print_output",
         action="store_true",
     )
+
+    # Multi-Node Arguments:
+    parser.add_argument(
+        "--run_multi_node",
+        action="store_true",
+        help="If set, run the query in a multi-node Dask cluster using Dask Cloud Provider",
+    )
+    parser.add_argument(
+        "--instance_profile_name",
+        type=str,
+        default=None,
+        help="IAM instance profile name for EC2 instances for accessing S3",
+    )
+    parser.add_argument(
+        "--subnet_id",
+        type=str,
+        default=None,
+        help="Subnet ID for EC2 instances (within us-east-2)",
+    )
+
     args = parser.parse_args()
 
     if args.log_timings and not os.path.exists(args.log_timings):
         with open(args.log_timings, "w") as f:
-            f.write("scale_factor,n_gpus,implementation,time_seconds,params\n")
+            f.write(
+                "scale_factor,storage_type,n_gpus,implementation,time_seconds,params\n"
+            )
 
     scale_factor = args.root.split("/")[-1].replace("SF", "")
     if scale_factor.isdigit():
@@ -87,11 +114,51 @@ def main():
 
     storage_type = "s3" if args.root.startswith("s3://") else "local"
 
-    # Configure Dask to have longer worker timeouts for long-running tasks.
-    dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
-    dask.config.set({"distributed.comm.timeouts.connect": "600s"})
+    if args.run_multi_node:
+        from dask_cloudprovider.aws import EC2Cluster
 
-    _ = Client(LocalCUDACluster(n_workers=args.n_workers, enable_cudf_spill=True))
+        # Use GPU AMI with Nvidia drivers pre-installed to speed up cluster startup time.
+        # The specific AMI below was obtained from the following command:
+        # aws ssm get-parameter \
+        #     --region us-east-2 \
+        #     --name /aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id \
+        #     --query 'Parameter.Value' \
+        #     --output text
+        ami = "ami-0600d0aaccc95db72"
+
+        # Instance profile with permissions for reading from S3 (if not passing default credentials).
+        instance_profile = (
+            None
+            if args.instance_profile_name is None
+            else {"Name": args.instance_profile_name}
+        )
+
+        # See https://docs.rapids.ai/deployment/stable/cloud/aws/ec2-multi/
+        # for more details about cluster configuration and setup.
+        cluster = EC2Cluster(
+            instance_type="g7e.12xlarge",
+            docker_image="nvcr.io/nvidia/rapidsai/base:26.02-cuda13-py3.13",
+            worker_class="dask_cuda.CUDAWorker",
+            worker_options={"rmm_managed_memory": True},
+            docker_args="--shm-size=256m -e EXTRA_CONDA_PACKAGES=s3fs",
+            n_workers=args.n_workers,
+            filesystem_size=250,  # GB
+            region="us-east-2",
+            subnet_id=args.subnet_id,
+            ami=ami,
+            iam_instance_profile=instance_profile,
+            bootstrap=False,
+            security=False,
+        )
+    else:
+        # Configure Dask to have longer worker timeouts for long-running tasks.
+        dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
+        dask.config.set({"distributed.comm.timeouts.connect": "600s"})
+
+        cluster = LocalCUDACluster(
+            n_workers=args.n_workers, rmm_pool_size="90GB", enable_cudf_spill=True
+        )
+    client = Client(cluster)
 
     if args.warmup:
         try:
@@ -106,20 +173,27 @@ def main():
             result = q5(args.root).compute()
             total_time = time.time() - t0
             print(
-                f"Q5 dask (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
+                f"Q5 dask (sf={scale_factor}, n_workers={args.n_workers}): {i} took {total_time:.4f} s"
             )
+
             if args.print_output:
                 print(result)
 
             if args.log_timings:
+                extra_params = (
+                    "cluster=multi-node" if args.run_multi_node else "cluster=local"
+                )
                 with open(args.log_timings, "a") as f:
                     f.write(
-                        f"{scale_factor},{storage_type},{args.n_workers},dask,{total_time:.4f},\n"
+                        f"{scale_factor},{storage_type},{args.n_workers},dask,{total_time:.4f},{extra_params}\n"
                     )
         except Exception as e:
             print(
                 f"Error executing query sf={scale_factor}, n_gpus={args.n_workers}: {e}"
             )
+
+    client.close()
+    cluster.close()
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@
 #include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
 #include "physical/gpu_join_filter.h"
+#include "physical/gpu_limit.h"
 #include "physical/gpu_project.h"
 #include "physical/gpu_reduce.h"
 #include "physical/gpu_union_all.h"
@@ -1074,6 +1075,21 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
         throw std::runtime_error("LogicalLimit unsupported limit type");
     }
     duckdb::idx_t n = op.limit_val.GetConstantValue();
+
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalLimit>,
+                 std::shared_ptr<PhysicalGPULimit>>
+        physical_op;
+
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        physical_op = std::make_shared<PhysicalGPULimit>(n, in_table_schema);
+    } else {
+        physical_op = std::make_shared<PhysicalLimit>(n, in_table_schema);
+    }
+    std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); }, physical_op);
+#else   // USE_CUDF
+    // Otherwise, create a PhysicalLimit operator
     auto physical_op = std::make_shared<PhysicalLimit>(n, in_table_schema);
     // Finish the pipeline at this point so that Finalize can run
     // to reduce the number of collected rows to the desired amount.
@@ -1081,6 +1097,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
     // previous pipeline and the source of the next one.
     // We record the pipeline dependency between these two pipelines.
     FinishPipelineOneOperator(physical_op);
+#endif  // USE_CUDF
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
