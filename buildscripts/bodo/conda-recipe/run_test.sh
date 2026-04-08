@@ -6,8 +6,6 @@ export NUMBA_DISABLE_ERROR_MESSAGE_HIGHLIGHTING=1
 export PYTHONFAULTHANDLER=1
 export BODO_NUM_WORKERS=3
 
-echo $gpu
-
 if [[ "$gpu" == "true" ]]; then
     export OMPI_MCA_pml=ucx
     export BODO_GPU_DISABLE_CPU_FALLBACK=1
