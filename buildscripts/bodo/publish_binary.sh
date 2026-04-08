@@ -7,6 +7,9 @@ BODO_VERSION=${3:-}
 
 echo "********** Publishing to Artifactory **********"
 label="main"
+if [[ "$IS_GPU_BUILD" == "true" ]]; then
+    label="gpu"
+fi
 PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
 
 for package in `ls $PACKAGE_DIR/bodo*.conda`; do

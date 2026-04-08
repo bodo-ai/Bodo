@@ -7,7 +7,7 @@ source:
 
 build:
   number: {{ GIT_DESCRIBE_NUMBER|int }}
-  string: "{{ 'gpu' if gpu else 'cpu' }}_{{ PKG_BUILD_STRING }}"
+  string: "{{ 'gpu' if gpu else 'cpu' }}_py{{ PY_VER }}{{ PKG_HASH }}_{{ PKG_BUILDNUM }}"
   script_env:
     - IS_BODO_PLATFORM
     - BUILD_WITH_V8

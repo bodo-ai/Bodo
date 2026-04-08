@@ -55,6 +55,7 @@ jobs:
         with:
           environment-name: bodo_build
           create-args: >-
+            python=3.11 
             conda-libmamba-solver
             conda-build
             anaconda-client 
@@ -125,6 +126,7 @@ jobs:
           ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL $OS_DIR $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
+          IS_GPU_BUILD: ${{ inputs.gpu-build }}
           ARTIFACTORY_CHANNEL: ${{ (inputs.platform-build == true && inputs.is-release == true) && 'bodo.ai-platform' || 'SKIP_ARTIFACTORY' }}
           OS_DIR: ${{ format('{0}', (inputs.runner-id == 'macos-13') && 'osx-64' || (inputs.runner-id == 'macos-14') && 'osx-arm64' || (inputs.runner-id == 'windows-latest') && 'win-64' || 'linux-64') }}
           USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
