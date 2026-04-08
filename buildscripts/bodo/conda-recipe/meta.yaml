@@ -7,7 +7,7 @@ source:
 
 build:
   number: {{ GIT_DESCRIBE_NUMBER|int }}
-  string: "{{ 'gpu' if gpu else 'cpu' }}_py{{ PY_VER }}{{ PKG_HASH }}_{{ PKG_BUILDNUM }}"
+  string: "py{{ PY_VER }}h{{ PKG_HASH }}_{{ PKG_BUILDNUM }}_{{ 'cuda' if gpu else 'cpu' }}"
   script_env:
     - IS_BODO_PLATFORM
     - BUILD_WITH_V8
@@ -69,7 +69,7 @@ requirements:
     - openmpi               # [gpu]
     - mpich                 # [not gpu and linux]
     - openmpi               # [not gpu and osx]
-    - impi-devel          # [not gpu and win]
+    - impi-devel            # [not gpu and win]
 
     # Corresponding dependency is automatically added in reqs/run.
     - aws-sdk-cpp

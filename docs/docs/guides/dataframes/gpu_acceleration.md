@@ -9,15 +9,24 @@ This page describes Bodo’s CPU–GPU hybrid execution within [Bodo DataFrames]
 
 Bodo DataFrames provides hybrid CPU-GPU execution.  It can execute anywhere from 0 to 100% of the nodes of a DataFrame plan on the GPUs available within the machine or a Bodo cluster.  Bodo DataFrames incorporates a cost model that analyzes the plan to determine which nodes should run on CPU or GPU.  When neighboring pipeline nodes run on different device types, Bodo automatically inserts and performs the necessary data transfers.
 
+## Installation
+
+To use Bodo's GPU support, install a GPU-enabled build variant of our conda package available on the `bodo.ai` channel:
+
+```
+conda install -c bodo.ai -c rapidsai -c nvidia bodo=*_cuda
+```
+
+This version of the Bodo package includes the dependencies necessary for running Bodo on GPUs, including CUDA, and is pre-configured to use GPUs by default.
+To disable GPU usage by Bodo DataFrames, set:
+
+```
+BODO_GPU=0
+```
+
+If `BODO_GPU` is set to another value or not set, Bodo DataFrames will use available GPUs when possible.
+
 ## Enabling GPU Hybrid Execution
-
-GPU execution is opt-in. To enable GPU usage by the DataFrame system set:
-
-```
-export BODO_GPU=1
-```
-
-If BODO_GPU is not set (or set to 0), Bodo runs DataFrame execution on CPU only even if GPUs are present.
 
 Bodo uses CUDA-aware MPI for GPU communication, which in the OpenMPI case requires setting OpenMPI's communication layer to UCX:
 
