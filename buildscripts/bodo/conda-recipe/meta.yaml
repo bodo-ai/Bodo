@@ -58,17 +58,13 @@ requirements:
     - libboost-headers          # [not win]
     - libboost-devel            # [win]
 
-    # HDF5 and h5py
-    - hdf5 * *mpi_openmpi_*     # [gpu]
     - hdf5 * *mpi_mpich_*       # [not gpu and linux]
-    - hdf5 * *mpi_openmpi_*     # [not gpu and osx]
+    - hdf5 * *mpi_openmpi_*     # [gpu or osx]
     - hdf5 * *mpi_impi_*        # [not gpu and win]
     - h5py
 
-    # MPI
-    - openmpi               # [gpu]
     - mpich                 # [not gpu and linux]
-    - openmpi               # [not gpu and osx]
+    - openmpi               # [gpu or osx]
     - impi-devel            # [not gpu and win]
 
     # Corresponding dependency is automatically added in reqs/run.
@@ -86,6 +82,7 @@ requirements:
     - {{ pin_compatible('numpy') }}
     - pandas >=2.2
     - fsspec >=2021.09
+    - mpi4py >=4.0
 
     - pyarrow 21.0.*        # [gpu]
     - pyarrow 23.0.*        # [not gpu]
@@ -95,10 +92,8 @@ requirements:
     - numba >=0.60,<0.62.0  # [gpu]
     - numba >=0.62,<0.64    # [not gpu]
 
-    - mpi4py >=4.0
-    - openmpi               # [gpu]
     - mpich                 # [not gpu and linux]
-    - openmpi               # [not gpu and osx]
+    - openmpi               # [gpu or osx]
     - impi_rt               # [not gpu and win]
 
     - requests
@@ -107,6 +102,7 @@ requirements:
     - psutil
     - pytz
 
+    # GPU dependencies
     - cudf >=25.12          # [gpu]
     - rmm >=25.12           # [gpu]
     - librmm >=25.12        # [gpu]

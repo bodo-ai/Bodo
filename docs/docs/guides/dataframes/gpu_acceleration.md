@@ -11,7 +11,7 @@ Bodo DataFrames provides hybrid CPU-GPU execution.  It can execute anywhere from
 
 ## Installation
 
-To use Bodo's GPU support, install a GPU-enabled build variant of our conda package available on the `bodo.ai` channel:
+To use Bodo's GPU support, install the GPU-enabled conda package available on the `bodo.ai` channel:
 
 ```
 conda install -c bodo.ai -c rapidsai -c nvidia bodo=*_cuda

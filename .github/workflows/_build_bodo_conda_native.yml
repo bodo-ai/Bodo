@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       gpu-build:
-        description: 'Whether this is a GPU build'
+        description: 'Build GPU Version of Bodo'
         required: false
         type: boolean
         default: false
@@ -99,10 +99,10 @@ jobs:
           # Sccache Creds
           AWS_ACCESS_KEY_ID: ${{ vars.SCCACHE_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SCCACHE_AWS_SECRET_ACCESS_KEY }}
+          EXTRA_CHANNELS: ${{ (inputs.gpu-build == true) && '-c rapidsai -c nvidia' || '' }}
           # Platform specific
           IS_BODO_PLATFORM: ${{ (inputs.platform-build == true) && '1' || '0' }}
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
-          EXTRA_CHANNELS: ${{ (inputs.gpu-build == true) && '-c rapidsai -c nvidia' || '' }}
 
       - name: Convert Build Path (Windows Only)
         if: ${{ inputs.runner-id == 'windows-latest' }}
