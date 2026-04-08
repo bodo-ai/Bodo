@@ -13,18 +13,16 @@
 #ifdef USE_CUDF
 
 CudaSortState::CudaSortState(
-    std::shared_ptr<bodo::Schema> schema,
+    std::shared_ptr<bodo::Schema> input_schema,
+    std::shared_ptr<bodo::Schema> output_schema,
     std::vector<cudf::size_type> const& key_indices,
     std::vector<cudf::order> const& column_order,
     std::vector<cudf::null_order> const& null_precedence)
-    : schema(std::move(schema)),
+    : input_schema(std::move(input_schema)),
+      output_schema(std::move(output_schema)),
       key_indices(key_indices),
       column_order(column_order),
-      null_precedence(null_precedence) {
-    // Schema for sort keys (used for sampling and pivots)
-    std::vector<std::shared_ptr<arrow::Field>> key_fields;
-    auto full_arrow_schema = this->schema->ToArrowSchema();
-}
+      null_precedence(null_precedence) {}
 
 void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
                                  std::shared_ptr<StreamAndEvent> input_se) {
@@ -94,7 +92,8 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
                                   null_precedence, stream);
         accumulation_buffer.clear();
     } else {
-        local_table = empty_table_from_arrow_schema(schema->ToArrowSchema());
+        local_table =
+            empty_table_from_arrow_schema(input_schema->ToArrowSchema());
     }
 
     MPI_Comm comm = sample_gatherer.get_mpi_comm();
@@ -235,13 +234,13 @@ std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
     bool& out_is_last, rmm::cuda_stream_view stream) {
     if (state != State::MERGING) {
         out_is_last = false;
-        return empty_table_from_arrow_schema(schema->ToArrowSchema());
+        return empty_table_from_arrow_schema(output_schema->ToArrowSchema());
     }
 
     if (final_result == nullptr) {
         if (received_tables.empty()) {
             final_result =
-                empty_table_from_arrow_schema(schema->ToArrowSchema());
+                empty_table_from_arrow_schema(output_schema->ToArrowSchema());
         } else {
             std::vector<cudf::table_view> views;
             for (const auto& table : received_tables) {
