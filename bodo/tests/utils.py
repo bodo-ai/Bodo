@@ -1367,9 +1367,9 @@ def _test_equal(
                 py_out = pd.Series(
                     _to_pa_array(
                         py_out.map(
-                            lambda a: None
-                            if isinstance(a, float) and np.isnan(a)
-                            else a
+                            lambda a: (
+                                None if isinstance(a, float) and np.isnan(a) else a
+                            )
                         ).values,
                         pa_type,
                     ),

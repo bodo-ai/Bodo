@@ -1645,8 +1645,8 @@ def overload_runtime_join_filter(
     # If no filter can be applied, just return a NOP implementation
     # (that will get optimized out) to avoid function call overheads.
     if (not any(can_apply_bloom_filters)) and (not any(can_apply_col_filters)):
-        return (
-            lambda join_states, table, join_keys_idxs, process_col_bitmasks: table
+        return lambda join_states, table, join_keys_idxs, process_col_bitmasks: (
+            table
         )  # pragma: no cover
 
     col_inds_t = MetaType(tuple(range(n_cols)))

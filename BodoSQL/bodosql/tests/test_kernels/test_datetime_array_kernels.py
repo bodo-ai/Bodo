@@ -2953,10 +2953,8 @@ def test_interval_multiply(interval_input, memory_leak_check):
     scalar_integer_impl = impl
     # If we have a scalar interval then the scalar integer outputs a scalar.
     if isinstance(interval_input, (pd.Timedelta, pd.DateOffset)):
-        scalar_integer_impl = (
-            lambda interval, integer: bodosql.kernels.interval_multiply(
-                interval, integer
-            )
+        scalar_integer_impl = lambda interval, integer: (
+            bodosql.kernels.interval_multiply(interval, integer)
         )
 
     def interval_scalar_fn(interval, integer):
@@ -3230,14 +3228,8 @@ def test_construct_timestamp(
     args = (year, month, day, hour, minute, second, nanosecond)
     if not any(isinstance(arg, pd.Series) for arg in args):
         if has_time_zone:
-            impl = (
-                lambda year,
-                month,
-                day,
-                hour,
-                minute,
-                second,
-                nanosecond: bodosql.kernels.construct_timestamp(
+            impl = lambda year, month, day, hour, minute, second, nanosecond: (
+                bodosql.kernels.construct_timestamp(
                     year,
                     month,
                     day,
@@ -3249,14 +3241,8 @@ def test_construct_timestamp(
                 )
             )
         else:
-            impl = (
-                lambda year,
-                month,
-                day,
-                hour,
-                minute,
-                second,
-                nanosecond: bodosql.kernels.construct_timestamp(
+            impl = lambda year, month, day, hour, minute, second, nanosecond: (
+                bodosql.kernels.construct_timestamp(
                     year, month, day, hour, minute, second, nanosecond, None
                 )
             )

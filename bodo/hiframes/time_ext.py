@@ -996,8 +996,8 @@ def create_cmp_op_overload(op):
         if isinstance(lhs, TimeType) and is_overload_none(rhs):
             # When we compare Time and None in order to sort or take extreme values
             # in a series/array of Time, Time() > None, Time() < None should all return True
-            return (
-                lambda lhs, rhs: False if op is operator.eq else True
+            return lambda lhs, rhs: (
+                False if op is operator.eq else True
             )  # pragma: no cover
 
         if is_overload_none(lhs) and isinstance(rhs, TimeType):

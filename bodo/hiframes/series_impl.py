@@ -137,9 +137,9 @@ def overload_series_dtype(s):
     if s.dtype == bodo.types.string_type:
         raise BodoError("Series.dtype not supported for string Series yet")
 
-    return lambda s: bodo.hiframes.pd_series_ext.get_series_data(
-        s
-    ).dtype  # pragma: no cover
+    return lambda s: (
+        bodo.hiframes.pd_series_ext.get_series_data(s).dtype
+    )  # pragma: no cover
 
 
 @overload_attribute(HeterogeneousSeriesType, "shape", jit_options={"cache": True})
@@ -182,8 +182,8 @@ def overload_series_hasnans(s):
 @overload_attribute(HeterogeneousSeriesType, "empty", jit_options={"cache": True})
 @overload_attribute(SeriesType, "empty", jit_options={"cache": True})
 def overload_series_empty(s):
-    return (
-        lambda s: len(bodo.hiframes.pd_series_ext.get_series_data(s)) == 0
+    return lambda s: (
+        len(bodo.hiframes.pd_series_ext.get_series_data(s)) == 0
     )  # pragma: no cover
 
 
@@ -1679,9 +1679,9 @@ def overload_series_is_monotonic_decreasing(S):
 @overload_attribute(SeriesType, "nbytes", inline="always", jit_options={"cache": True})
 def overload_series_nbytes(S):
     """Support Series.nbytes. It returns nbytes for data only (without index)"""
-    return lambda S: bodo.hiframes.pd_series_ext.get_series_data(
-        S
-    ).nbytes  # pragma: no cover
+    return lambda S: (
+        bodo.hiframes.pd_series_ext.get_series_data(S).nbytes
+    )  # pragma: no cover
 
 
 @overload_method(
@@ -1721,12 +1721,8 @@ def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=N
     if not is_overload_bool(skipna):
         raise BodoError("Series.median(): skipna argument must be a boolean")
 
-    return (
-        lambda S,
-        axis=None,
-        skipna=True,
-        level=None,
-        numeric_only=None: bodo.libs.array_ops.array_op_median(
+    return lambda S, axis=None, skipna=True, level=None, numeric_only=None: (
+        bodo.libs.array_ops.array_op_median(
             bodo.hiframes.pd_series_ext.get_series_data(S), skipna
         )
     )  # pragma: no cover
@@ -3649,14 +3645,10 @@ def overload_series_fillna(
             # optimization: just set null bit if fill is empty
             if is_overload_constant_str(value) and get_overload_const_str(value) == "":
                 return (
-                    lambda S,
-                    value=None,
-                    method=None,
-                    axis=None,
-                    inplace=False,
-                    limit=None,
-                    downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
-                        bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                    lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: (
+                        bodo.libs.str_arr_ext.set_null_bits_to_value(
+                            bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                        )
                     )
                 )
 
@@ -3672,14 +3664,10 @@ def overload_series_fillna(
                 and get_overload_const_bytes(value) == b""
             ):
                 return (
-                    lambda S,
-                    value=None,
-                    method=None,
-                    axis=None,
-                    inplace=False,
-                    limit=None,
-                    downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
-                        bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                    lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: (
+                        bodo.libs.str_arr_ext.set_null_bits_to_value(
+                            bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                        )
                     )
                 )
 
@@ -5416,12 +5404,8 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
 
     # optimized path for dict-encoded string arrays
     if arg_a == bodo.types.dict_str_arr_type:
-        return (
-            lambda arg_a,
-            errors="raise",
-            downcast=None: bodo.libs.dict_arr_ext.dict_arr_to_numeric(
-                arg_a, errors, downcast
-            )
+        return lambda arg_a, errors="raise", downcast=None: (
+            bodo.libs.dict_arr_ext.dict_arr_to_numeric(arg_a, errors, downcast)
         )  # pragma: no cover
 
     _arr_typ = (
