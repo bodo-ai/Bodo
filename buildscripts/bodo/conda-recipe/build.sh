@@ -21,7 +21,7 @@ if [[ "$gpu" == "true" ]]; then
     DEFAULT_GPU=1
 fi
 
-echo 'DEFAULT_GPU_ENABLED = "$DEFAULT_GPU"' > bodo/_build_config.py
+echo "DEFAULT_GPU_ENABLED = '${DEFAULT_GPU}'" > bodo/_build_config.py
 
 # Build the wheel. We can use this for only-Pip wheel builds
 $PYTHON -m pip install \
