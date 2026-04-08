@@ -6,12 +6,17 @@ on:
         description: 'Python Version to Build For'
         type: string
         required: true
-      os:
-        description: 'Operating System to Build On/For'
+      runner-id:
+        description: 'Github Runner ID responsible for the build (e.g. ubuntu-latest, windows-latest, macos-14)'
         type: string
         required: true
       platform-build:
         description: 'Build Platform Version of Bodo'
+        required: false
+        type: boolean
+        default: false
+      gpu-build:
+        description: 'Whether this is a GPU build'
         required: false
         type: boolean
         default: false
@@ -30,7 +35,7 @@ jobs:
       run:
         shell: bash -l {0}
 
-    runs-on: ${{ inputs.os }}
+    runs-on: ${{ inputs.runner-id }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -39,7 +44,7 @@ jobs:
 
       # Mac-Specific Setup
       - name: Install MacOS SDK
-        if: ${{ contains(inputs.os, 'macos') }}
+        if: ${{ contains(inputs.runner-id, 'macos') }}
         run: ./buildscripts/setup_osx_sdk.sh
         env:
           MACOSX_DEPLOYMENT_TARGET: ${{ '11.0' }}
@@ -73,6 +78,7 @@ jobs:
           set -exo pipefail
           cd buildscripts/bodo/conda-recipe
 
+          gpu_variant=${{ inputs.gpu-build && 'true' || 'false' }}
           # --no-verify because it doesn't work for Conda v2 packages
           # --no-anaconda-upload because we'll upload ourselves
           # Sccache works when the files are located in the same path.
@@ -82,7 +88,8 @@ jobs:
           conda build . $PLATFORM_CHANNEL -c conda-forge \
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
-            --python '${{ inputs.python-version }}'
+            --python '${{ inputs.python-version }}' \
+            --variants "{gpu: $gpu_variant}"
 
           # Export Location for Artifacting
           echo "CONDA_BLD_PATH=$HOME/conda-bld" >> $GITHUB_ENV
@@ -97,7 +104,7 @@ jobs:
           PLATFORM_CHANNEL: ${{ (inputs.platform-build == true) && '-c bodo.ai' || '' }}
 
       - name: Convert Build Path (Windows Only)
-        if: ${{ inputs.os == 'windows-latest' }}
+        if: ${{ inputs.runner-id == 'windows-latest' }}
         run: |
            echo "CONDA_BLD_PATH=`cygpath -w $CONDA_BLD_PATH`" >> $GITHUB_ENV 
         shell: bash
@@ -105,7 +112,7 @@ jobs:
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
-          name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.os }}
+          name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.runner-id }}
           path: ${{ env.CONDA_BLD_PATH }}
 
       - name: Publish to Artifactory / Anaconda
@@ -119,7 +126,7 @@ jobs:
         env:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ (inputs.platform-build == true && inputs.is-release == true) && 'bodo.ai-platform' || 'SKIP_ARTIFACTORY' }}
-          OS_DIR: ${{ format('{0}', (inputs.os == 'macos-13') && 'osx-64' || (inputs.os == 'macos-14') && 'osx-arm64' || (inputs.os == 'windows-latest') && 'win-64' || 'linux-64') }}
+          OS_DIR: ${{ format('{0}', (inputs.runner-id == 'macos-13') && 'osx-64' || (inputs.runner-id == 'macos-14') && 'osx-arm64' || (inputs.runner-id == 'windows-latest') && 'win-64' || 'linux-64') }}
           USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
           TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
           ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}

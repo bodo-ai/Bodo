@@ -8,7 +8,12 @@ export BODO_NUM_WORKERS=3
 
 echo $gpu
 
-if [[ "$(uname)" == "Darwin" ]]; then
+if [[ "$gpu" == "true" ]]; then
+    export BODO_GPU=1
+    export OMPI_MCA_pml=ucx
+    export BODO_DATAFRAME_LIBRARY_DUMP_PLANS=1
+    python -c "import bodo.pandas as pd; print(pd.DataFrame({'a': [1, 2], 'b': [3, 4]})['a'])"
+elif [[ "$(uname)" == "Darwin" ]]; then
     # OpenMPI requires mpiexec on macOS CI.
     mpiexec -n 1 python -u examples/Misc/misc_pi.py
 else
