@@ -278,7 +278,7 @@ class PhysicalSink : public PhysicalOperator {
     virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                         OperatorResult prev_op_result);
 
-    virtual std::variant<std::shared_ptr<table_info>, PyObject*>
+    virtual std::variant<std::shared_ptr<table_info>, PyObject *>
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
@@ -352,7 +352,22 @@ class PhysicalGPUSource : public PhysicalOperator {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+    const std::shared_ptr<bodo::Schema> getOutputSchema() {
+        const std::shared_ptr<bodo::Schema> schema = getOutputSchemaInternal();
+        for (const auto &col_type : schema->column_types) {
+            if (col_type->array_type == bodo_array_type::NUMPY) {
+                throw std::runtime_error(
+                    "GPU operators do not support numpy array types in the "
+                    "output schema. This is because in the GPU -> CPU process "
+                    "the batch goes through Arrow and our Arrow -> Bodo "
+                    "conversion does not support numpy array types");
+            }
+        }
+        return schema;
+    };
+
+   private:
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() = 0;
 };
 
 /**
@@ -375,7 +390,7 @@ class PhysicalGPUSink : public PhysicalOperator {
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) = 0;
 
-    virtual std::variant<std::shared_ptr<table_info>, PyObject*>
+    virtual std::variant<std::shared_ptr<table_info>, PyObject *>
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;

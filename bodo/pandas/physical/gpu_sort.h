@@ -61,6 +61,11 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         for (long kept_col : this->kept_cols) {
             std::unique_ptr<bodo::DataType> col_type =
                 input_schema->column_types[kept_col]->copy();
+            if (col_type->array_type == bodo_array_type::NUMPY) {
+                col_type = std::make_unique<bodo::DataType>(
+                    bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
+                    col_type->precision, col_type->scale, col_type->timezone);
+            }
             this->output_schema->append_column(std::move(col_type));
             this->output_schema->column_names.push_back(
                 input_schema->column_names[kept_col]);
@@ -233,7 +238,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         throw std::runtime_error("GetResult called on a sort node.");
     }
 
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return output_schema;
     }
 
