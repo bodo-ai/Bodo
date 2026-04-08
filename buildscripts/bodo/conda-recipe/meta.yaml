@@ -72,6 +72,8 @@ requirements:
     - zstd
 
     # GPU dependencies
+    # Upper bound is needed to avoid incompatibilities with newer versions of these packages.
+    # TODO: Upgrade rapids dependencies.
     - cudf >=25.12,<26.04          # [gpu]
     - rmm >=25.12,<26.04           # [gpu]
     - librmm >=25.12,<26.04        # [gpu]
@@ -103,12 +105,10 @@ requirements:
     - pytz
 
     # GPU dependencies
-    # Upper bound is needed to avoid incompatibilities with newer versions of these packages.
-    # TODO: Upgrade rapids dependencies.
     - cudf >=25.12,<26.04          # [gpu]
     - rmm >=25.12,<26.04           # [gpu]
     - librmm >=25.12,<26.04        # [gpu]
-    - cuda-version 13.*     # [gpu]
+    - cuda-version 13.*            # [gpu]
 
     - {{ pin_compatible("cuda-version") }}  # [gpu]
 
