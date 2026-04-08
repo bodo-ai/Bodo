@@ -14,7 +14,7 @@ export SETUPTOOLS_SCM_PRETEND_VERSION="$PKG_VERSION"
 export CMAKE_GENERATOR='Ninja'
 
 cmake_gpu_define=""
-if [[ "$BODO_USE_CUDA" == "1" ]]; then
+if [[ "$gpu" == "true" ]]; then
     cmake_gpu_define="--config-settings=cmake.define.USE_CUDF=ON"
 fi
 

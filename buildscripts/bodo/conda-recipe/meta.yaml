@@ -16,7 +16,6 @@ build:
     - AWS_SECRET_ACCESS_KEY
     # Flag for disabling sccache in the build environment
     - DISABLE_SCCACHE_IN_BUILD
-    - BODO_USE_CUDA={{ "1" if gpu else "0" }}
   rpaths:
     - lib
     - {{ PREFIX }}/lib
@@ -90,8 +89,8 @@ requirements:
 
     - pyarrow 21.0.*        # [gpu]
     - pyarrow 23.0.*        # [not gpu]
-    - libarrow 21.0.*    # [gpu]
-    - libarrow 23.0.*    # [not gpu]
+    - libarrow 21.0.*       # [gpu]
+    - libarrow 23.0.*       # [not gpu]
 
     - numba >=0.60,<0.62.0  # [gpu]
     - numba >=0.62,<0.64    # [not gpu]
@@ -107,6 +106,11 @@ requirements:
     - cloudpickle >=3.0
     - psutil
     - pytz
+
+    - cudf >=25.12          # [gpu]
+    - rmm >=25.12           # [gpu]
+    - librmm >=25.12        # [gpu]
+    - cuda-version 13.*     # [gpu]
 
     - {{ pin_compatible("cuda-version") }}  # [gpu]
 
