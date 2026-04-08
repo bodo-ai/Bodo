@@ -24,10 +24,6 @@ CudaSortState::CudaSortState(
     // Schema for sort keys (used for sampling and pivots)
     std::vector<std::shared_ptr<arrow::Field>> key_fields;
     auto full_arrow_schema = this->schema->ToArrowSchema();
-    for (auto idx : this->key_indices) {
-        key_fields.push_back(full_arrow_schema->field(idx));
-    }
-    this->key_schema = std::make_shared<arrow::Schema>(std::move(key_fields));
 }
 
 void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
@@ -137,7 +133,8 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
             cudf::gather(local_table->select(key_indices), sample_indices_view,
                          cudf::out_of_bounds_policy::DONT_CHECK, stream);
     } else {
-        sample_table = empty_table_from_arrow_schema(this->key_schema);
+        sample_table =
+            std::make_unique<cudf::table>(local_table->select(key_indices));
     }
 
     // Start Broadcast of local samples
@@ -204,10 +201,6 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
                 cudf::gather(sorted_samples->view(), pivot_indices_view,
                              cudf::out_of_bounds_policy::DONT_CHECK, stream);
         }
-    }
-
-    if (!global_pivots) {
-        global_pivots = empty_table_from_arrow_schema(this->key_schema);
     }
 
     //  Partitioning

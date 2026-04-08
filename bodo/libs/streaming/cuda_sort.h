@@ -52,7 +52,6 @@ class CudaSortState {
 
    private:
     std::shared_ptr<bodo::Schema> schema;
-    std::shared_ptr<arrow::Schema> key_schema;
     std::vector<cudf::size_type> key_indices;
     std::vector<cudf::order> column_order;
     std::vector<cudf::null_order> null_precedence;

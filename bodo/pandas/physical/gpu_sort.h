@@ -119,7 +119,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         }
 
         this->cuda_sort_state = std::make_unique<CudaSortState>(
-            input_schema, key_indices, column_order, null_precedence);
+            output_schema, key_indices, column_order, null_precedence);
 
         this->metrics.init_time = end_timer(start_init);
     }
