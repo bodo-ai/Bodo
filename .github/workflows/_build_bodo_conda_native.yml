@@ -86,7 +86,7 @@ jobs:
           # Conda-Build normally uses a random path. Setting these args disables that.
           # --croot for consistent base directory path for sccache
           # --build-id-pat for consistent build directory path for sccache
-          conda build . $PLATFORM_CHANNEL -c conda-forge \
+          conda build . $EXTRA_CHANNELS -c conda-forge \
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
             --python '${{ inputs.python-version }}' \
@@ -102,7 +102,7 @@ jobs:
           # Platform specific
           IS_BODO_PLATFORM: ${{ (inputs.platform-build == true) && '1' || '0' }}
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
-          PLATFORM_CHANNEL: ${{ (inputs.platform-build == true) && '-c bodo.ai' || '' }}
+          EXTRA_CHANNELS: ${{ (inputs.gpu-build == true) && '-c rapidsai -c nvidia' || '' }}
 
       - name: Convert Build Path (Windows Only)
         if: ${{ inputs.runner-id == 'windows-latest' }}
