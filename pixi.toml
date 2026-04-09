@@ -8,13 +8,13 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 default =      { features = ["py314", "rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
 azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
-platform =     { features = ["py313", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
-platform-dev = { features = ["py313", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
+platform =     { features = ["py314", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
+platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
-default-cuda =      { features = ["py313", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
+default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
 
 [tasks.configure-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/standard"
@@ -247,9 +247,6 @@ libutf8proc = "*"
 [feature.py314.dependencies]
 python = "3.14.*"
 
-[feature.py313.dependencies]
-python = "3.13.*"
-
 [feature.cpu.dependencies]
 pandas = ">=3.0.0"
 
@@ -262,9 +259,9 @@ channel-priority = "disabled"
 cuda-toolkit = "13.*"
 cuda-version = "13.*"
 cuda-nvcc = "13.*"
-rmm = "=26.04"
-librmm = "=26.04"
-cudf = "=26.04"
+rmm = ">=26.04"
+librmm = ">=26.04"
+cudf = ">=26.04"
 pandas = ">=2.2.0"
 
 
