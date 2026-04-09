@@ -896,15 +896,18 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
           result_type(std::move(_result_type)) {
         if (scalar_func_data.arrow_func_name != "ends_with" &&
             scalar_func_data.arrow_func_name != "starts_with" &&
+            scalar_func_data.arrow_func_name != "match_substring_regex" &&
             scalar_func_data.arrow_func_name != "year" &&
             scalar_func_data.arrow_func_name != "round" &&
             scalar_func_data.arrow_func_name != "is_null") {
             throw std::runtime_error(
                 "PhysicalGPUArrowExpression only supports ends_with, "
-                "starts_with, year, round and is_null for now.");
+                "starts_with, match_substring_regex, year, round and is_null "
+                "for now.");
         }
         if (scalar_func_data.arrow_func_name == "ends_with" ||
-            scalar_func_data.arrow_func_name == "starts_with") {
+            scalar_func_data.arrow_func_name == "starts_with" ||
+            scalar_func_data.arrow_func_name == "match_substring_regex") {
             extract_string_arg_from_python();
         } else if (scalar_func_data.arrow_func_name == "round") {
             extract_round_arg_from_python();
