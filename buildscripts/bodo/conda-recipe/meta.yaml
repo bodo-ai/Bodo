@@ -46,8 +46,8 @@ requirements:
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24
-    - pyarrow 23.0.*
-    - libarrow 23.0.*
+    - libarrow =23.0
+    - pyarrow =23.0
     - libboost-headers          # [not win]
     - libboost-devel            # [win]
     # Corresponding dependency is automatically added in reqs/run.
