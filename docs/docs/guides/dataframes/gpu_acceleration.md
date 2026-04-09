@@ -112,7 +112,7 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 * GroupBy aggregations: sum, count, mean, min, max, var, std, size, skew, nunique
 
-* Series reductions: `sum`, `product`, `count`,  `mean`,  `min`,  `max`
+* Series reductions: sum, product, count, mean, min, max
 
 * drop_duplicates, concat, Series.isin
 
