@@ -235,7 +235,7 @@ jobs:
             mv .coverage outputs/.coverage_${{ inputs.batch }}_${{ inputs.test-type }}
             if [[ "${{ inputs.test-type }}" == "DF_LIB_GPU" ]]; then
               mv buildscripts/github/test_dur_bodo_multi_gpu.json outputs/test_dur_bodo_multi_gpu_${{ inputs.batch }}_${{ inputs.test-type }}.json
-              mv buildscripts/github/test_dur_bodo_multi_gpu_more_workers.json outputs/test_dur_bodo_multi_gpu_more_workers_${{ inputs.batch }}_${{ inputs.test-type }}.json
+              # mv buildscripts/github/test_dur_bodo_multi_gpu_more_workers.json outputs/test_dur_bodo_multi_gpu_more_workers_${{ inputs.batch }}_${{ inputs.test-type }}.json
             else
               mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}_${{ inputs.test-type }}.json
               mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}_${{ inputs.test-type }}.json
