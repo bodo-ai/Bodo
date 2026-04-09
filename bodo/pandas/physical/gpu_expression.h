@@ -33,7 +33,9 @@
 #include <cudf/round.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
+#include <cudf/strings/contains.hpp>
 #include <cudf/strings/find.hpp>
+#include <cudf/strings/regex/regex_program.hpp>
 #include <cudf/unary.hpp>
 
 #include "duckdb/common/enums/expression_type.hpp"
@@ -449,8 +451,8 @@ class PhysicalGPUColumnRefExpression : public PhysicalGPUExpression {
         : col_idx(column), bound_name(_bound_name), left_side(_left_side) {}
     virtual ~PhysicalGPUColumnRefExpression() = default;
 
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         GPU_COLUMN res_array = std::make_unique<cudf::column>(
             input_batch.table->view().column(col_idx), se->stream);
 
@@ -520,8 +522,8 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -582,8 +584,8 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // Process child first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -659,8 +661,8 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // Process child first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -933,6 +935,10 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         } else if (scalar_func_data.arrow_func_name == "starts_with") {
             result = cudf::strings::starts_with(in_as_array->result->view(),
                                                 *str_scalar_in, se->stream);
+        } else if (scalar_func_data.arrow_func_name ==
+                   "match_substring_regex") {
+            result = cudf::strings::contains_re(in_as_array->result->view(),
+                                                *regex_prog, se->stream);
         } else if (scalar_func_data.arrow_func_name == "year") {
             result = cudf::datetime::extract_datetime_component(
                 in_as_array->result->view(),
@@ -1010,8 +1016,13 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
                             scalar_func_data.arrow_func_name));
         }
 
-        str_scalar_in =
-            std::make_shared<cudf::string_scalar>(std::string(c_str), true);
+        if (scalar_func_data.arrow_func_name == "match_substring_regex") {
+            regex_prog =
+                cudf::strings::regex_program::create(std::string(c_str));
+        } else {
+            str_scalar_in =
+                std::make_shared<cudf::string_scalar>(std::string(c_str), true);
+        }
     }
 
     void extract_round_arg_from_python() {
@@ -1032,6 +1043,9 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     // Keeping reference to the cudf string scalar created from the Python
     // string argument to ensure it stays alive during processing.
     std::shared_ptr<cudf::string_scalar> str_scalar_in;
+
+    // Needed for match_substring_regex
+    std::shared_ptr<cudf::strings::regex_program> regex_prog;
 
     int32_t round_ndigits = 0;
 };

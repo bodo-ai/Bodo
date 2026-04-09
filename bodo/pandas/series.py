@@ -1633,7 +1633,12 @@ class BodoStringMethods:
         # Avoid UDFs for patterns that are supported both by Arrow compute and cuDF:
         # https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/string_arrow.py#L402
         # https://github.com/rapidsai/cudf/blob/1ed06c6105fb31bba18fc7cf69e2529f9c6a7a22/python/cudf/cudf/core/accessors/string.py#L757
-        _has_unsupported_regex = pd.core.arrays._arrow_string_mixins.ArrowStringArrayMixin._has_unsupported_regex
+        # This extra check was introduced in Pandas 3.0.0 but doesn't seem very critical in practice
+        _has_unsupported_regex = (
+            pd.core.arrays._arrow_string_mixins.ArrowStringArrayMixin._has_unsupported_regex
+            if pd.__version__ >= "3.0.0"
+            else lambda pat: False
+        )
         if (
             isinstance(pat, str)
             and regex
