@@ -96,17 +96,6 @@ export BODO_GPU_STREAMING_BATCH_SIZE=24000000   # default: 24M
 
 Tune this value for your workload: larger batches increase GPU utilization but require more device memory.
 
-<!-- ### Memory Allocator
-
-Because Bodo pipelines data in fixed-sized batches through the GPU, lots of room exists to improve performance by re-using memory allocations.  Therefore, we suggest that users enable the RMM pooling (or arena) allocator.  For example:
-
-```
-export RMM_ALLOCATOR="pool"
-export RMM_POOL_INIT_SIZE="2GB"
-```
-
-Adjust RMM_POOL_INIT_SIZE to match your workload and available GPU memory. -->
-
 ## Supported Capabilities and Caveats
 
 Below is a concise summary of broad capabilities that can run on GPU today, followed by specific caveats that may prevent a particular use of that capability from running on GPU.
@@ -153,7 +142,8 @@ The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nuniq
 
 ### Joins
 
-Inner equi-joins are supported on GPU. Joins with non-equality predicates (range joins, inequality joins, or arbitrary expressions) are not supported on GPU and will run on CPU.
+Supported join types include inner, left, right, outer, anti, anti-right and mark joins (i.e. `Series.isin`),
+though these joins may still fall back to CPU if they contain unsupported expressions in the join condition.
 
 ## Troubleshooting
 
