@@ -136,6 +136,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
                     out_arr_type->precision, out_arr_type->scale,
                     out_arr_type->timezone);
             }
+
             this->output_schema->append_column(std::move(out_arr_type));
             this->output_schema->column_names.push_back(agg_expr.function.name);
 
@@ -328,6 +329,8 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         // Add keys to output schema
         this->output_schema = std::make_shared<bodo::Schema>();
         for (size_t i = 0; i < keys.size(); i++) {
+            this->output_schema->append_column(
+                in_table_schema->column_types[keys[i]]->copy());
             if (in_table_schema->column_names.size() > 0) {
                 this->output_schema->column_names.push_back(
                     in_table_schema->column_names[keys[i]]);

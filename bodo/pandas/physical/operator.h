@@ -354,8 +354,6 @@ class PhysicalGPUSource : public PhysicalOperator {
      */
     const std::shared_ptr<bodo::Schema> getOutputSchema() {
         const std::shared_ptr<bodo::Schema> schema = getOutputSchemaInternal();
-        std::cout << "Output schema in in op: " << schema->ToString(true)
-                  << "\n";
         for (const auto &col_type : schema->column_types) {
             if (col_type->array_type == bodo_array_type::NUMPY) {
                 throw std::runtime_error(
