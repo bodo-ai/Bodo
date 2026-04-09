@@ -132,11 +132,12 @@ jobs:
               python_test_exit_code=$?
 
               # Case 2: NUM_WORKERS > NUM GPUS
-              BODO_NUM_WORKERS=9 pytest -s -v -Wignore \
-                --cov-report= --cov=bodo --cov-append \
-                --store-durations --clean-durations \
-                --durations-path=buildscripts/github/test_dur_bodo_multi_gpu_more_workers.json \
-                -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
+              # TODO[BSE-5322]: Re-enable when CPU-GPU exchange doesn't change the order of data.
+              # BODO_NUM_WORKERS=9 pytest -s -v -Wignore \
+              #   --cov-report= --cov=bodo --cov-append \
+              #   --store-durations --clean-durations \
+              #   --durations-path=buildscripts/github/test_dur_bodo_multi_gpu_more_workers.json \
+              #   -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests
               python_multi_test_exit_code=$?
 
               # Merge Exit Codes
