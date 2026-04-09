@@ -92,7 +92,7 @@ static bodo::tests::suite tests([] {
 
             // Verify offsets size
             bodo::tests::check(offsets.size() ==
-                               static_cast<size_t>(num_partitions));
+                               static_cast<size_t>(num_partitions) + 1);
 
             // Verify offsets are monotonic and less than the total rows
             for (size_t i = 0; i < offsets.size() - 1; ++i) {
