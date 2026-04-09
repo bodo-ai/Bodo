@@ -251,24 +251,20 @@ python = "3.14.*"
 python = "3.13.*"
 
 [feature.cpu.dependencies]
-numba = ">=0.62,<0.64.0"
-pyarrow = "23.0.*"
 pandas = ">=3.0.0"
 
 [feature.cudf]
 platforms = ["linux-64"]
 channels = ["rapidsai", "nvidia", "conda-forge"]
+channel-priority = "disabled"
 
 [feature.cudf.dependencies]
 cuda-toolkit = "13.*"
 cuda-version = "13.*"
 cuda-nvcc = "13.*"
-rmm = ">=25.12"
-librmm = ">=25.12"
-cudf = ">=25.12"
-numba = ">=0.60,<0.62.0"
-pyarrow = "21.0.*"
-libarrow = "21.0.*"
+rmm = "=26.04"
+librmm = "=26.04"
+cudf = "=26.04"
 pandas = ">=2.2.0"
 
 
@@ -310,6 +306,8 @@ cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
 mpi4py = ">=4.0"
+numba = ">=0.62,<0.64.0"
+pyarrow = "23.0.*"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).

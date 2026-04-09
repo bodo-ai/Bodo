@@ -193,7 +193,7 @@ class RankBatchGenerator {
         estimate_parquet_metadata();
 
         // Set common parquet reader options.
-        chunked_reader_opts.set_columns(selected_columns);
+        chunked_reader_opts.set_column_names(selected_columns);
         if (filter_ast_tree.size() > 0) {
             chunked_reader_opts.set_filter(filter_ast_tree.back());
         }
