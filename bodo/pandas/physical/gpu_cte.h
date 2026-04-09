@@ -16,6 +16,18 @@ class PhysicalGPUCTE : public PhysicalGPUSink {
    public:
     explicit PhysicalGPUCTE(const std::shared_ptr<bodo::Schema> sink_schema)
         : output_schema(sink_schema) {
+        for (size_t i = 0; i < output_schema->ncols(); i++) {
+            if (this->output_schema->column_types[i]->array_type ==
+                bodo_array_type::NUMPY) {
+                std::unique_ptr<bodo::DataType> col_type =
+                    this->output_schema->column_types[i]->copy();
+                this->output_schema->column_types[i] =
+                    std::make_unique<bodo::DataType>(
+                        bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
+                        col_type->precision, col_type->scale,
+                        col_type->timezone);
+            }
+        }
         arrow_output_schema = this->output_schema->ToArrowSchema();
     }
 
@@ -95,7 +107,7 @@ class PhysicalGPUCTERef : public PhysicalGPUSource {
      *
      * @return std::shared_ptr<bodo::Schema>
      */
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return cte->output_schema;
     }
 

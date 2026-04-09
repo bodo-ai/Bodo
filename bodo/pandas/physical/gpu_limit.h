@@ -27,6 +27,25 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                   input_schema->ToArrowSchema(), make_stream_and_event(false)),
               get_gpu_streaming_batch_size()),
           output_schema(input_schema) {
+        for (size_t i = 0; i < output_schema->ncols(); i++) {
+            // GPU operators do not support numpy array types in the output
+            // schema. This is because in the GPU -> CPU process the batch goes
+            // through Arrow and our Arrow -> Bodo conversion does not support
+            // numpy array types. If we encounter a numpy array type in the
+            // input schema, we convert it to a nullable int bool type in the
+            // output schema and rely on duckdb's type coercion to convert it
+            // back to the correct type in the CPU sort operator.
+            if (this->output_schema->column_types[i]->array_type ==
+                bodo_array_type::NUMPY) {
+                std::unique_ptr<bodo::DataType>& col_type =
+                    this->output_schema->column_types[i];
+                this->output_schema->column_types[i] =
+                    std::make_unique<bodo::DataType>(
+                        bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
+                        col_type->precision, col_type->scale,
+                        col_type->timezone);
+            }
+        }
         arrow_output_schema = output_schema->ToArrowSchema();
     }
 
@@ -149,7 +168,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return output_schema;
     }
 

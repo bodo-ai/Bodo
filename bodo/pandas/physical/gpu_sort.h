@@ -61,6 +61,13 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         for (long kept_col : this->kept_cols) {
             std::unique_ptr<bodo::DataType> col_type =
                 input_schema->column_types[kept_col]->copy();
+            // GPU operators do not support numpy array types in the output
+            // schema. This is because in the GPU -> CPU process the batch goes
+            // through Arrow and our Arrow -> Bodo conversion does not support
+            // numpy array types. If we encounter a numpy array type in the
+            // input schema, we convert it to a nullable int bool type in the
+            // output schema and rely on duckdb's type coercion to convert it
+            // back to the correct type in the CPU sort operator.
             if (col_type->array_type == bodo_array_type::NUMPY) {
                 col_type = std::make_unique<bodo::DataType>(
                     bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
