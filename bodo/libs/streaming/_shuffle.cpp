@@ -686,8 +686,12 @@ int get_next_available_tag(std::unordered_set<int>& inflight_tags) {
 
 std::optional<std::shared_ptr<table_info>>
 IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
-    // Reduce MPI call overheads by communicating only every 10 iterations
-    if (!(is_last || ((this->curr_iter % 10) == 0))) {
+    // Reduce MPI call overheads by communicating every *shuffle_freq*
+    // iterations. This value was originally set to 10 for a batch size of 4096.
+    // For larger batch sizes, we need to shuffle more frequently to avoid too
+    // many inflight messages.
+    const int shuffle_freq = std::max(4, (10 * 4096) / STREAMING_BATCH_SIZE);
+    if (!(is_last || ((this->curr_iter % shuffle_freq) == 0))) {
         return std::nullopt;
     }
 
