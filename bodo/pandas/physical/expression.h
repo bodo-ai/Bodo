@@ -3,6 +3,7 @@
 #include <arrow/api.h>
 #include <arrow/chunked_array.h>
 #include <arrow/compute/api.h>
+#include <arrow/compute/api_scalar.h>
 #include <arrow/compute/function.h>
 #include <arrow/compute/kernel.h>
 #include <arrow/result.h>
@@ -1299,6 +1300,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
             }
 
             arrow::compute::RoundOptions opts(digits);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "is_null") {
+            // Set nan_is_null option to match Pandas isna behavior
+            arrow::compute::NullOptions opts(true);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else {

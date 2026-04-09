@@ -499,7 +499,8 @@ bool gpu_capable(duckdb::Expression& expr) {
                     return scalar_func_data.arrow_func_name == "ends_with" ||
                            scalar_func_data.arrow_func_name == "starts_with" ||
                            scalar_func_data.arrow_func_name == "year" ||
-                           scalar_func_data.arrow_func_name == "round";
+                           scalar_func_data.arrow_func_name == "round" ||
+                           scalar_func_data.arrow_func_name == "is_null";
                 } else if (scalar_func_data.args) {
                     return false;
                 }
