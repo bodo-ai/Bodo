@@ -42,21 +42,17 @@ requirements:
     - setuptools_scm >=8
     - scikit-build-core
     - mpi4py >=4.0
-
-    - numba >=0.60,<0.62.0  # [gpu]
-    - numba >=0.62,<0.64    # [not gpu]
-
+    - numba >=0.62,<0.64
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24
-
-    - pyarrow 21.0.*     # [gpu]
-    - pyarrow 23.0.*     # [not gpu]
-    - libarrow 21.0.*    # [gpu]
-    - libarrow 23.0.*    # [not gpu]
-
+    - pyarrow 23.0.*
+    - libarrow 23.0.*
     - libboost-headers          # [not win]
     - libboost-devel            # [win]
+    # Corresponding dependency is automatically added in reqs/run.
+    - aws-sdk-cpp
+    - zstd
 
     - hdf5 * *mpi_mpich_*       # [not gpu and linux]
     - hdf5 * *mpi_openmpi_*     # [gpu or osx]
@@ -67,17 +63,13 @@ requirements:
     - openmpi               # [gpu or osx]
     - impi-devel            # [not gpu and win]
 
-    # Corresponding dependency is automatically added in reqs/run.
-    - aws-sdk-cpp
-    - zstd
-
     # GPU dependencies
-    # This pin is necessary to avoid compatibility issues with RAPIDS 25.12 & 26.04.
-    # TODO: Upgrade rapids dependencies.
-    - cudf =26.02                  # [gpu]
-    - rmm =26.02                   # [gpu]
-    - librmm =26.02                # [gpu]
-    - cuda-version 13.*     # [gpu]
+    # This pin is necessary to avoid compatibility issues with 26.02
+    # and newer versions.
+    - cudf =26.04                  # [gpu]
+    - rmm =26.04                   # [gpu]
+    - librmm =26.04                # [gpu]
+    - cuda-version 13.*            # [gpu]
 
   run:
     - python
@@ -85,14 +77,8 @@ requirements:
     - pandas >=2.2
     - fsspec >=2021.09
     - mpi4py >=4.0
-
-    - pyarrow 21.0.*        # [gpu]
-    - pyarrow 23.0.*        # [not gpu]
-    - libarrow 21.0.*       # [gpu]
-    - libarrow 23.0.*       # [not gpu]
-
-    - numba >=0.60,<0.62.0  # [gpu]
-    - numba >=0.62,<0.64    # [not gpu]
+    - pyarrow 23.0.*
+    - numba >=0.62,<0.64
 
     - mpich                 # [not gpu and linux]
     - openmpi               # [gpu or osx]
@@ -105,9 +91,9 @@ requirements:
     - pytz
 
     # GPU dependencies
-    - cudf =26.02                  # [gpu]
-    - rmm =26.02                   # [gpu]
-    - librmm =26.02                # [gpu]
+    - cudf =26.04                  # [gpu]
+    - rmm =26.04                   # [gpu]
+    - librmm =26.04                # [gpu]
     - cuda-version 13.*            # [gpu]
 
     - {{ pin_compatible("cuda-version") }}  # [gpu]
