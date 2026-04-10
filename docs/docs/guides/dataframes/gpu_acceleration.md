@@ -144,6 +144,10 @@ The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nuniq
 
 Inner equi-joins are supported on GPU. Joins with non-equality predicates (range joins, inequality joins, or arbitrary expressions) are not supported on GPU and will run on CPU.
 
+### Sorting
+
+Sorting is supported on the GPU, including top-k sorts and offsets into the sorted output.
+
 ## Troubleshooting
 
 If execution is slower than expected, confirm the operators in your plan are supported on GPU (see supported list).
