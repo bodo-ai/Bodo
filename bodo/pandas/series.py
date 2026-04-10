@@ -3013,7 +3013,10 @@ def _get_series_func_plan(
             body = name.split(".")[1]
             return "utf8_" + body[:2] + "_" + body[2:]
         if name == "str.match":
-            return "match_substring_regex"
+            # match_substring_regex in Arrow matches anywhere in the string but
+            # Series.str.match() matches from the start. match_substring_regex_first is
+            # a placeholder for CPU and GPU backends to implement the correct behavior.
+            return "match_substring_regex_first"
         if name == "str.startswith":
             return "starts_with"
         if name == "str.endswith":
