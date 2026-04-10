@@ -53,10 +53,14 @@ def generate_series_test(name, df, arg_sets, accessor=None):
     """
     Generates a parameterized test case for Series methods.
     """
+    marked_arg_sets = arg_sets.copy()
+    if name == "contains" and accessor == "str":
+        # Only the first argument set is supported on GPU
+        marked_arg_sets[0] = pytest.param(*arg_sets[0], marks=pytest.mark.gpu)
 
     @pytest.mark.parametrize(
         "args, kwargs",
-        arg_sets,
+        marked_arg_sets,
         ids=[
             f"{name}-args{args}-kwargs{sorted(kwargs.items())}"
             for args, kwargs in arg_sets
