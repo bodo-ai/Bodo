@@ -112,15 +112,13 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 * GroupBy aggregations: sum, count, mean, min, max, var, std, size, skew, nunique
 
-* Inner joins with equality conditions.
-
 * drop_duplicates
 
 ## Unsupported Capabilities
 
 No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
 
-Limit, sampling, CTEs, sorting, quantiles, and union are not currently supported.
+Sampling, quantiles, and union distinct are not currently supported.
 
 ## Important Per-Feature Caveats
 
@@ -142,7 +140,11 @@ The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nuniq
 
 ### Joins
 
-Inner equi-joins are supported on GPU. Joins with non-equality predicates (range joins, inequality joins, or arbitrary expressions) are not supported on GPU and will run on CPU.
+Joins are supported on GPU.
+
+### Sorting
+
+Sorting is supported on the GPU, including top-k sorts and offsets into the sorted output.
 
 ## Troubleshooting
 
