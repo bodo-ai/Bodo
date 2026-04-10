@@ -45,6 +45,12 @@ When this happens, the current query plan of the DataFrame is immediately execut
 !!! warning
     Fallback to Pandas may lead to degraded performance and increase the risk of out-of-memory (OOM) errors, especially for large datasets.
 
+## GPU Acceleration
+
+GPU acceleration for Bodo DataFrames is currently under development.  See [here][gpu] for more details.
+
+[gpu]: ../../guides/dataframes/gpu_acceleration.md
+
 <div class="grid cards" markdown>
 
 - [General Functions][general-functions]

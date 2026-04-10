@@ -2,7 +2,13 @@
 ```
 SeriesGroupBy.agg(func=None, engine=None, engine_kwargs=None, **kwargs) -> BodoDataFrame | BodoSeries
 ```
+**GPU:** ✔ Supported
 
+!!! tip
+    GPU acceleration for `SeriesGroupBy.agg` is only available for a subset of aggregation functions:
+    `sum`, `count`, `mean`, `min`, `max`, `var`, `std`, `size`, `skew`, and `nunique`.
+    Other aggregations, including custom aggregations and user-defined functions (UDFs),
+    are executed on CPU and may trigger a fallback to the non-GPU engine.
 Apply one or more aggregate functions to groups of data in a single column from a BodoDataFrame. This method is the same as `SeriesGroupBy.aggregate`.
 
 <p class="api-header">Parameters</p>

@@ -1,0 +1,165 @@
+GPU Acceleration for Bodo DataFrames {#df_gpu}
+=================
+
+This page describes Bodo’s CPU–GPU hybrid execution within [Bodo DataFrames][df_page] and uses terminology from that document, so it should be read first.  For hybrid execution, we discuss how GPU execution is enabled, what is supported today, configuration and tuning, and important caveats.
+
+[df_page]: dataframes_intro.md
+
+## Overview
+
+Bodo DataFrames provides hybrid CPU-GPU execution.  It can execute anywhere from 0 to 100% of the nodes of a DataFrame plan on the GPUs available within the machine or a Bodo cluster.  Bodo DataFrames incorporates a cost model that analyzes the plan to determine which nodes should run on CPU or GPU.  When neighboring pipeline nodes run on different device types, Bodo automatically inserts and performs the necessary data transfers.
+
+## Installation
+
+To use Bodo's GPU support, install the GPU-enabled conda package available on the `bodo.ai` channel:
+
+```
+conda install -c bodo.ai -c rapidsai -c nvidia "bodo=*=*cuda" --no-channel-priority
+```
+
+This version of the Bodo package includes the dependencies necessary for running Bodo on GPUs, including CUDA, and is pre-configured to use GPUs by default.
+To disable GPU usage by Bodo DataFrames, set:
+
+```
+export BODO_GPU=0
+```
+
+If `BODO_GPU` is set to another value or not set, Bodo DataFrames will use available GPUs when possible.
+
+## Enabling GPU Hybrid Execution
+
+Bodo uses CUDA-aware MPI for GPU communication, which in the OpenMPI case requires setting OpenMPI's communication layer to UCX:
+
+```
+export OMPI_MCA_pml="ucx"
+```
+
+If spawn mode is used on a multi-node cluster with OpenMPI the mapping must be set to allow oversubscription due to the extra spawner rank.
+
+```
+export PRTE_MCA_rmaps_default_mapping_policy=:OVERSUBSCRIBE
+```
+
+A [hostfile](https://www.open-mpi.org/doc/v3.0/man1/orterun.1.php#sect6) must also be provided, e.g.
+
+```
+mpiexec -n 1 --hostfile hostfile python bodo_dataframe_script.py
+```
+
+Note, there is an [outstanding bug](https://github.com/open-mpi/ompi/issues/13521) in OpenMPI when using multiple nodes and UCX that can cause hangs/segfaults.
+Until this is resolved we recommend you build MPICH from source and use MPICH for multi-node GPU execution.
+
+## How Placement is Decided
+
+Currently, when GPU execution is enabled, Bodo will run every operation on the GPU for which we have a GPU implementation (see supported capabilities below).  However, this approach will be replaced in the near future with an advanced device placement algorithm that will use a cost-model to determine which plan nodes should run on CPU versus GPU such that the plan execution achieves the lowest latency.  In either case, when adjacent nodes in a plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.
+
+<!--
+Bodo DataFrames uses a dynamic programming-based algorithm, whose goal is to minimize latency, in conjunction with a cost-model to determine which plan nodes should be run on CPU or GPU.  Currently, only some of the plan node types have a GPU implementation and can be run on GPU.  In addition, this algorithm uses the relative speed of the CPUs and GPUs in the system for each node type as well as the expected transfer times between CPU and GPU for each pair of plan nodes to determine which nodes should run on CPU or GPU.  When adjacent nodes in the plan are run on different device types, Bodo automatically inserts transfers between host and device as needed.  The first time BODO_GPU is enabled, Bodo will run a small number of example operators on CPU and GPU to determine their relative speeds and these statistics are later used to estimate execution time for operators on CPU and GPU.
+-->
+
+## Checking Placement
+
+When GPU acceleration is enabled, users can view which plan nodes will be run on CPU versus GPU by setting the following environment variable:
+
+```
+export BODO_DATAFRAME_LIBRARY_DUMP_PLANS=1
+```
+
+The following is an example output when this environment variable is enabled.
+
+```
+┌───────────────────────────┐
+│      (GPU) PROJECTION     │
+│    ────────────────────   │
+│        Expressions:       │
+│           #[0.0]          │
+│           #[0.1]          │
+│                           │
+│        ~3,000 rows        │
+└─────────────┬─────────────┘
+┌─────────────┴─────────────┐
+│(GPU) BODO_READ_PARQUE...  │
+│    ────────────────────   │
+│        ~3,000 rows        │
+└───────────────────────────┘
+```
+
+## Configuration and Tuning
+
+### Batch Size
+
+GPUs generally prefer to work on larger chunks of data compared to CPU.  As such, Bodo has a separate GPU batch size that controls the size of batches flowing through the GPU with Bodo pipelines.  To set this batch size, use the following environment variable.
+
+```
+export BODO_GPU_STREAMING_BATCH_SIZE=24000000   # default: 24M
+```
+
+Tune this value for your workload: larger batches increase GPU utilization but require more device memory.
+
+## Supported Capabilities and Caveats
+
+Below is a concise summary of broad capabilities that can run on GPU today, followed by specific caveats that may prevent a particular use of that capability from running on GPU.
+
+* Parquet read (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
+
+* Parquet write (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
+
+* Row filtering (Pandas-style boolean filters) — UDFs excluded
+
+* Column selection and vectorized arithmetic / boolean ops — UDFs excluded
+
+* Most kinds of joins
+
+* GroupBy aggregations: sum, count, mean, min, max, var, std, size, skew, nunique
+
+* Series reductions: sum, product, count, mean, min, max
+
+* drop_duplicates, concat, Series.isin
+
+## Unsupported Capabilities
+
+No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
+
+Limit, sampling, CTEs, sorting, and quantiles are not currently supported.
+
+## Important Per-Feature Caveats
+
+### Read Parquet
+
+A plan that includes a head() (or other operations that force a small sample collection via Pandas) may prevent the Parquet read from running on GPU; in such cases the read may fall back to CPU to satisfy the sampling semantics.
+
+### Filtering
+
+Vectorized boolean filters run on GPU. User-defined functions (UDFs) used inside filters are not supported on GPU and will force CPU execution for that node.
+
+### Column expressions
+
+Column selection and built-in arithmetic/boolean expressions are supported on GPU. UDFs are excluded.
+
+### GroupBy
+
+The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nunique) are supported on GPU. Custom aggregations implemented as UDFs or Python callbacks will run on CPU.
+
+### Joins
+
+Supported join types include inner, left, right, outer, anti, anti-right and mark joins (i.e. `Series.isin`),
+though these joins may still fall back to CPU if they contain unsupported expressions in the join condition.
+
+## Troubleshooting
+
+If execution is slower than expected, confirm the operators in your plan are supported on GPU (see supported list).
+
+If out of memory is reported on GPU, reduce BODO_GPU_STREAMING_BATCH_SIZE.
+
+### Unexpected CPU fallback
+
+If you expect a portion of your pipeline to run on GPU but it executes on CPU instead, check the following:
+
+* Verify that the operators involved are listed as GPU-supported in the sections above; unsupported operators will always run on CPU.
+* Ensure that GPU execution is enabled by setting `BODO_GPU=1` in the environment for the process running your code.
+* Look for unsupported constructs such as UDFs inside filters, column expressions, or aggregations, which can force CPU execution for those nodes.
+* Review your execution or plan diagnostics to confirm which nodes are placed on GPU vs CPU and adjust your code or configuration accordingly.
+
+## Roadmap
+
+Other operators and additional join variants are forthcoming. We are working on performance tuning and optimization as well.

@@ -12,6 +12,7 @@ BodoDataFrame.groupby(
     dropna=True
 ) -> DataFrameGroupBy
 ```
+**GPU:** ✔ Supported
 
 Creates a DataFrameGroupBy object representing the data in the input DataFrame grouped by a column or list of columns. The object can then be used to apply functions over groups.
 
