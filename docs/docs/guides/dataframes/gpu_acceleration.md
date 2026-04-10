@@ -120,7 +120,7 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
 
-Limit, sampling, CTEs, sorting, quantiles, and union are not currently supported.
+Limit, sampling, CTEs, sorting, and quantiles are not currently supported.
 
 ## Important Per-Feature Caveats
 
@@ -149,9 +149,7 @@ though these joins may still fall back to CPU if they contain unsupported expres
 
 If execution is slower than expected, confirm the operators in your plan are supported on GPU (see supported list).
 
-If GPU profiling shows high allocation overhead, ensure RMM pooling is enabled and tuned to an appropriate value.
-
-If out of memory is reported on GPU, reduce BODO_GPU_STREAMING_BATCH_SIZE or increase RMM_POOL_INIT_SIZE if memory is available.
+If out of memory is reported on GPU, reduce BODO_GPU_STREAMING_BATCH_SIZE.
 
 ### Unexpected CPU fallback
 
