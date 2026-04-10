@@ -1,0 +1,229 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: VPC with 2 private subnets, a security group with specified rules and 3 VPC Endpoints for PrivateLink
+Parameters:
+  ResourcePrefix:
+    Description: A name that is prefixed to resource names
+    Type: String
+    Default: 'BodoPlatform'
+
+  VpcCIDR:
+    Type: String
+    Description: CIDR block for the VPC
+    Default: '10.0.0.0/16'
+
+  PrivateSubnet1CIDR:
+    Type: String
+    Description: CIDR block for the first private subnet
+    Default: '10.0.0.0/20'
+
+  PrivateSubnet2CIDR:
+    Type: String
+    Description: CIDR block for the second private subnet
+    Default: '10.0.16.0/20'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "VPC Configuration"
+        Parameters:
+          - ResourcePrefix
+          - VpcCIDR
+      - Label:
+          default: "Subnet Configuration"
+        Parameters:
+          - PrivateSubnet1CIDR
+          - PrivateSubnet2CIDR
+    ParameterLabels:
+      ResourcePrefix:
+        default: "Resource Prefix"
+      VpcCIDR:
+        default: "VPC CIDR"
+      PrivateSubnet1CIDR:
+        default: "Subnet-1 CIDR"
+      PrivateSubnet2CIDR:
+        default: "Subnet-2 CIDR"
+
+Mappings:
+  BodoVpcEndpointMap:
+    us-east-1:
+      ServiceEndpoint: com.amazonaws.vpce.us-east-1.vpce-svc-0b0c6643c1f764b62
+      AvailabilityZoneIds: [use1-az1, use1-az4, use1-az6]
+    us-east-2:
+      ServiceEndpoint: com.amazonaws.vpce.us-east-2.vpce-svc-0c49909796ff87d5b
+      AvailabilityZoneIds: [use2-az1, use2-az2, use2-az3]
+    us-west-1:
+      ServiceEndpoint: com.amazonaws.vpce.us-west-1.vpce-svc-0ce34162b3b8f1eaa
+      AvailabilityZoneIds: [usw1-az1, usw1-az3]
+    us-west-2:
+      ServiceEndpoint: com.amazonaws.vpce.us-west-2.vpce-svc-026e1758e07ba65d5
+      AvailabilityZoneIds: [usw2-az1, usw2-az2, usw2-az3]
+    eu-west-1:
+      ServiceEndpoint: com.amazonaws.vpce.eu-west-1.vpce-svc-05352b1056a782d85
+      AvailabilityZoneIds: [euw1-az1, euw1-az2, euw1-az3]
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix} VPC'
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      AvailabilityZoneId: !Select
+        - 0
+        - !FindInMap
+          - BodoVpcEndpointMap
+          - !Ref 'AWS::Region'
+          - AvailabilityZoneIds
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix} Private Subnet-1'
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      AvailabilityZoneId: !Select
+        - 1
+        - !FindInMap
+          - BodoVpcEndpointMap
+          - !Ref 'AWS::Region'
+          - AvailabilityZoneIds
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix} Private Subnet-2'
+
+  PrivateSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PrivateSubnet1Route:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateSubnet1RouteTable
+
+  PrivateSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PrivateSubnet2Route:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateSubnet2RouteTable
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Security group with specified rules
+
+  SecurityGroupIngressSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref SecurityGroup
+
+  SecurityGroupEgressHTTP:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+
+  SecurityGroupEgressHTTPS:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+
+  SecurityGroupEgressNFS:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: tcp
+      FromPort: 2049
+      ToPort: 2049
+      CidrIp: 0.0.0.0/0
+
+  SecurityGroupEgressSelf:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: -1
+      DestinationSecurityGroupId: !Ref SecurityGroup
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      RouteTableIds:
+        - !Ref PrivateSubnet1RouteTable
+        - !Ref PrivateSubnet2RouteTable
+      VpcEndpointType: Gateway
+
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      VpcEndpointType: Interface
+
+  BodoInterfaceEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !FindInMap
+        - BodoVpcEndpointMap
+        - !Ref 'AWS::Region'
+        - ServiceEndpoint
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      VpcEndpointType: Interface
+
+Outputs:
+  VPCId:
+    Description: VPC Id
+    Value: !Ref VPC
+
+  PrivateSubnet1:
+    Description: Private Subnet-1
+    Value: !Ref PrivateSubnet1
+
+  PrivateSubnet2:
+    Description: Private Subnet-2
+    Value: !Ref PrivateSubnet2
+
+  SecurityGroupId:
+    Description: Security Group Id
+    Value: !Ref SecurityGroup
