@@ -13,7 +13,7 @@
 
 inline bool gpu_capable(duckdb::LogicalOrder& op) { return true; }
 
-inline bool gpu_capable(duckdb::LogicalTopN& op) { return false; }
+inline bool gpu_capable(duckdb::LogicalTopN& op) { return true; }
 
 struct PhysicalGPUSortMetrics {
     using stat_t = MetricBase::StatValue;
@@ -40,12 +40,6 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         int64_t offset, unsigned node_cols,
         const std::vector<duckdb::idx_t>& projection_map = {}) {
         time_pt start_init = start_timer();
-
-        if (limit != -1 || offset != -1) {
-            throw std::runtime_error(
-                "PhysicalGPUSortOperator: limit and offset are not yet "
-                "supported.");
-        }
 
         // Calculate the output schema and kept columns.
         this->output_schema = std::make_shared<bodo::Schema>();
@@ -131,7 +125,8 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         }
 
         this->cuda_sort_state = std::make_unique<CudaSortState>(
-            input_schema, key_indices, column_order, null_precedence);
+            input_schema, key_indices, column_order, null_precedence, limit,
+            offset);
 
         this->metrics.init_time = end_timer(start_init);
     }
@@ -158,7 +153,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
 
     virtual ~PhysicalGPUSortOperator() = default;
 
-    void FinalizeSink() override {}
+    void FinalizeSink() override { cuda_sort_state->FinalizeSort(); }
 
     void FinalizeSource() override {
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),

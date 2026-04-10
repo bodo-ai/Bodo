@@ -16,11 +16,14 @@ CudaSortState::CudaSortState(
     std::shared_ptr<bodo::Schema> schema,
     std::vector<cudf::size_type> const& key_indices,
     std::vector<cudf::order> const& column_order,
-    std::vector<cudf::null_order> const& null_precedence)
+    std::vector<cudf::null_order> const& null_precedence, int64_t limit,
+    int64_t offset)
     : schema(std::move(schema)),
       key_indices(key_indices),
       column_order(column_order),
-      null_precedence(null_precedence) {}
+      null_precedence(null_precedence),
+      limit(limit),
+      offset(offset) {}
 
 void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
                                  std::shared_ptr<StreamAndEvent> input_se) {
@@ -227,6 +230,53 @@ void CudaSortState::ExecutePsrsStep2(rmm::cuda_stream_view stream) {
                                  std::move(split_indices), se);
 }
 
+void CudaSortState::FinalizeSort() {
+    if (!is_gpu_rank()) {
+        return;
+    }
+    if (state != State::MERGING) {
+        throw std::runtime_error(
+            "FinalizeSort called before FinalizeAccumulation finished");
+    }
+
+    int64_t local_nrows = 0;
+    for (const auto& table : received_tables) {
+        local_nrows += table->num_rows();
+    }
+
+    MPI_Comm comm = shuffle_manager.get_mpi_comm();
+    int n_pes, myrank;
+    MPI_Comm_size(comm, &n_pes);
+    MPI_Comm_rank(comm, &myrank);
+
+    std::vector<int64_t> nrows_collect(n_pes);
+    CHECK_MPI(MPI_Allgather(&local_nrows, 1, MPI_INT64_T, nrows_collect.data(),
+                            1, MPI_INT64_T, comm),
+              "CudaSortState::FinalizeSort: MPI error on MPI_Allgather");
+
+    int64_t total_rows_before = 0;
+    for (int i = 0; i < myrank; i++) {
+        total_rows_before += nrows_collect[i];
+    }
+
+    bool is_beyond_limit = (limit != -1 && total_rows_before >= limit + offset);
+    bool is_before_offset = (total_rows_before + local_nrows <= offset);
+
+    if (is_beyond_limit || is_before_offset || limit == 0) {
+        local_slice_start = 0;
+        local_slice_end = 0;
+    } else {
+        local_slice_start = std::max(0L, offset - total_rows_before);
+        int64_t local_limit = local_nrows - local_slice_start;
+        if (limit != -1) {
+            local_limit =
+                std::min(local_limit, limit + offset - total_rows_before -
+                                          local_slice_start);
+        }
+        local_slice_end = local_slice_start + local_limit;
+    }
+}
+
 std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
     bool& out_is_last, rmm::cuda_stream_view stream) {
     if (state != State::MERGING) {
@@ -235,7 +285,7 @@ std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
     }
 
     if (final_result == nullptr) {
-        if (received_tables.empty()) {
+        if (received_tables.empty() || local_slice_start == local_slice_end) {
             final_result =
                 empty_table_from_arrow_schema(schema->ToArrowSchema());
         } else {
@@ -244,8 +294,19 @@ std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
                 views.push_back(table->view());
             }
             // Multi-way Merge
-            final_result = cudf::merge(views, key_indices, column_order,
-                                       null_precedence, stream);
+            auto merged = cudf::merge(views, key_indices, column_order,
+                                      null_precedence, stream);
+
+            if (local_slice_start == 0 &&
+                local_slice_end == merged->num_rows()) {
+                final_result = std::move(merged);
+            } else {
+                std::vector<cudf::size_type> indices = {
+                    static_cast<cudf::size_type>(local_slice_start),
+                    static_cast<cudf::size_type>(local_slice_end)};
+                auto sliced = cudf::slice(merged->view(), indices);
+                final_result = std::make_unique<cudf::table>(sliced[0]);
+            }
         }
         received_tables.clear();
     }
