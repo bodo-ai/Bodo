@@ -9,6 +9,7 @@
 #include "../_utils.h"
 #include "../gpu_utils.h"
 #include "_util.h"
+#include "physical/operator.h"
 
 #ifdef USE_CUDF
 
@@ -27,13 +28,38 @@ CudaSortState::CudaSortState(
 
 void CudaSortState::ConsumeBatch(std::shared_ptr<cudf::table> table,
                                  std::shared_ptr<StreamAndEvent> input_se) {
+    static int batch_size = get_streaming_batch_size();
     if (table->num_rows() == 0) {
         return;
     }
     std::unique_ptr<cudf::table> sorted_table =
         cudf::sort_by_key(table->view(), table->select(key_indices),
                           column_order, null_precedence, input_se->stream);
+    total_rows_in_buffer += sorted_table->num_rows();
     accumulation_buffer.push_back(std::move(sorted_table));
+
+    // Top-K optimization: if we have a limit + offset, we only need to keep
+    // the top K elements locally on each rank.
+    if (limit != -1 && total_rows_in_buffer > limit + offset &&
+        accumulation_buffer.size() >= static_cast<size_t>(batch_size)) {
+        std::vector<cudf::table_view> views;
+        for (const auto& t : accumulation_buffer) {
+            views.push_back(t->view());
+        }
+        auto merged = cudf::merge(views, key_indices, column_order,
+                                  null_precedence, input_se->stream);
+
+        int64_t target_rows = limit + offset;
+        if (merged->num_rows() > target_rows) {
+            std::vector<cudf::size_type> split_indices = {
+                0, static_cast<cudf::size_type>(target_rows)};
+            auto sliced = cudf::slice(merged->view(), split_indices);
+            merged = std::make_unique<cudf::table>(sliced[0]);
+        }
+        total_rows_in_buffer = merged->num_rows();
+        accumulation_buffer.clear();
+        accumulation_buffer.push_back(std::move(merged));
+    }
 }
 
 bool CudaSortState::FinalizeAccumulation(
@@ -92,8 +118,10 @@ void CudaSortState::ExecutePsrsStep1(rmm::cuda_stream_view stream) {
         local_table = cudf::merge(views, key_indices, column_order,
                                   null_precedence, stream);
         accumulation_buffer.clear();
+        total_rows_in_buffer = 0;
     } else {
         local_table = empty_table_from_arrow_schema(schema->ToArrowSchema());
+        total_rows_in_buffer = 0;
     }
 
     MPI_Comm comm = sample_gatherer.get_mpi_comm();

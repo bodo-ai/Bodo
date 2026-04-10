@@ -69,6 +69,7 @@ class CudaSortState {
 
     // Accumulation buffer for local batches
     std::vector<std::shared_ptr<cudf::table>> accumulation_buffer;
+    int64_t total_rows_in_buffer = 0;
 
     // Received tables from shuffle
     std::vector<std::shared_ptr<cudf::table>> received_tables;
