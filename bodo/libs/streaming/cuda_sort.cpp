@@ -329,6 +329,10 @@ std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
                 local_slice_end == merged->num_rows()) {
                 final_result = std::move(merged);
             } else {
+                // Ideally we'd not have to merge all the data just to slice out
+                // a portion of it, but cudf doesn't support top-k style
+                // multi-way merge that would allow us to only merge up to the
+                // offset + limit.
                 std::vector<cudf::size_type> indices = {
                     static_cast<cudf::size_type>(local_slice_start),
                     static_cast<cudf::size_type>(local_slice_end)};
