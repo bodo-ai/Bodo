@@ -105,9 +105,9 @@ std::unique_ptr<cudf::scalar> make_cudf_scalar_from_value(
     using T = std::decay_t<U>;
 
     if constexpr (std::is_same_v<T, std::string>) {
-        return std::make_unique<cudf::string_scalar>(value, se->stream);
+        return std::make_unique<cudf::string_scalar>(value, true, se->stream);
     } else if constexpr (std::is_same_v<T, const char *>) {
-        return std::make_unique<cudf::string_scalar>(std::string(value),
+        return std::make_unique<cudf::string_scalar>(std::string(value), true,
                                                      se->stream);
     } else if constexpr (std::is_same_v<T, bool>) {
         return std::make_unique<cudf::numeric_scalar<int8_t>>(

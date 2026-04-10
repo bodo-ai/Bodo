@@ -34,6 +34,10 @@ uint64_t getBatchRows(T &t) {
             using U = std::decay_t<decltype(vt)>;
             if constexpr (std::is_same_v<U, std::shared_ptr<table_info>>) {
                 ret = vt->nrows();
+            } else if constexpr (std::is_same_v<
+                                     U, std::pair<std::shared_ptr<table_info>,
+                                                  OperatorResult>>) {
+                ret = vt.first->nrows();
 #ifdef USE_CUDF
             } else if constexpr (std::is_same_v<U, GPU_DATA>) {
                 // Non-GPU ranks return nullptr
@@ -41,6 +45,14 @@ uint64_t getBatchRows(T &t) {
                     ret = 0;
                 } else {
                     ret = vt.table->num_rows();
+                }
+            } else if constexpr (std::is_same_v<
+                                     U, std::pair<GPU_DATA, OperatorResult>>) {
+                // Non-GPU ranks return nullptr
+                if (vt.first.table == nullptr) {
+                    ret = 0;
+                } else {
+                    ret = vt.first.table->num_rows();
                 }
 #endif
             } else {

@@ -14,17 +14,17 @@ using hrclock = std::chrono::high_resolution_clock;
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out)       \
-    do {                                                                     \
-        for (unsigned i = 0; i < idx; ++i)                                   \
-            out << " ";                                                      \
-        out << "Rank " << rank << " midPipelineExecute before ConsumeBatch " \
-            << getNodeString(sink) << " " << toString(prev_op_result)        \
-            << std::endl;                                                    \
+#define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out, batch) \
+    do {                                                                      \
+        for (unsigned i = 0; i < idx; ++i)                                    \
+            out << " ";                                                       \
+        out << "Rank " << rank << " midPipelineExecute before ConsumeBatch "  \
+            << getNodeString(sink) << " " << toString(prev_op_result)         \
+            << " NumRows=>" << getBatchRows(batch) << std::endl;              \
     } while (0)
 #else
-#define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out) \
-    do {                                                               \
+#define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out, batch) \
+    do {                                                                      \
     } while (0)
 #endif
 
@@ -56,15 +56,15 @@ using hrclock = std::chrono::high_resolution_clock;
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out)    \
-    do {                                                                   \
-        out << "Rank " << rank << " Pipeline::Execute after ProduceBatch " \
-            << getNodeString(source) << " " << toString(produce_result)    \
-            << std::endl;                                                  \
+#define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out, batch) \
+    do {                                                                       \
+        out << "Rank " << rank << " Pipeline::Execute after ProduceBatch "     \
+            << getNodeString(source) << " " << toString(produce_result)        \
+            << " NumRows=>" << getBatchRows(batch) << std::endl;               \
     } while (0)
 #else
-#define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out) \
-    do {                                                                \
+#define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out, batch) \
+    do {                                                                       \
     } while (0)
 #endif
 
@@ -81,23 +81,23 @@ using hrclock = std::chrono::high_resolution_clock;
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result, out)         \
+#define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result, out, batch)  \
     auto before_process_start = hrclock::now();                              \
     do {                                                                     \
         for (unsigned i = 0; i < idx; ++i)                                   \
             out << " ";                                                      \
         out << "Rank " << rank << " midPipelineExecute before ProcessBatch " \
             << getNodeString(op) << " " << toString(prev_op_result)          \
-            << std::endl;                                                    \
+            << " NumRows=>" << getBatchRows(batch) << std::endl;             \
     } while (0)
 #else
-#define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result, out) \
-    do {                                                             \
+#define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result, out, batch) \
+    do {                                                                    \
     } while (0)
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out)           \
+#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out, batch)    \
     do {                                                                      \
         auto after_process_start = hrclock::now();                            \
         auto diff_ms = std::chrono::duration_cast<std::chrono::microseconds>( \
@@ -107,11 +107,12 @@ using hrclock = std::chrono::high_resolution_clock;
             out << " ";                                                       \
         out << "Rank " << rank << " midPipelineExecute after ProcessBatch "   \
             << getNodeString(op) << " " << toString(prev_op_result) << " "    \
-            << diff_ms << "us" << std::endl;                                  \
+            << " NumRows=>" << getBatchRows(batch) << " " << diff_ms << "us"  \
+            << std::endl;                                                     \
     } while (0)
 #else
-#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out) \
-    do {                                                            \
+#define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out, batch) \
+    do {                                                                   \
     } while (0)
 #endif
 
@@ -146,7 +147,8 @@ using hrclock = std::chrono::high_resolution_clock;
         for (unsigned i = 0; i < idx; ++i)                                   \
             out << " ";                                                      \
         out << "Rank " << rank << " midPipelineExecute in batch "            \
-            << getNodeString(op) << " " << getBatchRows(batch) << std::endl; \
+            << getNodeString(op) << " NumRows=>" << getBatchRows(batch)      \
+            << std::endl;                                                    \
         std::visit(                                                          \
             [&](auto &x) {                                                   \
                 using T = std::decay_t<decltype(x)>;                         \
@@ -158,12 +160,13 @@ using hrclock = std::chrono::high_resolution_clock;
             batch);                                                          \
     } while (0)
 #elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                        \
-    do {                                                                     \
-        for (unsigned i = 0; i < idx; ++i)                                   \
-            out << " ";                                                      \
-        out << "Rank " << rank << " midPipelineExecute in batch "            \
-            << getNodeString(op) << " " << getBatchRows(batch) << std::endl; \
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                   \
+    do {                                                                \
+        for (unsigned i = 0; i < idx; ++i)                              \
+            out << " ";                                                 \
+        out << "Rank " << rank << " midPipelineExecute in batch "       \
+            << getNodeString(op) << " NumRows=>" << getBatchRows(batch) \
+            << std::endl;                                               \
     } while (0)
 #else
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out) \
@@ -188,7 +191,8 @@ bool Pipeline::midPipelineExecute(
         // Iterating here as in the normal section below so that if the sink
         // says HAVE_MORE_OUTPUT that we can iterate with an empty batch.
         while (true) {
-            DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out);
+            DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out,
+                                          batch);
             OperatorResult consume_result;
             std::visit(
                 [&](auto &vop) {
@@ -234,7 +238,7 @@ bool Pipeline::midPipelineExecute(
         PhysicalCpuGpuProcessBatch &op = between_ops[idx];
         DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out);
         while (true) {
-            DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result, out);
+            DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result, out, batch);
 
             // Process this batch with this operator.
             std::variant<std::pair<std::shared_ptr<table_info>, OperatorResult>,
@@ -253,7 +257,7 @@ bool Pipeline::midPipelineExecute(
                 },
                 op);
 
-            DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out);
+            DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out, result);
 
             // Execute subsequent operators and if any of them said that
             // no more output is needed or the current operator knows no
@@ -338,7 +342,7 @@ uint64_t Pipeline::Execute(int rank, std::ostream &out) {
         // just for compatibility with other operators' input expectations and
         // simplifying the pipeline code.
 
-        DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out);
+        DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out, result);
         // Run the between_ops and sink of the pipeline allowing repetition
         // in the HAVE_MORE_OUTPUT case.
         finished = midPipelineExecute(0, batch, produce_result, rank, out);
