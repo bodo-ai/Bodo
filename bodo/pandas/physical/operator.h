@@ -348,21 +348,37 @@ class PhysicalGPUSource : public PhysicalOperator {
     virtual void FinalizeSource() = 0;
 
     /**
+     * @brief Replace numpy array types with nullable int bool type in the
+     * schema. This is because GPU operators do not support numpy array types in
+     * the output schema. This is because in the GPU -> CPU process the batch
+     * goes through Arrow and our Arrow -> Bodo conversion does not support
+     * numpy array types. If we encounter a numpy array type in the input
+     * schema, we convert it to a nullable int bool type in the output schema
+     * and rely on duckdb's type coercion to convert it back to the correct
+     * type.
+     *
+     * @param schema Schema to modify.
+     */
+    static void EnsureNoNumpyColumns(std::shared_ptr<bodo::Schema> schema) {
+        for (size_t i = 0; i < schema->ncols(); i++) {
+            if (schema->column_types[i]->array_type == bodo_array_type::NUMPY) {
+                std::unique_ptr<bodo::DataType> &col_type =
+                    schema->column_types[i];
+                schema->column_types[i] = std::make_unique<bodo::DataType>(
+                    bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
+                    col_type->precision, col_type->scale, col_type->timezone);
+            }
+        }
+    }
+
+    /**
      * @brief Get the physical schema of the source data
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
     const std::shared_ptr<bodo::Schema> getOutputSchema() {
         const std::shared_ptr<bodo::Schema> schema = getOutputSchemaInternal();
-        for (const auto &col_type : schema->column_types) {
-            if (col_type->array_type == bodo_array_type::NUMPY) {
-                throw std::runtime_error(
-                    "GPU operators do not support numpy array types in the "
-                    "output schema. This is because in the GPU -> CPU process "
-                    "the batch goes through Arrow and our Arrow -> Bodo "
-                    "conversion does not support numpy array types");
-            }
-        }
+        EnsureNoNumpyColumns(schema);
         return schema;
     };
 

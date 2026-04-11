@@ -128,15 +128,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
                 std::get<0>(output_dtype), std::get<1>(output_dtype), -1, -1,
                 timezone);
 
-            // If the aggregated output type is still NUMPY, convert it to
-            // NULLABLE_INT_BOOL
-            if (out_arr_type->array_type == bodo_array_type::NUMPY) {
-                out_arr_type = std::make_unique<bodo::DataType>(
-                    bodo_array_type::NULLABLE_INT_BOOL, out_arr_type->c_type,
-                    out_arr_type->precision, out_arr_type->scale,
-                    out_arr_type->timezone);
-            }
-
             this->output_schema->append_column(std::move(out_arr_type));
             this->output_schema->column_names.push_back(agg_expr.function.name);
 
@@ -158,6 +149,8 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         if (!dropna.has_value()) {
             dropna = true;
         }
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         arrow_output_schema = this->output_schema->ToArrowSchema();
         this->groupby_state = std::make_unique<CudaGroupbyState>(
             keys, column_agg_funcs, arrow_output_schema);
@@ -179,24 +172,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         std::vector<std::pair<uint64_t, int32_t>> column_agg_funcs;
         this->output_schema = in_table_schema;
 
-        for (size_t i = 0; i < this->output_schema->ncols(); i++) {
-            std::unique_ptr<bodo::DataType>& col_type =
-                output_schema->column_types[i];
-            // GPU operators do not support numpy array types in the output
-            // schema. This is because in the GPU -> CPU process the batch goes
-            // through Arrow and our Arrow -> Bodo conversion does not support
-            // numpy array types. If we encounter a numpy array type in the
-            // input schema, we convert it to a nullable int bool type in the
-            // output schema and rely on duckdb's type coercion to convert it
-            // back to the correct type in the CPU sort operator.
-            if (col_type->array_type == bodo_array_type::NUMPY) {
-                this->output_schema->column_types[i] =
-                    std::make_unique<bodo::DataType>(
-                        bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
-                        col_type->precision, col_type->scale,
-                        col_type->timezone);
-            }
-        }
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
 
         arrow_output_schema = this->output_schema->ToArrowSchema();
         this->groupby_state = std::make_unique<CudaGroupbyState>(
@@ -342,24 +318,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
 
-        for (size_t i = 0; i < this->output_schema->ncols(); i++) {
-            std::unique_ptr<bodo::DataType>& col_type =
-                output_schema->column_types[i];
-            // GPU operators do not support numpy array types in the output
-            // schema. This is because in the GPU -> CPU process the batch goes
-            // through Arrow and our Arrow -> Bodo conversion does not support
-            // numpy array types. If we encounter a numpy array type in the
-            // input schema, we convert it to a nullable int bool type in the
-            // output schema and rely on duckdb's type coercion to convert it
-            // back to the correct type in the CPU sort operator.
-            if (col_type->array_type == bodo_array_type::NUMPY) {
-                this->output_schema->column_types[i] =
-                    std::make_unique<bodo::DataType>(
-                        bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
-                        col_type->precision, col_type->scale,
-                        col_type->timezone);
-            }
-        }
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
     }
 
     std::shared_ptr<CudaGroupbyState> groupby_state;
@@ -390,23 +349,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
             Bodo_CTypes::CTypeEnum::UINT64));
         std::vector<std::string> names = {std::string("count_star()")};
         out_schema = std::make_shared<bodo::Schema>(std::move(types), names);
-        for (size_t i = 0; i < out_schema->ncols(); i++) {
-            // GPU operators do not support numpy array types in the output
-            // schema. This is because in the GPU -> CPU process the batch goes
-            // through Arrow and our Arrow -> Bodo conversion does not support
-            // numpy array types. If we encounter a numpy array type in the
-            // input schema, we convert it to a nullable int bool type in the
-            // output schema and rely on duckdb's type coercion to convert it
-            // back to the correct type in the CPU sort operator.
-            if (out_schema->column_types[i]->array_type ==
-                bodo_array_type::NUMPY) {
-                std::unique_ptr<bodo::DataType>& col_type =
-                    out_schema->column_types[i];
-                out_schema->column_types[i] = std::make_unique<bodo::DataType>(
-                    bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
-                    col_type->precision, col_type->scale, col_type->timezone);
-            }
-        }
+        PhysicalGPUSource::EnsureNoNumpyColumns(out_schema);
         out_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
     }

@@ -177,25 +177,7 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
                                std::vector<std::string> function_names)
         : out_schema(std::move(out_schema)),
           function_names(std::move(function_names)) {
-        for (size_t i = 0; i < this->out_schema->ncols(); i++) {
-            // GPU operators do not support numpy array types in the output
-            // schema. This is because in the GPU -> CPU process the batch goes
-            // through Arrow and our Arrow -> Bodo conversion does not support
-            // numpy array types. If we encounter a numpy array type in the
-            // input schema, we convert it to a nullable int bool type in the
-            // output schema and rely on duckdb's type coercion to convert it
-            // back to the correct type in the CPU sort operator.
-            if (this->out_schema->column_types[i]->array_type ==
-                bodo_array_type::NUMPY) {
-                std::unique_ptr<bodo::DataType>& col_type =
-                    this->out_schema->column_types[i];
-                this->out_schema->column_types[i] =
-                    std::make_unique<bodo::DataType>(
-                        bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
-                        col_type->precision, col_type->scale,
-                        col_type->timezone);
-            }
-        }
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->out_schema);
     }
 
     virtual ~PhysicalGPUReduce() = default;

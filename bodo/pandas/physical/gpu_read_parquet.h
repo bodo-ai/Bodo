@@ -689,18 +689,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
                                   ->Project(selected_columns);
 
-        for (size_t i = 0; i < output_schema->ncols(); i++) {
-            if (this->output_schema->column_types[i]->array_type ==
-                bodo_array_type::NUMPY) {
-                std::unique_ptr<bodo::DataType> &col_type =
-                    this->output_schema->column_types[i];
-                this->output_schema->column_types[i] =
-                    std::make_unique<bodo::DataType>(
-                        bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
-                        col_type->precision, col_type->scale,
-                        col_type->timezone);
-            }
-        }
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         this->output_arrow_schema = output_schema->ToArrowSchema();
 
         this->schema_fields = PyObject_GetAttrString(pyarrow_schema, "names");
