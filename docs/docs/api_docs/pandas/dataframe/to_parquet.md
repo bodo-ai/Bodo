@@ -1,6 +1,7 @@
 # `pd.DataFrame.to_parquet`
 
 `pandas.DataFrame.to_parquet(path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None)`
+**GPU:** ✔ Supported
 
 ### Supported Arguments
 * `path` is a required argument and must be a string. When writing distributed dataframes, the path refers to a directory of parquet files.
