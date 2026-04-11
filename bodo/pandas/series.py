@@ -1605,6 +1605,58 @@ class BodoStringMethods:
         return self._start_ends_with(pat, "str.endswith")
 
     @check_args_fallback(unsupported="none")
+    def contains(
+        self,
+        pat,
+        case: bool = True,
+        flags: int = 0,
+        na=lib.no_default,
+        regex: bool = True,
+    ):
+        """
+        Support Series.str.contains() method same as Pandas. Uses Arrow/cuDF compute
+        when possible.
+        """
+
+        validate_dtype("str.contains", self)
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.bool_())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        # Avoid UDFs for patterns that are supported both by Arrow compute and cuDF:
+        # https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/string_arrow.py#L402
+        # https://github.com/rapidsai/cudf/blob/1ed06c6105fb31bba18fc7cf69e2529f9c6a7a22/python/cudf/cudf/core/accessors/string.py#L757
+        # This extra check was introduced in Pandas 3.0.0 but doesn't seem very critical in practice
+        _has_unsupported_regex = (
+            pd.core.arrays._arrow_string_mixins.ArrowStringArrayMixin._has_unsupported_regex
+            if pd.__version__ >= "3.0.0"
+            else lambda pat: False
+        )
+        if (
+            isinstance(pat, str)
+            and regex
+            and not flags
+            and not pat.endswith("\\Z")
+            and not _has_unsupported_regex(pat)
+            and case
+            and na is lib.no_default
+        ):
+            fname = "match_substring_regex"
+            kws = {}
+        else:
+            fname = "str.contains"
+            kws = {"case": case, "flags": flags, "na": na, "regex": regex}
+
+        return _get_series_func_plan(series._plan, new_metadata, fname, (pat,), kws)
+
+    @check_args_fallback(unsupported="none")
     def join(self, sep):
         """
         Join lists contained as elements in the Series/Index with passed delimiter.
@@ -2944,7 +2996,11 @@ def _get_series_func_plan(
         "str.match",
         "str.startswith",
         "str.endswith",
+        # str.contains with Arrow/cuDF supported args
+        "match_substring_regex",
         "round",
+        "isna",
+        "isnull",
     )
 
     def get_arrow_func(name):
@@ -2966,7 +3022,9 @@ def _get_series_func_plan(
             return "utf8_" + name.split(".")[1]
         if name == "round":
             return "round"
-        return name.split(".")[1]
+        if name in ("isna", "isnull"):
+            return "is_null"
+        return name.split(".")[-1]
 
     if func in arrow_compute_list and len(kwargs) == 0:
         func_name = get_arrow_func(func)
@@ -3402,7 +3460,6 @@ series_str_methods = [
             "isupper",
             "istitle",
             # args
-            "contains",
             "match",
             "fullmatch",
         ],

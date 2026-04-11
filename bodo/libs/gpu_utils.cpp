@@ -107,11 +107,12 @@ std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables(
         shuffle_table_info.table, shuffle_table_info.partition_indices, n_ranks,
         this->stream);
 
-    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
+    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks) + 1);
     // Contiguous splits requires the split indices excluding the first 0
-    // So we create a new vector from partition_start_rows[1..end]
+    // and last index (row count). So we create a new vector from
+    // partition_start_rows[1..end-1]
     std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
-        partition_start_rows.begin() + 1, partition_start_rows.end());
+        partition_start_rows.begin() + 1, partition_start_rows.end() - 1);
     // Pack the tables for sending
     packed_tables =
         cudf::contiguous_split(partitioned_table->view(), splits, stream,

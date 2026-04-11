@@ -306,6 +306,14 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
     arrow::Datum cmp_res =
         do_arrow_compute_unary(src1, comparator, func_options);
 
+    // DuckDB's optimizer may evaluate expressions with scalar input, see
+    // test_tpch_q22
+    if (cmp_res.is_scalar()) {
+        return arrow_array_to_bodo(
+            arrow::MakeArrayFromScalar(*cmp_res.scalar(), 1).ValueOrDie(),
+            bodo::BufferPool::DefaultPtr());
+    }
+
     return arrow_array_to_bodo(cmp_res.make_array(),
                                bodo::BufferPool::DefaultPtr());
 }
