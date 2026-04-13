@@ -397,6 +397,13 @@ class JoinFilterColStats {
  */
 const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name);
 
+/**
+ * @brief Extract the number of digits to round to from Python function call's
+ * args
+ *
+ * @param args Python tuple containing the function arguments
+ * @return int64_t The number of digits to round to
+ */
 int64_t get_py_round_arg(PyObject *args);
 
 #ifdef USE_CUDF
