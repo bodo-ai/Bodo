@@ -1075,6 +1075,21 @@ const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name) {
     return c_str;
 }
 
+int64_t get_py_round_arg(PyObject *args) {
+    int64_t digits = 0;  // default value if no argument is provided
+    if (PyTuple_Check(args) && PyTuple_Size(args) == 1) {
+        // Get the first element (borrowed reference)
+        PyObject *py_digits = PyTuple_GetItem(args, 0);
+
+        if (!PyLong_Check(py_digits)) {
+            throw std::runtime_error("round args element is not a Python int.");
+        }
+
+        digits = PyLong_AsLong(py_digits);
+    }
+    return digits;
+}
+
 #ifdef USE_CUDF
 
 cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {

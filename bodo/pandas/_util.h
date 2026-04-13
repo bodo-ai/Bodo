@@ -397,6 +397,8 @@ class JoinFilterColStats {
  */
 const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name);
 
+int64_t get_py_round_arg(PyObject *args);
+
 #ifdef USE_CUDF
 
 #include <cstdint>

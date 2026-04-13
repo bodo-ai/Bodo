@@ -913,7 +913,7 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             scalar_func_data.arrow_func_name == "match_substring_regex_first") {
             extract_string_arg_from_python();
         } else if (scalar_func_data.arrow_func_name == "round") {
-            extract_round_arg_from_python();
+            round_ndigits = get_py_round_arg(scalar_func_data.args);
         } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
             extract_slice_arg_from_python();
         }
@@ -1010,21 +1010,6 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         } else {
             str_scalar_in =
                 std::make_shared<cudf::string_scalar>(std::string(c_str), true);
-        }
-    }
-
-    void extract_round_arg_from_python() {
-        if (PyTuple_Check(scalar_func_data.args) &&
-            PyTuple_Size(scalar_func_data.args) == 1) {
-            // Get the first element (borrowed reference)
-            PyObject *py_digits = PyTuple_GetItem(scalar_func_data.args, 0);
-
-            if (!PyLong_Check(py_digits)) {
-                throw std::runtime_error(
-                    fmt::format("{} args element is not a Python int.",
-                                scalar_func_data.arrow_func_name));
-            }
-            round_ndigits = static_cast<int32_t>(PyLong_AsLong(py_digits));
         }
     }
 
