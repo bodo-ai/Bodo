@@ -1052,6 +1052,29 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     return filters;
 }
 
+const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name) {
+    if (!PyTuple_Check(args) || PyTuple_Size(args) != 1) {
+        throw std::runtime_error(
+            fmt::format("{} args not a 1-element tuple.", func_name));
+    }
+
+    // Get the first element (borrowed reference)
+    PyObject *py_str = PyTuple_GetItem(args, 0);
+
+    if (!PyUnicode_Check(py_str)) {
+        throw std::runtime_error(
+            fmt::format("{} args element is not a Python string.", func_name));
+    }
+
+    // Convert to UTF‑8 C string
+    const char *c_str = PyUnicode_AsUTF8(py_str);
+    if (!c_str) {
+        throw std::runtime_error(
+            fmt::format("{} error extracting Python string.", func_name));
+    }
+    return c_str;
+}
+
 #ifdef USE_CUDF
 
 cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {

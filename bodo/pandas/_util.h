@@ -387,6 +387,16 @@ class JoinFilterColStats {
         const std::vector<int> column_projection);
 };
 
+/**
+ * @brief Get a single string argument from a Python function call's args tuple
+ * and convert it to a C string.
+ *
+ * @param args Python tuple containing the function arguments
+ * @param func_name Name of the function (for error messages)
+ * @return const char* C string representation of the Python string argument
+ */
+const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name);
+
 #ifdef USE_CUDF
 
 #include <cstdint>
