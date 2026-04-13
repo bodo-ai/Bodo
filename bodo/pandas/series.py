@@ -1657,6 +1657,34 @@ class BodoStringMethods:
         return _get_series_func_plan(series._plan, new_metadata, fname, (pat,), kws)
 
     @check_args_fallback(unsupported="none")
+    def slice(
+        self,
+        start: int = None,
+        stop: int = None,
+        step: int = None,
+    ):
+        """
+        Support Series.str.slice() method same as Pandas using Arrow/cuDF compute.
+        """
+
+        validate_dtype("str.slice", self)
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.large_string())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        start, stop, step = process_slice_args(start, stop, step)
+        return _get_series_func_plan(
+            series._plan, new_metadata, "str.slice", (start, stop, step), {}
+        )
+
+    @check_args_fallback(unsupported="none")
     def join(self, sep):
         """
         Join lists contained as elements in the Series/Index with passed delimiter.
@@ -2714,6 +2742,22 @@ def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
     return split_s.map(get_len)
 
 
+def process_slice_args(start, stop, step):
+    """
+    Process slice arguments for Series.str.slice() to pass to Arrow backend same as Pandas:
+    https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/_arrow_string_mixins.py#L190
+    """
+    if start is None:
+        if step is not None and step < 0:
+            start = -1
+        else:
+            start = 0
+    if step is None:
+        step = 1
+
+    return start, stop, step
+
+
 def _nonnumeric_describe(series):
     """Computes non-numeric series.describe() using DataFrameGroupBy."""
 
@@ -2994,6 +3038,7 @@ def _get_series_func_plan(
         "str.title",
         "str.reverse",
         "str.match",
+        "str.slice",
         "str.startswith",
         "str.endswith",
         # str.contains with Arrow/cuDF supported args
@@ -3021,6 +3066,8 @@ def _get_series_func_plan(
             return "starts_with"
         if name == "str.endswith":
             return "ends_with"
+        if name == "str.slice":
+            return "utf8_slice_codeunits"
         if name.startswith("str."):
             return "utf8_" + name.split(".")[1]
         if name == "round":
@@ -3438,7 +3485,6 @@ series_str_methods = [
             "rjust",
             "ljust",
             "repeat",
-            "slice",
             "slice_replace",
             "translate",
             "zfill",

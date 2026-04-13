@@ -1319,6 +1319,30 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::NullOptions opts(true);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            if (!PyTuple_Check(scalar_func_data.args) ||
+                PyTuple_Size(scalar_func_data.args) != 3) {
+                throw std::runtime_error(
+                    "utf8_slice_codeunits args not a 3-element tuple.");
+            }
+
+            // Get the tuple elements (borrowed references)
+            PyObject *py_start = PyTuple_GetItem(scalar_func_data.args, 0);
+            PyObject *py_stop = PyTuple_GetItem(scalar_func_data.args, 1);
+            PyObject *py_step = PyTuple_GetItem(scalar_func_data.args, 2);
+
+            if (!PyLong_Check(py_start) || !PyLong_Check(py_stop) ||
+                !PyLong_Check(py_step)) {
+                throw std::runtime_error(
+                    "utf8_slice_codeunits args are not Python ints.");
+            }
+
+            int64_t start = PyLong_AsLong(py_start);
+            int64_t stop = PyLong_AsLong(py_stop);
+            int64_t step = PyLong_AsLong(py_step);
+
+            arrow::compute::SliceOptions opts(start, stop, step);
+            result = do_arrow_compute_unary(res, "utf8_slice_codeunits", &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
