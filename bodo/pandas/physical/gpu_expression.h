@@ -1014,32 +1014,8 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     }
 
     void extract_slice_arg_from_python() {
-        if (!PyTuple_Check(scalar_func_data.args) ||
-            PyTuple_Size(scalar_func_data.args) != 3) {
-            throw std::runtime_error(
-                "utf8_slice_codeunits args not a 3-element tuple.");
-        }
-
-        // Get the tuple elements (borrowed references)
-        PyObject *py_start = PyTuple_GetItem(scalar_func_data.args, 0);
-        PyObject *py_stop = PyTuple_GetItem(scalar_func_data.args, 1);
-        PyObject *py_step = PyTuple_GetItem(scalar_func_data.args, 2);
-
-        if (!PyLong_Check(py_start) || !PyLong_Check(py_step)) {
-            throw std::runtime_error(
-                "utf8_slice_codeunits args are not Python ints.");
-        }
-
-        if (!PyLong_Check(py_stop) && py_stop != Py_None) {
-            throw std::runtime_error(
-                "utf8_slice_codeunits stop arg is not a Python int or None.");
-        }
-
-        start = static_cast<int64_t>(PyLong_AsLong(py_start));
-        stop = (py_stop == Py_None)
-                   ? std::numeric_limits<cudf::size_type>::max()
-                   : PyLong_AsLong(py_stop);
-        step = static_cast<int64_t>(PyLong_AsLong(py_step));
+        std::tie(start, stop, step) =
+            get_py_slice_args<cudf::size_type>(scalar_func_data.args);
     }
 
     // Keeping reference to the cudf string scalar created from the Python
