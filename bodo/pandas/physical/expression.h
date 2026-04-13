@@ -1331,14 +1331,21 @@ class PhysicalArrowExpression : public PhysicalExpression {
             PyObject *py_stop = PyTuple_GetItem(scalar_func_data.args, 1);
             PyObject *py_step = PyTuple_GetItem(scalar_func_data.args, 2);
 
-            if (!PyLong_Check(py_start) || !PyLong_Check(py_stop) ||
-                !PyLong_Check(py_step)) {
+            if (!PyLong_Check(py_start) || !PyLong_Check(py_step)) {
                 throw std::runtime_error(
                     "utf8_slice_codeunits args are not Python ints.");
             }
 
+            if (!PyLong_Check(py_stop) && py_stop != Py_None) {
+                throw std::runtime_error(
+                    "utf8_slice_codeunits stop arg is not a Python int or "
+                    "None.");
+            }
+
             int64_t start = PyLong_AsLong(py_start);
-            int64_t stop = PyLong_AsLong(py_stop);
+            int64_t stop = (py_stop == Py_None)
+                               ? std::numeric_limits<int64_t>::max()
+                               : PyLong_AsLong(py_stop);
             int64_t step = PyLong_AsLong(py_step);
 
             arrow::compute::SliceOptions opts(start, stop, step);

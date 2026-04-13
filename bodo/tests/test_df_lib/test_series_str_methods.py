@@ -1,6 +1,7 @@
 import re
 
 import pandas as pd
+import pytest
 
 from bodo.tests.test_df_lib.series_test_generator import generate_series_test
 
@@ -17,6 +18,8 @@ def _install_series_str_tests():
                 test_map_arg[method_name],
                 accessor="str",
             )
+            if method_name == "slice":
+                test = pytest.mark.gpu(test)
             globals()[f"test_{method_name}_df{idx}"] = test
             idx += 1
 

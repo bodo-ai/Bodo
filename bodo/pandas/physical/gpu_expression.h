@@ -1067,15 +1067,21 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         PyObject *py_stop = PyTuple_GetItem(scalar_func_data.args, 1);
         PyObject *py_step = PyTuple_GetItem(scalar_func_data.args, 2);
 
-        if (!PyLong_Check(py_start) || !PyLong_Check(py_stop) ||
-            !PyLong_Check(py_step)) {
+        if (!PyLong_Check(py_start) || !PyLong_Check(py_step)) {
             throw std::runtime_error(
                 "utf8_slice_codeunits args are not Python ints.");
         }
 
-        start = static_cast<int32_t>(PyLong_AsLong(py_start));
-        stop = static_cast<int32_t>(PyLong_AsLong(py_stop));
-        step = static_cast<int32_t>(PyLong_AsLong(py_step));
+        if (!PyLong_Check(py_stop) && py_stop != Py_None) {
+            throw std::runtime_error(
+                "utf8_slice_codeunits stop arg is not a Python int or None.");
+        }
+
+        start = static_cast<int64_t>(PyLong_AsLong(py_start));
+        stop = (py_stop == Py_None)
+                   ? std::numeric_limits<cudf::size_type>::max()
+                   : PyLong_AsLong(py_stop);
+        step = static_cast<int64_t>(PyLong_AsLong(py_step));
     }
 
     // Keeping reference to the cudf string scalar created from the Python
@@ -1088,9 +1094,9 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     int32_t round_ndigits = 0;
 
     // str.slice() arguments
-    int32_t start = 0;
-    int32_t stop = 0;
-    int32_t step = 0;
+    int64_t start = 0;
+    int64_t stop = 0;
+    int64_t step = 0;
 };
 
 struct PhysicalGPUUDFExpressionMetrics {
