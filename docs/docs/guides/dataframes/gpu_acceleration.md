@@ -120,7 +120,7 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
 
-Limit, sampling, CTEs, sorting, and quantiles are not currently supported.
+Sampling, CTEs, and quantiles are not currently supported.
 
 ## Important Per-Feature Caveats
 
@@ -144,6 +144,10 @@ The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nuniq
 
 Supported join types include inner, left, right, outer, anti, anti-right and mark joins (i.e. `Series.isin`),
 though these joins may still fall back to CPU if they contain unsupported expressions in the join condition.
+
+### Sorting
+
+Sorting is supported on the GPU, including top-k sorts and offsets into the sorted output.
 
 ## Troubleshooting
 

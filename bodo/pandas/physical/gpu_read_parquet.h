@@ -688,6 +688,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             arrow_schema->metadata()->values());
         this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
                                   ->Project(selected_columns);
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         this->output_arrow_schema = output_schema->ToArrowSchema();
 
         this->schema_fields = PyObject_GetAttrString(pyarrow_schema, "names");
@@ -794,7 +796,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return output_schema;
     }
 

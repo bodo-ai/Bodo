@@ -149,6 +149,8 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         if (!dropna.has_value()) {
             dropna = true;
         }
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         arrow_output_schema = this->output_schema->ToArrowSchema();
         this->groupby_state = std::make_unique<CudaGroupbyState>(
             keys, column_agg_funcs, arrow_output_schema);
@@ -169,6 +171,9 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
 
         std::vector<std::pair<uint64_t, int32_t>> column_agg_funcs;
         this->output_schema = in_table_schema;
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
+
         arrow_output_schema = this->output_schema->ToArrowSchema();
         this->groupby_state = std::make_unique<CudaGroupbyState>(
             cols_to_keep_vec, column_agg_funcs, arrow_output_schema);
@@ -261,7 +266,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
      *
      * @return std::shared_ptr<bodo::Schema>
      */
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return output_schema;
     }
 
@@ -312,6 +317,8 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         }
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
     }
 
     std::shared_ptr<CudaGroupbyState> groupby_state;
@@ -342,6 +349,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
             Bodo_CTypes::CTypeEnum::UINT64));
         std::vector<std::string> names = {std::string("count_star()")};
         out_schema = std::make_shared<bodo::Schema>(std::move(types), names);
+        PhysicalGPUSource::EnsureNoNumpyColumns(out_schema);
         out_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
     }
@@ -374,7 +382,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
             "GetResult called on a PhysicalGPUCountStar node.");
     }
 
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return out_schema;
     }
 

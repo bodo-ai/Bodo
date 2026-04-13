@@ -29,6 +29,7 @@
 #include "physical/gpu_limit.h"
 #include "physical/gpu_project.h"
 #include "physical/gpu_reduce.h"
+#include "physical/gpu_sort.h"
 #include "physical/gpu_union_all.h"
 #endif
 
@@ -160,13 +161,13 @@ class DevicePlanNode {
                 return false;
 
             case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalOrder>());
 
             case duckdb::LogicalOperatorType::LOGICAL_LIMIT:
                 return ::gpu_capable(op.Cast<duckdb::LogicalLimit>());
 
             case duckdb::LogicalOperatorType::LOGICAL_TOP_N:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalTopN>());
 
             case duckdb::LogicalOperatorType::LOGICAL_SAMPLE:
                 return false;

@@ -176,7 +176,9 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
     explicit PhysicalGPUReduce(std::shared_ptr<bodo::Schema> out_schema,
                                std::vector<std::string> function_names)
         : out_schema(std::move(out_schema)),
-          function_names(std::move(function_names)) {}
+          function_names(std::move(function_names)) {
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->out_schema);
+    }
 
     virtual ~PhysicalGPUReduce() = default;
 
@@ -217,7 +219,7 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
             "GetResult called on a PhysicalGPUReduce node.");
     }
 
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return out_schema;
     }
 
