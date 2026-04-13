@@ -12,10 +12,6 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
-#include "../libs/_array_utils.h"
-#include "../libs/_bodo_common.h"
-#include "../libs/_bodo_to_arrow.h"
-#include "../tests/utils.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/planner/expression.hpp"
@@ -36,6 +32,7 @@
 #include <cudf/strings/contains.hpp>
 #include <cudf/strings/find.hpp>
 #include <cudf/strings/regex/regex_program.hpp>
+#include <cudf/strings/slice.hpp>
 #include <cudf/unary.hpp>
 
 #include "duckdb/common/enums/expression_type.hpp"
@@ -900,6 +897,7 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             scalar_func_data.arrow_func_name != "starts_with" &&
             scalar_func_data.arrow_func_name != "match_substring_regex" &&
             scalar_func_data.arrow_func_name != "match_substring_regex_first" &&
+            scalar_func_data.arrow_func_name != "utf8_slice_codeunits" &&
             scalar_func_data.arrow_func_name != "year" &&
             scalar_func_data.arrow_func_name != "round" &&
             scalar_func_data.arrow_func_name != "is_null") {
@@ -915,7 +913,9 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             scalar_func_data.arrow_func_name == "match_substring_regex_first") {
             extract_string_arg_from_python();
         } else if (scalar_func_data.arrow_func_name == "round") {
-            extract_round_arg_from_python();
+            round_ndigits = get_py_round_arg(scalar_func_data.args);
+        } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            extract_slice_arg_from_python();
         }
     }
 
@@ -946,6 +946,9 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
                    "match_substring_regex_first") {
             result = cudf::strings::matches_re(in_as_array->result->view(),
                                                *regex_prog, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            result = cudf::strings::slice_strings(
+                in_as_array->result->view(), start, stop, step, se->stream);
         } else if (scalar_func_data.arrow_func_name == "year") {
             result = cudf::datetime::extract_datetime_component(
                 in_as_array->result->view(),
@@ -997,31 +1000,8 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     PhysicalGPUArrowExpressionMetrics metrics;
 
     void extract_string_arg_from_python() {
-        // Extract string argument from scalar_func_data.args for ends_with and
-        // starts_with
-        if (!PyTuple_Check(scalar_func_data.args) ||
-            PyTuple_Size(scalar_func_data.args) != 1) {
-            throw std::runtime_error(
-                fmt::format("{} args not a 1-element tuple.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        // Get the first element (borrowed reference)
-        PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
-
-        if (!PyUnicode_Check(py_str)) {
-            throw std::runtime_error(
-                fmt::format("{} args element is not a Python string.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        // Convert to UTF‑8 C string
-        const char *c_str = PyUnicode_AsUTF8(py_str);
-        if (!c_str) {
-            throw std::runtime_error(
-                fmt::format("{} error extracting Python string.",
-                            scalar_func_data.arrow_func_name));
-        }
+        const char *c_str = get_py_single_arg_as_cstr(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str());
 
         if (scalar_func_data.arrow_func_name == "match_substring_regex" ||
             scalar_func_data.arrow_func_name == "match_substring_regex_first") {
@@ -1033,19 +1013,9 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         }
     }
 
-    void extract_round_arg_from_python() {
-        if (PyTuple_Check(scalar_func_data.args) &&
-            PyTuple_Size(scalar_func_data.args) == 1) {
-            // Get the first element (borrowed reference)
-            PyObject *py_digits = PyTuple_GetItem(scalar_func_data.args, 0);
-
-            if (!PyLong_Check(py_digits)) {
-                throw std::runtime_error(
-                    fmt::format("{} args element is not a Python int.",
-                                scalar_func_data.arrow_func_name));
-            }
-            round_ndigits = static_cast<int32_t>(PyLong_AsLong(py_digits));
-        }
+    void extract_slice_arg_from_python() {
+        std::tie(start, stop, step) =
+            get_py_slice_args<cudf::size_type>(scalar_func_data.args);
     }
 
     // Keeping reference to the cudf string scalar created from the Python
@@ -1056,6 +1026,11 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     std::shared_ptr<cudf::strings::regex_program> regex_prog;
 
     int32_t round_ndigits = 0;
+
+    // str.slice() arguments
+    int64_t start = 0;
+    int64_t stop = 0;
+    int64_t step = 0;
 };
 
 struct PhysicalGPUUDFExpressionMetrics {

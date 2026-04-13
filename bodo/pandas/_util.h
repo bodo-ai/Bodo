@@ -3,7 +3,9 @@
 #include <Python.h>
 #include <arrow/api.h>
 #include <cstdint>
+#include <limits>
 #include <map>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include "../libs/_bodo_to_arrow.h"
@@ -386,6 +388,39 @@ class JoinFilterColStats {
         duckdb::unique_ptr<duckdb::TableFilterSet> filters,
         const std::vector<int> column_projection);
 };
+
+/**
+ * @brief Get a single string argument from a Python function call's args tuple
+ * and convert it to a C string.
+ *
+ * @param args Python tuple containing the function arguments
+ * @param func_name Name of the function (for error messages)
+ * @return const char* C string representation of the Python string argument
+ */
+const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name);
+
+/**
+ * @brief Extract the number of digits to round to from Python function call's
+ * args
+ *
+ * @param args Python tuple containing the function arguments
+ * @return int64_t The number of digits to round to
+ */
+int64_t get_py_round_arg(PyObject *args);
+
+/**
+ * @brief Extract slice arguments (start, stop, step) from a Python 3-element
+ * tuple. The stop argument can be None, in which case it defaults to
+ * std::numeric_limits<StopMaxT>::max().
+ *
+ * @tparam StopMaxT The type used for the max sentinel when stop is None
+ *                  (e.g., int64_t for CPU Arrow, cudf::size_type for GPU).
+ * @param args Python tuple containing (start, stop, step)
+ * @return std::tuple<int64_t, int64_t, int64_t> The extracted (start, stop,
+ *         step) arguments
+ */
+template <typename StopMaxT = int64_t>
+std::tuple<int64_t, int64_t, int64_t> get_py_slice_args(PyObject *args);
 
 #ifdef USE_CUDF
 

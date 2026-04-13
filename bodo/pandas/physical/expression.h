@@ -1258,29 +1258,9 @@ class PhysicalArrowExpression : public PhysicalExpression {
                        "match_substring_regex_first" ||
                    scalar_func_data.arrow_func_name == "starts_with" ||
                    scalar_func_data.arrow_func_name == "ends_with") {
-            if (!PyTuple_Check(scalar_func_data.args) ||
-                PyTuple_Size(scalar_func_data.args) != 1) {
-                throw std::runtime_error(
-                    fmt::format("{} args not a 1-element tuple.",
-                                scalar_func_data.arrow_func_name));
-            }
-
-            // Get the first element (borrowed reference)
-            PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
-
-            if (!PyUnicode_Check(py_str)) {
-                throw std::runtime_error(
-                    fmt::format("{} args element is not a Python string.",
-                                scalar_func_data.arrow_func_name));
-            }
-
-            // Convert to UTF‑8 C string
-            const char *c_str = PyUnicode_AsUTF8(py_str);
-            if (!c_str) {
-                throw std::runtime_error(
-                    fmt::format("{} error extracting Python string.",
-                                scalar_func_data.arrow_func_name));
-            }
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
 
             std::string func_name = scalar_func_data.arrow_func_name;
             std::string pattern(c_str);
@@ -1296,20 +1276,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::MatchSubstringOptions opts(pattern);
             result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
-            int64_t digits = 0;
-            if (PyTuple_Check(scalar_func_data.args) &&
-                PyTuple_Size(scalar_func_data.args) == 1) {
-                // Get the first element (borrowed reference)
-                PyObject *py_digits = PyTuple_GetItem(scalar_func_data.args, 0);
-
-                if (!PyLong_Check(py_digits)) {
-                    throw std::runtime_error(
-                        fmt::format("{} args element is not a Python int.",
-                                    scalar_func_data.arrow_func_name));
-                }
-
-                digits = PyLong_AsLong(py_digits);
-            }
+            int64_t digits = get_py_round_arg(scalar_func_data.args);
 
             arrow::compute::RoundOptions opts(digits);
             result = do_arrow_compute_unary(
@@ -1319,6 +1286,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::NullOptions opts(true);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            auto [start, stop, step] = get_py_slice_args(scalar_func_data.args);
+
+            arrow::compute::SliceOptions opts(start, stop, step);
+            result = do_arrow_compute_unary(res, "utf8_slice_codeunits", &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
