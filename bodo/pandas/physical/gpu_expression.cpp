@@ -500,6 +500,8 @@ bool gpu_capable(duckdb::Expression& expr) {
                            scalar_func_data.arrow_func_name == "starts_with" ||
                            scalar_func_data.arrow_func_name ==
                                "match_substring_regex" ||
+                           scalar_func_data.arrow_func_name ==
+                               "match_substring_regex_first" ||
                            scalar_func_data.arrow_func_name == "year" ||
                            scalar_func_data.arrow_func_name == "round" ||
                            scalar_func_data.arrow_func_name == "is_null";

@@ -1254,6 +1254,8 @@ class PhysicalArrowExpression : public PhysicalExpression {
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
+                   scalar_func_data.arrow_func_name ==
+                       "match_substring_regex_first" ||
                    scalar_func_data.arrow_func_name == "starts_with" ||
                    scalar_func_data.arrow_func_name == "ends_with") {
             if (!PyTuple_Check(scalar_func_data.args) ||
@@ -1280,9 +1282,19 @@ class PhysicalArrowExpression : public PhysicalExpression {
                                 scalar_func_data.arrow_func_name));
             }
 
-            arrow::compute::MatchSubstringOptions opts(c_str);
-            result = do_arrow_compute_unary(
-                res, scalar_func_data.arrow_func_name, &opts);
+            std::string func_name = scalar_func_data.arrow_func_name;
+            std::string pattern(c_str);
+            if (func_name == "match_substring_regex_first") {
+                // match_substring_regex in Arrow matches anywhere in the string
+                // but Series.str.match() matches from the start. Add ^ to the
+                // pattern to match from the start same as Pandas:
+                // https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/_arrow_string_mixins.py#L378
+                func_name = "match_substring_regex";
+                pattern = "^(" + pattern + ")";
+            }
+
+            arrow::compute::MatchSubstringOptions opts(pattern);
+            result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
             int64_t digits = 0;
             if (PyTuple_Check(scalar_func_data.args) &&

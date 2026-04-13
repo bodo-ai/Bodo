@@ -899,17 +899,20 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         if (scalar_func_data.arrow_func_name != "ends_with" &&
             scalar_func_data.arrow_func_name != "starts_with" &&
             scalar_func_data.arrow_func_name != "match_substring_regex" &&
+            scalar_func_data.arrow_func_name != "match_substring_regex_first" &&
             scalar_func_data.arrow_func_name != "year" &&
             scalar_func_data.arrow_func_name != "round" &&
             scalar_func_data.arrow_func_name != "is_null") {
             throw std::runtime_error(
                 "PhysicalGPUArrowExpression only supports ends_with, "
-                "starts_with, match_substring_regex, year, round and is_null "
-                "for now.");
+                "starts_with, match_substring_regex, "
+                "match_substring_regex_first, "
+                "year, round and is_null for now.");
         }
         if (scalar_func_data.arrow_func_name == "ends_with" ||
             scalar_func_data.arrow_func_name == "starts_with" ||
-            scalar_func_data.arrow_func_name == "match_substring_regex") {
+            scalar_func_data.arrow_func_name == "match_substring_regex" ||
+            scalar_func_data.arrow_func_name == "match_substring_regex_first") {
             extract_string_arg_from_python();
         } else if (scalar_func_data.arrow_func_name == "round") {
             extract_round_arg_from_python();
@@ -939,6 +942,10 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
                    "match_substring_regex") {
             result = cudf::strings::contains_re(in_as_array->result->view(),
                                                 *regex_prog, se->stream);
+        } else if (scalar_func_data.arrow_func_name ==
+                   "match_substring_regex_first") {
+            result = cudf::strings::matches_re(in_as_array->result->view(),
+                                               *regex_prog, se->stream);
         } else if (scalar_func_data.arrow_func_name == "year") {
             result = cudf::datetime::extract_datetime_component(
                 in_as_array->result->view(),
@@ -1016,7 +1023,8 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
                             scalar_func_data.arrow_func_name));
         }
 
-        if (scalar_func_data.arrow_func_name == "match_substring_regex") {
+        if (scalar_func_data.arrow_func_name == "match_substring_regex" ||
+            scalar_func_data.arrow_func_name == "match_substring_regex_first") {
             regex_prog =
                 cudf::strings::regex_program::create(std::string(c_str));
         } else {

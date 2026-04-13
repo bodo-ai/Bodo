@@ -237,6 +237,8 @@ df = pd.DataFrame(
             "B-anan-a",
             " E-xc i-ted ",
             "Do-g",
+            # Pattern "A" is not first to distinguish between contains() and match()
+            "lastA",
         ],
     }
 )
