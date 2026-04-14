@@ -6,6 +6,7 @@
 #include <arrow/compute/kernel.h>
 #include <arrow/result.h>
 #include <arrow/status.h>
+#include <arrow/table.h>
 #include <arrow/type_traits.h>
 #include <future>
 #include <rmm/cuda_stream_view.hpp>
@@ -29,6 +30,7 @@
 #include <cudf/round.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
+#include <cudf/search.hpp>
 #include <cudf/strings/contains.hpp>
 #include <cudf/strings/find.hpp>
 #include <cudf/strings/regex/regex_program.hpp>
@@ -900,12 +902,13 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             scalar_func_data.arrow_func_name != "utf8_slice_codeunits" &&
             scalar_func_data.arrow_func_name != "year" &&
             scalar_func_data.arrow_func_name != "round" &&
-            scalar_func_data.arrow_func_name != "is_null") {
+            scalar_func_data.arrow_func_name != "is_null" &&
+            scalar_func_data.arrow_func_name != "is_in") {
             throw std::runtime_error(
                 "PhysicalGPUArrowExpression only supports ends_with, "
                 "starts_with, match_substring_regex, "
                 "match_substring_regex_first, "
-                "year, round and is_null for now.");
+                "year, round, is_null and is_in for now.");
         }
         if (scalar_func_data.arrow_func_name == "ends_with" ||
             scalar_func_data.arrow_func_name == "starts_with" ||
@@ -916,6 +919,8 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             round_ndigits = get_py_round_arg(scalar_func_data.args);
         } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
             extract_slice_arg_from_python();
+        } else if (scalar_func_data.arrow_func_name == "is_in") {
+            extract_isin_arg_from_python();
         }
     }
 
@@ -968,6 +973,10 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
 #pragma GCC diagnostic pop
         } else if (scalar_func_data.arrow_func_name == "is_null") {
             result = cudf::is_null(in_as_array->result->view(), se->stream);
+        } else if (scalar_func_data.arrow_func_name == "is_in") {
+            result =
+                cudf::contains(in_as_array->result->view(),
+                               isin_data->get_column(0).view(), se->stream);
         } else {
             throw std::runtime_error(
                 fmt::format("Unsupported Arrow function: {}",
@@ -1018,6 +1027,19 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             get_py_slice_args<cudf::size_type>(scalar_func_data.args);
     }
 
+    void extract_isin_arg_from_python() {
+        std::shared_ptr<arrow::Array> values_array =
+            get_py_isin_arg_as_arrow_array(scalar_func_data.args);
+
+        // Convert isin input to cudf table
+        std::shared_ptr<arrow::Table> values_table = arrow::Table::Make(
+            arrow::schema({arrow::field("values", values_array->type())}),
+            {values_array});
+        GPU_DATA gpu_data = convertArrowTableToGPU(values_table, nullptr);
+
+        isin_data = gpu_data.table;
+    }
+
     // Keeping reference to the cudf string scalar created from the Python
     // string argument to ensure it stays alive during processing.
     std::shared_ptr<cudf::string_scalar> str_scalar_in;
@@ -1031,6 +1053,9 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     int64_t start = 0;
     int64_t stop = 0;
     int64_t step = 0;
+
+    // isin argument
+    std::shared_ptr<cudf::table> isin_data;
 };
 
 struct PhysicalGPUUDFExpressionMetrics {
