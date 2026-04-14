@@ -422,6 +422,15 @@ int64_t get_py_round_arg(PyObject *args);
 template <typename StopMaxT = int64_t>
 std::tuple<int64_t, int64_t, int64_t> get_py_slice_args(PyObject *args);
 
+/**
+ * @brief Convert isin argument from Python to an Arrow array. The argument is
+ * expected to be a PyArrow array.
+ *
+ * @param args Python tuple containing the function arguments
+ * @return std::shared_ptr<arrow::Array> The converted Arrow array
+ */
+std::shared_ptr<arrow::Array> get_py_isin_arg_as_arrow_array(PyObject *args);
+
 #ifdef USE_CUDF
 
 #include <cstdint>

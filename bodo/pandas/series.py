@@ -1202,17 +1202,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
-        # If the number of possible values is small then it will be faster to run them as
-        # a conjunction of equality checks rather than with an expensive UDF.
-        if not isinstance(values, BodoSeries) and len(values) <= 4:
-            ret = None
-            for val in values:
-                if ret is None:
-                    ret = self == val
-                else:
-                    ret = ret | (self == val)
-            return ret
-
         new_metadata = pd.Series(
             dtype=pd.ArrowDtype(pa.bool_()),
             name=self.name,
@@ -1284,6 +1273,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return wrap_plan(proj_plan)
 
         # It's just a map function if 'values' is not a BodoSeries
+        # prepare input for Arrow backend
+        values = pa.array(values, type=self.head(0).dtype.pyarrow_dtype)
         return _get_series_func_plan(self._plan, new_metadata, "isin", (values,), {})
 
     @check_args_fallback(supported=["drop", "name", "level"])
@@ -3046,6 +3037,7 @@ def _get_series_func_plan(
         "round",
         "isna",
         "isnull",
+        "isin",
     )
 
     def get_arrow_func(name):
@@ -3074,6 +3066,8 @@ def _get_series_func_plan(
             return "round"
         if name in ("isna", "isnull"):
             return "is_null"
+        if name == "isin":
+            return "is_in"
         return name.split(".")[-1]
 
     if func in arrow_compute_list and len(kwargs) == 0:
