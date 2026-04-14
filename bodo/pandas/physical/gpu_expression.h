@@ -27,6 +27,7 @@
 #include <cudf/column/column_factories.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/datetime.hpp>
+#include <cudf/replace.hpp>
 #include <cudf/round.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
@@ -976,6 +977,18 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         } else if (scalar_func_data.arrow_func_name == "is_in") {
             result = cudf::contains(isin_data->get_column(0).view(),
                                     in_as_array->result->view(), se->stream);
+            // handle nulls in input to match Pandas similar to cudf:
+            // https://github.com/rapidsai/cudf/blob/1fd16fda34a6e78777330f4e02bdd122a6977a22/python/cudf/cudf/core/column/column.py#L2164
+            if (in_as_array->result->has_nulls()) {
+                std::unique_ptr<cudf::scalar> fill_scalar =
+                    arrow_scalar_to_cudf(
+                        arrow::MakeScalar(arrow::boolean(),
+                                          isin_data->get_column(0).has_nulls())
+                            .ValueOrDie(),
+                        se->stream);
+                result = cudf::replace_nulls(result->view(), *fill_scalar,
+                                             se->stream);
+            }
         } else {
             throw std::runtime_error(
                 fmt::format("Unsupported Arrow function: {}",

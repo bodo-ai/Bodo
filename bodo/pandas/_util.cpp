@@ -1340,8 +1340,8 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                                                                       false);
 
             case arrow::Type::BOOL:
-                return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                    static_cast<int8_t>(false), false);
+                return std::make_unique<cudf::numeric_scalar<bool>>(false,
+                                                                    false);
 
             case arrow::Type::LARGE_STRING:
             case arrow::Type::STRING:
@@ -1438,10 +1438,8 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                 std::static_pointer_cast<arrow::DoubleScalar>(s)->value, true);
 
         case arrow::Type::BOOL:
-            return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                static_cast<int8_t>(
-                    std::static_pointer_cast<arrow::BooleanScalar>(s)->value),
-                true);
+            return std::make_unique<cudf::numeric_scalar<bool>>(
+                std::static_pointer_cast<arrow::BooleanScalar>(s)->value, true);
 
         // ---------------- STRINGS / BINARY ----------------
         case arrow::Type::STRING: {
