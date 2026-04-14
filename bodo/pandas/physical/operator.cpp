@@ -1,7 +1,6 @@
 #include "operator.h"
 #include <arrow/array/builder_base.h>
 #include <arrow/util/endian.h>
-#include <cudf/utilities/default_stream.hpp>
 #include <memory>
 #include <string>
 
@@ -10,6 +9,7 @@
 #include <cudf/copying.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
+#include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
 
 #include "../../libs/gpu_utils.h"
