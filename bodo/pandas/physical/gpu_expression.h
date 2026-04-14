@@ -974,9 +974,8 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         } else if (scalar_func_data.arrow_func_name == "is_null") {
             result = cudf::is_null(in_as_array->result->view(), se->stream);
         } else if (scalar_func_data.arrow_func_name == "is_in") {
-            result =
-                cudf::contains(in_as_array->result->view(),
-                               isin_data->get_column(0).view(), se->stream);
+            result = cudf::contains(isin_data->get_column(0).view(),
+                                    in_as_array->result->view(), se->stream);
         } else {
             throw std::runtime_error(
                 fmt::format("Unsupported Arrow function: {}",
