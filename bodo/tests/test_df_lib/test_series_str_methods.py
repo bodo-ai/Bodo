@@ -18,7 +18,7 @@ def _install_series_str_tests():
                 test_map_arg[method_name],
                 accessor="str",
             )
-            if method_name == "slice":
+            if method_name in ("slice", "strip"):
                 test = pytest.mark.gpu(test)
             globals()[f"test_{method_name}_df{idx}"] = test
             idx += 1
@@ -106,6 +106,10 @@ test_map_arg = {
         ((), {"start": 1, "stop": 3, "repl": "oi"}),
         ((), {"stop": 4, "repl": "XXX"}),
         ((), {"start": -1}),
+    ],
+    "strip": [
+        ((), {}),
+        (("AB",), {}),
     ],
     "repeat": [
         ((2,), {}),

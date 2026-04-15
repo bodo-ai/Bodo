@@ -36,6 +36,7 @@
 #include <cudf/strings/find.hpp>
 #include <cudf/strings/regex/regex_program.hpp>
 #include <cudf/strings/slice.hpp>
+#include <cudf/strings/strip.hpp>
 #include <cudf/unary.hpp>
 
 #include "duckdb/common/enums/expression_type.hpp"
@@ -901,6 +902,8 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             scalar_func_data.arrow_func_name != "match_substring_regex" &&
             scalar_func_data.arrow_func_name != "match_substring_regex_first" &&
             scalar_func_data.arrow_func_name != "utf8_slice_codeunits" &&
+            scalar_func_data.arrow_func_name != "utf8_trim_whitespace" &&
+            scalar_func_data.arrow_func_name != "utf8_trim" &&
             scalar_func_data.arrow_func_name != "year" &&
             scalar_func_data.arrow_func_name != "round" &&
             scalar_func_data.arrow_func_name != "is_null" &&
@@ -914,8 +917,13 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         if (scalar_func_data.arrow_func_name == "ends_with" ||
             scalar_func_data.arrow_func_name == "starts_with" ||
             scalar_func_data.arrow_func_name == "match_substring_regex" ||
-            scalar_func_data.arrow_func_name == "match_substring_regex_first") {
+            scalar_func_data.arrow_func_name == "match_substring_regex_first" ||
+            scalar_func_data.arrow_func_name == "utf8_trim") {
             extract_string_arg_from_python();
+        } else if (scalar_func_data.arrow_func_name == "utf8_trim_whitespace") {
+            // Empty string which indicates strip whitespace characters in
+            // cudf::strings::strip()
+            str_scalar_in = std::make_shared<cudf::string_scalar>("", true);
         } else if (scalar_func_data.arrow_func_name == "round") {
             round_ndigits = get_py_round_arg(scalar_func_data.args);
         } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
@@ -955,6 +963,11 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
             result = cudf::strings::slice_strings(
                 in_as_array->result->view(), start, stop, step, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "utf8_trim_whitespace" ||
+                   scalar_func_data.arrow_func_name == "utf8_trim") {
+            result = cudf::strings::strip(in_as_array->result->view(),
+                                          cudf::strings::side_type::BOTH,
+                                          *str_scalar_in, se->stream);
         } else if (scalar_func_data.arrow_func_name == "year") {
             result = cudf::datetime::extract_datetime_component(
                 in_as_array->result->view(),

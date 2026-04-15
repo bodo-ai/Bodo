@@ -1291,6 +1291,13 @@ class PhysicalArrowExpression : public PhysicalExpression {
 
             arrow::compute::SliceOptions opts(start, stop, step);
             result = do_arrow_compute_unary(res, "utf8_slice_codeunits", &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_trim") {
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+
+            arrow::compute::TrimOptions opts(c_str);
+            result = do_arrow_compute_unary(res, "utf8_trim", &opts);
         } else if (scalar_func_data.arrow_func_name == "is_in") {
             std::shared_ptr<arrow::Array> values_array =
                 get_py_isin_arg_as_arrow_array(scalar_func_data.args);

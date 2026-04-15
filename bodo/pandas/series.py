@@ -1676,6 +1676,34 @@ class BodoStringMethods:
         )
 
     @check_args_fallback(unsupported="none")
+    def strip(self, to_strip=None):
+        """
+        Support Series.str.strip() method same as Pandas using Arrow/cuDF compute.
+        """
+
+        validate_dtype("str.strip", self)
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.large_string())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        if to_strip is None:
+            fname = "utf8_trim_whitespace"
+            args = ()
+        else:
+            fname = "utf8_trim"
+            assert isinstance(to_strip, str), "to_strip argument must be a string"
+            args = (to_strip,)
+
+        return _get_series_func_plan(series._plan, new_metadata, fname, args, {})
+
+    @check_args_fallback(unsupported="none")
     def join(self, sep):
         """
         Join lists contained as elements in the Series/Index with passed delimiter.
@@ -3038,6 +3066,8 @@ def _get_series_func_plan(
         "isna",
         "isnull",
         "isin",
+        "utf8_trim_whitespace",
+        "utf8_trim",
     )
 
     def get_arrow_func(name):
@@ -3068,6 +3098,8 @@ def _get_series_func_plan(
             return "is_null"
         if name == "isin":
             return "is_in"
+        if name in ("utf8_trim_whitespace", "utf8_trim"):
+            return name
         return name.split(".")[-1]
 
     if func in arrow_compute_list and len(kwargs) == 0:
@@ -3468,7 +3500,6 @@ series_str_methods = [
             "capitalize",
             "casefold",
             # args
-            "strip",
             "lstrip",
             "rstrip",
             "center",
