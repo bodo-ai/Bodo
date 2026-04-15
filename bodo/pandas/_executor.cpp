@@ -1005,7 +1005,7 @@ bool ignore_cpu_fallback(duckdb::LogicalOperator const &op) {
                    .getScanFunctionType() ==
                BodoScanFunctionType::DATAFRAME_SCAN;
     }
-    return op.type == duckdb::LogicalOperatorType::LOGICAL_ORDER_BY;
+    return false;
 }
 
 #endif  // USE_CUDF
