@@ -1698,6 +1698,7 @@ class BodoStringMethods:
             args = ()
         else:
             fname = "utf8_trim"
+            assert isinstance(to_strip, str), "to_strip argument must be a string"
             args = (to_strip,)
 
         return _get_series_func_plan(series._plan, new_metadata, fname, args, {})
