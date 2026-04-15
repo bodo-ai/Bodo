@@ -9,6 +9,7 @@
 #include <cudf/copying.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
+#include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
 
 #include "../../libs/gpu_utils.h"
@@ -296,7 +297,8 @@ GPU_DATA convertArrowTableToGPU(std::shared_ptr<arrow::Table> arrow_table,
     // from_arrow_host parses the structs, allocates GPU memory, and performs
     // the copy.
     std::unique_ptr<cudf::table> result =
-        cudf::from_arrow_host(&arrow_schema, &device_array, se->stream);
+        cudf::from_arrow_host(&arrow_schema, &device_array,
+                              se ? se->stream : cudf::get_default_stream());
 
     // Clean up the C structs (Arrow requires manual release if not imported,
     // but Export gives us ownership, so we must release the release callbacks)

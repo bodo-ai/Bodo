@@ -1125,6 +1125,29 @@ std::tuple<int64_t, int64_t, int64_t> get_py_slice_args(PyObject *args) {
 template std::tuple<int64_t, int64_t, int64_t> get_py_slice_args<int64_t>(
     PyObject *args);
 
+std::shared_ptr<arrow::Array> get_py_isin_arg_as_arrow_array(PyObject *args) {
+    if (!PyTuple_Check(args) || PyTuple_Size(args) != 1) {
+        throw std::runtime_error("isin args not a 1-element tuple.");
+    }
+
+    // Get the first element (borrowed reference)
+    PyObject *py_arg = PyTuple_GetItem(args, 0);
+
+    // Convert the Python object to an Arrow array
+    // https://arrow.apache.org/docs/python/integration/extending.html
+    if (arrow::py::import_pyarrow() != 0) {
+        throw std::runtime_error("Failed to import pyarrow module.");
+    }
+    arrow::Result<std::shared_ptr<arrow::Array>> result =
+        arrow::py::unwrap_array(py_arg);
+    if (!result.ok()) {
+        throw std::runtime_error(
+            "Failed to convert isin argument to Arrow array: " +
+            result.status().ToString());
+    }
+    return result.ValueOrDie();
+}
+
 #ifdef USE_CUDF
 
 template std::tuple<int64_t, int64_t, int64_t>
@@ -1317,8 +1340,8 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                                                                       false);
 
             case arrow::Type::BOOL:
-                return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                    static_cast<int8_t>(false), false);
+                return std::make_unique<cudf::numeric_scalar<bool>>(false,
+                                                                    false);
 
             case arrow::Type::LARGE_STRING:
             case arrow::Type::STRING:
@@ -1415,10 +1438,8 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                 std::static_pointer_cast<arrow::DoubleScalar>(s)->value, true);
 
         case arrow::Type::BOOL:
-            return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                static_cast<int8_t>(
-                    std::static_pointer_cast<arrow::BooleanScalar>(s)->value),
-                true);
+            return std::make_unique<cudf::numeric_scalar<bool>>(
+                std::static_pointer_cast<arrow::BooleanScalar>(s)->value, true);
 
         // ---------------- STRINGS / BINARY ----------------
         case arrow::Type::STRING: {
