@@ -111,8 +111,8 @@ std::unique_ptr<cudf::scalar> make_cudf_scalar_from_value(
         return std::make_unique<cudf::string_scalar>(std::string(value), true,
                                                      se->stream);
     } else if constexpr (std::is_same_v<T, bool>) {
-        return std::make_unique<cudf::numeric_scalar<int8_t>>(
-            static_cast<int8_t>(value), true, se->stream);
+        return std::make_unique<cudf::numeric_scalar<bool>>(value, true,
+                                                            se->stream);
     } else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
         if constexpr (sizeof(T) == 1)
             return std::make_unique<cudf::numeric_scalar<int8_t>>(

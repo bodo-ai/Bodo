@@ -633,7 +633,7 @@ void duckdbValuetoCudfLiteral(
     switch (type) {
         case duckdb::LogicalTypeId::TINYINT: {
             auto literal_value = std::make_unique<cudf::numeric_scalar<int8_t>>(
-                value.GetValue<int8_t>());
+                value.GetValue<int8_t>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<int8_t>*>(
@@ -643,7 +643,7 @@ void duckdbValuetoCudfLiteral(
         case duckdb::LogicalTypeId::SMALLINT: {
             auto literal_value =
                 std::make_unique<cudf::numeric_scalar<int16_t>>(
-                    value.GetValue<int16_t>());
+                    value.GetValue<int16_t>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<int16_t>*>(
@@ -653,7 +653,7 @@ void duckdbValuetoCudfLiteral(
         case duckdb::LogicalTypeId::INTEGER: {
             auto literal_value =
                 std::make_unique<cudf::numeric_scalar<int32_t>>(
-                    value.GetValue<int32_t>());
+                    value.GetValue<int32_t>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<int32_t>*>(
@@ -663,7 +663,7 @@ void duckdbValuetoCudfLiteral(
         case duckdb::LogicalTypeId::BIGINT: {
             auto literal_value =
                 std::make_unique<cudf::numeric_scalar<int64_t>>(
-                    value.GetValue<int64_t>());
+                    value.GetValue<int64_t>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<int64_t>*>(
@@ -673,7 +673,7 @@ void duckdbValuetoCudfLiteral(
         case duckdb::LogicalTypeId::UTINYINT: {
             auto literal_value =
                 std::make_unique<cudf::numeric_scalar<uint8_t>>(
-                    value.GetValue<uint8_t>());
+                    value.GetValue<uint8_t>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<uint8_t>*>(
@@ -683,7 +683,7 @@ void duckdbValuetoCudfLiteral(
         case duckdb::LogicalTypeId::USMALLINT: {
             auto literal_value =
                 std::make_unique<cudf::numeric_scalar<uint16_t>>(
-                    value.GetValue<uint16_t>());
+                    value.GetValue<uint16_t>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(cudf::ast::literal(
                 *static_cast<cudf::numeric_scalar<uint16_t>*>(
@@ -693,7 +693,7 @@ void duckdbValuetoCudfLiteral(
         case duckdb::LogicalTypeId::UINTEGER: {
             auto literal_value =
                 std::make_unique<cudf::numeric_scalar<uint32_t>>(
-                    value.GetValue<uint32_t>());
+                    value.GetValue<uint32_t>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(cudf::ast::literal(
                 *static_cast<cudf::numeric_scalar<uint32_t>*>(
@@ -703,7 +703,7 @@ void duckdbValuetoCudfLiteral(
         case duckdb::LogicalTypeId::UBIGINT: {
             auto literal_value =
                 std::make_unique<cudf::numeric_scalar<uint64_t>>(
-                    value.GetValue<uint64_t>());
+                    value.GetValue<uint64_t>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(cudf::ast::literal(
                 *static_cast<cudf::numeric_scalar<uint64_t>*>(
@@ -712,7 +712,7 @@ void duckdbValuetoCudfLiteral(
         }
         case duckdb::LogicalTypeId::FLOAT: {
             auto literal_value = std::make_unique<cudf::numeric_scalar<float>>(
-                value.GetValue<float>());
+                value.GetValue<float>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<float>*>(
@@ -721,7 +721,7 @@ void duckdbValuetoCudfLiteral(
         }
         case duckdb::LogicalTypeId::DOUBLE: {
             auto literal_value = std::make_unique<cudf::numeric_scalar<double>>(
-                value.GetValue<double>());
+                value.GetValue<double>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<double>*>(
@@ -730,7 +730,7 @@ void duckdbValuetoCudfLiteral(
         }
         case duckdb::LogicalTypeId::BOOLEAN: {
             auto literal_value = std::make_unique<cudf::numeric_scalar<bool>>(
-                value.GetValue<bool>());
+                value.GetValue<bool>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
@@ -739,7 +739,7 @@ void duckdbValuetoCudfLiteral(
         }
         case duckdb::LogicalTypeId::VARCHAR: {
             auto literal_value = std::make_unique<cudf::string_scalar>(
-                value.GetValue<std::string>());
+                value.GetValue<std::string>(), !value.IsNull());
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::string_scalar*>(
@@ -924,7 +924,7 @@ void tableFilterToCudfAST(
             } catch (...) {
                 // No-op: literal true
                 auto literal_value =
-                    std::make_unique<cudf::numeric_scalar<bool>>(true);
+                    std::make_unique<cudf::numeric_scalar<bool>>(true, true);
                 filter_scalars.push_back(std::move(literal_value));
                 filter_ast_tree.push(cudf::ast::literal(
                     *static_cast<cudf::numeric_scalar<bool>*>(
@@ -1100,65 +1100,66 @@ void CudfASTOwner::insert_literal(const duckdb::Value& val,
     switch (val.type().id()) {
         case duckdb::LogicalTypeId::BOOLEAN:
             push_literal(std::make_unique<cudf::numeric_scalar<int8_t>>(
-                static_cast<int8_t>(val.GetValue<bool>()), true, stream));
+                static_cast<int8_t>(val.GetValue<bool>()), !val.IsNull(),
+                stream));
             break;
         case duckdb::LogicalTypeId::TINYINT:
             push_literal(std::make_unique<cudf::numeric_scalar<int8_t>>(
-                val.GetValue<int8_t>(), true, stream));
+                val.GetValue<int8_t>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::SMALLINT:
             push_literal(std::make_unique<cudf::numeric_scalar<int16_t>>(
-                val.GetValue<int16_t>(), true, stream));
+                val.GetValue<int16_t>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::INTEGER:
             push_literal(std::make_unique<cudf::numeric_scalar<int32_t>>(
-                val.GetValue<int32_t>(), true, stream));
+                val.GetValue<int32_t>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::BIGINT:
             push_literal(std::make_unique<cudf::numeric_scalar<int64_t>>(
-                val.GetValue<int64_t>(), true, stream));
+                val.GetValue<int64_t>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::UTINYINT:
             push_literal(std::make_unique<cudf::numeric_scalar<uint8_t>>(
-                val.GetValue<uint8_t>(), true, stream));
+                val.GetValue<uint8_t>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::USMALLINT:
             push_literal(std::make_unique<cudf::numeric_scalar<uint16_t>>(
-                val.GetValue<uint16_t>(), true, stream));
+                val.GetValue<uint16_t>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::UINTEGER:
             push_literal(std::make_unique<cudf::numeric_scalar<uint32_t>>(
-                val.GetValue<uint32_t>(), true, stream));
+                val.GetValue<uint32_t>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::UBIGINT:
             push_literal(std::make_unique<cudf::numeric_scalar<uint64_t>>(
-                val.GetValue<uint64_t>(), true, stream));
+                val.GetValue<uint64_t>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::FLOAT:
             push_literal(std::make_unique<cudf::numeric_scalar<float>>(
-                val.GetValue<float>(), true, stream));
+                val.GetValue<float>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::DOUBLE:
             push_literal(std::make_unique<cudf::numeric_scalar<double>>(
-                val.GetValue<double>(), true, stream));
+                val.GetValue<double>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::VARCHAR:
             push_literal(std::make_unique<cudf::string_scalar>(
-                val.GetValue<std::string>(), true, stream));
+                val.GetValue<std::string>(), !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::DATE:
             push_literal(
                 std::make_unique<cudf::timestamp_scalar<cudf::timestamp_D>>(
                     cudf::timestamp_D{
                         cudf::duration_D{val.GetValue<int32_t>()}},
-                    true, stream));
+                    !val.IsNull(), stream));
             break;
         case duckdb::LogicalTypeId::TIMESTAMP:
             push_literal(
                 std::make_unique<cudf::timestamp_scalar<cudf::timestamp_us>>(
                     cudf::timestamp_us{
                         cudf::duration_us{val.GetValue<int64_t>()}},
-                    true, stream));
+                    !val.IsNull(), stream));
             break;
         default:
             throw std::runtime_error(

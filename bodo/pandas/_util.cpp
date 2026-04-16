@@ -1267,8 +1267,8 @@ std::unique_ptr<cudf::scalar> make_invalid_like(
 
         // **bool**
         case cudf::type_id::BOOL8:
-            return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                static_cast<int8_t>(false), false, stream);
+            return std::make_unique<cudf::numeric_scalar<bool>>(false, false,
+                                                                stream);
 
         // **string**
         case cudf::type_id::STRING:
