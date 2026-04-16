@@ -27,6 +27,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                   input_schema->ToArrowSchema(), make_stream_and_event(false)),
               get_gpu_streaming_batch_size()),
           output_schema(input_schema) {
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         arrow_output_schema = output_schema->ToArrowSchema();
     }
 
@@ -149,7 +150,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return output_schema;
     }
 

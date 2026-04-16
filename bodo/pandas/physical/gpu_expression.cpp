@@ -498,8 +498,18 @@ bool gpu_capable(duckdb::Expression& expr) {
                 if (!scalar_func_data.arrow_func_name.empty()) {
                     return scalar_func_data.arrow_func_name == "ends_with" ||
                            scalar_func_data.arrow_func_name == "starts_with" ||
+                           scalar_func_data.arrow_func_name ==
+                               "match_substring_regex" ||
+                           scalar_func_data.arrow_func_name ==
+                               "match_substring_regex_first" ||
+                           scalar_func_data.arrow_func_name ==
+                               "utf8_slice_codeunits" ||
+                           scalar_func_data.arrow_func_name ==
+                               "utf8_trim_whitespace" ||
+                           scalar_func_data.arrow_func_name == "utf8_trim" ||
                            scalar_func_data.arrow_func_name == "year" ||
                            scalar_func_data.arrow_func_name == "round" ||
+                           scalar_func_data.arrow_func_name == "is_in" ||
                            scalar_func_data.arrow_func_name == "is_null";
                 } else if (scalar_func_data.args) {
                     return false;

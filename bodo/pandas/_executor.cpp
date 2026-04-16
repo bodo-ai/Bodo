@@ -29,6 +29,7 @@
 #include "physical/gpu_limit.h"
 #include "physical/gpu_project.h"
 #include "physical/gpu_reduce.h"
+#include "physical/gpu_sort.h"
 #include "physical/gpu_union_all.h"
 #endif
 
@@ -160,13 +161,13 @@ class DevicePlanNode {
                 return false;
 
             case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalOrder>());
 
             case duckdb::LogicalOperatorType::LOGICAL_LIMIT:
                 return ::gpu_capable(op.Cast<duckdb::LogicalLimit>());
 
             case duckdb::LogicalOperatorType::LOGICAL_TOP_N:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalTopN>());
 
             case duckdb::LogicalOperatorType::LOGICAL_SAMPLE:
                 return false;
@@ -997,14 +998,14 @@ bool cpu_fallback_disabled() {
  *
  */
 bool ignore_cpu_fallback(duckdb::LogicalOperator const &op) {
-    // Only explicitly allow fallback for DataFrame source and sort.
+    // Only explicitly allow fallback for DataFrame source.
     if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
         duckdb::LogicalGet const &get_op = op.Cast<duckdb::LogicalGet>();
         return get_op.bind_data->Cast<BodoScanFunctionData>()
                    .getScanFunctionType() ==
                BodoScanFunctionType::DATAFRAME_SCAN;
     }
-    return op.type == duckdb::LogicalOperatorType::LOGICAL_ORDER_BY;
+    return false;
 }
 
 #endif  // USE_CUDF
