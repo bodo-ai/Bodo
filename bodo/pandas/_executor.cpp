@@ -998,14 +998,14 @@ bool cpu_fallback_disabled() {
  *
  */
 bool ignore_cpu_fallback(duckdb::LogicalOperator const &op) {
-    // Only explicitly allow fallback for DataFrame source and sort.
+    // Only explicitly allow fallback for DataFrame source.
     if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
         duckdb::LogicalGet const &get_op = op.Cast<duckdb::LogicalGet>();
         return get_op.bind_data->Cast<BodoScanFunctionData>()
                    .getScanFunctionType() ==
                BodoScanFunctionType::DATAFRAME_SCAN;
     }
-    return op.type == duckdb::LogicalOperatorType::LOGICAL_ORDER_BY;
+    return false;
 }
 
 #endif  // USE_CUDF
