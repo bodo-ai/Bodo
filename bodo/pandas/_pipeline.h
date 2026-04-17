@@ -9,7 +9,8 @@
 #include "physical/operator.h"
 
 // enable and build to print debug info on the pipeline
-#define DEBUG_PIPELINE 1  // 1 for control flow, 2 adds data
+// #define DEBUG_PIPELINE 1  // 1 for control flow, 2 adds column names and
+// types, 3 adds data
 
 // comment out to generate separate rank<N> debug file per rank
 // requires DEBUG_PIPELINE above to be enabled
