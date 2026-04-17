@@ -1180,14 +1180,16 @@ void DEBUG_PrintColumn(std::ostream& os, const std::shared_ptr<array_info> arr);
  * @return Nothing. Everything is put in the stream
  */
 void DEBUG_PrintSetOfColumn(
-    std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr);
+    std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr,
+    bool print_only_types = false);
 
 /**
  * @brief Print the contents of a table to the output stream.
  * See DEBUG_PrintSetOfColumn for more details
  */
 void DEBUG_PrintTable(std::ostream& os, const table_info* table,
-                      bool print_column_names = false);
+                      bool print_column_names = false,
+                      bool print_only_types = false);
 
 /**
  * @brief Print the contents of a table to the output stream.
@@ -1195,7 +1197,8 @@ void DEBUG_PrintTable(std::ostream& os, const table_info* table,
  */
 void DEBUG_PrintTable(std::ostream& os,
                       const std::shared_ptr<const table_info>& table,
-                      bool print_column_names = false);
+                      bool print_column_names = false,
+                      bool print_only_types = false);
 
 /**
  * @brief Prints contents of a std::unordered_map to the output stream.

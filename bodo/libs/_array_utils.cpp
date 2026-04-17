@@ -2382,7 +2382,8 @@ void DEBUG_PrintVectorArrayInfo(
 }
 
 void DEBUG_PrintSetOfColumn(
-    std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr) {
+    std::ostream& os, std::vector<std::shared_ptr<array_info>> const& ListArr,
+    bool print_only_types) {
     int nCol = ListArr.size();
     if (nCol == 0) {
         os << "number of columns nCol=" << nCol << " Nothing to print\n";
@@ -2394,6 +2395,9 @@ void DEBUG_PrintSetOfColumn(
            << "arr_type=" << GetArrType_as_string(ListArr[iCol]->arr_type)
            << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype)
            << std::endl;
+    }
+    if (print_only_types) {
+        return;
     }
 
     std::vector<int> ListLen(nCol);
@@ -2412,20 +2416,20 @@ void DEBUG_PrintSetOfColumn(
 }
 
 void DEBUG_PrintTable(std::ostream& os, const table_info* table,
-                      bool print_column_names) {
+                      bool print_column_names, bool print_only_types) {
     if (print_column_names) {
         for (auto& val : table->column_names) {
             os << val << " ";
         }
         os << "\n";
     }
-    DEBUG_PrintSetOfColumn(os, table->columns);
+    DEBUG_PrintSetOfColumn(os, table->columns, print_only_types);
 }
 
 void DEBUG_PrintTable(std::ostream& os,
                       const std::shared_ptr<const table_info>& table,
-                      bool print_column_names) {
-    DEBUG_PrintTable(os, table.get(), print_column_names);
+                      bool print_column_names, bool print_only_types) {
+    DEBUG_PrintTable(os, table.get(), print_column_names, print_only_types);
 }
 
 void DEBUG_PrintUnorderedMap(std::ostream& os,
