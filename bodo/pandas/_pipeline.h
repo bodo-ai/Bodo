@@ -27,6 +27,40 @@ std::string getNodeString(T &t) {
     return ret;
 }
 
+#ifdef USE_CUDF
+inline void dumpTableTypes(std::ostream &out, const cudf::table_view &t) {
+    out << "table num_columns=" << t.num_columns() << "\n";
+    for (int c = 0; c < t.num_columns(); ++c) {
+        auto const &col = t.column(c);
+        out << "  col " << c << " type=" << cudf::type_to_name(col.type())
+            << std::endl;
+    }
+}
+#endif  // USE_CUDF
+
+template <class T>
+void printBatchTypes(std::ostream &out, T &t) {
+    std::visit(
+        [&](auto &x) {
+            using U = std::decay_t<decltype(x)>;
+            if constexpr (std::is_same_v<U, std::shared_ptr<table_info>>) {
+                DEBUG_PrintTable(out, x, true, true);
+            } else if constexpr (std::is_same_v<
+                                     U, std::pair<std::shared_ptr<table_info>,
+                                                  OperatorResult>>) {
+                DEBUG_PrintTable(out, x.first, true, true);
+#ifdef USE_CUDF
+            } else if constexpr (std::is_same_v<U, GPU_DATA>) {
+                dumpTableTypes(out, x.table->view());
+            } else if constexpr (std::is_same_v<
+                                     U, std::pair<GPU_DATA, OperatorResult>>) {
+                dumpTableTypes(out, x.first.table->view());
+#endif  // USE_CUDF
+            }
+        },
+        t);
+}
+
 template <class T>
 uint64_t getBatchRows(T &t) {
     uint64_t ret;
@@ -55,7 +89,7 @@ uint64_t getBatchRows(T &t) {
                 } else {
                     ret = vt.first.table->num_rows();
                 }
-#endif
+#endif  // USE_CUDF
             } else {
                 throw std::runtime_error("Unexpected type in getBatchRows");
             }

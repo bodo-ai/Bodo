@@ -4,7 +4,7 @@
 #ifdef USE_CUDF
 #include <cudf/copying.hpp>
 #include <cudf/table/table_view.hpp>
-#endif
+#endif  // USE_CUDF
 #include "physical/operator.h"
 #include "physical/result_collector.h"
 
@@ -12,15 +12,6 @@
 #include <chrono>
 using hrclock = std::chrono::high_resolution_clock;
 #endif
-
-void dumpTableTypes(const cudf::table_view &t) {
-    std::cout << "table num_columns=" << t.num_columns() << "\n";
-    for (int c = 0; c < t.num_columns(); ++c) {
-        auto const &col = t.column(c);
-        std::cout << "  col " << c << " type=" << cudf::type_to_name(col.type())
-                  << std::endl;
-    }
-}
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out, batch) \
@@ -71,21 +62,7 @@ void dumpTableTypes(const cudf::table_view &t) {
             << getNodeString(source) << " " << toString(produce_result)        \
             << " NumRows=>" << getBatchRows(batch) << std::endl;               \
         if (DEBUG_PIPELINE >= 2) {                                             \
-            std::visit(                                                        \
-                [&](auto &x) {                                                 \
-                    using T = std::decay_t<decltype(x)>;                       \
-                    if constexpr (std::is_same_v<                              \
-                                      T,                                       \
-                                      std::pair<std::shared_ptr<table_info>,   \
-                                                OperatorResult>>) {            \
-                        DEBUG_PrintTable(out, x.first, true, true);            \
-                    } else if constexpr (std::is_same_v<                       \
-                                             T, std::pair<GPU_DATA,            \
-                                                          OperatorResult>>) {  \
-                        dumpTableTypes(x.first.table->view());                 \
-                    }                                                          \
-                },                                                             \
-                batch);                                                        \
+            printBatchTypes(out, batch);                                       \
         }                                                                      \
     } while (0)
 #else
@@ -116,17 +93,7 @@ void dumpTableTypes(const cudf::table_view &t) {
             << getNodeString(op) << " " << toString(prev_op_result)          \
             << " NumRows=>" << getBatchRows(batch) << std::endl;             \
         if (DEBUG_PIPELINE >= 2) {                                           \
-            std::visit(                                                      \
-                [&](auto &x) {                                               \
-                    using T = std::decay_t<decltype(x)>;                     \
-                    if constexpr (std::is_same_v<                            \
-                                      T, std::shared_ptr<table_info>>) {     \
-                        DEBUG_PrintTable(out, x, true, true);                \
-                    } else if constexpr (std::is_same_v<T, GPU_DATA>) {      \
-                        dumpTableTypes(x.table->view());                     \
-                    }                                                        \
-                },                                                           \
-                batch);                                                      \
+            printBatchTypes(out, batch);                                     \
         }                                                                    \
     } while (0)
 #else
@@ -149,17 +116,7 @@ void dumpTableTypes(const cudf::table_view &t) {
             << " NumRows=>" << getBatchRows(batch) << " " << diff_ms << "us"  \
             << std::endl;                                                     \
         if (DEBUG_PIPELINE >= 2) {                                            \
-            std::visit(                                                       \
-                [&](auto &x) {                                                \
-                    using T = std::decay_t<decltype(x)>;                      \
-                    if constexpr (std::is_same_v<                             \
-                                      T, std::shared_ptr<table_info>>) {      \
-                        DEBUG_PrintTable(out, x, true, true);                 \
-                    } else if constexpr (std::is_same_v<T, GPU_DATA>) {       \
-                        dumpTableTypes(x.table->view());                      \
-                    }                                                         \
-                },                                                            \
-                batch);                                                       \
+            printBatchTypes(out, batch);                                      \
         }                                                                     \
     } while (0)
 #else
@@ -212,26 +169,16 @@ void dumpTableTypes(const cudf::table_view &t) {
             batch);                                                          \
     } while (0)
 #elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                    \
-    do {                                                                 \
-        for (unsigned i = 0; i < idx; ++i)                               \
-            out << " ";                                                  \
-        out << "Rank " << rank << " midPipelineExecute in batch "        \
-            << getNodeString(op) << " NumRows=>" << getBatchRows(batch)  \
-            << std::endl;                                                \
-        if (DEBUG_PIPELINE >= 2) {                                       \
-            std::visit(                                                  \
-                [&](auto &x) {                                           \
-                    using T = std::decay_t<decltype(x)>;                 \
-                    if constexpr (std::is_same_v<                        \
-                                      T, std::shared_ptr<table_info>>) { \
-                        DEBUG_PrintTable(out, x, true, true);            \
-                    } else if constexpr (std::is_same_v<T, GPU_DATA>) {  \
-                        dumpTableTypes(x.table->view());                 \
-                    }                                                    \
-                },                                                       \
-                batch);                                                  \
-        }                                                                \
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                   \
+    do {                                                                \
+        for (unsigned i = 0; i < idx; ++i)                              \
+            out << " ";                                                 \
+        out << "Rank " << rank << " midPipelineExecute in batch "       \
+            << getNodeString(op) << " NumRows=>" << getBatchRows(batch) \
+            << std::endl;                                               \
+        if (DEBUG_PIPELINE >= 2) {                                      \
+            printBatchTypes(out, batch);                                \
+        }                                                               \
     } while (0)
 #else
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out) \
