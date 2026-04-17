@@ -225,10 +225,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             probe_kept_cols.push_back(idx);
         }
 
-        std::unordered_set<duckdb::idx_t> probe_table_inds;
-        for (auto [k, _] : left_col_ref_map) {
-            probe_table_inds.emplace(k.first);
-        }
         std::vector<duckdb::unique_ptr<duckdb::Expression>> duckdb_exprs;
         for (duckdb::JoinCondition& cond : conditions) {
             if (cond.IsComparison() &&
@@ -245,8 +241,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         rmm::cuda_stream_view stream = cudf::get_default_stream();
         std::unique_ptr<CudfASTOwner> physExprTree =
             duckdb_exprs.size()
-                ? std::make_unique<CudfASTOwner>(build_mixed_join_predicate(
-                      duckdb_exprs, probe_table_inds, stream))
+                ? std::make_unique<CudfASTOwner>(
+                      build_mixed_join_predicate(duckdb_exprs, left_col_ref_map,
+                                                 right_col_ref_map, stream))
                 : nullptr;
 
         bool build_table_outer =
