@@ -226,6 +226,8 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
         time_pt start_produce_time = start_timer();
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         if (!is_gpu_rank()) {
             return {GPU_DATA(nullptr, out_schema->ToArrowSchema(), se),
@@ -244,8 +246,10 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
                     out_schema->column_types[i]->ToArrowDataType()));
             }
 
-            std::unique_ptr<cudf::column> col1 =
-                cudf::make_column_from_scalar(*output_scalar, 1, se->stream);
+            // Only rank 0 returns a single row with the result, other ranks
+            // return an empty array
+            std::unique_ptr<cudf::column> col1 = cudf::make_column_from_scalar(
+                *output_scalar, rank == 0 ? 1 : 0, se->stream);
             cols.push_back(std::move(col1));
         }
 

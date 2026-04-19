@@ -971,7 +971,10 @@ void tableFilterSetToCudfAST(
 
 CudfASTOwner build_mixed_join_predicate(
     const std::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
-    const std::unordered_set<duckdb::idx_t>& left_table_indices,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
+        left_col_ref_map,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
+        right_col_ref_map,
     rmm::cuda_stream_view& stream) {
     if (exprs.empty()) {
         throw std::runtime_error(
@@ -981,15 +984,15 @@ CudfASTOwner build_mixed_join_predicate(
     CudfASTOwner owner;
 
     // Convert the first expression — its root becomes the accumulator.
-    const cudf::ast::expression* acc =
-        &duckdb_expr_to_cudf_ast(*exprs[0], left_table_indices, owner, stream);
+    const cudf::ast::expression* acc = &duckdb_expr_to_cudf_ast(
+        *exprs[0], left_col_ref_map, right_col_ref_map, owner, stream);
 
     // Each subsequent expression is converted into the same owner and
     // AND-ed with the accumulated root. Because all nodes live in the
     // same tree, the references remain valid.
     for (size_t i = 1; i < exprs.size(); ++i) {
         const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
-            *exprs[i], left_table_indices, owner, stream);
+            *exprs[i], left_col_ref_map, right_col_ref_map, owner, stream);
         acc = &owner.push(cudf::ast::operation(
             cudf::ast::ast_operator::LOGICAL_AND, *acc, rhs));
     }
@@ -999,19 +1002,30 @@ CudfASTOwner build_mixed_join_predicate(
 
 const cudf::ast::expression& duckdb_expr_to_cudf_ast(
     const duckdb::Expression& expr,
-    const std::unordered_set<duckdb::idx_t>& left_table_indices,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
+        left_col_ref_map,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
+        right_col_ref_map,
     CudfASTOwner& owner, rmm::cuda_stream_view& stream) {
     switch (expr.expression_class) {
         case duckdb::ExpressionClass::BOUND_COLUMN_REF: {
             auto& col_ref = expr.Cast<duckdb::BoundColumnRefExpression>();
+            size_t col_idx;
+            cudf::ast::table_reference table_ref;
+            auto key = std::make_pair(col_ref.binding.table_index,
+                                      col_ref.binding.column_index);
+            if (left_col_ref_map.count(key)) {
+                col_idx = left_col_ref_map.at(key);
+                table_ref = cudf::ast::table_reference::LEFT;
+            } else if (right_col_ref_map.count(key)) {
+                col_idx = right_col_ref_map.at(key);
+                table_ref = cudf::ast::table_reference::RIGHT;
+            } else {
+                throw std::runtime_error(
+                    "duckdb_expr_to_cudf_ast: column reference not found in "
+                    "either left or right map");
+            }
 
-            duckdb::idx_t table_idx = col_ref.binding.table_index;
-            duckdb::idx_t col_idx = col_ref.binding.column_index;
-
-            cudf::ast::table_reference table_ref =
-                left_table_indices.count(table_idx)
-                    ? cudf::ast::table_reference::LEFT
-                    : cudf::ast::table_reference::RIGHT;
             return owner.push(cudf::ast::column_reference(col_idx, table_ref));
         } break;
 
@@ -1028,9 +1042,9 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
             auto& cmp = expr.Cast<duckdb::BoundComparisonExpression>();
 
             const cudf::ast::expression& lhs = duckdb_expr_to_cudf_ast(
-                *cmp.left, left_table_indices, owner, stream);
+                *cmp.left, left_col_ref_map, right_col_ref_map, owner, stream);
             const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
-                *cmp.right, left_table_indices, owner, stream);
+                *cmp.right, left_col_ref_map, right_col_ref_map, owner, stream);
 
             cudf::ast::ast_operator op = duckdb_etype_to_cudf_ast_op(expr.type);
             return owner.push(cudf::ast::operation(op, lhs, rhs));
@@ -1047,12 +1061,14 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
 
             cudf::ast::ast_operator op = duckdb_etype_to_cudf_ast_op(expr.type);
 
-            const cudf::ast::expression* acc = &duckdb_expr_to_cudf_ast(
-                *conj.children[0], left_table_indices, owner, stream);
+            const cudf::ast::expression* acc =
+                &duckdb_expr_to_cudf_ast(*conj.children[0], left_col_ref_map,
+                                         right_col_ref_map, owner, stream);
 
             for (size_t i = 1; i < conj.children.size(); ++i) {
-                const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
-                    *conj.children[i], left_table_indices, owner, stream);
+                const cudf::ast::expression& rhs =
+                    duckdb_expr_to_cudf_ast(*conj.children[i], left_col_ref_map,
+                                            right_col_ref_map, owner, stream);
                 acc = &owner.push(cudf::ast::operation(op, *acc, rhs));
             }
             return *acc;
@@ -1068,7 +1084,8 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
                         "child");
                 }
                 const cudf::ast::expression& child = duckdb_expr_to_cudf_ast(
-                    *op_expr.children[0], left_table_indices, owner, stream);
+                    *op_expr.children[0], left_col_ref_map, right_col_ref_map,
+                    owner, stream);
                 return owner.push(
                     cudf::ast::operation(cudf::ast::ast_operator::NOT, child));
             }
