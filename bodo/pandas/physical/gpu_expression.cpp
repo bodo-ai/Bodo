@@ -14,6 +14,7 @@
 #include <cudf/table/table_view.hpp>
 #include <cudf/types.hpp>
 
+#include "duckdb/common/types.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "duckdb/planner/expression/bound_case_expression.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
@@ -1039,13 +1040,40 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
         case duckdb::ExpressionClass::BOUND_COMPARISON: {
             auto& cmp = expr.Cast<duckdb::BoundComparisonExpression>();
 
-            const cudf::ast::expression& lhs = duckdb_expr_to_cudf_ast(
+            const cudf::ast::expression& lhs_orig = duckdb_expr_to_cudf_ast(
                 *cmp.left, left_col_ref_map, right_col_ref_map, owner, stream);
-            const cudf::ast::expression& rhs = duckdb_expr_to_cudf_ast(
+            const cudf::ast::expression& rhs_orig = duckdb_expr_to_cudf_ast(
                 *cmp.right, left_col_ref_map, right_col_ref_map, owner, stream);
 
+            duckdb::LogicalType lhs_type = cmp.left->return_type;
+            duckdb::LogicalType rhs_type = cmp.right->return_type;
+
+            // Make sure operands have the same type to avoid cudf AST
+            // validation errors.
+            const cudf::ast::expression* lhs = &lhs_orig;
+            const cudf::ast::expression* rhs = &rhs_orig;
+            if (lhs_type != rhs_type) {
+                if (lhs_type == duckdb::LogicalType::DOUBLE) {
+                    rhs = &owner.push(cudf::ast::operation(
+                        cudf::ast::ast_operator::CAST_TO_FLOAT64, *rhs));
+                } else if (lhs_type == duckdb::LogicalType::BIGINT) {
+                    rhs = &owner.push(cudf::ast::operation(
+                        cudf::ast::ast_operator::CAST_TO_INT64, *rhs));
+                } else if (lhs_type == duckdb::LogicalType::INTEGER) {
+                    lhs = &owner.push(cudf::ast::operation(
+                        cudf::ast::ast_operator::CAST_TO_INT64, *lhs));
+                    rhs = &owner.push(cudf::ast::operation(
+                        cudf::ast::ast_operator::CAST_TO_INT64, *rhs));
+                } else {
+                    throw std::runtime_error(
+                        "duckdb_expr_to_cudf_ast: unsupported type coercion "
+                        "from " +
+                        rhs_type.ToString() + " to " + lhs_type.ToString());
+                }
+            }
+
             cudf::ast::ast_operator op = duckdb_etype_to_cudf_ast_op(expr.type);
-            return owner.push(cudf::ast::operation(op, lhs, rhs));
+            return owner.push(cudf::ast::operation(op, *lhs, *rhs));
         }
 
         case duckdb::ExpressionClass::BOUND_CONJUNCTION: {
