@@ -8,6 +8,7 @@ from bodo.tests.test_df_lib.series_test_generator import generate_series_test
 from bodo.tests.utils import _test_equal
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("use_index1", [True, False])
 @pytest.mark.parametrize("use_index2", [True, False])
 def test_series_isin(index_val, use_index1, use_index2):
@@ -80,7 +81,7 @@ def _install_series_direct_tests():
     """Installs tests for direct Series.<method> methods."""
     for method_name, arg_sets in test_map_arg_direct.items():
         test = generate_series_test(method_name, df, arg_sets)
-        if method_name in ("isnull", "isin"):
+        if method_name in ("isnull", "isin", "round", "notnull", "abs"):
             test = pytest.mark.gpu(test)
         globals()[f"test_dir_{method_name}"] = test
 
