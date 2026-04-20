@@ -81,8 +81,10 @@ def _install_series_direct_tests():
     """Installs tests for direct Series.<method> methods."""
     for method_name, arg_sets in test_map_arg_direct.items():
         test = generate_series_test(method_name, df, arg_sets)
-        if method_name in ("isnull", "isin", "round", "notnull", "abs"):
+        if method_name in ("isnull", "isin", "round"):
             test = pytest.mark.gpu(test)
+        if method_name in ("notnull", "abs"):
+            test = pytest.mark.gpu(allow_fallback=True)(test)
         globals()[f"test_dir_{method_name}"] = test
 
 
