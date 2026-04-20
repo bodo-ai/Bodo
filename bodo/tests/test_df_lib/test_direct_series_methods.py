@@ -39,6 +39,7 @@ def test_series_isin(index_val, use_index1, use_index2):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)
 def test_series_where(index_val):
     """Tests Series.where() with condition and other arguments."""
     df = pd.DataFrame(
