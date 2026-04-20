@@ -1033,9 +1033,7 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
             auto& const_expr = expr.Cast<duckdb::BoundConstantExpression>();
             const duckdb::Value& val = const_expr.value;
 
-            owner.insert_literal(val, stream);
-
-            return owner.tree.back();
+            return owner.insert_literal(val, stream);
         } break;
 
         case duckdb::ExpressionClass::BOUND_COMPARISON: {
@@ -1095,6 +1093,72 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
                 std::to_string(static_cast<int>(expr.type)));
         } break;
 
+        case duckdb::ExpressionClass::BOUND_FUNCTION: {
+            auto& bfe = expr.Cast<duckdb::BoundFunctionExpression>();
+            // Convert is_in() into a series of OR'd equality comparisons since
+            // CUDF does not have a native is_in operation.
+            if (bfe.bind_info) {
+                BodoScalarFunctionData& scalar_func_data =
+                    bfe.bind_info->Cast<BodoScalarFunctionData>();
+                if (scalar_func_data.arrow_func_name != "is_in") {
+                    throw std::runtime_error(
+                        "duckdb_expr_to_cudf_ast: only 'is_in' function is "
+                        "supported, found " +
+                        scalar_func_data.arrow_func_name);
+                }
+
+                const cudf::ast::expression& child =
+                    duckdb_expr_to_cudf_ast(*bfe.children[0], left_col_ref_map,
+                                            right_col_ref_map, owner, stream);
+
+                std::shared_ptr<arrow::Array> values_array =
+                    get_py_isin_arg_as_arrow_array(scalar_func_data.args);
+
+                if (!values_array || values_array->length() == 0) {
+                    throw std::runtime_error(
+                        "duckdb_expr_to_cudf_ast: failed to retrieve values "
+                        "array for is_in function");
+                }
+                if (values_array->null_count() > 0) {
+                    throw std::runtime_error(
+                        "duckdb_expr_to_cudf_ast: null values in is_in "
+                        "argument are not supported");
+                }
+                if (values_array->length() > 100) {
+                    throw std::runtime_error(
+                        "duckdb_expr_to_cudf_ast: is_in with more than 100 "
+                        "values is not supported");
+                }
+
+                const cudf::ast::expression* acc = nullptr;
+
+                for (int i = 0; i < values_array->length(); ++i) {
+                    std::shared_ptr<arrow::Scalar> scalar =
+                        values_array->GetScalar(i).ValueOrDie();
+                    std::unique_ptr<cudf::scalar> cudf_scalar =
+                        arrow_scalar_to_cudf(scalar, stream);
+                    const cudf::ast::expression& literal =
+                        owner.insert_literal(std::move(cudf_scalar), stream);
+
+                    const cudf::ast::expression& cmp =
+                        owner.push(cudf::ast::operation(
+                            cudf::ast::ast_operator::EQUAL, child, literal));
+
+                    if (i == 0) {
+                        acc = &cmp;
+                    } else {
+                        acc = &owner.push(cudf::ast::operation(
+                            cudf::ast::ast_operator::LOGICAL_OR, *acc, cmp));
+                    }
+                }
+                return *acc;
+
+            } else {
+                throw std::runtime_error(
+                    "duckdb_expr_to_cudf_ast: unsupported function expression");
+            }
+        } break;
+
         default:
             throw std::runtime_error(
                 "duckdb_expr_to_cudf_ast: unsupported expression class " +
@@ -1102,8 +1166,8 @@ const cudf::ast::expression& duckdb_expr_to_cudf_ast(
     }
 }
 
-void CudfASTOwner::insert_literal(const duckdb::Value& val,
-                                  rmm::cuda_stream_view& stream) {
+const cudf::ast::expression& CudfASTOwner::insert_literal(
+    const duckdb::Value& val, rmm::cuda_stream_view& stream) {
     // Helper to push a typed literal and then transfer ownership of the
     // scalar into the owner. Must happen in this order: literal holds a
     // ref to the scalar so it must be pushed into the tree first.
@@ -1183,6 +1247,86 @@ void CudfASTOwner::insert_literal(const duckdb::Value& val,
                 "duckdb_value_to_cudf_ast_literal: unsupported duckdb type " +
                 val.type().ToString());
     }
+    return tree.back();
+}
+
+const cudf::ast::expression& CudfASTOwner::insert_literal(
+    std::unique_ptr<cudf::scalar> val, rmm::cuda_stream_view& stream) {
+    switch (val->type().id()) {
+        case cudf::type_id::INT8: {
+            cudf::numeric_scalar<int8_t>* typed_scalar =
+                static_cast<cudf::numeric_scalar<int8_t>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::INT16: {
+            cudf::numeric_scalar<int16_t>* typed_scalar =
+                static_cast<cudf::numeric_scalar<int16_t>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::INT32: {
+            cudf::numeric_scalar<int32_t>* typed_scalar =
+                static_cast<cudf::numeric_scalar<int32_t>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::INT64: {
+            cudf::numeric_scalar<int64_t>* typed_scalar =
+                static_cast<cudf::numeric_scalar<int64_t>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::UINT8: {
+            cudf::numeric_scalar<uint8_t>* typed_scalar =
+                static_cast<cudf::numeric_scalar<uint8_t>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::UINT16: {
+            cudf::numeric_scalar<uint16_t>* typed_scalar =
+                static_cast<cudf::numeric_scalar<uint16_t>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::UINT32: {
+            cudf::numeric_scalar<uint32_t>* typed_scalar =
+                static_cast<cudf::numeric_scalar<uint32_t>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::UINT64: {
+            cudf::numeric_scalar<uint64_t>* typed_scalar =
+                static_cast<cudf::numeric_scalar<uint64_t>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::FLOAT32: {
+            cudf::numeric_scalar<float>* typed_scalar =
+                static_cast<cudf::numeric_scalar<float>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::FLOAT64: {
+            cudf::numeric_scalar<double>* typed_scalar =
+                static_cast<cudf::numeric_scalar<double>*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        case cudf::type_id::STRING: {
+            cudf::string_scalar* typed_scalar =
+                static_cast<cudf::string_scalar*>(val.get());
+            this->push(cudf::ast::literal(*typed_scalar));
+            break;
+        }
+        default:
+            throw std::runtime_error(
+                "insert_literal: unsupported cudf type " +
+                std::to_string(static_cast<int>(val->type().id())));
+    }
+
+    this->scalars.push_back(std::move(val));
+    return this->tree.back();
 }
 
 cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
