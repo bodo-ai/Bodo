@@ -4,7 +4,7 @@
 #ifdef USE_CUDF
 #include <cudf/copying.hpp>
 #include <cudf/table/table_view.hpp>
-#endif
+#endif  // USE_CUDF
 #include "physical/operator.h"
 #include "physical/result_collector.h"
 
@@ -61,6 +61,9 @@ using hrclock = std::chrono::high_resolution_clock;
         out << "Rank " << rank << " Pipeline::Execute after ProduceBatch "     \
             << getNodeString(source) << " " << toString(produce_result)        \
             << " NumRows=>" << getBatchRows(batch) << std::endl;               \
+        if (DEBUG_PIPELINE >= 2) {                                             \
+            printBatchTypes(out, batch);                                       \
+        }                                                                      \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out, batch) \
@@ -89,6 +92,9 @@ using hrclock = std::chrono::high_resolution_clock;
         out << "Rank " << rank << " midPipelineExecute before ProcessBatch " \
             << getNodeString(op) << " " << toString(prev_op_result)          \
             << " NumRows=>" << getBatchRows(batch) << std::endl;             \
+        if (DEBUG_PIPELINE >= 2) {                                           \
+            printBatchTypes(out, batch);                                     \
+        }                                                                    \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_PROCESS(rank, op, prev_op_result, out, batch) \
@@ -109,6 +115,9 @@ using hrclock = std::chrono::high_resolution_clock;
             << getNodeString(op) << " " << toString(prev_op_result) << " "    \
             << " NumRows=>" << getBatchRows(batch) << " " << diff_ms << "us"  \
             << std::endl;                                                     \
+        if (DEBUG_PIPELINE >= 2) {                                            \
+            printBatchTypes(out, batch);                                      \
+        }                                                                     \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_PROCESS(rank, op, prev_op_result, out, batch) \
@@ -141,7 +150,7 @@ using hrclock = std::chrono::high_resolution_clock;
     } while (0)
 #endif
 
-#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 2)
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 3)
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                        \
     do {                                                                     \
         for (unsigned i = 0; i < idx; ++i)                                   \
@@ -167,6 +176,9 @@ using hrclock = std::chrono::high_resolution_clock;
         out << "Rank " << rank << " midPipelineExecute in batch "       \
             << getNodeString(op) << " NumRows=>" << getBatchRows(batch) \
             << std::endl;                                               \
+        if (DEBUG_PIPELINE >= 2) {                                      \
+            printBatchTypes(out, batch);                                \
+        }                                                               \
     } while (0)
 #else
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out) \

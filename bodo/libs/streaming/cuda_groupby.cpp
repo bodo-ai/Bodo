@@ -478,7 +478,7 @@ std::unique_ptr<cudf::column> nunique_final_merge(
     auto nunique_col =
         cudf::lists::count_elements(collect_set_col, output_stream);
 
-    return nunique_col;
+    return cudf::cast(*nunique_col, cudf::data_type{cudf::type_id::INT64});
 }
 
 std::unique_ptr<cudf::column> square_col(const cudf::column_view& input_col,

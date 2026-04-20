@@ -1191,7 +1191,9 @@ class CudfASTOwner {
     }
 
     friend const cudf::ast::expression &duckdb_expr_to_cudf_ast(
-        const duckdb::Expression &, const std::unordered_set<duckdb::idx_t> &,
+        const duckdb::Expression &,
+        const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &,
+        const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &,
         CudfASTOwner &, rmm::cuda_stream_view &);
 };
 
@@ -1212,14 +1214,13 @@ cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
  * (table_index, column_index) duckdb pairs to a flat column index into the
  * *_conditional table_view passed to mixed_join.  The table_reference
  * (LEFT vs RIGHT) is determined by whether the duckdb table_index is
- * found in @p left_table_indices.
+ * found in @p left_col_ref_map.
  *
  * @param expr              Root of the duckdb expression subtree to convert.
- * @param left_table_indices
- *                          Set of duckdb table indices that belong to the left
- *                          side of the join.  Any table index NOT in this set
- *                          is treated as belonging to the right side.
- * @param owner             Keeps all allocated AST nodes and scalars alive.
+ * @param left_col_ref_map Duckdb column references on the left side of the
+ * join.
+ * @param right_col_ref_map Duckdb column references on the right side of the
+ * join.
  *
  * @param stream cuda stream to create scalars on
  *
@@ -1230,7 +1231,10 @@ cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
  */
 const cudf::ast::expression &duckdb_expr_to_cudf_ast(
     const duckdb::Expression &expr,
-    const std::unordered_set<duckdb::idx_t> &left_table_indices,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        &left_col_ref_map,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        &right_col_ref_map,
     CudfASTOwner &owner, rmm::cuda_stream_view &stream);
 /**
  * @brief Convert multiple duckdb expressions into a single CudfASTOwner,
@@ -1238,12 +1242,17 @@ const cudf::ast::expression &duckdb_expr_to_cudf_ast(
  *
  * @param exprs             The duckdb expressions to combine.
  * index.
- * @param left_table_indices Set of duckdb table indices on the left side of the
+ * @param left_col_ref_map Duckdb column references on the left side of the
+ * join.
+ * @param right_col_ref_map Duckdb column references on the right side of the
  * join.
  * @param stream to create scalars on
  * @return CudfASTOwner whose tree root is the AND of all expressions.
  */
 CudfASTOwner build_mixed_join_predicate(
     const std::vector<duckdb::unique_ptr<duckdb::Expression>> &exprs,
-    const std::unordered_set<duckdb::idx_t> &left_table_indices,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        &left_col_ref_map,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        &right_col_ref_map,
     rmm::cuda_stream_view &stream);

@@ -297,7 +297,15 @@ void CudaHashJoin::build_hash_table(
     for (const auto& chunk : build_chunks) {
         build_views.push_back(chunk->view());
     }
-    this->_build_table = cudf::concatenate(build_views);
+    if (build_views.size() > 0) {
+        this->_build_table = cudf::concatenate(build_views);
+    } else {
+        std::shared_ptr<arrow::Schema> build_table_arrow_schema =
+            this->build_table_schema->ToArrowSchema();
+
+        this->_build_table =
+            empty_table_from_arrow_schema(build_table_arrow_schema);
+    }
 
     // 2. Create the hash_join object
     //    This triggers the kernel that builds the hash table on the GPU.
