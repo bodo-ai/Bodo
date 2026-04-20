@@ -199,7 +199,7 @@ def test_read_parquet_series_len_shape(datapath):
         assert bodo_out.shape == py_out.shape
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_read_parquet_filter_projection(datapath):
     """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
@@ -679,7 +679,7 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
 
@@ -693,7 +693,7 @@ def test_projection_head_pushdown(datapath):
     assert len(bodo_df3) == 3
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_series_head(datapath):
     """Test for Series.head() reading from Pandas."""
     # Make sure bodo_df3 is unevaluated in the process.
@@ -707,7 +707,7 @@ def test_series_head(datapath):
     assert len(bodo_df3) == 3
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_head(datapath):
     """Test for head pushed down to read parquet."""
 
@@ -773,7 +773,7 @@ def test_apply_str(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_apply_non_jit(datapath, index_val):
     """Test unsupported UDFs fallback to Pandas execution."""
@@ -803,7 +803,7 @@ def test_apply_non_jit(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_chain_python_func(datapath, index_val):
     """Make sure chaining multiple Series functions that run in Python works"""
     with assert_executed_plan_count(0):
@@ -850,7 +850,7 @@ def test_series_map(datapath, index_val, na_action):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_series_map_non_jit(index_val):
     """Test non-jittable UDFs in ser.map still work."""
@@ -897,7 +897,7 @@ def test_series_map_non_jit(index_val):
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_set_df_column(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
@@ -1282,7 +1282,7 @@ def test_merge(how, broadcast):
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_merge_cross():
     """Simple test for DataFrame merge with cross join."""
     with assert_executed_plan_count(0):
@@ -2077,7 +2077,7 @@ def test_scalar_arith_binops(datapath, index_val):
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
@@ -2113,7 +2113,7 @@ def test_map_partitions_df():
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_map_partitions_series():
     """Simple tests for map_partition on lazy Series."""
@@ -2534,7 +2534,7 @@ def test_series_min_max_unsupported_types():
             bdf["A"].max()
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.parametrize(
     "method",
     [
@@ -2774,7 +2774,7 @@ def test_loc(datapath):
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.parametrize(
     "percentiles",
     [None, (0.1, 0.4, 0.7, 0.9), [0, 1]],
@@ -2855,7 +2855,7 @@ def test_series_describe_nonnumeric():
         _test_equal(describe_bodo, describe_pd, check_pandas_types=False)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_series_describe_empty():
     """Basic test for Series describe with empty data."""
@@ -3215,7 +3215,7 @@ def test_drop_duplicates_subset(kwargs):
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_uncompilable_map():
     """Test for maps that can't be compiled."""
@@ -3419,7 +3419,7 @@ def test_series_reset_index():
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 def test_series_reset_index_compute():
     """Test Series.reset_index in between computation."""
@@ -3548,7 +3548,7 @@ def test_dataframe_reset_index_pipeline():
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_map_with_state():
     def init_state():
         return {1: 7}
@@ -3584,7 +3584,7 @@ def test_map_with_state():
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_map_partitions_with_state():
     class mystate:
         def __init__(self):
@@ -3631,7 +3631,7 @@ def test_map_partitions_with_state():
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.parametrize(
     "quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1], [0.22, 0.55, 0.99], [0.5]]
 )
@@ -3681,7 +3681,7 @@ def test_series_quantile(quantiles):
             )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.parametrize("q", [0.25, 0.5, 0.75, 0.9])
 def test_series_quantile_scalar(q):
     """Tests that approximate quantiles with scalar arguments fall within expected error bounds."""
@@ -3723,7 +3723,7 @@ def test_series_quantile_scalar(q):
         )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_series_quantile_empty():
     """Tests that quantile on an empty BodoSeries returns either a scalar pd.NA or a BodoSeries of pd.NA."""
 
@@ -3765,7 +3765,7 @@ def test_series_quantile_empty():
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_series_quantile_tails():
     """Tests that querying quantiles at tail ends return exact values."""
 
@@ -3784,7 +3784,7 @@ def test_series_quantile_tails():
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_series_quantile_singleton():
     """Tests quantile on a singleton BodoSeries."""
 
@@ -4108,7 +4108,7 @@ def timezone_timestamp_df():
     return pd.DataFrame(data)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.jit_dependency
 @pytest.mark.parametrize("engine", ["python", "bodo"])
 def test_timezone_scalar_func(engine, index_val, timezone_timestamp_df):
@@ -4141,7 +4141,7 @@ def test_timezone_filter(index_val, timezone_timestamp_df):
     _test_equal(bodo_out, pandas_out, check_pandas_types=False, reset_index=reset_index)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_timezone_groupby(timezone_timestamp_df):
     """Test groupby works with timezones"""
     df = timezone_timestamp_df
@@ -4190,7 +4190,7 @@ def test_empty_df(datapath, index_val):
     _test_equal(bd.DataFrame(), pd.DataFrame())
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_np_ufunc(index_val):
     """Test for np.ufunc(Series) case."""
 
@@ -4258,7 +4258,7 @@ def test_crossproduct_column_removal(datapath):
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_join_filter_push_cross_product():
     """Test for join filter pushdown through cross product."""
     df1 = pd.DataFrame(

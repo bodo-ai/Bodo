@@ -64,7 +64,7 @@ def fallback_df():
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 @pytest.mark.parametrize(
     "lhs_expr, rhs_expr, kwargs",
     [
