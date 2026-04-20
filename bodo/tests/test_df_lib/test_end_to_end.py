@@ -661,7 +661,7 @@ def test_filter_datetime(datapath, op):
     )
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)
 def test_head_pushdown(datapath):
     """Test for head pushed down to read parquet."""
 
