@@ -216,7 +216,6 @@ def test_groupby_udf_types(impl, val_col, func):
     _test_equal(bdf2, df2, check_pandas_types=False, reset_index=True)
 
 
-@pytest.mark.gpu(allow_fallback=True)
 def test_agg_udf_errorchecking(groupby_df):
     bdf = bd.from_pandas(groupby_df)
 
