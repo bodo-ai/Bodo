@@ -1175,8 +1175,10 @@ class CudfASTOwner {
     const cudf::ast::expression *root{nullptr};
 
    public:
-    void insert_literal(const duckdb::Value &val,
-                        rmm::cuda_stream_view &stream);
+    const cudf::ast::expression &insert_literal(const duckdb::Value &val,
+                                                rmm::cuda_stream_view &stream);
+    const cudf::ast::expression &insert_literal(
+        std::unique_ptr<cudf::scalar> val, rmm::cuda_stream_view &stream);
     const cudf::ast::expression &get_root() const {
         if (!root) {
             throw std::runtime_error("CudfASTOwner: tree is empty");
