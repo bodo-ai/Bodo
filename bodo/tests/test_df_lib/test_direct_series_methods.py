@@ -39,7 +39,7 @@ def test_series_isin(index_val, use_index1, use_index2):
     )
 
 
-@pytest.mark.gpu(allow_fallback=True)
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas dataframe
 def test_series_where(index_val):
     """Tests Series.where() with condition and other arguments."""
     df = pd.DataFrame(
@@ -85,6 +85,7 @@ def _install_series_direct_tests():
         if method_name in ("isnull", "isin", "round"):
             test = pytest.mark.gpu(test)
         if method_name in ("notnull", "abs"):
+            # fallback read Pandas dataframe
             test = pytest.mark.gpu(allow_fallback=True)(test)
         globals()[f"test_dir_{method_name}"] = test
 
