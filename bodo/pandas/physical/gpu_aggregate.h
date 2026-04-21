@@ -44,6 +44,19 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
                 expr->ToString());
         }
         auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+        auto& first_child = agg_expr.children[0];
+        auto& first_type = first_child->return_type;
+        // Only these operations support string types.
+        if (!(agg_expr.function.name == "count" ||
+              agg_expr.function.name == "min" ||
+              agg_expr.function.name == "max" ||
+              agg_expr.function.name == "first" ||
+              agg_expr.function.name == "last" ||
+              agg_expr.function.name == "nunique")) {
+            if (!first_type.IsNumeric()) {
+                return false;
+            }
+        }
 
         // Check if the aggregate function is supported
         bool is_udf = agg_expr.function.name.starts_with("udf");
