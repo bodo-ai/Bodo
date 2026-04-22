@@ -171,9 +171,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1), 0);
     }
 
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
-        return iceberg_files_info_py;
-    }
+    PipelineResult GetResult() override { return iceberg_files_info_py; }
 
    private:
     // State similar to streaming parquet write in Bodo JIT

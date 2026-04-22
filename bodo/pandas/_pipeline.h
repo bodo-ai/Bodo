@@ -134,9 +134,7 @@ class Pipeline {
     /// @brief Get the final result. Result collector returns table_info,
     // Parquet write returns null table_info pointer, and Iceberg write
     // returns a PyObject* of Iceberg files infos.
-    std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
-                 std::variant<GPU_DATA, PyObject *>>
-    GetResult();
+    PipelineResult GetResult();
 
     // Const iterator accessors
     std::vector<std::shared_ptr<Pipeline>>::const_iterator run_before_begin()

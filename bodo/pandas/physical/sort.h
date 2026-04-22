@@ -216,7 +216,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         // Sort build doesn't return output results
         throw std::runtime_error("GetResult called on a sort node.");
     }

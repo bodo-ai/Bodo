@@ -150,7 +150,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override;
 
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         throw std::runtime_error("GetResult called on a PhysicalReduce node.");
     }
 

@@ -264,6 +264,13 @@ class PhysicalSource : public PhysicalOperator {
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
+using GPUResultPtr = void *;
+
+using PipelineResult =
+    std::variant<std::shared_ptr<table_info>,
+                 std::pair<std::shared_ptr<table_info>, GPUResultPtr>,
+                 PyObject *>;
+
 /**
  * @brief Base class for operators that consume batches at the end of pipelines.
  *
@@ -278,8 +285,7 @@ class PhysicalSink : public PhysicalOperator {
     virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                         OperatorResult prev_op_result);
 
-    virtual std::variant<std::shared_ptr<table_info>, PyObject *>
-    GetResult() = 0;
+    virtual PipelineResult GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
 
@@ -396,18 +402,17 @@ class PhysicalGPUSink : public PhysicalOperator {
         return OperatorType::GPU_SINK;
     }
 
-    OperatorResult ConsumeBatch(GPU_DATA input_batch,
-                                OperatorResult prev_op_result);
+    virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
+                                        OperatorResult prev_op_result);
 
-    OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
-                                OperatorResult prev_op_result);
+    virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
+                                        OperatorResult prev_op_result);
 
     virtual OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) = 0;
 
-    virtual std::variant<std::shared_ptr<table_info>, PyObject *>
-    GetResult() = 0;
+    virtual PipelineResult GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
 

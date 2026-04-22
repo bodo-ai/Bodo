@@ -257,7 +257,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         throw std::runtime_error("GetResult called on an aggregate node.");
     }
 
@@ -377,7 +377,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
                    : OperatorResult::NEED_MORE_INPUT;
     }
 
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         throw std::runtime_error(
             "GetResult called on a PhysicalGPUCountStar node.");
     }

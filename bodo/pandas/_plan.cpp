@@ -1258,8 +1258,8 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
     return set_operation;
 }
 
-std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+execute_plan_result execute_plan(std::unique_ptr<duckdb::LogicalOperator> plan,
+                                 PyObject *out_schema_py) {
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
     rmm::cuda_device_id gpu_id = get_gpu_id();
@@ -1277,7 +1277,7 @@ std::pair<int64_t, PyObject *> execute_plan(
 #endif
 
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
-    std::variant<std::shared_ptr<table_info>, PyObject *> output;
+    PipelineResult output;
     // Ensure that executor is destroyed before device_guard goes out of scope,
     // in case executor holds any GPU resources that need to be released before
     // resetting the device.
@@ -1293,24 +1293,40 @@ std::pair<int64_t, PyObject *> execute_plan(
     }
 #endif
 
+    GPUResultPtr gpu_result_ptr = nullptr;
+
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {
         PyObject *file_infos = std::get<PyObject *>(output);
-        return {0, file_infos};
+        return {0, 0, file_infos};
     }
 
-    std::shared_ptr<table_info> output_table = std::get<0>(output);
+    std::shared_ptr<table_info> output_table;
+
+    if (std::holds_alternative<std::shared_ptr<table_info>>(output)) {
+        output_table = std::get<std::shared_ptr<table_info>>(output);
+    } else if (std::holds_alternative<
+                   std::pair<std::shared_ptr<table_info>, GPUResultPtr>>(
+                   output)) {
+        std::pair<std::shared_ptr<table_info>, GPUResultPtr> table_with_gpu =
+            std::get<std::pair<std::shared_ptr<table_info>, GPUResultPtr>>(
+                output);
+        output_table = table_with_gpu.first;
+        gpu_result_ptr = table_with_gpu.second;
+    } else {
+        throw std::runtime_error("Unknown PipelineResult option");
+    }
 
     // Parquet write doesn't return data
     if (output_table == nullptr) {
-        return {0, nullptr};
+        return {0, 0, nullptr};
     }
 
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
     return {reinterpret_cast<int64_t>(new table_info(*output_table)),
-            pyarrow_schema};
+            reinterpret_cast<int64_t>(gpu_result_ptr), pyarrow_schema};
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(

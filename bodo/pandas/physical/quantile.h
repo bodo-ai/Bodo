@@ -158,7 +158,7 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     void FinalizeSource() override {}
 
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         throw std::runtime_error("GetResult called on a quantile node.");
     }
 

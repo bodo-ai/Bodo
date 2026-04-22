@@ -44,7 +44,7 @@ class PhysicalGPUCTE : public PhysicalGPUSink {
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::variant<std::shared_ptr<table_info>, PyObject *> GetResult() override {
+    PipelineResult GetResult() override {
         // CTE doesn't return output results
         throw std::runtime_error("GetResult called on a CTE node.");
     }

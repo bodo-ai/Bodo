@@ -313,6 +313,11 @@ cdef extern from "_plan.h" nogil:
     cdef cppclass CLogicalJoinFilter" bodo::LogicalJoinFilter"(CLogicalOperator):
         pass
 
+    ctypedef struct execute_plan_result:
+        int64_t table
+        int64_t gpu_result
+        PyObjectPtr pyobj
+
     cdef idx_t getTableIndex() except +
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
@@ -355,7 +360,7 @@ cdef extern from "_plan.h" nogil:
         c_string index_name, object region) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
-    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
+    cdef execute_plan_result execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
@@ -1202,7 +1207,7 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
     """Execute a logical plan in the C++ backend
     """
     cdef LogicalOperator wrapped_operator
-    cdef pair[int64_t, PyObjectPtr] exec_output
+    cdef execute_plan_result exec_output
     cdef int64_t cpp_table
 
     if not isinstance(plan, LogicalOperator):
@@ -1211,19 +1216,19 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
     wrapped_operator = plan
 
     exec_output = execute_plan(move(wrapped_operator.c_logical_operator), out_schema)
-    cpp_table = exec_output.first
+    cpp_table = exec_output.table
 
     # Write doesn't return output data
     if cpp_table == 0:
         # Iceberg write returns file information for later commit
-        if exec_output.second != NULL:
-            return <object>exec_output.second
+        if exec_output.pyobj != NULL:
+            return <object>(exec_output.pyobj)
         return None
 
-    arrow_schema = <object>exec_output.second
+    arrow_schema = <object>(exec_output.pyobj)
     if output_func is None:
         raise ValueError("output_func is None.")
-    return output_func(cpp_table, out_schema)
+    return output_func(cpp_table, out_schema), exec_output.gpu_result
 
 
 def py_get_table_index():

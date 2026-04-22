@@ -104,16 +104,22 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
 duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     std::unique_ptr<duckdb::LogicalOperator> plan);
 
+struct execute_plan_result {
+    int64_t table;
+    int64_t gpu_result;
+    PyObject *pyobj;
+};
+
 /**
  * @brief Execute a DuckDB logical plan in our C++ runtime and return the
  * result.
  *
  * @param plan logical plan to execute (should be optimized unless if testing)
  * @return std::pair<int64_t, PyObject*> Bodo C++ table pointer cast to int64,
- * pyarrow schema object
+ * ID for GPU cache entry, pyarrow schema object
  */
-std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py);
+execute_plan_result execute_plan(std::unique_ptr<duckdb::LogicalOperator> plan,
+                                 PyObject *out_schema_py);
 
 /**
  * @brief Creates a new table index.
@@ -751,3 +757,7 @@ bool get_dump_plans();
  * @return int
  */
 int count_gpu_plan_nodes(std::unique_ptr<duckdb::LogicalOperator> &plan);
+
+#ifdef USE_CUDF
+extern bool g_use_cudf;
+#endif  // USE_CUDF

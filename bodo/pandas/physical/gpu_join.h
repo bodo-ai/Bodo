@@ -371,7 +371,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     /**
      * @brief GetResult - just for API compatibility but should never be called
      */
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         // Join build doesn't return output results
         throw std::runtime_error("GetResult called on a join node.");
     }

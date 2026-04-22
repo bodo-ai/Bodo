@@ -68,7 +68,7 @@ class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
     /**
      * @brief GetResult - just for API compatability but should never be called
      */
-    std::variant<std::shared_ptr<table_info>, PyObject *> GetResult() override {
+    PipelineResult GetResult() override {
         // Union all should be between pipelines and act alternatively as a sink
         // then source but there should never be the need to ask for the result
         // all in one go.

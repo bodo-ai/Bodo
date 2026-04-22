@@ -224,7 +224,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
                             : OperatorResult::HAVE_MORE_OUTPUT};
     }
 
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         throw std::runtime_error("GetResult called on a sort node.");
     }
 

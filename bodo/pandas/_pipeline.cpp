@@ -4,6 +4,8 @@
 #ifdef USE_CUDF
 #include <cudf/copying.hpp>
 #include <cudf/table/table_view.hpp>
+#include "_plan.h"
+#include "physical/gpu_result_collector.h"
 #endif  // USE_CUDF
 #include "physical/operator.h"
 #include "physical/result_collector.h"
@@ -415,12 +417,8 @@ uint64_t Pipeline::Execute(int rank, std::ostream &out) {
     return batches_processed;
 }
 
-std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
-             std::variant<GPU_DATA, PyObject *>>
-Pipeline::GetResult() {
-    std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
-                 std::variant<GPU_DATA, PyObject *>>
-        res;
+PipelineResult Pipeline::GetResult() {
+    PipelineResult res;
     std::visit([&](auto &vop) { res = vop->GetResult(); }, sink);
     return res;
 }
@@ -438,6 +436,13 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(PhysicalCpuGpuSink sink) {
 std::shared_ptr<Pipeline> PipelineBuilder::BuildEnd(
     std::shared_ptr<bodo::Schema> in_schema,
     std::shared_ptr<bodo::Schema> out_schema) {
+#ifdef USE_CUDF
+    if (g_use_cudf) {
+        auto sink =
+            std::make_shared<PhysicalGPUResultCollector>(in_schema, out_schema);
+        return Build(sink);
+    }
+#endif  // USE_CUDF
     auto sink =
         std::make_shared<PhysicalResultCollector>(in_schema, out_schema);
     return Build(sink);

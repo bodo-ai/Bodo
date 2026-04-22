@@ -214,7 +214,7 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
                                    OperatorResult prev_op_result,
                                    std::shared_ptr<StreamAndEvent> se) override;
 
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         throw std::runtime_error(
             "GetResult called on a PhysicalGPUReduce node.");
     }

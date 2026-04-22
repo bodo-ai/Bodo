@@ -163,7 +163,7 @@ class Executor {
     /**
      * @brief Execute the plan and return the result.
      */
-    std::variant<std::shared_ptr<table_info>, PyObject *> ExecutePipelines() {
+    PipelineResult ExecutePipelines() {
         // Pipelines generation ensures that pipelines are in the right
         // order and that the dependencies are satisfied (e.g. join build
         // pipeline is before probe).
@@ -171,10 +171,10 @@ class Executor {
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #ifdef DEBUG_CONSOLIDATED
         std::ostream &out = std::cout;
-#else
+#else   // DEBUG_CONSOLIDATED
         std::string outfile = "rank" + std::to_string(rank);
         std::ofstream out(outfile, std::ios::app);
-#endif
+#endif  // DEBUG_CONSOLIDATED
         DEBUG_PIPELINE_CONTENTS(rank, pipelines, out);
 
         for (size_t i = 0; i < pipelines.size(); ++i) {
@@ -192,42 +192,6 @@ class Executor {
             QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }
         QueryProfileCollector::Default().Finalize(0);
-        std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
-                     std::variant<GPU_DATA, PyObject *>>
-            gr_res = pipelines.back()->GetResult();
-        std::variant<std::shared_ptr<table_info>, PyObject *> ret;
-        std::visit(
-            [&](auto &vres) {
-                using T = std::decay_t<decltype(vres)>;
-                if constexpr (std::is_same_v<
-                                  T, std::variant<GPU_DATA, PyObject *>>) {
-#ifdef USE_CUDF
-                    std::visit(
-                        [&](auto &gpu_var) {
-                            using U = std::decay_t<decltype(gpu_var)>;
-                            if constexpr (std::is_same_v<U, GPU_DATA>) {
-                                ret = convertGPUToTable(gpu_var);
-                            } else {
-                                ret = gpu_var;
-                            }
-                        },
-                        vres);
-#endif
-                } else if constexpr (std::is_same_v<
-                                         T, std::variant<
-                                                std::shared_ptr<table_info>,
-                                                PyObject *>>) {
-                    std::visit(
-                        [&](auto &table_or_pyobject_var) {
-                            ret = table_or_pyobject_var;
-                        },
-                        vres);
-                } else {
-                    static_assert(sizeof(T) == 0,
-                                  "Unexpected GetResult() alternative.");
-                }
-            },
-            gr_res);
-        return ret;
+        return pipelines.back()->GetResult();
     }
 };

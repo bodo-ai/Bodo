@@ -126,7 +126,7 @@ class PhysicalWriteParquet : public PhysicalSink {
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1), 0);
     }
 
-    std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
+    PipelineResult GetResult() override {
         return std::shared_ptr<table_info>(nullptr);
     }
 

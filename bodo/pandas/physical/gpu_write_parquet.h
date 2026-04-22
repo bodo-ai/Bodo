@@ -351,7 +351,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         return OperatorResult::NEED_MORE_INPUT;
     }
 
-    std::variant<std::shared_ptr<table_info>, PyObject *> GetResult() override {
+    PipelineResult GetResult() override {
         return std::shared_ptr<table_info>(nullptr);
     }
 

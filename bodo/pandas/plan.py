@@ -1036,7 +1036,7 @@ def execute_plan(plan: LazyPlan, optimize=True):
         output_func = cpp_table_to_series if plan.is_series else cpp_table_to_df
         if bodo.get_rank() == 0:
             start_time = time.perf_counter()
-        ret = plan_optimizer.py_execute_plan(
+        ret, gpu_result = plan_optimizer.py_execute_plan(
             optimized_plan, output_func, duckdb_plan.out_schema
         )
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
