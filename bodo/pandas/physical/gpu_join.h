@@ -254,6 +254,37 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             (logical_join.join_type == duckdb::JoinType::LEFT) ||
             (logical_join.join_type == duckdb::JoinType::OUTER) || is_left_anti;
 
+        this->initOutputSchema(build_table_schema, probe_table_schema,
+                               build_kept_cols, probe_kept_cols,
+                               build_table_outer, probe_table_outer);
+
+        if (build_keys.empty()) {
+            this->cuda_join = std::make_unique<CudaNonEquiJoin>(
+                build_table_schema, probe_table_schema, build_kept_cols,
+                probe_kept_cols, output_schema, logical_join.join_type,
+                std::move(physExprTree), is_broadcast_join);
+        } else {
+            this->cuda_join = std::make_unique<CudaHashJoin>(
+                build_keys, probe_keys, build_table_schema, probe_table_schema,
+                build_kept_cols, probe_kept_cols, output_schema,
+                logical_join.join_type, std::move(physExprTree),
+                cudf::null_equality::UNEQUAL, is_broadcast_join);
+        }
+
+        if (this->output_schema->ncols() !=
+            logical_join.GetColumnBindings().size()) {
+            throw std::runtime_error(
+                "Output schema column count does not match logical join column "
+                "bindings count.");
+        }
+    }
+
+    void initOutputSchema(
+        const std::shared_ptr<bodo::Schema>& build_table_schema,
+        const std::shared_ptr<bodo::Schema>& probe_table_schema,
+        const std::vector<int64_t>& build_kept_cols,
+        const std::vector<int64_t>& probe_kept_cols, bool build_table_outer,
+        bool probe_table_outer) {
         this->output_schema = std::make_shared<bodo::Schema>();
         std::vector<std::string> col_names;
         for (const auto& kept_col : probe_kept_cols) {
@@ -294,22 +325,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
         this->arrow_schema = this->output_schema->ToArrowSchema();
-
-        if (build_keys.empty()) {
-            this->cuda_join = std::make_unique<CudaNonEquiJoin>(
-                build_table_schema, probe_table_schema, build_kept_cols,
-                probe_kept_cols, output_schema, logical_join.join_type,
-                std::move(physExprTree), is_broadcast_join);
-        } else {
-            this->cuda_join = std::make_unique<CudaHashJoin>(
-                build_keys, probe_keys, build_table_schema, probe_table_schema,
-                build_kept_cols, probe_kept_cols, output_schema,
-                logical_join.join_type, std::move(physExprTree),
-                cudf::null_equality::UNEQUAL, is_broadcast_join);
-        }
-
-        assert(this->output_schema->ncols() ==
-               logical_join.GetColumnBindings().size());
     }
 
     virtual ~PhysicalGPUJoin() = default;
