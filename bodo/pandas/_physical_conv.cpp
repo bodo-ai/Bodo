@@ -938,9 +938,14 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     std::shared_ptr<bodo::Schema> probe_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
+#ifdef USE_CUDF
+    std::shared_ptr<PhysicalGPUJoin> physical_join;
+    physical_join = std::make_shared<PhysicalGPUJoin>(op, build_table_schema,
+                                                      probe_table_schema);
+#else   // USE_CUDF
     auto physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
                                                         probe_table_schema);
-
+#endif  // USE_CUDF
     std::shared_ptr<Pipeline> done_pipeline =
         rhs_builder.active_pipeline->Build(physical_join);
     this->active_pipeline->AddOperator(physical_join);
@@ -957,8 +962,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
  */
 bool arrowSchemaTypeEquals(const ::arrow::Schema& s1,
                            const ::arrow::Schema& s2) {
-    if (s1.num_fields() != s2.num_fields())
+    if (s1.num_fields() != s2.num_fields()) {
         return false;
+    }
 
     for (int i = 0; i < s1.num_fields(); ++i) {
         if (!s1.field(i)->type()->Equals(*s2.field(i)->type())) {

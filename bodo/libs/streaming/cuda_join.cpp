@@ -718,36 +718,40 @@ CudaNonEquiJoin::ProbeProcessBatch(
     std::unique_ptr<rmm::device_uvector<cudf::size_type>> probe_indices,
         build_indices;
 
-    const cudf::ast::expression& root = this->non_equi_expression->get_root();
-
     switch (this->join_type) {
         case duckdb::JoinType::RIGHT_ANTI:
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::INNER: {
             std::tie(probe_indices, build_indices) =
-                cudf::conditional_inner_join(probe_to_select->view(),
-                                             this->_build_table->view(), root,
-                                             {}, stream);
+                cudf::conditional_inner_join(
+                    probe_to_select->view(), this->_build_table->view(),
+                    this->non_equi_expression->get_root(), {}, stream);
         } break;
         case duckdb::JoinType::OUTER:
         case duckdb::JoinType::LEFT: {
             std::tie(probe_indices, build_indices) =
-                cudf::conditional_left_join(probe_to_select->view(),
-                                            this->_build_table->view(), root,
-                                            {}, stream);
+                cudf::conditional_left_join(
+                    probe_to_select->view(), this->_build_table->view(),
+                    this->non_equi_expression->get_root(), {}, stream);
         } break;
         case duckdb::JoinType::ANTI: {
             probe_indices = cudf::conditional_left_anti_join(
-                probe_to_select->view(), this->_build_table->view(), root, {},
-                stream);
+                probe_to_select->view(), this->_build_table->view(),
+                this->non_equi_expression->get_root(), {}, stream);
             build_indices =
                 std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
                                                                        stream);
         } break;
         case duckdb::JoinType::MARK: {
             probe_indices = cudf::conditional_left_semi_join(
-                probe_to_select->view(), this->_build_table->view(), root, {},
-                stream);
+                probe_to_select->view(), this->_build_table->view(),
+                this->non_equi_expression->get_root(), {}, stream);
+        } break;
+        // We use duckdb::JoinType::INVALID to mark cross join
+        case duckdb::JoinType::INVALID: {
+            return {cudf::cross_join(probe_to_select->view(),
+                                     this->_build_table->view(), stream),
+                    global_is_last};
         } break;
         default: {
             throw std::runtime_error(

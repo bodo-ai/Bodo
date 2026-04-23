@@ -110,7 +110,23 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
                     const std::shared_ptr<bodo::Schema> build_table_schema,
                     const std::shared_ptr<bodo::Schema> probe_table_schema) {
-        throw std::runtime_error("Not implemented.");
+        std::vector<int64_t> build_kept_cols;
+        std::vector<int64_t> probe_kept_cols;
+
+        // Cross join doesn't have any keys, so we keep all columns.
+        for (uint64_t i = 0; i < probe_table_schema->ncols(); i++) {
+            probe_kept_cols.push_back(i);
+        }
+        for (uint64_t i = 0; i < build_table_schema->ncols(); i++) {
+            build_kept_cols.push_back(i);
+        }
+        this->initOutputSchema(build_table_schema, probe_table_schema,
+                               build_kept_cols, probe_kept_cols, false, false);
+        // We use duckdb::JoinType::INVALID to mark cross join
+        this->cuda_join = std::make_unique<CudaNonEquiJoin>(
+            build_table_schema, probe_table_schema, build_kept_cols,
+            probe_kept_cols, output_schema, duckdb::JoinType::INVALID, nullptr,
+            true);
     }
 
     /**
