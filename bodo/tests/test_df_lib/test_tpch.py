@@ -155,7 +155,7 @@ def test_tpch_q13():
     run_tpch_query_test(tpch.tpch_q13)
 
 
-@pytest.mark.gpu(allow_fallback=True)
+@pytest.mark.gpu
 def test_tpch_q14():
     run_tpch_query_test(tpch.tpch_q14, plan_executions=1)
 

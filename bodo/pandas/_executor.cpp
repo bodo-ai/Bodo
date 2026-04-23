@@ -158,7 +158,7 @@ class DevicePlanNode {
                 return ::gpu_capable(op.Cast<duckdb::LogicalComparisonJoin>());
 
             case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
-                return false;
+                return true;
 
             case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
                 return ::gpu_capable(op.Cast<duckdb::LogicalOrder>());

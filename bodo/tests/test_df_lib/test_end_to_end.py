@@ -1282,7 +1282,7 @@ def test_merge(how, broadcast):
     )
 
 
-@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, crossproduct
+@pytest.mark.gpu
 def test_merge_cross():
     """Simple test for DataFrame merge with cross join."""
     with assert_executed_plan_count(0):
