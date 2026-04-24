@@ -107,7 +107,7 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
 
 struct execute_plan_result {
     int64_t table;
-    int64_t gpu_result;
+    GPUResultHandle gpu_result;
     PyObject *pyobj;
 };
 

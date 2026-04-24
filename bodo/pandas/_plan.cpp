@@ -1289,7 +1289,7 @@ execute_plan_result execute_plan(std::unique_ptr<duckdb::LogicalOperator> plan,
         output = executor.ExecutePipelines();
     }
 
-    GPUResultPtr gpu_result_ptr = nullptr;
+    GPUResultHandle gpu_result_handle = 0;
 
     // Iceberg write returns a PyObject* with file information
     if (std::holds_alternative<PyObject *>(output)) {
@@ -1301,14 +1301,16 @@ execute_plan_result execute_plan(std::unique_ptr<duckdb::LogicalOperator> plan,
 
     if (std::holds_alternative<std::shared_ptr<table_info>>(output)) {
         output_table = std::get<std::shared_ptr<table_info>>(output);
+#ifdef USE_CUDF
     } else if (std::holds_alternative<
-                   std::pair<std::shared_ptr<table_info>, GPUResultPtr>>(
+                   std::pair<std::shared_ptr<table_info>, GPUResultHandle>>(
                    output)) {
-        std::pair<std::shared_ptr<table_info>, GPUResultPtr> table_with_gpu =
-            std::get<std::pair<std::shared_ptr<table_info>, GPUResultPtr>>(
+        std::pair<std::shared_ptr<table_info>, GPUResultHandle> table_with_gpu =
+            std::get<std::pair<std::shared_ptr<table_info>, GPUResultHandle>>(
                 output);
         output_table = table_with_gpu.first;
-        gpu_result_ptr = table_with_gpu.second;
+        gpu_result_handle = table_with_gpu.second;
+#endif  // USE_CUDF
     } else {
         throw std::runtime_error("Unknown PipelineResult option");
     }
@@ -1322,7 +1324,7 @@ execute_plan_result execute_plan(std::unique_ptr<duckdb::LogicalOperator> plan,
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
     return {reinterpret_cast<int64_t>(new table_info(*output_table)),
-            reinterpret_cast<int64_t>(gpu_result_ptr), pyarrow_schema};
+            gpu_result_handle, pyarrow_schema};
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(

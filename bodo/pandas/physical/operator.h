@@ -222,11 +222,9 @@ class PhysicalSource : public PhysicalOperator {
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 };
 
-using GPUResultPtr = void *;
-
 using PipelineResult =
     std::variant<std::shared_ptr<table_info>,
-                 std::pair<std::shared_ptr<table_info>, GPUResultPtr>,
+                 std::pair<std::shared_ptr<table_info>, GPUResultHandle>,
                  PyObject *>;
 
 /**

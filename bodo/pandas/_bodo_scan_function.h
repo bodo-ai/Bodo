@@ -165,6 +165,10 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
 
     PyObject *df;
     const std::shared_ptr<arrow::Schema> arrow_schema;
+
+    bool canRunOnGPU(bool has_filters, bool has_limit) override {
+        return !has_filters && !has_limit;
+    }
 };
 
 /**
@@ -194,6 +198,10 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
         bool run_on_gpu) override;
     std::string result_id;
     const std::shared_ptr<arrow::Schema> arrow_schema;
+
+    bool canRunOnGPU(bool has_filters, bool has_limit) override {
+        return !has_filters && !has_limit;
+    }
 };
 
 /**
