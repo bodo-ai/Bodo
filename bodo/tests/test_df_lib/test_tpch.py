@@ -146,6 +146,7 @@ def test_tpch_q11():
     run_tpch_query_test(tpch.tpch_q11, ctes_created=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q12():
     run_tpch_query_test(tpch.tpch_q12)
 

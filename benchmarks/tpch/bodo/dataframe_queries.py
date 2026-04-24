@@ -438,7 +438,7 @@ def tpch_q11(partsupp, supplier, nation, scale_factor=1.0, pd=bodo.pandas):
 
 
 def tpch_q12(lineitem, orders, pd=bodo.pandas):
-    """Adapted from:
+    """Adapted from (removed UDFs to work on GPUs):
     https://github.com/xorbitsai/benchmarks/blob/main/tpch/pandas_queries/queries.py
     """
     var1 = datetime.date(1994, 1, 1)
@@ -453,14 +453,12 @@ def tpch_q12(lineitem, orders, pd=bodo.pandas):
         & (jn1["L_RECEIPTDATE"] < var2)
     ]
 
-    def g1(x):
-        return ((x == "1-URGENT") | (x == "2-HIGH")).sum()
+    jn1["HIGH_LINE"] = jn1["O_ORDERPRIORITY"].isin(["1-URGENT", "2-HIGH"])
+    jn1["LOW_LINE"] = ~jn1["HIGH_LINE"]
 
-    def g2(x):
-        return ((x != "1-URGENT") & (x != "2-HIGH")).sum()
-
-    gb = jn1.groupby("L_SHIPMODE", as_index=False)["O_ORDERPRIORITY"].agg(
-        HIGH_LINE_COUNT=g1, LOW_LINE_COUNT=g2
+    gb = jn1.groupby("L_SHIPMODE", as_index=False).agg(
+        HIGH_LINE_COUNT=pd.NamedAgg(column="HIGH_LINE", aggfunc="sum"),
+        LOW_LINE_COUNT=pd.NamedAgg(column="LOW_LINE", aggfunc="sum"),
     )
     result_df = gb.sort_values("L_SHIPMODE")
 
