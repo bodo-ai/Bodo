@@ -34,6 +34,7 @@ typings
 compile_commands.json
 .envrc
 .clangd
+*.swp
 
 # Jupyter checkpoints
 *.ipynb_checkpoints/
