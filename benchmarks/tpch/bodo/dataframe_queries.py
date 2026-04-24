@@ -3,10 +3,12 @@ import argparse
 import datetime
 import functools
 import inspect
+import os
 import time
 import warnings
 from collections.abc import Callable
 
+import boto3
 import pandas as pd
 
 import bodo.pandas
@@ -1003,6 +1005,22 @@ def main():
     print(f"Queries to run: {queries}")
 
     warnings.filterwarnings("ignore")
+
+    storage_type = "s3" if args.folder.startswith("s3://") else "local"
+    if storage_type == "s3":
+        session = boto3.Session()
+        credentials = session.get_credentials().get_frozen_credentials()
+
+        # Variables required for using kvikio for S3 reads.
+        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
+        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+        os.environ["AWS_SESSION_TOKEN"] = credentials.token
+        os.environ["AWS_DEFAULT_REGION"] = (
+            session.region_name if session.region_name else "us-east-2"
+        )
+        os.environ["AWS_REGION"] = (
+            session.region_name if session.region_name else "us-east-2"
+        )
 
     backend_module = bodo.pandas if backend == "bodo" else pd
     run_queries(
