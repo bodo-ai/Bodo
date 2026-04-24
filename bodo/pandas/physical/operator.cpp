@@ -38,110 +38,6 @@ int64_t get_parquet_chunk_size() {
 
 #ifdef USE_CUDF
 
-std::shared_ptr<cudf::table> make_empty_like(
-    std::shared_ptr<cudf::table> input_table,
-    std::shared_ptr<StreamAndEvent> se) {
-    cudf::table_view tv = input_table->view();
-
-    // slice produces a vector<table_view>
-    auto sliced = cudf::slice(tv, {0, 0}, se->stream);
-    cudf::table_view empty_view = sliced[0];
-
-    // materialize into a real cudf::table
-    return std::make_shared<cudf::table>(empty_view);
-}
-
-void GPUBatchGenerator::append_batch(GPU_DATA batch) {
-    auto n = batch.table->num_rows();
-    if (n == 0) {
-        return;
-    }
-    collected_rows += n;
-    batches.push_back(batch);
-}
-
-GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
-                                 bool force_return) {
-    if (collected_rows < out_batch_size && !force_return) {
-        dummy_gpu_data->stream_event->event.wait(se->stream);
-        return GPU_DATA(make_empty_like(dummy_gpu_data->table, se),
-                        dummy_gpu_data->schema, se);
-    }
-
-    std::vector<GPU_DATA> gpu_tables;
-    std::size_t rows_accum = 0;
-
-    if (leftover_data) {
-        std::size_t n = leftover_data->table->num_rows();
-        if (n <= out_batch_size) {
-            rows_accum += n;
-            gpu_tables.push_back(*leftover_data);
-            leftover_data.reset();
-        } else {
-            cudf::table_view tv = leftover_data->table->view();
-            leftover_data->stream_event->event.wait(se->stream);
-            auto batch =
-                cudf::slice(tv, {0, (int)out_batch_size}, se->stream)[0];
-            auto remain =
-                cudf::slice(tv, {(int)out_batch_size, (int)n}, se->stream)[0];
-            gpu_tables.emplace_back(std::make_shared<cudf::table>(batch),
-                                    leftover_data->schema, se);
-            leftover_data = std::make_unique<GPU_DATA>(
-                std::make_shared<cudf::table>(remain), leftover_data->schema,
-                se);
-            rows_accum = out_batch_size;
-        }
-    }
-
-    while (!batches.empty() && (rows_accum < out_batch_size)) {
-        GPU_DATA &batch = batches.front();
-        cudf::table_view tv = batch.table->view();
-        std::shared_ptr<StreamAndEvent> &batch_se = batch.stream_event;
-        std::size_t n = tv.num_rows();
-
-        if (rows_accum + n <= out_batch_size) {
-            rows_accum += n;
-            gpu_tables.push_back(batch);
-        } else {
-            auto batch_part =
-                cudf::slice(tv, {0, (int)(out_batch_size - rows_accum)},
-                            batch_se->stream)[0];
-            auto remain_part =
-                cudf::slice(tv, {(int)(out_batch_size - rows_accum), (int)n},
-                            batch_se->stream)[0];
-            gpu_tables.emplace_back(std::make_shared<cudf::table>(batch_part),
-                                    batch.schema, batch_se);
-            leftover_data = std::make_unique<GPU_DATA>(
-                std::make_shared<cudf::table>(remain_part), batch.schema,
-                batch_se);
-            rows_accum = out_batch_size;
-        }
-        batches.pop_front();
-    }
-    collected_rows -= rows_accum;
-
-    if (rows_accum == 0) {
-        dummy_gpu_data->stream_event->event.wait(se->stream);
-        return GPU_DATA(make_empty_like(dummy_gpu_data->table, se),
-                        dummy_gpu_data->schema, se);
-    }
-
-    if (gpu_tables.size() == 1) {
-        gpu_tables[0].stream_event->event.wait(se->stream);
-        return GPU_DATA(gpu_tables[0].table, dummy_gpu_data->schema, se);
-    }
-
-    std::vector<cudf::table_view> table_views;
-    table_views.reserve(gpu_tables.size());
-    for (auto &tptr : gpu_tables) {
-        tptr.stream_event->event.wait(se->stream);
-        table_views.emplace_back(tptr.table->view());
-    }
-    std::unique_ptr<cudf::table> batch =
-        cudf::concatenate(table_views, se->stream);
-    return GPU_DATA(std::move(batch), dummy_gpu_data->schema, se);
-}
-
 OperatorResult PhysicalSink::ConsumeBatch(GPU_DATA input_batch,
                                           OperatorResult prev_op_result) {
     std::shared_ptr<table_info> cpu_batch =
@@ -623,7 +519,7 @@ void CPUtoGPUExchange::Initialize(std::shared_ptr<table_info> input_batch,
         sync_freq, this->op_id);
     this->shuffle_state->Initialize(nullptr, true, this->shuffle_comm);
 }
-#else
+#else   // USE_CUDF
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUSource::ProduceBatch() {
     throw std::runtime_error("Should never be called in non-CUDF mode.");
 }
@@ -658,4 +554,4 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
     throw std::runtime_error("Should never be called in non-CUDF mode.");
 }
-#endif
+#endif  // USE_CUDF

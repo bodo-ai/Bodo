@@ -23,6 +23,19 @@ bool g_use_async = false;
 #include "_utils.h"
 #include "cuda_runtime_api.h"
 
+std::shared_ptr<cudf::table> make_empty_like(
+    std::shared_ptr<cudf::table> input_table,
+    std::shared_ptr<StreamAndEvent> se) {
+    cudf::table_view tv = input_table->view();
+
+    // slice produces a vector<table_view>
+    auto sliced = cudf::slice(tv, {0, 0}, se->stream);
+    cudf::table_view empty_view = sliced[0];
+
+    // materialize into a real cudf::table
+    return std::make_shared<cudf::table>(empty_view);
+}
+
 GpuMpiManager::GpuMpiManager() : gpu_id(get_gpu_id()) {
     // Create a subcommunicator with only ranks that have GPUs assigned
     this->mpi_comm = get_gpu_mpi_comm(this->gpu_id);

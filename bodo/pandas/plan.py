@@ -1039,6 +1039,7 @@ def execute_plan(plan: LazyPlan, optimize=True):
         ret, gpu_result = plan_optimizer.py_execute_plan(
             optimized_plan, output_func, duckdb_plan.out_schema
         )
+        ret.gpu_result = gpu_result
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time execute", time.perf_counter() - start_time)
         return ret

@@ -8,6 +8,7 @@
 #include <cudf/interop.hpp>
 #include <cudf/table/table.hpp>
 #include "../../libs/gpu_utils.h"
+#include "gpu_batch_cache.h"
 #endif
 #include <memory>
 #include <typeinfo>
@@ -64,25 +65,6 @@ inline std::string toString(OperatorResult res) {
 
 #ifdef USE_CUDF
 
-std::shared_ptr<cudf::table> make_empty_like(
-    std::shared_ptr<cudf::table> input_table,
-    std::shared_ptr<StreamAndEvent> se);
-
-struct GPU_DATA {
-   public:
-    std::shared_ptr<cudf::table> table;
-    std::shared_ptr<arrow::Schema> schema;
-    std::shared_ptr<StreamAndEvent> stream_event;
-
-    GPU_DATA() = default;
-
-    GPU_DATA(std::shared_ptr<cudf::table> t, std::shared_ptr<arrow::Schema> s,
-             std::shared_ptr<StreamAndEvent> se)
-        : table(std::move(t)),
-          schema(std::move(s)),
-          stream_event(std::move(se)) {}
-};
-
 /**
  * @brief Base class for sending data to/from ranks with pinned resources (GPUs)
  *
@@ -109,30 +91,6 @@ class RankDataExchange {
     // Currently unused, required for IncrementalShuffleState.
     uint64_t curr_iter = 0;
     int64_t sync_freq = 1;
-};
-
-struct GPUBatchGenerator {
-    std::deque<GPU_DATA> batches;
-    std::unique_ptr<GPU_DATA> leftover_data;
-    std::shared_ptr<GPU_DATA> dummy_gpu_data;
-    size_t out_batch_size;
-    size_t collected_rows = 0;
-
-    GPUBatchGenerator(GPU_DATA dummy_gpu_data_, size_t out_batch_size_)
-        : dummy_gpu_data(std::make_shared<GPU_DATA>(dummy_gpu_data_)),
-          out_batch_size(out_batch_size_) {}
-
-    void append_batch(GPU_DATA batch);
-
-    /**
-     * @brief Combine smaller tables into a GPU batch.
-     *
-     * @param se Stream used for creating batch.
-     * @param force_return Whether to flush the remaining rows.
-     * @return GPU_DATA (returns dummy data if no batch is ready and
-     * force_return is false)
-     */
-    GPU_DATA next(std::shared_ptr<StreamAndEvent> se, bool force_return);
 };
 
 /**

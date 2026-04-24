@@ -17,6 +17,7 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
+#include "physical/gpu_batch_cache.h"
 
 namespace bodo {
 

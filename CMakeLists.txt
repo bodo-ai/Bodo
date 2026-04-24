@@ -730,6 +730,7 @@ if (USE_CUDF)
     "bodo/pandas/physical/gpu_expression.cpp"
     "bodo/pandas/physical/gpu_aggregate.cpp"
     "bodo/pandas/physical/gpu_reduce.cpp"
+    "bodo/pandas/physical/gpu_batch_cache.cpp"
     "bodo/libs/streaming/cuda_join.cpp"
     "bodo/libs/streaming/cuda_groupby.cpp"
     "bodo/libs/streaming/cuda_sort.cpp"

@@ -50,7 +50,7 @@
 #include <rmm/cuda_device.hpp>
 #include <rmm/mr/device_memory_resource.hpp>
 #include "cuda_runtime_api.h"
-#endif
+#endif  // USE_CUDF
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -1261,20 +1261,23 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
 execute_plan_result execute_plan(std::unique_ptr<duckdb::LogicalOperator> plan,
                                  PyObject *out_schema_py) {
 #ifdef USE_CUDF
-    // Assign ranks to cuda devices
-    rmm::cuda_device_id gpu_id = get_gpu_id();
-    std::optional<rmm::cuda_set_device_raii> device_guard;
-    std::shared_ptr<rmm::mr::device_memory_resource> mr = nullptr;
-    rmm::mr::device_memory_resource *prev_mr = nullptr;
-    if (gpu_id.value() != -1) {
-        // Set device (resets to previous device when device_guard goes out of
-        // scope)
-        device_guard.emplace(gpu_id);
+    if (g_use_cudf) {
+        static std::shared_ptr<rmm::mr::device_memory_resource> mr;
+        static std::once_flag flag;
+        std::call_once(flag, [] {
+            // Assign ranks to cuda devices
+            rmm::cuda_device_id gpu_id = get_gpu_id();
+            if (gpu_id.value() != -1) {
+                // rmm::mr::device_memory_resource *prev_mr = nullptr;
+                cudaSetDevice(gpu_id.value());
+                cudaFree(0);
 
-        mr = get_gpu_async_memory_resource();
-        prev_mr = cudf::set_current_device_resource(mr.get());
+                mr = get_gpu_async_memory_resource();
+                cudf::set_current_device_resource(mr.get());
+            }
+        });
     }
-#endif
+#endif  // USE_CUDF
 
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     PipelineResult output;
@@ -1285,13 +1288,6 @@ execute_plan_result execute_plan(std::unique_ptr<duckdb::LogicalOperator> plan,
         Executor executor(std::move(plan), out_schema);
         output = executor.ExecutePipelines();
     }
-
-#ifdef USE_CUDF
-    if (prev_mr) {
-        // Reset device resource for GPU ranks.
-        cudf::set_current_device_resource(prev_mr);
-    }
-#endif
 
     GPUResultPtr gpu_result_ptr = nullptr;
 

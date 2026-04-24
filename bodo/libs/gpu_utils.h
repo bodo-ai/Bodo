@@ -109,6 +109,10 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
     }
 }
 
+std::shared_ptr<cudf::table> make_empty_like(
+    std::shared_ptr<cudf::table> input_table,
+    std::shared_ptr<StreamAndEvent> se);
+
 enum class GpuShuffleState {
     SIZES_INFLIGHT = 0,
     DATA_INFLIGHT = 1,
