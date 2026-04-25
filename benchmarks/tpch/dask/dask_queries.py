@@ -1481,7 +1481,7 @@ def main():
         else:
             client = Client()
 
-            total_start = time.time()
+        total_start = time.time()
 
         for query in queries:
             run_single_query(
