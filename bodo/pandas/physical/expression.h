@@ -3,6 +3,7 @@
 #include <arrow/api.h>
 #include <arrow/chunked_array.h>
 #include <arrow/compute/api.h>
+#include <arrow/compute/api_scalar.h>
 #include <arrow/compute/function.h>
 #include <arrow/compute/kernel.h>
 #include <arrow/result.h>
@@ -1253,54 +1254,55 @@ class PhysicalArrowExpression : public PhysicalExpression {
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
+                   scalar_func_data.arrow_func_name ==
+                       "match_substring_regex_first" ||
                    scalar_func_data.arrow_func_name == "starts_with" ||
                    scalar_func_data.arrow_func_name == "ends_with") {
-            if (!PyTuple_Check(scalar_func_data.args) ||
-                PyTuple_Size(scalar_func_data.args) != 1) {
-                throw std::runtime_error(
-                    fmt::format("{} args not a 1-element tuple.",
-                                scalar_func_data.arrow_func_name));
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+
+            std::string func_name = scalar_func_data.arrow_func_name;
+            std::string pattern(c_str);
+            if (func_name == "match_substring_regex_first") {
+                // match_substring_regex in Arrow matches anywhere in the string
+                // but Series.str.match() matches from the start. Add ^ to the
+                // pattern to match from the start same as Pandas:
+                // https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/_arrow_string_mixins.py#L378
+                func_name = "match_substring_regex";
+                pattern = "^(" + pattern + ")";
             }
 
-            // Get the first element (borrowed reference)
-            PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
-
-            if (!PyUnicode_Check(py_str)) {
-                throw std::runtime_error(
-                    fmt::format("{} args element is not a Python string.",
-                                scalar_func_data.arrow_func_name));
-            }
-
-            // Convert to UTF‑8 C string
-            const char *c_str = PyUnicode_AsUTF8(py_str);
-            if (!c_str) {
-                throw std::runtime_error(
-                    fmt::format("{} error extracting Python string.",
-                                scalar_func_data.arrow_func_name));
-            }
-
-            arrow::compute::MatchSubstringOptions opts(c_str);
-            result = do_arrow_compute_unary(
-                res, scalar_func_data.arrow_func_name, &opts);
+            arrow::compute::MatchSubstringOptions opts(pattern);
+            result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
-            int64_t digits = 0;
-            if (PyTuple_Check(scalar_func_data.args) &&
-                PyTuple_Size(scalar_func_data.args) == 1) {
-                // Get the first element (borrowed reference)
-                PyObject *py_digits = PyTuple_GetItem(scalar_func_data.args, 0);
-
-                if (!PyLong_Check(py_digits)) {
-                    throw std::runtime_error(
-                        fmt::format("{} args element is not a Python int.",
-                                    scalar_func_data.arrow_func_name));
-                }
-
-                digits = PyLong_AsLong(py_digits);
-            }
+            int64_t digits = get_py_round_arg(scalar_func_data.args);
 
             arrow::compute::RoundOptions opts(digits);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "is_null") {
+            // Set nan_is_null option to match Pandas isna behavior
+            arrow::compute::NullOptions opts(true);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            auto [start, stop, step] = get_py_slice_args(scalar_func_data.args);
+
+            arrow::compute::SliceOptions opts(start, stop, step);
+            result = do_arrow_compute_unary(res, "utf8_slice_codeunits", &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_trim") {
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+
+            arrow::compute::TrimOptions opts(c_str);
+            result = do_arrow_compute_unary(res, "utf8_trim", &opts);
+        } else if (scalar_func_data.arrow_func_name == "is_in") {
+            std::shared_ptr<arrow::Array> values_array =
+                get_py_isin_arg_as_arrow_array(scalar_func_data.args);
+            arrow::compute::SetLookupOptions opts(values_array);
+            result = do_arrow_compute_unary(res, "is_in", &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);

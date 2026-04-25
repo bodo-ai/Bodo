@@ -1,6 +1,7 @@
 import re
 
 import pandas as pd
+import pytest
 
 from bodo.tests.test_df_lib.series_test_generator import generate_series_test
 
@@ -17,6 +18,8 @@ def _install_series_str_tests():
                 test_map_arg[method_name],
                 accessor="str",
             )
+            if method_name in ("slice", "strip"):
+                test = pytest.mark.gpu(test)
             globals()[f"test_{method_name}_df{idx}"] = test
             idx += 1
 
@@ -103,6 +106,10 @@ test_map_arg = {
         ((), {"start": 1, "stop": 3, "repl": "oi"}),
         ((), {"stop": 4, "repl": "XXX"}),
         ((), {"start": -1}),
+    ],
+    "strip": [
+        ((), {}),
+        (("AB",), {}),
     ],
     "repeat": [
         ((2,), {}),
@@ -237,6 +244,8 @@ df = pd.DataFrame(
             "B-anan-a",
             " E-xc i-ted ",
             "Do-g",
+            # Pattern "A" is not first to distinguish between contains() and match()
+            "lastA",
         ],
     }
 )

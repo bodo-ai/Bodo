@@ -1202,17 +1202,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         from bodo.ext import plan_optimizer
         from bodo.pandas.base import _empty_like
 
-        # If the number of possible values is small then it will be faster to run them as
-        # a conjunction of equality checks rather than with an expensive UDF.
-        if not isinstance(values, BodoSeries) and len(values) <= 4:
-            ret = None
-            for val in values:
-                if ret is None:
-                    ret = self == val
-                else:
-                    ret = ret | (self == val)
-            return ret
-
         new_metadata = pd.Series(
             dtype=pd.ArrowDtype(pa.bool_()),
             name=self.name,
@@ -1284,6 +1273,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return wrap_plan(proj_plan)
 
         # It's just a map function if 'values' is not a BodoSeries
+        # prepare input for Arrow backend
+        values = pa.array(values, type=self.head(0).dtype.pyarrow_dtype)
         return _get_series_func_plan(self._plan, new_metadata, "isin", (values,), {})
 
     @check_args_fallback(supported=["drop", "name", "level"])
@@ -1603,6 +1594,114 @@ class BodoStringMethods:
     @check_args_fallback(unsupported="na")
     def endswith(self, pat, na=None):
         return self._start_ends_with(pat, "str.endswith")
+
+    @check_args_fallback(unsupported="none")
+    def contains(
+        self,
+        pat,
+        case: bool = True,
+        flags: int = 0,
+        na=lib.no_default,
+        regex: bool = True,
+    ):
+        """
+        Support Series.str.contains() method same as Pandas. Uses Arrow/cuDF compute
+        when possible.
+        """
+
+        validate_dtype("str.contains", self)
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.bool_())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        # Avoid UDFs for patterns that are supported both by Arrow compute and cuDF:
+        # https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/string_arrow.py#L402
+        # https://github.com/rapidsai/cudf/blob/1ed06c6105fb31bba18fc7cf69e2529f9c6a7a22/python/cudf/cudf/core/accessors/string.py#L757
+        # This extra check was introduced in Pandas 3.0.0 but doesn't seem very critical in practice
+        _has_unsupported_regex = (
+            pd.core.arrays._arrow_string_mixins.ArrowStringArrayMixin._has_unsupported_regex
+            if pd.__version__ >= "3.0.0"
+            else lambda pat: False
+        )
+        if (
+            isinstance(pat, str)
+            and regex
+            and not flags
+            and not pat.endswith("\\Z")
+            and not _has_unsupported_regex(pat)
+            and case
+            and na is lib.no_default
+        ):
+            fname = "match_substring_regex"
+            kws = {}
+        else:
+            fname = "str.contains"
+            kws = {"case": case, "flags": flags, "na": na, "regex": regex}
+
+        return _get_series_func_plan(series._plan, new_metadata, fname, (pat,), kws)
+
+    @check_args_fallback(unsupported="none")
+    def slice(
+        self,
+        start: int = None,
+        stop: int = None,
+        step: int = None,
+    ):
+        """
+        Support Series.str.slice() method same as Pandas using Arrow/cuDF compute.
+        """
+
+        validate_dtype("str.slice", self)
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.large_string())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        start, stop, step = process_slice_args(start, stop, step)
+        return _get_series_func_plan(
+            series._plan, new_metadata, "str.slice", (start, stop, step), {}
+        )
+
+    @check_args_fallback(unsupported="none")
+    def strip(self, to_strip=None):
+        """
+        Support Series.str.strip() method same as Pandas using Arrow/cuDF compute.
+        """
+
+        validate_dtype("str.strip", self)
+
+        series = self._series
+        dtype = pd.ArrowDtype(pa.large_string())
+
+        index = series.head(0).index
+        new_metadata = pd.Series(
+            dtype=dtype,
+            name=series.name,
+            index=index,
+        )
+
+        if to_strip is None:
+            fname = "utf8_trim_whitespace"
+            args = ()
+        else:
+            fname = "utf8_trim"
+            assert isinstance(to_strip, str), "to_strip argument must be a string"
+            args = (to_strip,)
+
+        return _get_series_func_plan(series._plan, new_metadata, fname, args, {})
 
     @check_args_fallback(unsupported="none")
     def join(self, sep):
@@ -2662,6 +2761,22 @@ def _get_split_len(s, is_split=True, pat=None, n=-1, regex=None):
     return split_s.map(get_len)
 
 
+def process_slice_args(start, stop, step):
+    """
+    Process slice arguments for Series.str.slice() to pass to Arrow backend same as Pandas:
+    https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/_arrow_string_mixins.py#L190
+    """
+    if start is None:
+        if step is not None and step < 0:
+            start = -1
+        else:
+            start = 0
+    if step is None:
+        step = 1
+
+    return start, stop, step
+
+
 def _nonnumeric_describe(series):
     """Computes non-numeric series.describe() using DataFrameGroupBy."""
 
@@ -2942,9 +3057,17 @@ def _get_series_func_plan(
         "str.title",
         "str.reverse",
         "str.match",
+        "str.slice",
         "str.startswith",
         "str.endswith",
+        # str.contains with Arrow/cuDF supported args
+        "match_substring_regex",
         "round",
+        "isna",
+        "isnull",
+        "isin",
+        "utf8_trim_whitespace",
+        "utf8_trim",
     )
 
     def get_arrow_func(name):
@@ -2957,16 +3080,27 @@ def _get_series_func_plan(
             body = name.split(".")[1]
             return "utf8_" + body[:2] + "_" + body[2:]
         if name == "str.match":
-            return "match_substring_regex"
+            # match_substring_regex in Arrow matches anywhere in the string but
+            # Series.str.match() matches from the start. match_substring_regex_first is
+            # a placeholder for CPU and GPU backends to implement the correct behavior.
+            return "match_substring_regex_first"
         if name == "str.startswith":
             return "starts_with"
         if name == "str.endswith":
             return "ends_with"
+        if name == "str.slice":
+            return "utf8_slice_codeunits"
         if name.startswith("str."):
             return "utf8_" + name.split(".")[1]
         if name == "round":
             return "round"
-        return name.split(".")[1]
+        if name in ("isna", "isnull"):
+            return "is_null"
+        if name == "isin":
+            return "is_in"
+        if name in ("utf8_trim_whitespace", "utf8_trim"):
+            return name
+        return name.split(".")[-1]
 
     if func in arrow_compute_list and len(kwargs) == 0:
         func_name = get_arrow_func(func)
@@ -3366,7 +3500,6 @@ series_str_methods = [
             "capitalize",
             "casefold",
             # args
-            "strip",
             "lstrip",
             "rstrip",
             "center",
@@ -3377,7 +3510,6 @@ series_str_methods = [
             "rjust",
             "ljust",
             "repeat",
-            "slice",
             "slice_replace",
             "translate",
             "zfill",
@@ -3402,7 +3534,6 @@ series_str_methods = [
             "isupper",
             "istitle",
             # args
-            "contains",
             "match",
             "fullmatch",
         ],

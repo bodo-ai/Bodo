@@ -16,8 +16,10 @@
 #include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
 #include "physical/gpu_join_filter.h"
+#include "physical/gpu_limit.h"
 #include "physical/gpu_project.h"
 #include "physical/gpu_reduce.h"
+#include "physical/gpu_sort.h"
 #include "physical/gpu_union_all.h"
 #endif  // USE_CUDF
 #include "physical/join.h"
@@ -309,9 +311,20 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    auto physical_sort =
-        std::make_shared<PhysicalSort>(op, in_table_schema, source_cols);
-    FinishPipelineOneOperator(physical_sort);
+#ifdef USE_CUDF
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        auto physical_sort = std::make_shared<PhysicalGPUSortOperator>(
+            op, in_table_schema, source_cols);
+        FinishPipelineOneOperator(physical_sort);
+    } else {
+#endif
+        auto physical_sort =
+            std::make_shared<PhysicalSort>(op, in_table_schema, source_cols);
+        FinishPipelineOneOperator(physical_sort);
+#ifdef USE_CUDF
+    }
+#endif
 }
 
 /**
@@ -925,9 +938,14 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     std::shared_ptr<bodo::Schema> probe_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
+#ifdef USE_CUDF
+    std::shared_ptr<PhysicalGPUJoin> physical_join;
+    physical_join = std::make_shared<PhysicalGPUJoin>(op, build_table_schema,
+                                                      probe_table_schema);
+#else   // USE_CUDF
     auto physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
                                                         probe_table_schema);
-
+#endif  // USE_CUDF
     std::shared_ptr<Pipeline> done_pipeline =
         rhs_builder.active_pipeline->Build(physical_join);
     this->active_pipeline->AddOperator(physical_join);
@@ -944,8 +962,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
  */
 bool arrowSchemaTypeEquals(const ::arrow::Schema& s1,
                            const ::arrow::Schema& s2) {
-    if (s1.num_fields() != s2.num_fields())
+    if (s1.num_fields() != s2.num_fields()) {
         return false;
+    }
 
     for (int i = 0; i < s1.num_fields(); ++i) {
         if (!s1.field(i)->type()->Equals(*s2.field(i)->type())) {
@@ -1074,6 +1093,21 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
         throw std::runtime_error("LogicalLimit unsupported limit type");
     }
     duckdb::idx_t n = op.limit_val.GetConstantValue();
+
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalLimit>,
+                 std::shared_ptr<PhysicalGPULimit>>
+        physical_op;
+
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        physical_op = std::make_shared<PhysicalGPULimit>(n, in_table_schema);
+    } else {
+        physical_op = std::make_shared<PhysicalLimit>(n, in_table_schema);
+    }
+    std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); }, physical_op);
+#else   // USE_CUDF
+    // Otherwise, create a PhysicalLimit operator
     auto physical_op = std::make_shared<PhysicalLimit>(n, in_table_schema);
     // Finish the pipeline at this point so that Finalize can run
     // to reduce the number of collected rows to the desired amount.
@@ -1081,6 +1115,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
     // previous pipeline and the source of the next one.
     // We record the pipeline dependency between these two pipelines.
     FinishPipelineOneOperator(physical_op);
+#endif  // USE_CUDF
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
@@ -1092,9 +1127,20 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
     std::shared_ptr<bodo::Schema> in_table_schema =
         this->active_pipeline->getPrevOpOutputSchema();
 
-    auto physical_sort = std::make_shared<PhysicalSort>(
-        op, in_table_schema, source_cols, op.limit, op.offset);
-    FinishPipelineOneOperator(physical_sort);
+#ifdef USE_CUDF
+    bool run_on_gpu = node_run_on_gpu(op);
+    if (run_on_gpu) {
+        auto physical_sort = std::make_shared<PhysicalGPUSortOperator>(
+            op, in_table_schema, source_cols, op.limit, op.offset);
+        FinishPipelineOneOperator(physical_sort);
+    } else {
+#endif
+        auto physical_sort = std::make_shared<PhysicalSort>(
+            op, in_table_schema, source_cols, op.limit, op.offset);
+        FinishPipelineOneOperator(physical_sort);
+#ifdef USE_CUDF
+    }
+#endif
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {

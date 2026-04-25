@@ -7,6 +7,7 @@ source:
 
 build:
   number: {{ GIT_DESCRIBE_NUMBER|int }}
+  string: "py{{ PY_VER }}h{{ PKG_HASH }}_{{ PKG_BUILDNUM }}_{{ 'cuda' if gpu == 'true' else 'cpu' }}"
   script_env:
     - IS_BODO_PLATFORM
     - BUILD_WITH_V8
@@ -26,6 +27,10 @@ requirements:
     - {{ compiler('cxx') }}
     - sccache
     - mold  # [linux]
+    - cmake <4.0,>=3.23
+    - make
+    - ninja
+    - {{ compiler('cuda') }}  # [gpu]
 
   host:
     - python
@@ -36,9 +41,6 @@ requirements:
     - cython >=3.0
     - setuptools_scm >=8
     - scikit-build-core
-    - cmake <4.0,>=3.23
-    - make
-    - ninja
     - mpi4py >=4.0
     - numba >=0.62,<0.64
     # Compatible with Numba requirements.
@@ -48,32 +50,53 @@ requirements:
     - pyarrow =23.0
     - libboost-headers          # [not win]
     - libboost-devel            # [win]
-    - hdf5 * *mpi_mpich_*       # [not win and not osx]
-    - hdf5 * *mpi_openmpi_*     # [osx]
-    - hdf5 * *mpi_impi_*        # [win]
-    - h5py
-    - mpich                     # [not win and not osx]
-    - openmpi                   # [osx]
-    - impi-devel                # [win64]
     # Corresponding dependency is automatically added in reqs/run.
     - aws-sdk-cpp
     - zstd
-    - pytz
+
+    - hdf5 * *mpi_mpich_*       # [not gpu and linux]
+    - hdf5 * *mpi_openmpi_*     # [gpu or osx]
+    - hdf5 * *mpi_impi_*        # [not gpu and win]
+    - h5py
+
+    - mpich                 # [not gpu and linux]
+    - openmpi               # [gpu or osx]
+    - impi-devel            # [not gpu and win]
+
+    # GPU dependencies
+    # This pin is necessary to avoid compatibility issues with 26.02
+    # and newer versions.
+    - cudf =26.04                  # [gpu]
+    - rmm =26.04                   # [gpu]
+    - librmm =26.04                # [gpu]
+    - cuda-version 13.*            # [gpu]
 
   run:
     - python
     - {{ pin_compatible('numpy') }}
     - pandas >=2.2
-    - pytz
     - fsspec >=2021.09
+    - mpi4py >=4.0
     - pyarrow =23.0
     - numba >=0.62,<0.64
+
+    - mpich                 # [not gpu and linux]
+    - openmpi               # [gpu or osx]
+    - impi_rt               # [not gpu and win]
+
     - requests
-    - pytz
     - zstd
     - cloudpickle >=3.0
     - psutil
     - pytz
+
+    # GPU dependencies
+    - cudf =26.04                  # [gpu]
+    - rmm =26.04                   # [gpu]
+    - librmm =26.04                # [gpu]
+    - cuda-version 13.*            # [gpu]
+
+    - {{ pin_compatible("cuda-version") }}  # [gpu]
 
   # run_constrained means these packages are not required deps
   # but will restrict them if they are present in the conda env.

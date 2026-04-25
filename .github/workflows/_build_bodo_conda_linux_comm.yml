@@ -63,7 +63,8 @@ jobs:
           conda build . -c conda-forge \
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
-            --python '${{ inputs.python-version }}'
+            --python '${{ inputs.python-version }}' \
+            --variants "{gpu: false}"
         env:
           CONDA_SOLVER: libmamba
           # Sccache Creds

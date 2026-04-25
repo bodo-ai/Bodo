@@ -16,7 +16,8 @@ class CudaSortState {
     CudaSortState(std::shared_ptr<bodo::Schema> schema,
                   std::vector<cudf::size_type> const& key_indices,
                   std::vector<cudf::order> const& column_order,
-                  std::vector<cudf::null_order> const& null_precedence);
+                  std::vector<cudf::null_order> const& null_precedence,
+                  int64_t limit = -1, int64_t offset = 0);
 
     /**
      * @brief Consume a batch of data to be sorted.
@@ -29,9 +30,19 @@ class CudaSortState {
     /**
      * @brief Finalize the accumulation phase and perform the distributed sort.
      * @param local_is_last Whether this is the last batch on this rank.
+     * @param input_se Stream and event for synchronization.
      * @return Global is last flag.
      */
-    bool FinalizeAccumulation(bool local_is_last);
+    bool FinalizeAccumulation(bool local_is_last,
+                              std::shared_ptr<StreamAndEvent> input_se);
+
+    /**
+     * @brief Finalize the sort phase and compute limits/offsets across ranks.
+     * This MUST be called exactly once by all ranks after
+     * FinalizeAccumulation returns true and before any calls to
+     * GetOutputBatch.
+     */
+    void FinalizeSort();
 
     /**
      * @brief Get the sorted output batch.
@@ -50,19 +61,25 @@ class CudaSortState {
 
    private:
     std::shared_ptr<bodo::Schema> schema;
-    std::shared_ptr<arrow::Schema> key_schema;
     std::vector<cudf::size_type> key_indices;
     std::vector<cudf::order> column_order;
     std::vector<cudf::null_order> null_precedence;
+    const int64_t limit;
+    const int64_t offset;
 
     // Accumulation buffer for local batches
     std::vector<std::shared_ptr<cudf::table>> accumulation_buffer;
+    int64_t total_rows_in_buffer = 0;
 
     // Received tables from shuffle
     std::vector<std::shared_ptr<cudf::table>> received_tables;
 
     // Final merged result
     std::unique_ptr<cudf::table> final_result = nullptr;
+
+    // Local slice indices (pre-calculated in FinalizeSort)
+    int64_t local_slice_start = 0;
+    int64_t local_slice_end = 0;
 
     GpuRangeShuffleManager shuffle_manager;
     GpuTableAllGatherManager sample_gatherer;

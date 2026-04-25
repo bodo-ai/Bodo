@@ -193,7 +193,7 @@ class RankBatchGenerator {
         estimate_parquet_metadata();
 
         // Set common parquet reader options.
-        chunked_reader_opts.set_columns(selected_columns);
+        chunked_reader_opts.set_column_names(selected_columns);
         if (filter_ast_tree.size() > 0) {
             chunked_reader_opts.set_filter(filter_ast_tree.back());
         }
@@ -688,6 +688,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
             arrow_schema->metadata()->values());
         this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
                                   ->Project(selected_columns);
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         this->output_arrow_schema = output_schema->ToArrowSchema();
 
         this->schema_fields = PyObject_GetAttrString(pyarrow_schema, "names");
@@ -794,7 +796,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return output_schema;
     }
 

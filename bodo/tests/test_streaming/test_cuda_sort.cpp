@@ -94,19 +94,21 @@ void run_cuda_sort_test(
     std::vector<cudf::null_order> const& null_precedence,
     std::function<std::unique_ptr<cudf::table>(int, int, size_t&)>
         create_input_fn,
+    int64_t limit = -1, int64_t offset = -1,
     std::function<void(cudf::table_view, int, int, MPI_Comm)> extra_verify_fn =
         nullptr) {
     rmm::cuda_device_id device_id = get_gpu_id();
     if (device_id.value() >= 0) {
         cudaSetDevice(device_id.value());
     }
-    CudaSortState sort_state(schema, key_indices, column_order,
-                             null_precedence);
+    CudaSortState sort_state(schema, key_indices, column_order, null_precedence,
+                             limit, offset);
     if (!is_gpu_rank()) {
         bool global_is_last = false;
         while (!global_is_last) {
-            global_is_last = sort_state.FinalizeAccumulation(true);
+            global_is_last = sort_state.FinalizeAccumulation(true, nullptr);
         }
+        sort_state.FinalizeSort();
         return;
     }
     MPI_Comm gpu_comm = sort_state.get_mpi_comm();
@@ -124,8 +126,9 @@ void run_cuda_sort_test(
 
     bool global_is_last = false;
     while (!global_is_last) {
-        global_is_last = sort_state.FinalizeAccumulation(true);
+        global_is_last = sort_state.FinalizeAccumulation(true, se);
     }
+    sort_state.FinalizeSort();
 
     bool out_is_last = false;
     auto output =
@@ -146,7 +149,15 @@ void run_cuda_sort_test(
                             MPI_SUM, gpu_comm),
               "MPI_Allreduce failed");
 
-    bodo::tests::check(total_rows == expected_total);
+    int64_t expected_after_limit = expected_total;
+    if (offset > 0) {
+        expected_after_limit = std::max(0L, expected_after_limit - offset);
+    }
+    if (limit != -1) {
+        expected_after_limit = std::min((int64_t)expected_after_limit, limit);
+    }
+
+    bodo::tests::check((int64_t)total_rows == expected_after_limit);
 
     // Verify global order across ranks (on the first key column)
     auto const& col = output->get_column(key_indices[0]);
@@ -336,6 +347,7 @@ static bodo::tests::suite cuda_sort_tests([] {
                     cols.push_back(std::move(key_col));
                     return std::make_unique<cudf::table>(std::move(cols));
                 },
+                -1, -1,
                 [](cudf::table_view output, int rank, int n_ranks,
                    MPI_Comm comm) {
                     int num_rows = output.num_rows();
@@ -391,4 +403,24 @@ static bodo::tests::suite cuda_sort_tests([] {
                 });
         },
         {"gpu_cpp"});
+
+    bodo::tests::test("test_cuda_sort_limit_offset",
+                      [] {
+                          run_cuda_sort_test(
+                              make_simple_int64_schema(1), {0},
+                              {cudf::order::ASCENDING},
+                              {cudf::null_order::BEFORE},
+                              [](int rank, int n_ranks, size_t& rows_count) {
+                                  std::vector<int64_t> vals;
+                                  if (rank == 0) {
+                                      vals = {50, 10, 80, 30};
+                                  } else if (rank == 1) {
+                                      vals = {20, 70, 40, 60};
+                                  }
+                                  rows_count = vals.size();
+                                  return create_int_table_to_sort(vals);
+                              },
+                              3, 2);  // limit=3, offset=2
+                      },
+                      {"gpu_cpp"});
 });

@@ -8,6 +8,7 @@ from bodo.tests.test_df_lib.series_test_generator import generate_series_test
 from bodo.tests.utils import _test_equal
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("use_index1", [True, False])
 @pytest.mark.parametrize("use_index2", [True, False])
 def test_series_isin(index_val, use_index1, use_index2):
@@ -38,6 +39,7 @@ def test_series_isin(index_val, use_index1, use_index2):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas dataframe
 def test_series_where(index_val):
     """Tests Series.where() with condition and other arguments."""
     df = pd.DataFrame(
@@ -80,6 +82,11 @@ def _install_series_direct_tests():
     """Installs tests for direct Series.<method> methods."""
     for method_name, arg_sets in test_map_arg_direct.items():
         test = generate_series_test(method_name, df, arg_sets)
+        if method_name in ("isnull", "isin", "round"):
+            test = pytest.mark.gpu(test)
+        if method_name in ("notnull", "abs"):
+            # fallback read Pandas dataframe
+            test = pytest.mark.gpu(allow_fallback=True)(test)
         globals()[f"test_dir_{method_name}"] = test
 
 

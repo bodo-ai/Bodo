@@ -94,17 +94,17 @@ def test_tpch_q01(broadcast):
         run_tpch_query_test(tpch.tpch_q01)
 
 
-@pytest.mark.gpu(allow_fallback=True)
+@pytest.mark.gpu
 def test_tpch_q02():
     run_tpch_query_test(tpch.tpch_q02, ctes_created=1)
 
 
-@pytest.mark.gpu(allow_fallback=True)
+@pytest.mark.gpu
 def test_tpch_q03():
     run_tpch_query_test(tpch.tpch_q03)
 
 
-@pytest.mark.gpu(allow_fallback=True)
+@pytest.mark.gpu
 def test_tpch_q04():
     run_tpch_query_test(tpch.tpch_q04)
 
@@ -116,70 +116,86 @@ def test_tpch_q05(broadcast):
         run_tpch_query_test(tpch.tpch_q05)
 
 
-@pytest.mark.gpu(allow_fallback=True)
+@pytest.mark.gpu
 def test_tpch_q06():
     run_tpch_query_test(tpch.tpch_q06, plan_executions=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q07():
     run_tpch_query_test(tpch.tpch_q07)
 
 
+@pytest.mark.gpu
 def test_tpch_q08():
     run_tpch_query_test(tpch.tpch_q08, ctes_created=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q09():
     run_tpch_query_test(tpch.tpch_q09)
 
 
+@pytest.mark.gpu
 def test_tpch_q10():
     run_tpch_query_test(tpch.tpch_q10)
 
 
+@pytest.mark.gpu
 def test_tpch_q11():
     run_tpch_query_test(tpch.tpch_q11, ctes_created=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q12():
     run_tpch_query_test(tpch.tpch_q12)
 
 
+@pytest.mark.gpu
 def test_tpch_q13():
     run_tpch_query_test(tpch.tpch_q13)
 
 
+@pytest.mark.gpu
 def test_tpch_q14():
     run_tpch_query_test(tpch.tpch_q14, plan_executions=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q15():
     run_tpch_query_test(tpch.tpch_q15, ctes_created=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q16():
     run_tpch_query_test(tpch.tpch_q16)
 
 
+@pytest.mark.gpu
 def test_tpch_q17():
     run_tpch_query_test(tpch.tpch_q17, plan_executions=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q18():
     run_tpch_query_test(tpch.tpch_q18)
 
 
+@pytest.mark.gpu
 def test_tpch_q19():
     run_tpch_query_test(tpch.tpch_q19, plan_executions=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q20():
     run_tpch_query_test(tpch.tpch_q20)
 
 
+@pytest.mark.gpu
 def test_tpch_q21():
     run_tpch_query_test(tpch.tpch_q21, ctes_created=1)
 
 
+@pytest.mark.gpu
 def test_tpch_q22():
     run_tpch_query_test(tpch.tpch_q22, ctes_created=1)

@@ -9,6 +9,7 @@
 #include <cudf/copying.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
+#include <cudf/utilities/default_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
 
 #include "../../libs/gpu_utils.h"
@@ -296,7 +297,8 @@ GPU_DATA convertArrowTableToGPU(std::shared_ptr<arrow::Table> arrow_table,
     // from_arrow_host parses the structs, allocates GPU memory, and performs
     // the copy.
     std::unique_ptr<cudf::table> result =
-        cudf::from_arrow_host(&arrow_schema, &device_array, se->stream);
+        cudf::from_arrow_host(&arrow_schema, &device_array,
+                              se ? se->stream : cudf::get_default_stream());
 
     // Clean up the C structs (Arrow requires manual release if not imported,
     // but Export gives us ownership, so we must release the release callbacks)
@@ -311,14 +313,31 @@ GPU_DATA convertArrowTableToGPU(std::shared_ptr<arrow::Table> arrow_table,
     return GPU_DATA{std::move(result), arrow_batch->schema(), se};
 }
 
+cudf::column_metadata build_meta_from_arrow(
+    std::shared_ptr<arrow::Field> field) {
+    cudf::column_metadata meta;
+    meta.name = field->name();
+
+    if (field->type()->id() == arrow::Type::STRUCT) {
+        auto struct_type =
+            std::static_pointer_cast<arrow::StructType>(field->type());
+        for (int i = 0; i < struct_type->num_fields(); ++i) {
+            meta.children_meta.push_back(
+                build_meta_from_arrow(struct_type->field(i)));
+        }
+    }
+
+    return meta;
+}
+
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
     cudf::table_view view = batch.table->view();
     // Setup Metadata (Arrow requires column names)
     // We must create a cudf::column_metadata hierarchy matching the table
     // structure.
     std::vector<cudf::column_metadata> meta;
-    for (const auto &name : batch.schema->field_names()) {
-        meta.emplace_back(name);
+    for (const auto &field : batch.schema->fields()) {
+        meta.push_back(build_meta_from_arrow(field));
     }
 
     cudf::unique_schema_t unique_schema = cudf::to_arrow_schema(view, meta);

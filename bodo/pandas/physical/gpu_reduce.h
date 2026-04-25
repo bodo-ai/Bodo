@@ -27,7 +27,8 @@ inline bool gpu_capable_reduce(duckdb::LogicalAggregate& logical_aggregate) {
             agg_expr.function.name != "max" &&
             agg_expr.function.name != "min" &&
             agg_expr.function.name != "product" &&
-            agg_expr.function.name != "count") {
+            agg_expr.function.name != "count" &&
+            agg_expr.function.name != "mean") {
             return false;
         }
     }
@@ -95,6 +96,16 @@ std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_one_nullptr();
 std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_cudf_scalar(
     std::unique_ptr<cudf::scalar> scalar);
 
+/**
+ * @brief Create a vector of two unique_ptr<cudf::scalar> values that contains
+ * the given scalars. Needed as a function to avoid unique_ptr compiler
+ * restrictions in constructors.
+ *
+ */
+std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_two_cudf_scalars(
+    std::unique_ptr<cudf::scalar> scalar1,
+    std::unique_ptr<cudf::scalar> scalar2);
+
 struct GPUReductionFunctionMax : public GPUReductionFunction {
     GPUReductionFunctionMax(std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
@@ -141,6 +152,21 @@ struct GPUReductionFunctionCount : public GPUReductionFunction {
               dt, MPI_SUM) {}
 };
 
+struct GPUReductionFunctionMean : public GPUReductionFunction {
+    GPUReductionFunctionMean(std::shared_ptr<arrow::DataType> dt,
+                             rmm::cuda_stream_view& output_stream)
+        : GPUReductionFunction(
+              {"sum", "count"}, {"add", "add"},
+              {GPUReductionType::AGGREGATION, GPUReductionType::AGGREGATION},
+              make_vector_of_two_cudf_scalars(
+                  arrow_scalar_to_cudf(arrow::MakeScalar(dt, 0).ValueOrDie(),
+                                       output_stream),
+                  arrow_scalar_to_cudf(arrow::MakeScalar(dt, 0).ValueOrDie(),
+                                       output_stream)),
+              dt, MPI_SUM) {}
+    void Finalize(MPI_Comm comm) override;
+};
+
 /**
  * @brief Physical node for reductions like max.
  *
@@ -150,7 +176,9 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
     explicit PhysicalGPUReduce(std::shared_ptr<bodo::Schema> out_schema,
                                std::vector<std::string> function_names)
         : out_schema(std::move(out_schema)),
-          function_names(std::move(function_names)) {}
+          function_names(std::move(function_names)) {
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->out_schema);
+    }
 
     virtual ~PhysicalGPUReduce() = default;
 
@@ -191,13 +219,15 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
             "GetResult called on a PhysicalGPUReduce node.");
     }
 
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return out_schema;
     }
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
         time_pt start_produce_time = start_timer();
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
         if (!is_gpu_rank()) {
             return {GPU_DATA(nullptr, out_schema->ToArrowSchema(), se),
@@ -216,8 +246,10 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
                     out_schema->column_types[i]->ToArrowDataType()));
             }
 
-            std::unique_ptr<cudf::column> col1 =
-                cudf::make_column_from_scalar(*output_scalar, 1, se->stream);
+            // Only rank 0 returns a single row with the result, other ranks
+            // return an empty array
+            std::unique_ptr<cudf::column> col1 = cudf::make_column_from_scalar(
+                *output_scalar, rank == 0 ? 1 : 0, se->stream);
             cols.push_back(std::move(col1));
         }
 

@@ -26,8 +26,10 @@
 #include "physical/gpu_aggregate.h"
 #include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
+#include "physical/gpu_limit.h"
 #include "physical/gpu_project.h"
 #include "physical/gpu_reduce.h"
+#include "physical/gpu_sort.h"
 #include "physical/gpu_union_all.h"
 #endif
 
@@ -156,16 +158,16 @@ class DevicePlanNode {
                 return ::gpu_capable(op.Cast<duckdb::LogicalComparisonJoin>());
 
             case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
-                return false;
+                return true;
 
             case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalOrder>());
 
             case duckdb::LogicalOperatorType::LOGICAL_LIMIT:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalLimit>());
 
             case duckdb::LogicalOperatorType::LOGICAL_TOP_N:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalTopN>());
 
             case duckdb::LogicalOperatorType::LOGICAL_SAMPLE:
                 return false;
@@ -228,6 +230,21 @@ class DevicePlanNode {
                 op.has_estimated_cardinality = true;
                 // 90% retention is an AI estimate of average row retention.
                 op.estimated_cardinality = (uint64_t)(rows_in * 0.9);
+            } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_LIMIT) {
+                op.has_estimated_cardinality = true;
+                duckdb::LogicalLimit &limit = op.Cast<duckdb::LogicalLimit>();
+                if (limit.offset_val.Type() !=
+                        duckdb::LimitNodeType::CONSTANT_VALUE ||
+                    limit.offset_val.GetConstantValue() != 0) {
+                    throw std::runtime_error("LogicalLimit unsupported offset");
+                }
+                if (limit.limit_val.Type() !=
+                    duckdb::LimitNodeType::CONSTANT_VALUE) {
+                    throw std::runtime_error(
+                        "LogicalLimit unsupported limit type");
+                }
+                op.estimated_cardinality =
+                    (uint64_t)(limit.limit_val.GetConstantValue());
             } else {
 #ifdef DEBUG_GPU_SELECTOR
                 std::cout
@@ -235,7 +252,8 @@ class DevicePlanNode {
                     << op.ToString() << std::endl;
 #endif
                 throw std::runtime_error(
-                    "DevicePlanNode operator didn't have cardinality.");
+                    "DevicePlanNode operator didn't have cardinality.\n" +
+                    op.ToString());
             }
         }
         rows_out = op.estimated_cardinality;
@@ -980,14 +998,14 @@ bool cpu_fallback_disabled() {
  *
  */
 bool ignore_cpu_fallback(duckdb::LogicalOperator const &op) {
-    // Only explicitly allow fallback for DataFrame source and sort.
+    // Only explicitly allow fallback for DataFrame source.
     if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
         duckdb::LogicalGet const &get_op = op.Cast<duckdb::LogicalGet>();
         return get_op.bind_data->Cast<BodoScanFunctionData>()
                    .getScanFunctionType() ==
                BodoScanFunctionType::DATAFRAME_SCAN;
     }
-    return op.type == duckdb::LogicalOperatorType::LOGICAL_ORDER_BY;
+    return false;
 }
 
 #endif  // USE_CUDF

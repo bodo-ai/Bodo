@@ -1429,7 +1429,7 @@ def _test_equal(
 
             # Pandas boolean output may have False instead of NA
             if pa.types.is_boolean(pa_type) and py_out.dtype == np.bool_:
-                bodo_out = _pd_fillna_value(py_out, False)
+                bodo_out = _pd_fillna_value(bodo_out, False)
 
             # Handle NA/nan mismatch
             if pa.types.is_boolean(pa_type) and py_out.dtype == np.object_:

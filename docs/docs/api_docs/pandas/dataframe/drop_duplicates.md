@@ -2,6 +2,7 @@
 
 
 `pandas.DataFrame.drop_duplicates(subset=None, keep='first', inplace=False, ignore_index=False)`
+**GPU:** ✔ Supported
 
 
 ### Supported Arguments
