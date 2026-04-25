@@ -82,15 +82,30 @@ void QueryProfileCollector::Init() {
             std::chrono::duration_cast<std::chrono::minutes>(seconds - hour);
         auto second = std::chrono::duration_cast<std::chrono::seconds>(
             seconds - hour - minute);
-        output_dir = fmt::format("{}/run_{}{:02}{:02}_{:02}{:02}{:02}",
-                                 parent_dir, year, month, day, hour.count(),
-                                 minute.count(), second.count());
-        int res = makedir(output_dir.data(), 0700);
-        if (res != 0) {
-            // TODO XXX Needs error synchronization!
-            throw std::runtime_error(
-                fmt::format("Failed to create output directory {}: {}",
-                            output_dir, strerror(errno)));
+        std::string output_dir_base = fmt::format(
+            "{}/run_{}{:02}{:02}_{:02}{:02}{:02}", parent_dir, year, month, day,
+            hour.count(), minute.count(), second.count());
+
+        int run_suffix = 0;
+        while (true) {
+            std::string candidate =
+                run_suffix == 0
+                    ? output_dir_base
+                    : output_dir_base + "_" + std::to_string(run_suffix);
+
+            if (mkdir(candidate.c_str(), 0700) == 0) {
+                output_dir = candidate;
+                break;
+            }
+
+            if (errno != EEXIST) {
+                // TODO XXX Needs error synchronization!
+                throw std::runtime_error(
+                    fmt::format("Failed to create output directory {}: {}",
+                                candidate, strerror(errno)));
+            }
+
+            run_suffix++;
         }
     }
     // Broadcast the output_dir length to all ranks

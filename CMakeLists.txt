@@ -340,9 +340,13 @@ if(DEFINED ENV{BODO_VENDOR_MPICH})
   set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
   set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
 else()
-  set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-  set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
+  # TODO: avoid setting these vars manually
+  set(MPI_INCLUDE_DIR "/opt/mpich/include")
+  set(MPI_LIB_DIR "/opt/mpich/lib")
 endif()
+
+message(STATUS "MPI Includes: ${MPI_INCLUDE_DIR}")
+message(STATUS "MPI Lib Dirs: ${MPI_LIB_DIR}")
 
 # MPI implementation (Intel or MPICH)
 if (WIN32)
@@ -704,6 +708,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
   if (USE_CUDF)
         set(test_list "${test_list}"
         "bodo/tests/test_streaming/test_gpu_shuffle.cpp"
+        "bodo/tests/test_streaming/test_ping_pong.cpp"
         "bodo/tests/test_streaming/test_gpu_batch_gen.cpp"
         "bodo/tests/test_streaming/test_gpu_bloom_filter.cpp"
         "bodo/tests/test_streaming/test_cuda_sort.cpp"

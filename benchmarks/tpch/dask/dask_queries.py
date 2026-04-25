@@ -5,19 +5,15 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
+import dask
 import dask.dataframe as dd
 from dask.distributed import Client
 
 
-# Bodo Change: make all column names lower case, add extension parameter
 def _load_dataset(dataset_path, table_name, ext=".parquet"):
-    df = dd.read_parquet(os.path.join(dataset_path, f"{table_name}{ext}")).rename(
+    return dd.read_parquet(os.path.join(dataset_path, f"{table_name}{ext}")).rename(
         columns=str.lower
     )
-    for c in df.columns:
-        if c.endswith("date"):
-            df[c] = df[c].astype("date32[day][pyarrow]")
-    return df
 
 
 def query_01(dataset_path, scale, ext=".parquet"):
@@ -1299,24 +1295,32 @@ def get_query_func(q_num: int) -> Callable:
     return globals()[f"query_{q_num:02d}"]
 
 
-def run_single_query(query_func, dataset_path, scale_factor) -> float:
+def run_single_query(
+    query_num, dataset_path, scale_factor, backend, log_file=None
+) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
+    query_func = get_query_func(query_num)
+
     start = time.time()
     query_func(dataset_path, scale_factor, ext=".pq").compute()
-    return time.time() - start
+    total_time = time.time() - start
+    if log_file:
+        with open(log_file, "a") as f:
+            f.write(
+                f"dask[{backend}],{query_num},{os.environ.get('BODO_NUM_WORKERS', 4)},{total_time:f}\n"
+            )
+    print(f"Query {query_num} execution time: {total_time:.2f} seconds")
+    return total_time
 
 
-def run_queries(query_nums, dataset_path, scale_factor) -> None:
-    with Client():  # Use default LocalCluster settings
-        total_start = time.time()
+def run_queries(query_nums, dataset_path, scale_factor, log_file=None) -> None:
+    total_start = time.time()
 
-        for i in query_nums:
-            query_func = get_query_func(i)
-            query_time = run_single_query(query_func, dataset_path, scale_factor)
-            print(f"Query {i} execution time: {query_time:.2f} seconds")
+    for i in query_nums:
+        run_single_query(i, dataset_path, scale_factor, log_file=log_file)
 
-        total_time = time.time() - total_start
-        print(f"Total execution time: {total_time:.4f} seconds")
+    total_time = time.time() - total_start
+    print(f"Total execution time: {total_time:.4f} seconds")
 
 
 def main():
@@ -1346,6 +1350,30 @@ def main():
         required=False,
         help="Space separated TPC-H queries to run.",
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["pandas", "cudf"],
+        default="pandas",
+    )
+    parser.add_argument(
+        "--instance_profile_name",
+        type=str,
+        default=None,
+        help="IAM instance profile name for EC2 instances for accessing S3",
+    )
+    parser.add_argument(
+        "--subnet_id",
+        type=str,
+        default=None,
+        help="Subnet ID for EC2 instances (within us-east-2)",
+    )
+    parser.add_argument(
+        "--log_timings",
+        type=str,
+        default=None,
+        help="Path to log timings.",
+    )
 
     args = parser.parse_args()
     dataset_path = args.folder
@@ -1356,26 +1384,67 @@ def main():
     if args.queries is not None:
         queries = args.queries
 
+    if args.log_timings is not None:
+        if not os.path.exists(args.log_timings):
+            with open(args.log_timings, "w") as f:
+                f.write("implementation,query,n_gpus,execution_time\n")
+
+    dask.config.set({"dataframe.backend": args.backend})
+    dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
+    dask.config.set({"distributed.comm.timeouts.connect": "600s"})
+
     if use_cloudprovider:
         from dask_cloudprovider.aws import EC2Cluster
 
-        env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2025.10.0"}
-        ec2_config = {
-            # NOTE: Setting security = False to avoid large config size
-            # https://github.com/dask/dask-cloudprovider/issues/249
-            "security": False,
-            "n_workers": 4,
-            "scheduler_instance_type": "c6i.xlarge",
-            "worker_instance_type": "r6i.16xlarge",
-            "docker_image": "daskdev/dask:2025.12.0-py3.10",
-            # Region for accessing bodo-example-data
-            "region": "us-east-2",
-            "filesystem_size": 1000,
-            # Profile with AmazonS3FullAccess
-            "iam_instance_profile": {"Name": "dask-benchmark"},
-            "env_vars": env_vars,
-            "debug": True,
-        }
+        # Instance profile with permissions for reading from S3 (if not passing default credentials).
+        instance_profile = (
+            None
+            if args.instance_profile_name is None
+            else {"Name": args.instance_profile_name}
+        )
+
+        if args.backend == "cudf":
+            # Use GPU AMI with Nvidia drivers pre-installed to speed up cluster startup time.
+            # The specific AMI below was obtained from the following command:
+            # aws ssm get-parameter \
+            #     --region us-east-2 \
+            #     --name /aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id \
+            #     --query 'Parameter.Value' \
+            #     --output text
+            ami = "ami-0600d0aaccc95db72"
+            ec2_config = {
+                "instance_type": "g7e.12xlarge",
+                "docker_image": "nvcr.io/nvidia/rapidsai/base:26.04-cuda13-py3.14",
+                "worker_class": "dask_cuda.CUDAWorker",
+                "worker_options": {"rmm_managed_memory": True},
+                "docker_args": "--shm-size=256m -e EXTRA_CONDA_PACKAGES=s3fs",
+                "n_workers": args.n_workers,
+                "filesystem_size": 250,  # GB
+                "region": "us-east-2",
+                "subnet_id": args.subnet_id,
+                "ami": ami,
+                "iam_instance_profile": instance_profile,
+                "bootstrap": False,
+                "security": False,
+            }
+        else:
+            env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2025.10.0"}
+            ec2_config = {
+                # NOTE: Setting security = False to avoid large config size
+                # https://github.com/dask/dask-cloudprovider/issues/249
+                "security": False,
+                "n_workers": 4,
+                "scheduler_instance_type": "c6i.xlarge",
+                "worker_instance_type": "r6i.16xlarge",
+                "docker_image": "daskdev/dask:2025.12.0-py3.10",
+                # Region for accessing bodo-example-data
+                "region": "us-east-2",
+                "filesystem_size": 1000,
+                # Profile with AmazonS3FullAccess
+                "iam_instance_profile": instance_profile,
+                "env_vars": env_vars,
+                "debug": True,
+            }
 
         with EC2Cluster(**ec2_config) as cluster:
             with cluster.get_client() as client:
@@ -1386,14 +1455,15 @@ def main():
 
                 start = time.time()
                 for query in queries:
-                    query_func = get_query_func(query)
-
                     try:
                         print(f"Submitting query {query} at {datetime.now()}")
-                        query_time = client.submit(
-                            run_single_query, query_func, dataset_path, scale_factor
-                        ).result()
-                        print(f"Query {query} execution time: {query_time:.2f} seconds")
+                        run_single_query(
+                            query,
+                            dataset_path,
+                            scale_factor,
+                            backend=args.backend,
+                            log_file=args.log_timings,
+                        )
                     except Exception as e:
                         print(f"Query {query} failed with an exception: {e}")
                         client.restart()
@@ -1402,7 +1472,28 @@ def main():
                 print(f"Total execution time: {total_time:.4f} seconds")
 
     else:
-        run_queries(queries, dataset_path, scale_factor)
+        if args.backend == "cudf":
+            from dask_cuda import LocalCUDACluster
+
+            client = Client(
+                LocalCUDACluster(rmm_pool_size="0.9", enable_cudf_spill=True)
+            )
+        else:
+            client = Client()
+
+        total_start = time.time()
+
+        for query in queries:
+            run_single_query(
+                query,
+                dataset_path,
+                scale_factor,
+                backend=args.backend,
+                log_file=args.log_timings,
+            )
+
+        total_time = time.time() - total_start
+        print(f"Total execution time: {total_time:.4f} seconds")
 
 
 if __name__ == "__main__":

@@ -3,10 +3,12 @@ import argparse
 import datetime
 import functools
 import inspect
+import os
 import time
 import warnings
 from collections.abc import Callable
 
+import boto3
 import pandas as pd
 
 import bodo.pandas
@@ -61,13 +63,25 @@ def load_partsupp(data_folder: str, pd=bodo.pandas):
     return df
 
 
-def timethis(q: Callable, name: str | None = None):
+def timethis(
+    q: Callable,
+    name: str | None = None,
+    log_file: str | None = None,
+    query: int | None = None,
+):
     @functools.wraps(q)
     def wrapped(*args, **kwargs):
         t = time.time()
         q(*args, **kwargs)
         msg = name or f"{q.__name__.upper()} Execution time (s):"
-        print(f"{msg} {time.time() - t:f}")
+        total_time = time.time() - t
+        if log_file:
+            with open(log_file, "a") as f:
+                f.write(
+                    f"bodo,{query},{os.environ.get('BODO_NUM_WORKERS', 4)},{total_time:f}\n"
+                )
+
+        print(f"{msg} {total_time:f}")
 
     return wrapped
 
@@ -921,7 +935,14 @@ def _load_args(query: int, root: str, scale_factor: float, backend):
     return args
 
 
-def run_queries(root: str, queries: list[int], scale_factor: float, backend, warmup):
+def run_queries(
+    root: str,
+    queries: list[int],
+    scale_factor: float,
+    backend,
+    warmup: bool,
+    log_file: str | None = None,
+):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
 
@@ -933,7 +954,10 @@ def run_queries(root: str, queries: list[int], scale_factor: float, backend, war
             q(*_load_args(query, root, scale_factor, backend))
 
         query_func = timethis(
-            query_func, name=f"Q{query:02} Execution time (including read_parquet) (s):"
+            query_func,
+            name=f"Q{query:02} Execution time (including read_parquet) (s):",
+            log_file=log_file,
+            query=query,
         )
 
         if warmup:
@@ -986,6 +1010,12 @@ def main():
         required=False,
         help="Whether to do warmup run.",
     )
+    parser.add_argument(
+        "--log_timings",
+        type=str,
+        required=False,
+        help="File to log timings.",
+    )
 
     args = parser.parse_args()
     data_set = args.folder
@@ -1004,6 +1034,27 @@ def main():
 
     warnings.filterwarnings("ignore")
 
+    if args.log_timings is not None:
+        if not os.path.exists(args.log_timings):
+            with open(args.log_timings, "w") as f:
+                f.write("implementation,query,n_gpus,execution_time\n")
+
+    storage_type = "s3" if args.folder.startswith("s3://") else "local"
+    if storage_type == "s3":
+        session = boto3.Session()
+        credentials = session.get_credentials().get_frozen_credentials()
+
+        # Variables required for using kvikio for S3 reads.
+        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
+        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
+        os.environ["AWS_SESSION_TOKEN"] = credentials.token
+        os.environ["AWS_DEFAULT_REGION"] = (
+            session.region_name if session.region_name else "us-east-2"
+        )
+        os.environ["AWS_REGION"] = (
+            session.region_name if session.region_name else "us-east-2"
+        )
+
     backend_module = bodo.pandas if backend == "bodo" else pd
     run_queries(
         data_set,
@@ -1011,6 +1062,7 @@ def main():
         scale_factor=scale_factor,
         backend=backend_module,
         warmup=do_warmup,
+        log_file=args.log_timings,
     )
 
 

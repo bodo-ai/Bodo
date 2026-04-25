@@ -137,7 +137,7 @@ def main():
         # for more details about cluster configuration and setup.
         cluster = EC2Cluster(
             instance_type="g7e.12xlarge",
-            docker_image="nvcr.io/nvidia/rapidsai/base:26.02-cuda13-py3.13",
+            docker_image="nvcr.io/nvidia/rapidsai/base:26.04-cuda13-py3.14",
             worker_class="dask_cuda.CUDAWorker",
             worker_options={"rmm_managed_memory": True},
             docker_args="--shm-size=256m -e EXTRA_CONDA_PACKAGES=s3fs",
