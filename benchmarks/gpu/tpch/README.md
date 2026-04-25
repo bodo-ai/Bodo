@@ -94,4 +94,4 @@ python run_dask.py \
 ```
 
 This command will launch 4 `g7e.12xlarge` instances (plus one scheduler instance) in the `us-east-2` region.
-You may also need to pass `--subnet_id` if those instances are not available in your default subnet's availability zone.
+You may need to pass `--subnet_id` if those instances are not available in your default subnet's availability zone.

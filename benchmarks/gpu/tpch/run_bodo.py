@@ -207,7 +207,6 @@ def main():
             result = q5(args.root, pd_impl)
             if args.library == "bodo":
                 result = result.execute_plan()
-
             total_time = time.time() - t0
             print(
                 f"Q5 {args.library} (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"

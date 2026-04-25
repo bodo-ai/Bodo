@@ -107,13 +107,13 @@ std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables(
         shuffle_table_info.table, shuffle_table_info.partition_indices, n_ranks,
         this->stream);
 
-    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
+    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks) + 1);
     // Contiguous splits requires the split indices excluding the first 0
-    // So we create a new vector from partition_start_rows[1..end]
+    // and last index (row count). So we create a new vector from
+    // partition_start_rows[1..end-1]
     std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
-        partition_start_rows.begin() + 1, partition_start_rows.end());
+        partition_start_rows.begin() + 1, partition_start_rows.end() - 1);
     // Pack the tables for sending
-
     packed_tables =
         cudf::contiguous_split(partitioned_table->view(), splits, stream,
                                get_cuda_memory_resource_ref());
@@ -141,10 +141,7 @@ std::vector<cudf::packed_table> GpuTableBroadcastManager::getNextPerRankTables(
 
 std::vector<cudf::packed_table> GpuRangeShuffleManager::getNextPerRankTables(
     bool& do_broadcast) {
-    if (do_broadcast) {
-        throw std::runtime_error(
-            "GpuRangeShuffleManager does not support broadcast tables");
-    }
+    do_broadcast = false;
     if (!tableReadyToSend()) {
         throw std::runtime_error("getNextPerRankTables has no data");
     }
@@ -670,11 +667,6 @@ bool is_gpu_rank() {
 
 std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource() {
-    char* env_p = std::getenv("BODO_USE_SYNC_GPU_MEMORY_RESOURCE");
-    if (env_p != nullptr && std::string(env_p) == "1") {
-        std::cout << "Using synchronous GPU memory resource" << std::endl;
-        return std::make_shared<rmm::mr::cuda_memory_resource>();
-    }
     return std::make_shared<rmm::mr::cuda_async_memory_resource>();
 }
 

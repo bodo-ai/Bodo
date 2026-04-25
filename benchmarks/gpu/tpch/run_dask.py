@@ -47,26 +47,6 @@ def q5(root: str) -> DataFrame:
     return gb.reset_index().sort_values("REVENUE", ascending=False)
 
 
-def run_query_with_timing(root: str) -> tuple[DataFrame, float]:
-    """Function for running Q5 and getting the result and total execution time."""
-    start_time = time.time()
-    result = q5(root).compute()
-    total_time = time.time() - start_time
-
-    return result, total_time
-
-
-def run_query_dispatch(
-    root: str, client: Client, run_multi_node: bool
-) -> tuple[DataFrame, float]:
-    """Dispatches the query to the Dask cluster and returns the result and execution time."""
-    if run_multi_node:
-        future = client.submit(run_query_with_timing, root)
-        return future.result()
-    else:
-        return run_query_with_timing(root)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -103,7 +83,7 @@ def main():
     parser.add_argument(
         "--run_multi_node",
         action="store_true",
-        help="If set, run the query in a multi-node Dask cluster (requires dask cloud provider).",
+        help="If set, run the query in a multi-node Dask cluster using Dask Cloud Provider",
     )
     parser.add_argument(
         "--instance_profile_name",
@@ -137,10 +117,8 @@ def main():
     if args.run_multi_node:
         from dask_cloudprovider.aws import EC2Cluster
 
-        # Use GPU AMI with Nvidia drivers pre-installed to speed up cluster startup time
+        # Use GPU AMI with Nvidia drivers pre-installed to speed up cluster startup time.
         # The specific AMI below was obtained from the following command:
-        # AMI with Nvidia drivers and docker pre-installed:
-        # (Avoid bootstrap time)
         # aws ssm get-parameter \
         #     --region us-east-2 \
         #     --name /aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id \
@@ -148,7 +126,7 @@ def main():
         #     --output text
         ami = "ami-0600d0aaccc95db72"
 
-        # Instance profile with permissions required for writing and potentially reading from S3
+        # Instance profile with permissions for reading from S3 (if not passing default credentials).
         instance_profile = (
             None
             if args.instance_profile_name is None
@@ -177,26 +155,29 @@ def main():
         dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
         dask.config.set({"distributed.comm.timeouts.connect": "600s"})
 
-        cluster = LocalCUDACluster(n_workers=args.n_workers, enable_cudf_spill=True)
+        cluster = LocalCUDACluster(
+            n_workers=args.n_workers, rmm_pool_size="90GB", enable_cudf_spill=True
+        )
     client = Client(cluster)
 
     if args.warmup:
         try:
             print("Running warmup...")
-            run_query_dispatch(args.root, client, args.run_multi_node)
+            q5(args.root).compute()
             print("Warmup complete.")
         except Exception as e:
             print(f"Error during warmup run: {e}")
     for i in range(args.n_iters):
         try:
-            res, total_time = run_query_dispatch(args.root, client, args.run_multi_node)
+            t0 = time.time()
+            result = q5(args.root).compute()
+            total_time = time.time() - t0
+            print(
+                f"Q5 dask (sf={scale_factor}, n_workers={args.n_workers}): {i} took {total_time:.4f} s"
+            )
 
             if args.print_output:
-                print(res)
-
-            print(
-                f"Q5 dask (sf={scale_factor}, n_gpus={args.n_workers}): {i} took {total_time:.4f} s"
-            )
+                print(result)
 
             if args.log_timings:
                 extra_params = (
