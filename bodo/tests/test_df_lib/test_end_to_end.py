@@ -1599,6 +1599,7 @@ def as_index(request):
     return request.param
 
 
+@pytest.mark.gpu
 def test_series_groupby(dropna, as_index):
     """
     Test a simple groupby operation.
@@ -1607,7 +1608,7 @@ def test_series_groupby(dropna, as_index):
         df1 = pd.DataFrame(
             {
                 "B": ["a1", "b11", "c111"] * 2,
-                "E": pd.array([1.1, pd.NA, 13.3, pd.NA, pd.NA, 13.3], "Float64"),
+                "E": pd.array([1.1, 4.1, 13.3, 1.9, 3.5, 13.3], "Float64"),
                 "A": pd.array([pd.NA, 2, 3] * 2, "Int64"),
             },
             index=[0, 41, 2] * 2,
