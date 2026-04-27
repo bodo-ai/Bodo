@@ -248,7 +248,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             self.execute_plan()
             # We might fallthrough here if data is distributed
 
-        if self._md_result_id is not None:
+        if self._md_result_id is not None and self._collect_func is not None:
             debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")
             assert self._md_nrows is not None
             assert self._md_head is not None
@@ -258,7 +258,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
 
             self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
-            self._md_result_id = None
+            # self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
             BlockManager._rebuild_blknos_and_blklocs(self)
@@ -503,7 +503,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self.execute_plan()
             # We might fallthrough here if data is distributed
 
-        if self._md_result_id is not None:
+        if self._md_result_id is not None and self._collect_func is not None:
             assert self._md_nrows is not None
             assert self._md_head is not None
             assert self._collect_func is not None
@@ -514,7 +514,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self.blocks = data._mgr.blocks
             self.axes = data._mgr.axes
 
-            self._md_result_id = None
+            # self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
             self._collect_func = None

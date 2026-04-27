@@ -3,7 +3,7 @@
 # distutils: language = c++
 # cython: c_string_type=unicode, c_string_encoding=utf8
 
-from libcpp.memory cimport unique_ptr, make_unique, dynamic_pointer_cast
+from libcpp.memory cimport unique_ptr, make_unique, dynamic_pointer_cast, shared_ptr, make_shared
 from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
@@ -309,13 +309,18 @@ cdef extern from "duckdb/planner/operator/logical_copy_to_file.hpp" namespace "d
     cdef cppclass CLogicalCopyToFile" duckdb::LogicalCopyToFile"(CLogicalOperator):
         pass
 
+ctypedef uint64_t GPUBatchCacheHandleType
+
+def hasCacheEntry(handle):
+    return handle != 0
+
 cdef extern from "_plan.h" nogil:
     cdef cppclass CLogicalJoinFilter" bodo::LogicalJoinFilter"(CLogicalOperator):
         pass
 
     ctypedef struct execute_plan_result:
         int64_t table
-        int64_t gpu_result
+        GPUBatchCacheHandleType gpu_result
         PyObjectPtr pyobj
 
     cdef idx_t getTableIndex() except +
@@ -1228,7 +1233,14 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
     arrow_schema = <object>(exec_output.pyobj)
     if output_func is None:
         raise ValueError("output_func is None.")
-    return output_func(cpp_table, out_schema), exec_output.gpu_result
+
+    cdef GPUBatchCacheHandleType py_gpu_result = exec_output.gpu_result
+    if hasCacheEntry(py_gpu_result):
+        print("py_execute_plan has GPUBatchGenerator")
+    else:
+        print("py_execute_plan does not have GPUBatchGenerator")
+
+    return output_func(cpp_table, out_schema), py_gpu_result
 
 
 def py_get_table_index():

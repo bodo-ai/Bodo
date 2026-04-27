@@ -94,7 +94,7 @@ class LazyArrowExtensionArray(
         """
         Collects data from workers if it has not been collected yet.
         """
-        if self._md_result_id is not None:
+        if self._md_result_id is not None and self._collect_func is not None:
             # Just duplicate the head to get the full array for testing
             assert self._md_head is not None
             assert self._md_nrows is not None
@@ -109,7 +109,7 @@ class LazyArrowExtensionArray(
             self._pa_array = pa.chunked_array(
                 [pa.array(collected, type=self._md_head._pa_array.type)]
             )
-            self._md_result_id = None
+            # self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
             self._collect_func = None
@@ -142,3 +142,6 @@ class LazyArrowExtensionArray(
 
     def _get_result_id(self) -> str | None:
         return self._md_result_id
+
+    def _is_distributed(self):
+        return self._md_result_id is not None and self._collect_func is not None

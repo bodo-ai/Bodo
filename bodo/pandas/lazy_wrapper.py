@@ -19,6 +19,10 @@ class BodoLazyWrapper(abc.ABC):
     def _get_result_id(self) -> str | None:
         pass
 
+    @abc.abstractmethod
+    def _is_distributed(self):
+        pass
+
     @classmethod
     @abc.abstractmethod
     def from_lazy_metadata(
@@ -43,7 +47,7 @@ class BodoLazyWrapper(abc.ABC):
 
     @property
     def _lazy(self) -> bool:
-        return self._get_result_id() is not None
+        return self._is_distributed()
 
     @abc.abstractmethod
     def is_lazy_plan(self):

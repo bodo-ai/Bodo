@@ -288,7 +288,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             self.execute_plan()
             # We might fallthrough here if data is distributed
 
-        if self._md_result_id is not None:
+        if self._md_result_id is not None and self._collect_func is not None:
             assert self._md_head is not None
             assert self._md_nrows is not None
             assert self._collect_func is not None
@@ -297,7 +297,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             self.arrays = data._mgr.arrays
             self._axes = data._mgr._axes
 
-            self._md_result_id = None
+            # self._md_result_id = None
             self._md_head = None
             self._md_nrows = None
             # Collect should only be done once
@@ -531,7 +531,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             data = self.execute_plan()
             # We might fallthrough here if data is distributed
 
-        if self._md_result_id is not None:
+        if self._md_result_id is not None and self._collect_func is not None:
             debug_msg(self.logger, "[LazySingleArrayManager] Collecting data...")
             assert self._md_head is not None
             assert self._md_nrows is not None

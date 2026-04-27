@@ -5,10 +5,24 @@
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
 #if USE_CUDF
+#include "physical/gpu_read_pandas.h"
 #include "physical/gpu_read_parquet.h"
 #endif
 
 #include <fmt/format.h>
+
+PhysicalCpuGpuSource createCPUGPUReadPandas(
+    PyObject *df, std::vector<int> &selected_columns,
+    const std::shared_ptr<arrow::Schema> &arrow_schema, bool run_on_gpu) {
+#ifdef USE_CUDF
+    if (run_on_gpu) {
+        return std::make_shared<PhysicalGPUReadPandas>(df, selected_columns,
+                                                       arrow_schema);
+    }
+#endif  // USE_CUDF
+    return std::make_shared<PhysicalReadPandas>(df, selected_columns,
+                                                arrow_schema);
+}
 
 PhysicalCpuGpuSource
 BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
@@ -47,9 +61,8 @@ BodoDataFrameParallelScanFunctionData::CreatePhysicalOperator(
         throw std::runtime_error(fmt::format(
             "Result ID {} not found in result registry", result_id.c_str()));
     }
-
-    return std::make_shared<PhysicalReadPandas>(df, selected_columns,
-                                                this->arrow_schema);
+    return createCPUGPUReadPandas(df, selected_columns, this->arrow_schema,
+                                  run_on_gpu);
 }
 
 PhysicalCpuGpuSource BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
@@ -57,8 +70,8 @@ PhysicalCpuGpuSource BodoDataFrameSeqScanFunctionData::CreatePhysicalOperator(
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
     std::shared_ptr<std::unordered_map<int, join_state_t>> join_filter_states,
     bool run_on_gpu) {
-    return std::make_shared<PhysicalReadPandas>(df, selected_columns,
-                                                this->arrow_schema);
+    return createCPUGPUReadPandas(df, selected_columns, this->arrow_schema,
+                                  run_on_gpu);
 }
 
 PhysicalCpuGpuSource BodoParquetScanFunctionData::CreatePhysicalOperator(

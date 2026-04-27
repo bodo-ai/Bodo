@@ -673,6 +673,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             return self._mgr._md_result_id
         return None
 
+    def _is_distributed(self):
+        if isinstance(self._mgr, LazyMetadataMixin):
+            return (
+                self._mgr._md_result_id is not None
+                and self._mgr._collect_func is not None
+            )
+        return False
+
     @property
     def empty(self):
         return len(self) == 0

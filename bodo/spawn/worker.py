@@ -704,7 +704,7 @@ def worker_loop(
         elif command == CommandType.GATHER.value:
             res_id = spawner_intercomm.bcast(None, 0)
             bodo.gatherv(
-                RESULT_REGISTRY.pop(res_id, None), root=0, comm=spawner_intercomm
+                RESULT_REGISTRY.get(res_id, None), root=0, comm=spawner_intercomm
             )
             debug_worker_msg(logger, f"Gather done for result {res_id}")
 

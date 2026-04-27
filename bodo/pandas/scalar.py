@@ -20,6 +20,9 @@ class BodoScalar(BodoLazyWrapper):
     def _get_result_id(self) -> str | None:
         return self.wrapped_series._get_result_id()
 
+    def _is_distributed(self):
+        return self.wrapped_series._is_distributed()
+
     @classmethod
     def from_lazy_metadata(
         cls,
