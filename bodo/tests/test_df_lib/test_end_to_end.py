@@ -1928,6 +1928,7 @@ def test_series_mod(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_compound_expression(datapath):
     """Very simple test for projection expressions."""
     with assert_executed_plan_count(0):
@@ -1949,6 +1950,7 @@ def test_series_compound_expression(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_arith_binops(datapath, index_val):
     """Test various cases of Series binary operations."""
     df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
@@ -1990,6 +1992,7 @@ def test_series_arith_binops(datapath, index_val):
     )
 
 
+@pytest.mark.gpu
 def test_series_cmp_binops(datapath, index_val):
     """Test various cases of Series binary operations."""
     df = pd.DataFrame({"A": [1, 20, 300], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
@@ -2031,6 +2034,7 @@ def test_series_cmp_binops(datapath, index_val):
     )
 
 
+@pytest.mark.gpu
 def test_scalar_arith_binops(datapath, index_val):
     """Test various cases of BodoScalar binary operations."""
 
@@ -4124,7 +4128,7 @@ def test_timezone_scalar_func(engine, index_val, timezone_timestamp_df):
     _test_equal(bodo_out, expected, check_pandas_types=False)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)  # fallback timezone
 def test_timezone_filter(index_val, timezone_timestamp_df):
     """Test filter works with timezones"""
     df = timezone_timestamp_df
@@ -4154,6 +4158,7 @@ def test_timezone_groupby(timezone_timestamp_df):
     _test_equal(bodo_out, pandas_out, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback timezone
 def test_timezone_merge(timezone_timestamp_df):
     """Test merge works with timezone keys"""
     df = timezone_timestamp_df
