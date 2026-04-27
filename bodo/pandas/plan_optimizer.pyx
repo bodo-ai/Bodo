@@ -314,7 +314,7 @@ cdef extern from "_plan.h" nogil:
         pass
 
     cdef idx_t getTableIndex() except +
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows) except +
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, bool has_partitioning) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate) except +
@@ -911,7 +911,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly object storage_options
     cdef readonly int64_t nrows
 
-    def __cinit__(self, object out_schema, object parquet_path, object storage_options):
+    def __cinit__(self, object out_schema, object parquet_path, object storage_options, bool has_partitioning):
         from bodo.ext import hdist
 
         self.out_schema = out_schema
@@ -919,7 +919,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         self.storage_options = storage_options
         self.nrows = -1
         cdef int64_t nrows_estimate = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=False) if bodo.get_rank() == 0 else 0)
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate, has_partitioning)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
