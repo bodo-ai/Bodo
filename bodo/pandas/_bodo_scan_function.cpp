@@ -5,6 +5,7 @@
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
 #if USE_CUDF
+#include "physical/gpu_read_iceberg.h"
 #include "physical/gpu_read_parquet.h"
 #endif
 
@@ -93,6 +94,14 @@ PhysicalCpuGpuSource BodoIcebergScanFunctionData::CreatePhysicalOperator(
             ? JoinFilterColStats(join_filter_states,
                                  this->rtjf_state_map.value())
             : JoinFilterColStats();
+#ifdef USE_CUDF
+    if (run_on_gpu) {
+        return std::make_shared<PhysicalGPUReadIceberg>(
+            this->catalog, this->table_id, this->iceberg_filter,
+            this->iceberg_schema, this->arrow_schema, this->snapshot_id,
+            selected_columns, filter_exprs, limit_val, join_filter_col_stats);
+    }
+#endif
     return std::make_shared<PhysicalReadIceberg>(
         this->catalog, this->table_id, this->iceberg_filter,
         this->iceberg_schema, this->arrow_schema, this->snapshot_id,

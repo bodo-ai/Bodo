@@ -251,6 +251,11 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
         bool run_on_gpu) override;
+
+    bool canRunOnGPU(bool has_filters, bool has_limit) override {
+        return !has_limit;
+    }
+
     const std::shared_ptr<arrow::Schema> arrow_schema;
     PyObject *catalog;
     PyObject *iceberg_filter;
