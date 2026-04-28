@@ -26,6 +26,7 @@
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/null_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
 
 std::variant<GPU_COLUMN, GPU_SCALAR> do_cudf_compute_binary(
@@ -934,6 +935,26 @@ void tableFilterToCudfAST(
                     cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
                 filter_ast_tree.push(expr);
             }
+        } break;
+
+        case TF::IS_NULL: {
+            cudf::ast::column_name_reference col_ref =
+                cudf::ast::column_name_reference(column_names[col_idx]);
+            filter_ast_tree.push(col_ref);
+            cudf::ast::operation expr = cudf::ast::operation(
+                cudf::ast::ast_operator::IS_NULL, filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+        } break;
+
+        case TF::IS_NOT_NULL: {
+            cudf::ast::column_name_reference col_ref =
+                cudf::ast::column_name_reference(column_names[col_idx]);
+            filter_ast_tree.push(col_ref);
+            cudf::ast::operation expr = cudf::ast::operation(
+                cudf::ast::ast_operator::IS_NULL, filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+            filter_ast_tree.push(cudf::ast::operation(
+                cudf::ast::ast_operator::NOT, filter_ast_tree.back()));
         } break;
 
         default:
