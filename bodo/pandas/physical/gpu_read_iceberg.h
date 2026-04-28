@@ -71,7 +71,8 @@ class GPUIcebergRankBatchGenerator {
     std::pair<std::unique_ptr<cudf::table>, bool> next(
         std::shared_ptr<StreamAndEvent> se) {
         if (!is_gpu_rank() ||
-            (curr_piece_idx >= pieces_.size() && !leftover_tbl)) {
+            (curr_piece_idx >= pieces_.size() && !leftover_tbl &&
+             (!curr_reader || !curr_reader->has_next()))) {
             return {empty_table_from_arrow_schema(output_arrow_schema), true};
         }
 
@@ -161,6 +162,8 @@ class GPUIcebergRankBatchGenerator {
     void ReportMetrics(std::vector<MetricBase>& metrics_out) {
         MetricBase::StatValue pieces = pieces_.size();
         metrics_out.emplace_back(StatMetric("num_pieces", pieces));
+        metrics_out.emplace_back(
+            TimerMetric("evolve_time", this->evolve_time_));
     }
 
    private:
@@ -232,8 +235,13 @@ class GPUIcebergRankBatchGenerator {
             auto target_type = std::dynamic_pointer_cast<arrow::StructType>(
                 target_field->type());
 
-            std::vector<std::unique_ptr<cudf::column>> child_cols;
-            auto col_view = col->view();
+            cudf::size_type num_row = col->size();
+            cudf::size_type null_count = col->null_count();
+            cudf::column::contents col_data = col->release();
+
+            std::vector<std::unique_ptr<cudf::column>> source_children =
+                std::move(col_data.children);
+            std::vector<std::unique_ptr<cudf::column>> evolved_children;
 
             std::unordered_map<int, int> source_id_to_idx;
             for (int i = 0; i < source_type->num_fields(); i++) {
@@ -246,28 +254,27 @@ class GPUIcebergRankBatchGenerator {
                 int id = get_iceberg_field_id(target_child_field);
                 if (source_id_to_idx.contains(id)) {
                     int source_idx = source_id_to_idx[id];
-                    // cudf::column doesn't allow easy access to children as
-                    // unique_ptr, we might need to copy or use views.
-                    // For now, let's assume we can get a copy of the child.
-                    auto child_col =
-                        std::make_unique<cudf::column>(col->child(source_idx));
-                    child_cols.push_back(evolve_column(
-                        std::move(child_col), source_type->field(source_idx),
-                        target_child_field, stream));
+                    evolved_children.push_back(
+                        evolve_column(std::move(source_children[source_idx]),
+                                      source_type->field(source_idx),
+                                      target_child_field, stream));
                 } else {
                     // Add null child
                     auto null_scalar = arrow_scalar_to_cudf(
-                        arrow::MakeNullScalar(target_child_field->type()));
-                    child_cols.push_back(cudf::make_column_from_scalar(
-                        *null_scalar, col->size(), stream));
+                        arrow::MakeNullScalar(target_child_field->type()),
+                        stream);
+                    evolved_children.push_back(cudf::make_column_from_scalar(
+                        *null_scalar, num_row, stream));
                 }
             }
-            cudf::size_type num_row = col->size();
-            cudf::size_type null_count = col->null_count();
-            cudf::column::contents col_data = col->release();
+
+            rmm::device_buffer null_mask = col_data.null_mask
+                                               ? std::move(*col_data.null_mask)
+                                               : rmm::device_buffer{0, stream};
+
             return cudf::make_structs_column(
-                num_row, std::move(col_data.children), null_count,
-                std::move(*col_data.null_mask), stream);
+                num_row, std::move(evolved_children), null_count,
+                std::move(null_mask), stream);
         }
 
         // For other types (List, Map, Primitive), we might need more logic
@@ -277,6 +284,7 @@ class GPUIcebergRankBatchGenerator {
 
     std::unique_ptr<cudf::table> evolve_table(std::unique_ptr<cudf::table> tbl,
                                               rmm::cuda_stream_view stream) {
+        time_pt start_evolve = start_timer();
         // We need the read_schema to get the source fields for evolution
         // We can store it in curr_read_schema
         std::vector<std::unique_ptr<cudf::column>> output_cols;
@@ -292,8 +300,8 @@ class GPUIcebergRankBatchGenerator {
             if (mapping.first == -1) {
                 // Add null column
                 auto arrow_type = target_field->type();
-                auto null_scalar =
-                    arrow_scalar_to_cudf(arrow::MakeNullScalar(arrow_type));
+                auto null_scalar = arrow_scalar_to_cudf(
+                    arrow::MakeNullScalar(arrow_type), stream);
                 output_cols.push_back(cudf::make_column_from_scalar(
                     *null_scalar, tbl->num_rows(), stream));
             } else {
@@ -304,7 +312,9 @@ class GPUIcebergRankBatchGenerator {
             }
         }
 
-        return std::make_unique<cudf::table>(std::move(output_cols));
+        auto ret = std::make_unique<cudf::table>(std::move(output_cols));
+        this->evolve_time_ += end_timer(start_evolve);
+        return ret;
     }
 
     void get_dataset(PyObject* catalog, const std::string& table_id,
@@ -422,6 +432,7 @@ class GPUIcebergRankBatchGenerator {
     std::shared_ptr<arrow::Schema> curr_read_schema;
     std::unique_ptr<cudf::table> leftover_tbl;
     std::vector<std::pair<int, int>> curr_col_mapping;
+    MetricBase::TimerValue evolve_time_ = 0;
 };
 
 struct PhysicalGPUReadIcebergMetrics {
@@ -506,8 +517,6 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
         std::vector<MetricBase> metrics_out;
         metrics_out.emplace_back(
             TimerMetric("produce_time", this->metrics.produce_time));
-        metrics_out.emplace_back(
-            TimerMetric("evolve_time", this->metrics.evolve_time));
         if (this->batch_gen) {
             this->batch_gen->ReportMetrics(metrics_out);
         }
