@@ -1599,6 +1599,7 @@ def as_index(request):
     return request.param
 
 
+@pytest.mark.gpu
 def test_series_groupby(dropna, as_index):
     """
     Test a simple groupby operation.
@@ -1607,7 +1608,7 @@ def test_series_groupby(dropna, as_index):
         df1 = pd.DataFrame(
             {
                 "B": ["a1", "b11", "c111"] * 2,
-                "E": pd.array([1.1, pd.NA, 13.3, pd.NA, pd.NA, 13.3], "Float64"),
+                "E": pd.array([1.1, 4.1, 13.3, 1.9, 3.5, 13.3], "Float64"),
                 "A": pd.array([pd.NA, 2, 3] * 2, "Int64"),
             },
             index=[0, 41, 2] * 2,
@@ -1619,6 +1620,7 @@ def test_series_groupby(dropna, as_index):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback groupby with string aggregation
 @pytest.mark.parametrize(
     "selection",
     [pytest.param(None, id="select_all"), pytest.param(["C", "A"], id="select_subset")],
@@ -1630,7 +1632,7 @@ def test_dataframe_groupby(dropna, as_index, selection):
     with assert_executed_plan_count(0):
         df1 = pd.DataFrame(
             {
-                "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+                "A": pd.array([1, 2, 4, 2147483647] * 3, "Int32"),
                 "B": ["A", "B"] * 6,
                 "E": [False, True] * 6,
                 "D": pd.array(

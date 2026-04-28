@@ -36,6 +36,10 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
         return gpu_capable_reduce(logical_aggregate);
     }
 
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+        getColRefMap(logical_aggregate.children[0]->GetColumnBindings());
+    logical_aggregate.children[0]->ResolveOperatorTypes();
+
     for (size_t i = 0; i < logical_aggregate.expressions.size(); i++) {
         const auto& expr = logical_aggregate.expressions[i];
 
@@ -49,6 +53,26 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
         // Check if the aggregate function is supported
         bool is_udf = agg_expr.function.name.starts_with("udf");
         if (is_udf) {
+            return false;
+        }
+
+        // Check input types of the aggregate function
+        auto& child_expr = agg_expr.children[0];
+        if (child_expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
+            throw std::runtime_error(
+                "Aggregate expression must have only col ref "
+                "expression children" +
+                expr->ToString());
+        }
+        auto& colref = child_expr->Cast<duckdb::BoundColumnRefExpression>();
+
+        uint64_t col_idx = col_ref_map.at(
+            {colref.binding.table_index, colref.binding.column_index});
+
+        // cudf doesn't support sum aggregation on string columns
+        if (agg_expr.function.name == "sum" &&
+            logical_aggregate.children[0]->types[col_idx].id() ==
+                duckdb::LogicalTypeId::VARCHAR) {
             return false;
         }
     }
@@ -153,7 +177,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         arrow_output_schema = this->output_schema->ToArrowSchema();
         this->groupby_state = std::make_unique<CudaGroupbyState>(
-            keys, column_agg_funcs, arrow_output_schema);
+            keys, column_agg_funcs, arrow_output_schema, dropna.value());
 
         this->metrics.init_time += end_timer(start_init);
     }
