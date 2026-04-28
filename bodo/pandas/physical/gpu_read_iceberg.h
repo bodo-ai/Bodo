@@ -49,6 +49,7 @@ class GPUIcebergRankBatchGenerator {
         duckdb::TableFilterSet& filter_exprs, std::size_t target_rows,
         MPI_Comm comm, std::shared_ptr<arrow::Schema> output_arrow_schema)
         : target_rows_(target_rows),
+          filter_exprs_(filter_exprs.Copy()),
           py_pieces(nullptr),
           py_schema_groups(nullptr),
           selected_columns_(selected_columns),
@@ -61,8 +62,12 @@ class GPUIcebergRankBatchGenerator {
         MPI_Comm_rank(comm, &rank_);
         MPI_Comm_size(comm, &size_);
 
+        // Initialize CUDF AST filters for row-level filtering
+        tableFilterSetToCudfAST(*filter_exprs_, arrow_schema->field_names(),
+                                filter_ast_tree, filter_scalars);
+
         get_dataset(catalog, table_id, arrow_schema, iceberg_filter,
-                    snapshot_id, target_rows);
+                    iceberg_schema, snapshot_id, target_rows);
 
         // Distribute pieces
         distribute_pieces();
@@ -207,12 +212,20 @@ class GPUIcebergRankBatchGenerator {
         cudf::io::parquet_reader_options opts =
             cudf::io::parquet_reader_options::builder(cudf::io::source_info());
         opts.set_column_names(file_col_names);
-        // TODO: Handle filters and other options
+        if (filter_ast_tree.size() > 0) {
+            opts.set_filter(filter_ast_tree.back());
+        }
 
         std::vector<std::unique_ptr<cudf::io::datasource>> sources;
         for (const auto& path : group_paths) {
-            // TODO: Use arrow_file_datasource if remote
-            sources.push_back(cudf::io::datasource::create(path));
+            if (filesystem_->type_name() != "local") {
+                std::shared_ptr<arrow::io::RandomAccessFile> arrow_file =
+                    filesystem_->OpenInputFile(path).ValueOrDie();
+                sources.push_back(
+                    std::make_unique<arrow_file_datasource>(arrow_file));
+            } else {
+                sources.push_back(cudf::io::datasource::create(path));
+            }
         }
 
         curr_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
@@ -226,7 +239,18 @@ class GPUIcebergRankBatchGenerator {
         const std::shared_ptr<arrow::Field>& source_field,
         const std::shared_ptr<arrow::Field>& target_field,
         rmm::cuda_stream_view stream) {
-        // TODO: Verify Iceberg field IDs match (similar to CPU EvolveArray)
+        // Verify that the Iceberg field ID is the same.
+        int source_field_iceberg_field_id = get_iceberg_field_id(source_field);
+        int target_field_iceberg_field_id = get_iceberg_field_id(target_field);
+        if (source_field_iceberg_field_id != target_field_iceberg_field_id) {
+            throw std::runtime_error(
+                "GPUIcebergRankBatchGenerator::evolve_column: Iceberg field ID "
+                "of the source (" +
+                std::to_string(source_field_iceberg_field_id) +
+                ") and target (" +
+                std::to_string(target_field_iceberg_field_id) +
+                ") fields do not match!");
+        }
 
         if (target_field->type()->id() == arrow::Type::STRUCT) {
             // Recursive evolution for Struct
@@ -319,8 +343,8 @@ class GPUIcebergRankBatchGenerator {
 
     void get_dataset(PyObject* catalog, const std::string& table_id,
                      const std::shared_ptr<arrow::Schema>& arrow_schema,
-                     PyObject* iceberg_filter, int64_t snapshot_id,
-                     int64_t tot_rows_to_read) {
+                     PyObject* iceberg_filter, PyObject* iceberg_schema,
+                     int64_t snapshot_id, int64_t tot_rows_to_read) {
         // import bodo.io.iceberg
         PyObjectPtr iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
         if (PyErr_Occurred()) {
@@ -337,14 +361,65 @@ class GPUIcebergRankBatchGenerator {
 
         PyObjectPtr pyarrow_schema = arrow::py::wrap_schema(arrow_schema);
 
-        // expr_filter_f_str and filter_scalars are not used for now, or we can
-        // get them from filter_exprs
-        // TODO: Handle filters properly
+        // We need to & the iceberg_filter with converted duckdb table filters
+        // to apply the filters at the file level.
+        PyObjectPtr duckdb_iceberg_filter =
+            duckdbFilterSetToPyicebergFilter(*filter_exprs_, arrow_schema);
+
+        // Perform the python & to combine the filters
+        PyObjectPtr py_iceberg_filter_and_duckdb_filter =
+            PyObjectPtr(PyObject_CallMethod(duckdb_iceberg_filter.get(),
+                                            "__and__", "O", iceberg_filter));
+        if (!py_iceberg_filter_and_duckdb_filter) {
+            throw std::runtime_error(
+                "failed to combine iceberg filter with duckdb table filters");
+        }
+
+        // We need to convert the combined pyiceberg iceberg filter to an Arrow
+        // filter format string so it can be applied at the row level in
+        // addition to the file level.
+        //  import bodo.io.iceberg.common
+        PyObjectPtr iceberg_common_mod =
+            PyImport_ImportModule("bodo.io.iceberg.common");
+        if (PyErr_Occurred()) {
+            throw std::runtime_error(
+                "failed to import bodo.io.iceberg.common module");
+        }
+
+        PyObjectPtr convert_func = PyObject_GetAttrString(
+            iceberg_common_mod.get(),
+            "pyiceberg_filter_to_pyarrow_format_str_and_scalars");
+        if (!convert_func || !PyCallable_Check(convert_func)) {
+            throw std::runtime_error(
+                "failed to get convert_iceberg_filter_to_arrow function from "
+                "bodo.io.iceberg.common module");
+        }
+
+        // call python function to convert the combined pyiceberg filter
+        PyObjectPtr filter_f_str_and_scalars =
+            PyObjectPtr(PyObject_CallFunctionObjArgs(
+                convert_func.get(), py_iceberg_filter_and_duckdb_filter.get(),
+                iceberg_schema, Py_True, nullptr));
+        if (!filter_f_str_and_scalars) {
+            throw std::runtime_error(
+                "failed to convert pyiceberg filter to arrow filter format "
+                "string");
+        }
+
+        // The result is a tuple of (iceberg_filter_f_str, filter_scalars)
+        PyObject* iceberg_filter_f_str_py =
+            PyTuple_GetItem(filter_f_str_and_scalars.get(), 0);
+        PyObject* filter_scalars_py =
+            PyTuple_GetItem(filter_f_str_and_scalars.get(), 1);
 
         PyObjectPtr ds = PyObject_CallMethod(
             iceberg_mod.get(), "get_iceberg_pq_dataset", "OsOOOsOOLL", catalog,
             table_id.c_str(), pyarrow_schema.get(), str_as_dict_cols_py.get(),
-            iceberg_filter, "", Py_None, force_row_level_py,
+            py_iceberg_filter_and_duckdb_filter.get(),
+            iceberg_filter_f_str_py != Py_None
+                ? PyUnicode_AsUTF8(iceberg_filter_f_str_py)
+                : "",
+            filter_scalars_py, force_row_level_py,
             static_cast<long long>(snapshot_id),
             static_cast<long long>(tot_rows_to_read));
 
@@ -418,6 +493,10 @@ class GPUIcebergRankBatchGenerator {
 
     std::size_t target_rows_;
     int rank_{0}, size_{1};
+
+    duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs_;
+    cudf::ast::tree filter_ast_tree;
+    std::vector<std::unique_ptr<cudf::scalar>> filter_scalars;
 
     std::shared_ptr<arrow::fs::FileSystem> filesystem_;
     PyObjectPtr py_pieces;
