@@ -3,6 +3,7 @@
 #include <Python.h>
 #include <arrow/util/key_value_metadata.h>
 #include <cudf/io/datasource.hpp>
+#include <cudf/types.hpp>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -252,7 +253,96 @@ class GPUIcebergRankBatchGenerator {
                 ") fields do not match!");
         }
 
-        if (target_field->type()->id() == arrow::Type::STRUCT) {
+        if (arrow::is_list(source_field->type()->id())) {
+            // Recurse on the value field
+            const std::shared_ptr<arrow::Field>& source_value_field =
+                std::dynamic_pointer_cast<arrow::BaseListType>(
+                    source_field->type())
+                    ->value_field();
+            const std::shared_ptr<arrow::Field>& target_value_field =
+                std::dynamic_pointer_cast<arrow::BaseListType>(
+                    target_field->type())
+                    ->value_field();
+
+            cudf::size_type num_row = col->size();
+            cudf::size_type null_count = col->null_count();
+            cudf::data_type type = col->type();
+            cudf::column::contents col_data = col->release();
+
+            std::unique_ptr<cudf::column> evolved_values_column =
+                evolve_column(std::move(col_data.children[0]),
+                              source_value_field, target_value_field, stream);
+
+            std::vector<std::unique_ptr<cudf::column>> children;
+            children.push_back(std::move(evolved_values_column));
+
+            rmm::device_buffer null_mask = col_data.null_mask
+                                               ? std::move(*col_data.null_mask)
+                                               : rmm::device_buffer{0, stream};
+
+            return std::make_unique<cudf::column>(
+                type, num_row, std::move(*col_data.data), std::move(null_mask),
+                null_count, std::move(children));
+
+        } else if (source_field->type()->id() == arrow::Type::MAP) {
+            // Recurse on the key and item fields
+            const std::shared_ptr<arrow::Field>& source_key_field =
+                std::dynamic_pointer_cast<arrow::MapType>(source_field->type())
+                    ->key_field();
+            const std::shared_ptr<arrow::Field>& target_key_field =
+                std::dynamic_pointer_cast<arrow::MapType>(target_field->type())
+                    ->key_field();
+            const std::shared_ptr<arrow::Field>& source_item_field =
+                std::dynamic_pointer_cast<arrow::MapType>(source_field->type())
+                    ->item_field();
+            const std::shared_ptr<arrow::Field>& target_item_field =
+                std::dynamic_pointer_cast<arrow::MapType>(target_field->type())
+                    ->item_field();
+
+            cudf::size_type num_row = col->size();
+            cudf::size_type null_count = col->null_count();
+            cudf::data_type type = col->type();
+            cudf::column::contents col_data = col->release();
+
+            // col_data.children[0] is a Struct column containing keys and items
+            std::unique_ptr<cudf::column> struct_col =
+                std::move(col_data.children[0]);
+            cudf::size_type struct_num_row = struct_col->size();
+            cudf::size_type struct_null_count = struct_col->null_count();
+            cudf::column::contents struct_data = struct_col->release();
+
+            std::unique_ptr<cudf::column> evolved_keys_column =
+                evolve_column(std::move(struct_data.children[0]),
+                              source_key_field, target_key_field, stream);
+            std::unique_ptr<cudf::column> evolved_items_column =
+                evolve_column(std::move(struct_data.children[1]),
+                              source_item_field, target_item_field, stream);
+
+            std::vector<std::unique_ptr<cudf::column>> evolved_struct_children;
+            evolved_struct_children.push_back(std::move(evolved_keys_column));
+            evolved_struct_children.push_back(std::move(evolved_items_column));
+
+            rmm::device_buffer struct_null_mask =
+                struct_data.null_mask ? std::move(*struct_data.null_mask)
+                                      : rmm::device_buffer{0, stream};
+
+            std::unique_ptr<cudf::column> evolved_struct_col =
+                cudf::make_structs_column(
+                    struct_num_row, std::move(evolved_struct_children),
+                    struct_null_count, std::move(struct_null_mask), stream);
+
+            std::vector<std::unique_ptr<cudf::column>> children;
+            children.push_back(std::move(evolved_struct_col));
+
+            rmm::device_buffer null_mask = col_data.null_mask
+                                               ? std::move(*col_data.null_mask)
+                                               : rmm::device_buffer{0, stream};
+
+            return std::make_unique<cudf::column>(
+                type, num_row, std::move(*col_data.data), std::move(null_mask),
+                null_count, std::move(children));
+
+        } else if (target_field->type()->id() == arrow::Type::STRUCT) {
             // Recursive evolution for Struct
             auto source_type = std::dynamic_pointer_cast<arrow::StructType>(
                 source_field->type());
