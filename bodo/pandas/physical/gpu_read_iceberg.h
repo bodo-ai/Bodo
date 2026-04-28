@@ -15,6 +15,7 @@
 #include "gpu_expression.h"
 #include "operator.h"
 
+#include <longobject.h>
 #include <mpi.h>
 
 #include <cudf/column/column_factories.hpp>
@@ -187,7 +188,7 @@ class GPUIcebergRankBatchGenerator {
         }
 
         // Get schema group info
-        PyObject* schema_group =
+        PyObjectPtr schema_group =
             PyList_GetItem(py_schema_groups.get(), schema_group_idx);
         PyObjectPtr read_schema_py =
             PyObject_GetAttrString(schema_group, "read_schema");
@@ -513,8 +514,9 @@ class GPUIcebergRankBatchGenerator {
             static_cast<long long>(snapshot_id),
             static_cast<long long>(tot_rows_to_read));
 
-        if (ds == nullptr && PyErr_Occurred()) {
-            throw std::runtime_error("python");
+        if (ds == nullptr || PyErr_Occurred()) {
+            throw std::runtime_error(
+                "Error during Iceberg read: Failed to get dataset from Python");
         }
 
         PyObjectPtr py_filesystem = PyObject_GetAttrString(ds, "filesystem");
@@ -537,16 +539,21 @@ class GPUIcebergRankBatchGenerator {
             throw std::runtime_error("python");
         }
 
+        PyObjectPtr rank_py = PyLong_FromLong(rank_);
+        PyObjectPtr size_py = PyLong_FromLong(size_);
+
         // pieces_myrank_py =
-        // bodo.io.iceberg.read_parquet.distribute_pieces(pieces_py)
+        // bodo.io.iceberg.read_parquet.distribute_pieces(pieces_py, rank_py,
+        // size_py)
         PyObjectPtr pieces_myrank_py = PyObject_CallMethod(
-            iceberg_mod.get(), "distribute_pieces", "O", this->py_pieces.get());
+            iceberg_mod.get(), "distribute_pieces", "OOO",
+            this->py_pieces.get(), rank_py.get(), size_py.get());
         if (pieces_myrank_py == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
         PyObject* piece;
-        PyObject* iterator = PyObject_GetIter(pieces_myrank_py.get());
+        PyObjectPtr iterator = PyObject_GetIter(pieces_myrank_py.get());
         if (iterator == nullptr) {
             throw std::runtime_error(
                 "GPUIcebergRankBatchGenerator::distribute_pieces(): error "
@@ -572,7 +579,6 @@ class GPUIcebergRankBatchGenerator {
 
             Py_DECREF(piece);
         }
-        Py_DECREF(iterator);
     }
 
     struct IcebergPieceInfo {
