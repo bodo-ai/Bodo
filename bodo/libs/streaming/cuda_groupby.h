@@ -94,9 +94,11 @@ class CudaGroupbyState {
     std::unique_ptr<cudf::table> accumulation;
     std::vector<FinalMerge> final_merges;
 
+    bool drop_na_keys = true;
+
     static std::unique_ptr<cudf::table> do_groupby(
         cudf::table_view const &input, std::vector<uint64_t> &key_indices,
-        std::vector<uint64_t> &column_indices,
+        bool drop_na_keys, std::vector<uint64_t> &column_indices,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
         col_to_col_fn_vec &aggregation_fns, col_to_col_fn_vec &post_agg_fns,
         tbl_to_tbl_fn_vec &pre_agg_table_fns, rmm::cuda_stream_view &stream);
@@ -365,8 +367,10 @@ class CudaGroupbyState {
     CudaGroupbyState(
         const std::vector<uint64_t> &_key_indices,
         const std::vector<std::pair<uint64_t, int32_t>> &column_agg_funcs,
-        std::shared_ptr<arrow::Schema> _output_schema)
-        : output_schema(_output_schema), key_indices(_key_indices) {
+        std::shared_ptr<arrow::Schema> _output_schema, bool drop_na_keys = true)
+        : output_schema(_output_schema),
+          key_indices(_key_indices),
+          drop_na_keys(drop_na_keys) {
         unsigned num_keys = key_indices.size();
 
         if (column_agg_funcs.size() == 0) {

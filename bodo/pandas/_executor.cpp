@@ -103,6 +103,14 @@ std::map<duckdb::LogicalOperatorType, uint64_t> GPU_MIN_SIZE{
 
 #ifdef USE_CUDF
 
+bool is_supported_cudf_type(const duckdb::LogicalType &type) {
+    if (type.id() == duckdb::LogicalTypeId::TIMESTAMP_TZ) {
+        return false;
+    }
+    // TODO(ehsan): add other unsupported types.
+    return true;
+}
+
 class DevicePlanNode {
    private:
     duckdb::LogicalOperator &op;
@@ -126,6 +134,13 @@ class DevicePlanNode {
      * in the physical GPU node file so things stay colocated.
      */
     bool determineGPUCapable(duckdb::LogicalOperator &op) {
+        // Make sure the data types are supported in libcudf.
+        op.ResolveOperatorTypes();
+        for (duckdb::LogicalType &type : op.types) {
+            if (!is_supported_cudf_type(type)) {
+                return false;
+            }
+        }
         switch (op.type) {
             case duckdb::LogicalOperatorType::LOGICAL_GET: {
                 duckdb::LogicalGet &lget = op.Cast<duckdb::LogicalGet>();
@@ -158,7 +173,7 @@ class DevicePlanNode {
                 return ::gpu_capable(op.Cast<duckdb::LogicalComparisonJoin>());
 
             case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
-                return false;
+                return true;
 
             case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
                 return ::gpu_capable(op.Cast<duckdb::LogicalOrder>());
