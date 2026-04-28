@@ -231,6 +231,7 @@ def test_read_parquet_filter_projection(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
