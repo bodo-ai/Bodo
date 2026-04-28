@@ -67,7 +67,9 @@ class GPUIcebergRankBatchGenerator {
         MPI_Comm_size(comm, &size_);
 
         // Initialize CUDF AST filters for row-level filtering
-        tableFilterSetToCudfAST(*filter_exprs_, arrow_schema->field_names(),
+        // We need to pass a copy because tableFilterSetToCudfAST is destructive
+        auto filter_exprs_copy = filter_exprs.Copy();
+        tableFilterSetToCudfAST(*filter_exprs_copy, arrow_schema->field_names(),
                                 filter_ast_tree, filter_scalars);
 
         get_dataset(catalog, table_id, arrow_schema, iceberg_filter,
