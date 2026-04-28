@@ -54,6 +54,8 @@ class GPUIcebergRankBatchGenerator {
           filter_exprs_(filter_exprs.Copy()),
           py_pieces(nullptr),
           py_schema_groups(nullptr),
+          pyarrow_schema(nullptr),
+          py_filesystem(nullptr),
           selected_columns_(selected_columns),
           output_arrow_schema(std::move(output_arrow_schema)) {
         // Only assign parts to GPU-pinned ranks
@@ -73,6 +75,9 @@ class GPUIcebergRankBatchGenerator {
 
         // Distribute pieces
         distribute_pieces();
+
+        // Initialize scanners (schemas and filters)
+        init_scanners(comm);
     }
 
     std::pair<std::unique_ptr<cudf::table>, bool> next(
@@ -115,6 +120,21 @@ class GPUIcebergRankBatchGenerator {
 
                 if (!tbl || tbl->num_rows() == 0) {
                     continue;
+                }
+
+                // Handle rows_to_skip
+                if (rows_to_skip > 0) {
+                    size_t n = tbl->num_rows();
+                    size_t to_skip = std::min((size_t)rows_to_skip, n);
+                    if (to_skip == n) {
+                        rows_to_skip -= (int64_t)n;
+                        continue;
+                    }
+                    std::vector<cudf::size_type> splits = {
+                        (cudf::size_type)to_skip, (cudf::size_type)n};
+                    auto sliced = cudf::slice(tbl->view(), splits, se->stream);
+                    tbl = std::make_unique<cudf::table>(sliced[0]);
+                    rows_to_skip -= (int64_t)to_skip;
                 }
 
                 // Evolve table to match output schema
@@ -171,6 +191,9 @@ class GPUIcebergRankBatchGenerator {
         metrics_out.emplace_back(StatMetric("num_pieces", pieces));
         metrics_out.emplace_back(
             TimerMetric("evolve_time", this->evolve_time_));
+        metrics_out.emplace_back(
+            TimerMetric("init_scanners_get_pa_datasets_time",
+                        this->init_scanners_get_pa_datasets_time));
     }
 
    private:
@@ -188,12 +211,12 @@ class GPUIcebergRankBatchGenerator {
         }
 
         // Get schema group info
-        PyObjectPtr schema_group =
-            PyList_GetItem(py_schema_groups.get(), schema_group_idx);
-        PyObjectPtr read_schema_py =
-            PyObject_GetAttrString(schema_group, "read_schema");
-        curr_read_schema =
-            arrow::py::unwrap_schema(read_schema_py.get()).ValueOrDie();
+        if (next_scanner_idx >= scanner_read_schemas.size()) {
+            throw std::runtime_error(
+                "GPUIcebergRankBatchGenerator::init_next_reader: scanner index "
+                "out of bounds");
+        }
+        curr_read_schema = scanner_read_schemas[next_scanner_idx++];
 
         // Identify existing columns and their file names
         std::vector<std::string> file_col_names;
@@ -450,7 +473,7 @@ class GPUIcebergRankBatchGenerator {
         // on CPU if possible.
         PyObject* force_row_level_py = Py_False;
 
-        PyObjectPtr pyarrow_schema = arrow::py::wrap_schema(arrow_schema);
+        this->pyarrow_schema = arrow::py::wrap_schema(arrow_schema);
 
         // We need to & the iceberg_filter with converted duckdb table filters
         // to apply the filters at the file level.
@@ -505,7 +528,8 @@ class GPUIcebergRankBatchGenerator {
 
         PyObjectPtr ds = PyObject_CallMethod(
             iceberg_mod.get(), "get_iceberg_pq_dataset", "OsOOOsOOLL", catalog,
-            table_id.c_str(), pyarrow_schema.get(), str_as_dict_cols_py.get(),
+            table_id.c_str(), this->pyarrow_schema.get(),
+            str_as_dict_cols_py.get(),
             py_iceberg_filter_and_duckdb_filter.get(),
             iceberg_filter_f_str_py != Py_None
                 ? PyUnicode_AsUTF8(iceberg_filter_f_str_py)
@@ -519,10 +543,10 @@ class GPUIcebergRankBatchGenerator {
                 "Error during Iceberg read: Failed to get dataset from Python");
         }
 
-        PyObjectPtr py_filesystem = PyObject_GetAttrString(ds, "filesystem");
+        this->py_filesystem = PyObject_GetAttrString(ds.get(), "filesystem");
         ensure_pa_wrappers_imported();
         CHECK_ARROW_AND_ASSIGN(
-            arrow::py::unwrap_filesystem(py_filesystem.get()),
+            arrow::py::unwrap_filesystem(this->py_filesystem.get()),
             "Error during Iceberg read: Failed to unwrap Arrow filesystem",
             this->filesystem_);
 
@@ -581,6 +605,83 @@ class GPUIcebergRankBatchGenerator {
         }
     }
 
+    void init_scanners(MPI_Comm comm) {
+        if (pieces_.empty()) {
+            return;
+        }
+
+        // Calculate avg_num_pieces across all ranks
+        uint64_t num_pieces = static_cast<uint64_t>(pieces_.size());
+        MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T, MPI_SUM,
+                      comm);
+        this->avg_num_pieces = num_pieces / static_cast<double>(size_);
+
+        // Construct Python lists from pieces_
+        PyObjectPtr fpaths_py = PyList_New(pieces_.size());
+        PyObjectPtr file_nrows_to_read_py = PyList_New(pieces_.size());
+        PyObjectPtr file_schema_group_idxs_py = PyList_New(pieces_.size());
+        for (size_t i = 0; i < pieces_.size(); i++) {
+            PyList_SetItem(fpaths_py.get(), i,
+                           PyUnicode_FromString(pieces_[i].path.c_str()));
+            PyList_SetItem(file_nrows_to_read_py.get(), i,
+                           PyLong_FromLongLong(pieces_[i].num_rows));
+            PyList_SetItem(file_schema_group_idxs_py.get(), i,
+                           PyLong_FromLongLong(pieces_[i].schema_group_idx));
+        }
+
+        PyObjectPtr iceberg_mod =
+            PyImport_ImportModule("bodo.io.iceberg.read_parquet");
+        if (PyErr_Occurred()) {
+            throw std::runtime_error("python");
+        }
+
+        // We don't support dict-encoded strings on GPU yet
+        PyObjectPtr str_as_dict_cols_py = PyList_New(0);
+
+        // Call get_pyarrow_datasets
+        // datasets_updated_offset_tup =
+        // bodo.io.iceberg.read_parquet.get_pyarrow_datasets(
+        //     fpaths, file_nrows_to_read, file_schema_group_idxs,
+        //     schema_groups, avg_num_pieces, is_parallel, filesystem,
+        //     str_as_dict_cols, start_offset, final_schema)
+        time_pt start = start_timer();
+        PyObjectPtr datasets_updated_offset_tup =
+            PyObjectPtr(PyObject_CallMethod(
+                iceberg_mod.get(), "get_pyarrow_datasets", "OOOOdiOOLO",
+                fpaths_py.get(), file_nrows_to_read_py.get(),
+                file_schema_group_idxs_py.get(), this->py_schema_groups.get(),
+                this->avg_num_pieces, 1,  // is_parallel = True
+                this->py_filesystem.get(), str_as_dict_cols_py.get(),
+                (long long)0,  // start_offset = 0 for now
+                this->pyarrow_schema.get()));
+        this->init_scanners_get_pa_datasets_time += end_timer(start);
+
+        if (!datasets_updated_offset_tup || PyErr_Occurred()) {
+            throw std::runtime_error(
+                "GPUIcebergRankBatchGenerator::init_scanners: failed to get "
+                "pyarrow datasets");
+        }
+
+        PyObject* scanner_read_schemas_py =
+            PyTuple_GetItem(datasets_updated_offset_tup.get(), 1);
+        size_t n_read_schemas = PyList_Size(scanner_read_schemas_py);
+        this->scanner_read_schemas.reserve(n_read_schemas);
+        for (size_t i = 0; i < n_read_schemas; i++) {
+            PyObject* read_schema_py =
+                PyList_GetItem(scanner_read_schemas_py, i);
+            std::shared_ptr<arrow::Schema> read_schema;
+            CHECK_ARROW_AND_ASSIGN(
+                arrow::py::unwrap_schema(read_schema_py),
+                "GPUIcebergRankBatchGenerator::init_scanners: failed to unwrap "
+                "schema",
+                read_schema);
+            this->scanner_read_schemas.push_back(read_schema);
+        }
+
+        this->rows_to_skip = PyLong_AsLongLong(
+            PyTuple_GetItem(datasets_updated_offset_tup.get(), 3));
+    }
+
     struct IcebergPieceInfo {
         std::string path;
         int64_t num_rows;
@@ -597,8 +698,15 @@ class GPUIcebergRankBatchGenerator {
     std::shared_ptr<arrow::fs::FileSystem> filesystem_;
     PyObjectPtr py_pieces;
     PyObjectPtr py_schema_groups;
+    PyObjectPtr pyarrow_schema;
+    PyObjectPtr py_filesystem;
 
     std::vector<IcebergPieceInfo> pieces_;
+    std::vector<std::shared_ptr<arrow::Schema>> scanner_read_schemas;
+    int64_t rows_to_skip = 0;
+    size_t next_scanner_idx = 0;
+    double avg_num_pieces = 0;
+
     const std::vector<int>& selected_columns_;
     std::shared_ptr<arrow::Schema> output_arrow_schema;
 
@@ -608,6 +716,7 @@ class GPUIcebergRankBatchGenerator {
     std::unique_ptr<cudf::table> leftover_tbl;
     std::vector<std::pair<int, int>> curr_col_mapping;
     MetricBase::TimerValue evolve_time_ = 0;
+    MetricBase::TimerValue init_scanners_get_pa_datasets_time = 0;
 };
 
 struct PhysicalGPUReadIcebergMetrics {
@@ -640,6 +749,8 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
     std::shared_ptr<GPUIcebergRankBatchGenerator> batch_gen;
     MPI_Comm comm;
 
+    JoinFilterColStats join_filter_col_stats;
+
    public:
     explicit PhysicalGPUReadIceberg(
         PyObject* catalog, const std::string table_id, PyObject* iceberg_filter,
@@ -656,18 +767,24 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
           snapshot_id(snapshot_id),
           filter_exprs(filter_exprs.Copy()),
           arrow_schema(arrow_schema),
-          selected_columns(selected_columns) {
+          selected_columns(selected_columns),
+          join_filter_col_stats(std::move(join_filter_col_stats)) {
         Py_INCREF(this->catalog);
         Py_INCREF(this->iceberg_filter);
         Py_INCREF(this->iceberg_schema);
 
-        this->filter_exprs = join_filter_col_stats.insert_filters(
-            std::move(this->filter_exprs), this->selected_columns);
-
         // Initialize schemas and metadata
         this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
                                   ->Project(selected_columns);
-        this->output_arrow_schema = output_schema->ToArrowSchema();
+        // Create a new schema with only the selected columns.
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        fields.reserve(selected_columns.size());
+        for (int i : selected_columns) {
+            fields.push_back(arrow_schema->field(i));
+        }
+        this->output_arrow_schema =
+            arrow::schema(fields, arrow_schema->metadata());
+
         this->out_metadata = std::make_shared<bodo::TableMetadata>(
             arrow_schema->metadata()->keys(),
             arrow_schema->metadata()->values());
@@ -742,6 +859,8 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
    private:
     void init_batch_gen() {
         auto batch_size = get_gpu_streaming_batch_size();
+        this->filter_exprs = this->join_filter_col_stats.insert_filters(
+            std::move(this->filter_exprs), this->selected_columns);
         batch_gen = std::make_shared<GPUIcebergRankBatchGenerator>(
             catalog, table_id, iceberg_filter, iceberg_schema, arrow_schema,
             snapshot_id, selected_columns, *filter_exprs, batch_size, comm,
