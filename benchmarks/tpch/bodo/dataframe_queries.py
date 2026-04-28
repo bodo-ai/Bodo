@@ -1056,6 +1056,9 @@ def main():
         )
 
     backend_module = bodo.pandas if backend == "bodo" else pd
+    # warmup cluster
+    if backend == "bodo":
+        print(pd.DataFrame({"A": [1, 2, 3]})["A"])
     run_queries(
         data_set,
         queries=queries,
