@@ -16,11 +16,13 @@ def test_join_node(datapath):
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
         {},
+        False,
     )
     P2 = plan_optimizer.LogicalGetParquetRead(
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example2.parquet"),
         {},
+        False,
     )
     A = plan_optimizer.LogicalComparisonJoin(
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
@@ -39,6 +41,7 @@ def test_projection_node(datapath):
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
         {},
+        False,
     )
     exprs = [
         plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0),
@@ -59,6 +62,7 @@ def test_filter_node(datapath):
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
         {},
+        False,
     )
     A = plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), P1, 0)
     B = plan_optimizer.ComparisonOpExpression(
@@ -75,6 +79,7 @@ def test_parquet_node(datapath):
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
         {},
+        False,
     )
     assert str(A).startswith("LogicalGetParquetRead(") and str(A).endswith(
         "example.parquet)"
@@ -89,6 +94,7 @@ def test_optimize_call(datapath):
         pa.schema([("A", pa.int64()), ("B", pa.string())]),
         datapath("example.parquet"),
         {},
+        False,
     )
     B = plan_optimizer.py_optimize_plan(A)
     assert str(B) == "LogicalOperator()"
@@ -108,6 +114,7 @@ def test_parquet_projection_pushdown(datapath):
         ),
         datapath("example.parquet"),
         {},
+        False,
     )
     exprs = [
         plan_optimizer.ColRefExpression(pa.schema([("A", pa.int64())]), A, 0),
