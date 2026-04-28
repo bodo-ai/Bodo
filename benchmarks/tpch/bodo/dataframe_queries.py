@@ -948,6 +948,7 @@ def run_queries(
 
     total_start = time.time()
     for query in queries:
+        print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
 
         def query_func():
