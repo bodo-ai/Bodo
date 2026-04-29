@@ -192,12 +192,16 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                     "CountStar must have exactly one "
                     "aggregate expression for reduction.");
             }
+#ifdef USE_CUDF
+            auto physical_op = std::make_shared<PhysicalGPUCountStar>();
+#else   // USE_CUDF
             auto physical_op = std::make_shared<PhysicalCountStar>();
-            // Finish the pipeline at this point so that Finalize can run
-            // to reduce the number of collected rows to the desired amount.
-            // The same operator will exist in both pipelines.  The sink of the
-            // previous pipeline and the source of the next one.
-            // We record the pipeline dependency between these two pipelines.
+#endif  // USE_CUDF
+        // Finish the pipeline at this point so that Finalize can run
+        // to reduce the number of collected rows to the desired amount.
+        // The same operator will exist in both pipelines.  The sink of the
+        // previous pipeline and the source of the next one.
+        // We record the pipeline dependency between these two pipelines.
             FinishPipelineOneOperator(physical_op);
             return;
         }
