@@ -189,9 +189,6 @@ class GPUIcebergRankBatchGenerator {
         metrics_out.emplace_back(StatMetric("num_pieces", pieces));
         metrics_out.emplace_back(
             TimerMetric("evolve_time", this->evolve_time_));
-        metrics_out.emplace_back(
-            TimerMetric("init_scanners_get_pa_datasets_time",
-                        this->init_scanners_get_pa_datasets_time));
     }
 
    private:
@@ -633,76 +630,29 @@ class GPUIcebergRankBatchGenerator {
             return;
         }
 
-        // Calculate avg_num_pieces across all ranks
-        uint64_t num_pieces = static_cast<uint64_t>(pieces_.size());
-        MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T, MPI_SUM,
-                      comm);
-        this->avg_num_pieces = num_pieces / static_cast<double>(size_);
-
-        // Construct Python lists from pieces_
-        PyObjectPtr fpaths_py = PyList_New(pieces_.size());
-        PyObjectPtr file_nrows_to_read_py = PyList_New(pieces_.size());
-        PyObjectPtr file_schema_group_idxs_py = PyList_New(pieces_.size());
-        for (size_t i = 0; i < pieces_.size(); i++) {
-            PyList_SetItem(fpaths_py.get(), i,
-                           PyUnicode_FromString(pieces_[i].path.c_str()));
-            PyList_SetItem(file_nrows_to_read_py.get(), i,
-                           PyLong_FromLongLong(pieces_[i].num_rows));
-            PyList_SetItem(file_schema_group_idxs_py.get(), i,
-                           PyLong_FromLongLong(pieces_[i].schema_group_idx));
-        }
-
-        PyObjectPtr iceberg_mod =
-            PyImport_ImportModule("bodo.io.iceberg.read_parquet");
-        if (PyErr_Occurred()) {
-            throw std::runtime_error("python");
-        }
-
-        // We don't support dict-encoded strings on GPU yet
-        PyObjectPtr str_as_dict_cols_py = PyList_New(0);
-
-        // Call get_pyarrow_datasets
-        // datasets_updated_offset_tup =
-        // bodo.io.iceberg.read_parquet.get_pyarrow_datasets(
-        //     fpaths, file_nrows_to_read, file_schema_group_idxs,
-        //     schema_groups, avg_num_pieces, is_parallel, filesystem,
-        //     str_as_dict_cols, start_offset, final_schema)
-        time_pt start = start_timer();
-        PyObjectPtr datasets_updated_offset_tup =
-            PyObjectPtr(PyObject_CallMethod(
-                iceberg_mod.get(), "get_pyarrow_datasets", "OOOOdiOOLO",
-                fpaths_py.get(), file_nrows_to_read_py.get(),
-                file_schema_group_idxs_py.get(), this->py_schema_groups.get(),
-                this->avg_num_pieces, 1,  // is_parallel = True
-                this->py_filesystem.get(), str_as_dict_cols_py.get(),
-                (long long)0,  // start_offset = 0 for now
-                this->pyarrow_schema.get()));
-        this->init_scanners_get_pa_datasets_time += end_timer(start);
-
-        if (!datasets_updated_offset_tup || PyErr_Occurred()) {
-            throw std::runtime_error(
-                "GPUIcebergRankBatchGenerator::init_scanners: failed to get "
-                "pyarrow datasets");
-        }
-
-        PyObject* scanner_read_schemas_py =
-            PyTuple_GetItem(datasets_updated_offset_tup.get(), 1);
-        size_t n_read_schemas = PyList_Size(scanner_read_schemas_py);
-        this->scanner_read_schemas.reserve(n_read_schemas);
-        for (size_t i = 0; i < n_read_schemas; i++) {
-            PyObject* read_schema_py =
-                PyList_GetItem(scanner_read_schemas_py, i);
+        // Extract read schemas directly from schema groups
+        size_t n_schema_groups = PyList_Size(this->py_schema_groups.get());
+        this->scanner_read_schemas.reserve(n_schema_groups);
+        for (size_t i = 0; i < n_schema_groups; i++) {
+            PyObject* schema_group =
+                PyList_GetItem(this->py_schema_groups.get(), i);
+            PyObjectPtr read_schema_py = PyObjectPtr(
+                PyObject_GetAttrString(schema_group, "read_schema"));
+            if (!read_schema_py) {
+                throw std::runtime_error(
+                    "GPUIcebergRankBatchGenerator::init_scanners: failed to "
+                    "get read_schema from schema group");
+            }
             std::shared_ptr<arrow::Schema> read_schema;
             CHECK_ARROW_AND_ASSIGN(
-                arrow::py::unwrap_schema(read_schema_py),
+                arrow::py::unwrap_schema(read_schema_py.get()),
                 "GPUIcebergRankBatchGenerator::init_scanners: failed to unwrap "
                 "schema",
                 read_schema);
             this->scanner_read_schemas.push_back(read_schema);
         }
 
-        this->rows_to_skip = PyLong_AsLongLong(
-            PyTuple_GetItem(datasets_updated_offset_tup.get(), 3));
+        // rows_to_skip is always 0 for GPU (piece-level read, no offset)
     }
 
     struct IcebergPieceInfo {
@@ -728,7 +678,6 @@ class GPUIcebergRankBatchGenerator {
     std::vector<std::shared_ptr<arrow::Schema>> scanner_read_schemas;
     int64_t rows_to_skip = 0;
     size_t next_scanner_idx = 0;
-    double avg_num_pieces = 0;
 
     const std::vector<int>& selected_columns_;
     std::shared_ptr<arrow::Schema> output_arrow_schema;
@@ -739,7 +688,6 @@ class GPUIcebergRankBatchGenerator {
     std::unique_ptr<cudf::table> leftover_tbl;
     std::vector<std::pair<int, int>> curr_col_mapping;
     MetricBase::TimerValue evolve_time_ = 0;
-    MetricBase::TimerValue init_scanners_get_pa_datasets_time = 0;
 };
 
 struct PhysicalGPUReadIcebergMetrics {
