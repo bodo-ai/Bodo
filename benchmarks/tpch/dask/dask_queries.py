@@ -649,12 +649,16 @@ def query_12(dataset_path, scale, ext=".parquet"):
     table["low_line_count"] = 0
     table["low_line_count"] = table.low_line_count.where(mask, 1)
 
-    return (
-        table.groupby("l_shipmode")
-        .agg({"high_line_count": "sum", "low_line_count": "sum"})
+    result = (
+        table.groupby("l_shipmode")[["high_line_count", "low_line_count"]]
+        .sum()
         .reset_index()
-        .sort_values(by="l_shipmode")
+        .sort_values(by="l_shipmode")[
+            ["l_shipmode", "high_line_count", "low_line_count"]
+        ]
     )
+    # Workaround to avoid extra column called "index" in output dask-cudf 26.04
+    return result.compute()[["l_shipmode", "high_line_count", "low_line_count"]]
 
 
 def query_13(dataset_path, scale, ext=".parquet"):
@@ -1299,10 +1303,24 @@ def run_single_query(
     query_num, dataset_path, scale_factor, backend, log_file=None
 ) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
+
+    def is_lazy(res, backend):
+        if backend == "cudf":
+            import cudf
+
+            return not isinstance(res, cudf.DataFrame)
+        else:
+            import pandas as pd
+
+            return not isinstance(res, pd.DataFrame)
+
     query_func = get_query_func(query_num)
 
     start = time.time()
-    query_func(dataset_path, scale_factor, ext=".pq").compute()
+    res = query_func(dataset_path, scale_factor, ext=".pq")
+    if is_lazy(res, backend):
+        res = res.compute()
+    print(res)
     total_time = time.time() - start
     if log_file:
         with open(log_file, "a") as f:
