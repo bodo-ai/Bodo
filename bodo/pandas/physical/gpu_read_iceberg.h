@@ -512,80 +512,106 @@ class GPUIcebergRankBatchGenerator {
         return ret;
     }
 
-    // Helper: convert a Python native value to a cuDF scalar based on the
-    // target Arrow type.
-    static std::unique_ptr<cudf::scalar> py_value_to_cudf_scalar(
+    // Helper: convert a Python literal value and push it as a cuDF AST literal
+    // node. This follows the same pattern as duckdbValuetoCudfLiteral:
+    // create a typed scalar, store it in filter_scalars, then push a
+    // cudf::ast::literal via a static_cast back to the concrete type.
+    static void push_literal_to_cudf_ast(
         PyObject* value_py, const std::shared_ptr<arrow::DataType>& type,
-        rmm::cuda_stream_view stream) {
-        std::shared_ptr<arrow::Scalar> arrow_scalar;
+        cudf::ast::tree& filter_ast_tree,
+        std::vector<std::unique_ptr<cudf::scalar>>& filter_scalars) {
+        bool is_null = (value_py == Py_None);
         switch (type->id()) {
-            case arrow::Type::BOOL:
-                arrow_scalar =
-                    arrow::MakeScalar(type, value_py == Py_True).ValueOrDie();
-                break;
-            case arrow::Type::INT8:
-                arrow_scalar =
-                    arrow::MakeScalar(type, (int8_t)PyLong_AsLong(value_py))
-                        .ValueOrDie();
-                break;
-            case arrow::Type::INT16:
-                arrow_scalar =
-                    arrow::MakeScalar(type, (int16_t)PyLong_AsLong(value_py))
-                        .ValueOrDie();
-                break;
-            case arrow::Type::INT32:
-                arrow_scalar =
-                    arrow::MakeScalar(type, (int32_t)PyLong_AsLong(value_py))
-                        .ValueOrDie();
-                break;
-            case arrow::Type::INT64:
-                arrow_scalar = arrow::MakeScalar(
-                                   type, (int64_t)PyLong_AsLongLong(value_py))
-                                   .ValueOrDie();
-                break;
-            case arrow::Type::UINT8:
-                arrow_scalar =
-                    arrow::MakeScalar(type, (uint8_t)PyLong_AsLong(value_py))
-                        .ValueOrDie();
-                break;
-            case arrow::Type::UINT16:
-                arrow_scalar =
-                    arrow::MakeScalar(type, (uint16_t)PyLong_AsLong(value_py))
-                        .ValueOrDie();
-                break;
-            case arrow::Type::UINT32:
-                arrow_scalar =
-                    arrow::MakeScalar(type, (uint32_t)PyLong_AsLong(value_py))
-                        .ValueOrDie();
-                break;
-            case arrow::Type::UINT64:
-                arrow_scalar = arrow::MakeScalar(
-                                   type, (uint64_t)PyLong_AsLongLong(value_py))
-                                   .ValueOrDie();
-                break;
-            case arrow::Type::FLOAT:
-                arrow_scalar =
-                    arrow::MakeScalar(type, (float)PyFloat_AsDouble(value_py))
-                        .ValueOrDie();
-                break;
-            case arrow::Type::DOUBLE:
-                arrow_scalar =
-                    arrow::MakeScalar(type, PyFloat_AsDouble(value_py))
-                        .ValueOrDie();
-                break;
-            case arrow::Type::STRING:
-            case arrow::Type::LARGE_STRING: {
-                const char* str = PyUnicode_AsUTF8(value_py);
-                arrow_scalar =
-                    arrow::MakeScalar(type, std::string(str)).ValueOrDie();
-                break;
+            case arrow::Type::BOOL: {
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<bool>>(
+                        is_null ? false : (value_py == Py_True), !is_null);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<bool>*>(
+                        filter_scalars.back().get())));
+                return;
+            }
+            case arrow::Type::INT8: {
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<int8_t>>(
+                        is_null ? 0 : (int8_t)PyLong_AsLong(value_py),
+                        !is_null);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<int8_t>*>(
+                        filter_scalars.back().get())));
+                return;
+            }
+            case arrow::Type::INT16: {
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<int16_t>>(
+                        is_null ? 0 : (int16_t)PyLong_AsLong(value_py),
+                        !is_null);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<int16_t>*>(
+                        filter_scalars.back().get())));
+                return;
+            }
+            case arrow::Type::INT32: {
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<int32_t>>(
+                        is_null ? 0 : (int32_t)PyLong_AsLong(value_py),
+                        !is_null);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<int32_t>*>(
+                        filter_scalars.back().get())));
+                return;
+            }
+            case arrow::Type::INT64: {
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<int64_t>>(
+                        is_null ? 0 : (int64_t)PyLong_AsLongLong(value_py),
+                        !is_null);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<int64_t>*>(
+                        filter_scalars.back().get())));
+                return;
+            }
+            case arrow::Type::FLOAT: {
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<float>>(
+                        is_null ? 0.0f : (float)PyFloat_AsDouble(value_py),
+                        !is_null);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<float>*>(
+                        filter_scalars.back().get())));
+                return;
+            }
+            case arrow::Type::DOUBLE: {
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<double>>(
+                        is_null ? 0.0 : PyFloat_AsDouble(value_py), !is_null);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<double>*>(
+                        filter_scalars.back().get())));
+                return;
+            }
+            case arrow::Type::STRING: {
+                const char* str = is_null ? "" : PyUnicode_AsUTF8(value_py);
+                auto literal_value = std::make_unique<cudf::string_scalar>(
+                    std::string(str), !is_null);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(
+                    cudf::ast::literal(*static_cast<cudf::string_scalar*>(
+                        filter_scalars.back().get())));
+                return;
             }
             default:
                 throw std::runtime_error(
-                    "py_value_to_cudf_scalar: unsupported type: " +
+                    "push_literal_to_cudf_ast: unsupported type: " +
                     type->ToString());
         }
-        return arrow_scalar_to_cudf(arrow_scalar, stream);
     }
 
     // Recursively walk a pyiceberg cuDF AST filter tree (nested Python tuples)
@@ -701,11 +727,8 @@ class GPUIcebergRankBatchGenerator {
 
             cudf::ast::column_name_reference col_ref(col_name);
             filter_ast_tree.push(col_ref);
-
-            auto cudf_scalar =
-                py_value_to_cudf_scalar(value_py, col_type, stream);
-            filter_scalars.push_back(std::move(cudf_scalar));
-            filter_ast_tree.push(cudf::ast::literal(*filter_scalars.back()));
+            push_literal_to_cudf_ast(value_py, col_type, filter_ast_tree,
+                                     filter_scalars);
 
             cudf::ast::operation expr = cudf::ast::operation(
                 cmp_it->second, filter_ast_tree[filter_ast_tree.size() - 2],
@@ -744,10 +767,8 @@ class GPUIcebergRankBatchGenerator {
             PyObject* first_val = PyList_GetItem(values_list, 0);
             cudf::ast::column_name_reference col_ref(col_name);
             filter_ast_tree.push(col_ref);
-            auto first_scalar =
-                py_value_to_cudf_scalar(first_val, col_type, stream);
-            filter_scalars.push_back(std::move(first_scalar));
-            filter_ast_tree.push(cudf::ast::literal(*filter_scalars.back()));
+            push_literal_to_cudf_ast(first_val, col_type, filter_ast_tree,
+                                     filter_scalars);
 
             const cudf::ast::expression* acc =
                 &filter_ast_tree.push(cudf::ast::operation(
@@ -759,11 +780,8 @@ class GPUIcebergRankBatchGenerator {
                 PyObject* val = PyList_GetItem(values_list, i);
                 cudf::ast::column_name_reference col_ref_i(col_name);
                 filter_ast_tree.push(col_ref_i);
-                auto cudf_scalar =
-                    py_value_to_cudf_scalar(val, col_type, stream);
-                filter_scalars.push_back(std::move(cudf_scalar));
-                filter_ast_tree.push(
-                    cudf::ast::literal(*filter_scalars.back()));
+                push_literal_to_cudf_ast(val, col_type, filter_ast_tree,
+                                         filter_scalars);
 
                 const cudf::ast::expression* eq_node =
                     &filter_ast_tree.push(cudf::ast::operation(
