@@ -491,8 +491,11 @@ class GPUIcebergRankBatchGenerator {
                 std::move(null_mask), stream);
         }
 
-        // For other types (List, Map, Primitive), we might need more logic
-        // For now, return as is if types match
+        // For primitive types, cast to target type if needed
+        auto target_cudf_type = arrow_to_cudf_type(target_field->type());
+        if (col->type() != target_cudf_type) {
+            return cudf::cast(col->view(), target_cudf_type, stream);
+        }
         return col;
     }
 
