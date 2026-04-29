@@ -1306,21 +1306,9 @@ def run_single_query(
     total_time = time.time() - start
     if log_file:
         with open(log_file, "a") as f:
-            f.write(
-                f"dask[{backend}],{query_num},{os.environ.get('BODO_NUM_WORKERS', 4)},{total_time:f}\n"
-            )
+            f.write(f"dask[{backend}],{query_num},-,{total_time:f}\n")
     print(f"Query {query_num} execution time: {total_time:.2f} seconds")
     return total_time
-
-
-def run_queries(query_nums, dataset_path, scale_factor, log_file=None) -> None:
-    total_start = time.time()
-
-    for i in query_nums:
-        run_single_query(i, dataset_path, scale_factor, log_file=log_file)
-
-    total_time = time.time() - total_start
-    print(f"Total execution time: {total_time:.4f} seconds")
 
 
 def main():
@@ -1360,7 +1348,7 @@ def main():
         "--instance_profile_name",
         type=str,
         default=None,
-        help="IAM instance profile name for EC2 instances for accessing S3",
+        help="IAM instance profile name (e.g. dask-benchmark) for EC2 instances for accessing S3",
     )
     parser.add_argument(
         "--subnet_id",
@@ -1418,8 +1406,8 @@ def main():
                 "worker_class": "dask_cuda.CUDAWorker",
                 "worker_options": {"rmm_managed_memory": True},
                 "docker_args": "--shm-size=256m -e EXTRA_CONDA_PACKAGES=s3fs",
-                "n_workers": args.n_workers,
-                "filesystem_size": 250,  # GB
+                "n_workers": 4,
+                "filesystem_size": 1000,  # GB
                 "region": "us-east-2",
                 "subnet_id": args.subnet_id,
                 "ami": ami,
@@ -1450,10 +1438,16 @@ def main():
             with cluster.get_client() as client:
                 print("DASHBOARD LINK: ", client.dashboard_link)
 
-                # Running dummy job to warm-up cluster
-                client.submit(lambda: 1).result()
-
                 start = time.time()
+
+                print(f"Warmup cluster with query {queries[0]} at {datetime.now()}")
+                run_single_query(
+                    queries[0],
+                    dataset_path,
+                    scale_factor,
+                    backend=args.backend,
+                    log_file=args.log_timings,
+                )
                 for query in queries:
                     try:
                         print(f"Submitting query {query} at {datetime.now()}")

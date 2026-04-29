@@ -2,15 +2,16 @@ name: rapids-26.04
 channels:
   - conda-forge
   - rapidsai
+  - nodefaults
+  - defaults
 dependencies:
   - _openmp_mutex=4.5=20_gnu
   - _python_abi3_support=1.0=hd8ed1ab_2
-  - aiobotocore=3.4.0=pyhcf101f3_0
+  - aiobotocore=3.5.0=pyhcf101f3_0
   - aiohappyeyeballs=2.6.1=pyhd8ed1ab_0
   - aiohttp=3.13.5=pyhf64b827_0
   - aioitertools=0.13.0=pyhd8ed1ab_0
   - aiosignal=1.4.0=pyhd8ed1ab_0
-  - alsa-lib=1.2.15.3=hb03c661_0
   - anyio=4.13.0=pyhcf101f3_0
   - aom=3.9.1=hac33072_0
   - argon2-cffi=25.1.0=pyhd8ed1ab_0
@@ -38,14 +39,11 @@ dependencies:
   - azure-storage-files-datalake-cpp=12.14.0=h52c5a47_1
   - backports.zstd=1.3.0=py314h680f03e_0
   - beautifulsoup4=4.14.3=pyha770c72_0
-  - binutils=2.45.1=default_h4852527_102
-  - binutils_impl_linux-64=2.45.1=default_hfdba357_102
-  - binutils_linux-64=2.45.1=default_h4852527_102
   - bleach=6.3.0=pyhcf101f3_1
   - bleach-with-css=6.3.0=hbca2aae_1
   - blosc=1.21.6=he440d0b_1
   - bokeh=3.9.0=pyhd8ed1ab_0
-  - botocore=1.42.84=pyhd8ed1ab_0
+  - botocore=1.42.91=pyhd8ed1ab_0
   - branca=0.8.2=pyhd8ed1ab_0
   - brotli=1.2.0=hed03a55_1
   - brotli-bin=1.2.0=hb03c661_1
@@ -54,7 +52,6 @@ dependencies:
   - bzip2=1.0.8=hda65f42_9
   - c-ares=1.34.6=hb03c661_0
   - c-blosc2=2.23.1=hc31b594_0
-  - c-compiler=1.11.0=h4d9bdce_0
   - ca-certificates=2026.4.22=hbd8a1cb_0
   - cached-property=1.5.2=hd8ed1ab_1
   - cached_property=1.5.2=pyha770c72_1
@@ -63,64 +60,35 @@ dependencies:
   - cffi=2.0.0=py314h4a8dc5f_1
   - charls=2.4.3=hecca717_0
   - charset-normalizer=3.4.7=pyhd8ed1ab_0
-  - click=8.3.2=pyhc90fa1f_0
+  - click=8.3.3=pyhc90fa1f_0
   - cloudpickle=3.1.2=pyhcf101f3_1
-  - colorcet=3.1.0=pyhd8ed1ab_1
-  - conda-gcc-specs=14.3.0=he8ccf15_18
+  - colorcet=3.2.1=pyhd8ed1ab_0
   - contourpy=1.3.3=py314h97ea11e_4
   - cpython=3.14.4=py314hd8ed1ab_100
   - cucim=26.04.00=cuda13_py314_260408_ghgd9ab164_gn0_phc494990
-  - cuda=13.2.1=ha804496_0
   - cuda-bindings=13.2.0=py314ha0b5721_0
-  - cuda-cccl_linux-64=13.2.75=ha770c72_0
-  - cuda-command-line-tools=13.2.1=ha770c72_0
-  - cuda-compiler=13.2.1=hbad6d8a_0
+  - cuda-cccl_linux-64=13.1.115=ha770c72_0
   - cuda-core=0.7.0=cuda13_py314h025f531_0
-  - cuda-crt-dev_linux-64=13.2.78=ha770c72_0
-  - cuda-crt-tools=13.2.78=ha770c72_0
-  - cuda-ctadvisor=13.2.78=h676940d_0
-  - cuda-cudart=13.2.75=hecca717_0
-  - cuda-cudart-dev=13.2.75=hecca717_0
-  - cuda-cudart-dev_linux-64=13.2.75=h376f20c_0
-  - cuda-cudart-static=13.2.75=hecca717_0
-  - cuda-cudart-static_linux-64=13.2.75=h376f20c_0
-  - cuda-cudart_linux-64=13.2.75=h376f20c_0
-  - cuda-cuobjdump=13.2.78=hffce074_0
-  - cuda-cupti=13.2.75=h676940d_0
-  - cuda-cupti-dev=13.2.75=h676940d_0
-  - cuda-cuxxfilt=13.2.78=hffce074_0
-  - cuda-driver-dev=13.2.75=hecca717_0
-  - cuda-driver-dev_linux-64=13.2.75=h376f20c_0
-  - cuda-gdb=13.2.75=hba53cbc_0
-  - cuda-libraries=13.2.1=ha770c72_0
-  - cuda-libraries-dev=13.2.1=ha770c72_0
-  - cuda-nsight=13.2.75=h7938cbb_0
-  - cuda-nvcc=13.2.78=hcdd1206_0
-  - cuda-nvcc-dev_linux-64=13.2.78=he91c749_0
-  - cuda-nvcc-impl=13.2.78=h85509e4_0
-  - cuda-nvcc-tools=13.2.78=he02047a_0
-  - cuda-nvcc_linux-64=13.2.78=hb2fc203_0
-  - cuda-nvdisasm=13.2.78=hffce074_0
-  - cuda-nvml-dev=13.2.82=hffce074_0
-  - cuda-nvprune=13.2.78=hffce074_0
-  - cuda-nvrtc=13.2.78=hecca717_0
-  - cuda-nvrtc-dev=13.2.78=hecca717_0
-  - cuda-nvtx=13.2.75=hecca717_0
-  - cuda-nvvm-dev_linux-64=13.2.78=ha770c72_0
-  - cuda-nvvm-impl=13.2.78=h4bc722e_0
-  - cuda-nvvm-tools=13.2.78=h4bc722e_0
-  - cuda-opencl=13.2.75=hecca717_0
-  - cuda-opencl-dev=13.2.75=hecca717_0
-  - cuda-pathfinder=1.5.3=pyhc364b38_0
-  - cuda-profiler-api=13.2.75=h7938cbb_0
+  - cuda-crt-dev_linux-64=13.1.115=ha770c72_0
+  - cuda-crt-tools=13.1.115=ha770c72_0
+  - cuda-cudart=13.1.80=hecca717_0
+  - cuda-cudart-dev=13.1.80=hecca717_0
+  - cuda-cudart-dev_linux-64=13.1.80=h376f20c_0
+  - cuda-cudart-static=13.1.80=hecca717_0
+  - cuda-cudart-static_linux-64=13.1.80=h376f20c_0
+  - cuda-cudart_linux-64=13.1.80=h376f20c_0
+  - cuda-cupti=13.1.115=h676940d_0
+  - cuda-nvcc-dev_linux-64=13.1.115=he91c749_0
+  - cuda-nvcc-impl=13.1.115=h85509e4_0
+  - cuda-nvcc-tools=13.1.115=he02047a_0
+  - cuda-nvrtc=13.1.115=hecca717_0
+  - cuda-nvvm-dev_linux-64=13.1.115=ha770c72_0
+  - cuda-nvvm-impl=13.1.115=h4bc722e_0
+  - cuda-nvvm-tools=13.1.115=h4bc722e_0
+  - cuda-pathfinder=1.5.4=pyhc364b38_0
+  - cuda-profiler-api=13.1.115=h7938cbb_0
   - cuda-python=13.2.0=pyhc455866_0
-  - cuda-runtime=13.2.1=ha804496_0
-  - cuda-sanitizer-api=13.2.76=h10ca0ad_0
-  - cuda-tileiras=13.2.78=hecca717_0
-  - cuda-toolkit=13.2.1=ha804496_0
-  - cuda-tools=13.2.1=ha770c72_0
-  - cuda-version=13.2=he2cc418_3
-  - cuda-visual-tools=13.2.1=ha770c72_0
+  - cuda-version=13.1=h2ff5cdb_3
   - cudf=26.04.00=cuda13_cp311_abi3_260408_f9c3cf19
   - cudf-polars=26.04.00=cuda13_260408_f9c3cf19
   - cudf_kafka=26.04.00=cuda13_cp311_abi3_260408_f9c3cf19
@@ -131,51 +99,34 @@ dependencies:
   - custreamz=26.04.00=260408_f9c3cf19
   - cuvs=26.04.00=cuda13_cp311_abi3_260408_
   - cuxfilter=26.04.00=cuda13_260409_3cec658d
-  - cxx-compiler=1.11.0=hfcd1e18_0
   - cycler=0.12.1=pyhcf101f3_2
   - cyrus-sasl=2.1.28=hac629b4_1
   - cytoolz=1.1.0=py314h5bd0f2a_2
   - dask=2026.1.1=pyhcf101f3_0
+  - dask-cloudprovider=2025.9.0=pyhd8ed1ab_0
   - dask-core=2026.1.1=pyhcf101f3_1
   - dask-cuda=26.04.00=py314_260408_157ffa32
   - dask-cudf=26.04.00=260408_f9c3cf19
   - datashader=0.19.0=pyhd8ed1ab_0
   - dav1d=1.2.1=hd590300_0
-  - dbus=1.16.2=h24cb091_1
   - defusedxml=0.7.1=pyhd8ed1ab_0
   - distributed=2026.1.1=pyhcf101f3_1
   - distributed-ucxx=0.49.00=260408_8d47a9ff_h546327b
   - dlpack=0.8=h59595ed_3
   - exceptiongroup=1.3.1=pyhd8ed1ab_0
   - folium=0.20.0=pyhd8ed1ab_0
-  - font-ttf-dejavu-sans-mono=2.37=hab24e00_0
-  - font-ttf-inconsolata=3.000=h77eed37_0
-  - font-ttf-source-code-pro=2.038=h77eed37_0
-  - font-ttf-ubuntu=0.83=h77eed37_3
-  - fontconfig=2.17.1=h27c8c51_0
-  - fonts-conda-ecosystem=1=0
-  - fonts-conda-forge=1=hc364b38_1
   - fonttools=4.62.1=pyh7db6752_0
   - fqdn=1.5.1=pyhd8ed1ab_1
   - freetype=2.14.3=ha770c72_0
   - freexl=2.0.0=h9dce30a_2
   - frozenlist=1.7.0=pyhf298e5d_0
   - fsspec=2026.3.0=pyhd8ed1ab_0
-  - gcc=14.3.0=h0dff253_18
-  - gcc_impl_linux-64=14.3.0=hbdf3cc3_18
-  - gcc_linux-64=14.3.0=h50e9bb6_24
-  - gdb=16.3=py314h7c795f0_6
-  - gds-tools=1.17.1.22=h676940d_0
   - geopandas=1.1.3=pyhd8ed1ab_0
   - geopandas-base=1.1.3=pyha770c72_0
   - geos=3.14.1=h480dda7_0
   - gflags=2.2.2=h5888daf_1005
   - giflib=5.2.2=hd590300_0
   - glog=0.7.1=hbabe93e_0
-  - gmp=6.3.0=hac33072_2
-  - gxx=14.3.0=h76987e4_18
-  - gxx_impl_linux-64=14.3.0=h2185e75_18
-  - gxx_linux-64=14.3.0=h8a413ad_24
   - h2=4.3.0=pyhcf101f3_0
   - holoviews=1.22.1=pyhd8ed1ab_0
   - hpack=4.1.0=pyhd8ed1ab_0
@@ -202,14 +153,13 @@ dependencies:
   - jupyter_server_terminals=0.5.4=pyhcf101f3_0
   - jupyterlab_pygments=0.3.0=pyhd8ed1ab_2
   - jxrlib=1.1=hd590300_3
-  - kernel-headers_linux-64=5.14.0=he073ed8_3
   - keyutils=1.6.3=hb9d3cd8_0
   - kiwisolver=1.5.0=py314h97ea11e_0
   - krb5=1.22.2=ha1258a1_0
   - lark=1.3.1=pyhd8ed1ab_0
   - lazy-loader=0.5=pyhd8ed1ab_0
   - lazy_loader=0.5=pyhd8ed1ab_0
-  - lcms2=2.18=h0c24ade_0
+  - lcms2=2.19=h0c24ade_0
   - ld_impl_linux-64=2.45.1=default_hbd61a6d_102
   - lerc=4.1.0=hdb68285_0
   - libabseil=20260107.1=cxx17_h7b12aa8_0
@@ -228,27 +178,24 @@ dependencies:
   - libcap=2.77=hd0affe5_1
   - libcblas=3.11.0=6_h0358290_openblas
   - libcrc32c=1.1.2=h9c3ff4c_0
-  - libcublas=13.4.0.1=h676940d_0
-  - libcublas-dev=13.4.0.1=h676940d_0
+  - libcublas=13.2.1.1=h676940d_0
+  - libcublas-dev=13.2.1.1=h676940d_0
   - libcucim=26.04.00=cuda13_260408_ghgd9ab164_gn0_phf3d4060
   - libcudf=26.04.00=cuda13_260408_f9c3cf19
   - libcudf_kafka=26.04.00=cuda13_260408_f9c3cf19
-  - libcufft=12.2.0.46=hecca717_0
-  - libcufft-dev=12.2.0.46=hecca717_0
-  - libcufile=1.17.1.22=h85c024f_0
-  - libcufile-dev=1.17.1.22=h676940d_0
+  - libcufft=12.1.0.78=hecca717_0
+  - libcufile=1.16.1.26=hd07211c_0
+  - libcufile-dev=1.16.1.26=h676940d_0
   - libcugraph=26.04.00=cuda13_260408_03ba9c2d
   - libcugraph_etl=26.04.00=cuda13_260408_03ba9c2d
   - libcuml=26.04.00=cuda13_260409_f223d89b
-  - libcuobjclient=1.1.1.22=hecca717_0
-  - libcuobjclient-dev=1.1.1.22=hecca717_0
-  - libcurand=10.4.2.55=h676940d_0
-  - libcurand-dev=10.4.2.55=h676940d_0
+  - libcurand=10.4.1.81=h676940d_0
+  - libcurand-dev=10.4.1.81=h676940d_0
   - libcurl=8.19.0=hcf29cc6_0
-  - libcusolver=12.2.0.1=h676940d_0
-  - libcusolver-dev=12.2.0.1=h676940d_0
-  - libcusparse=12.7.10.1=hecca717_0
-  - libcusparse-dev=12.7.10.1=hecca717_0
+  - libcusolver=12.0.9.81=h676940d_0
+  - libcusolver-dev=12.0.9.81=h676940d_0
+  - libcusparse=12.7.3.1=hecca717_0
+  - libcusparse-dev=12.7.3.1=hecca717_0
   - libcuvs=26.04.00=cuda13_260408_60b19a0f
   - libcuvs-headers=26.04.00=cuda13_260408_60b19a0f
   - libdeflate=1.25=h17f619e_0
@@ -262,13 +209,10 @@ dependencies:
   - libfreetype=2.14.3=ha770c72_0
   - libfreetype6=2.14.3=h73754d4_0
   - libgcc=15.2.0=he0feb66_18
-  - libgcc-devel_linux-64=14.3.0=hf649bbc_118
   - libgcc-ng=15.2.0=h69a702a_18
   - libgdal-core=3.12.3=h4f65170_4
   - libgfortran=15.2.0=h69a702a_18
   - libgfortran5=15.2.0=h68bc16d_18
-  - libglib=2.86.4=h6548e54_1
-  - libglvnd=1.7.0=ha4b6fd6_2
   - libgomp=15.2.0=he0feb66_18
   - libgoogle-cloud=3.3.0=h25dbb67_1
   - libgoogle-cloud-storage=3.3.0=hdbdcf42_1
@@ -282,32 +226,24 @@ dependencies:
   - libkvikio=26.04.00=cuda13_260408_5aba1d10
   - liblapack=3.11.0=6_h47877c9_openblas
   - liblzma=5.8.3=hb03c661_0
-  - liblzma-devel=5.8.3=hb03c661_0
   - libmpdec=4.0.0=hb03c661_1
   - libnghttp2=1.68.1=h877daf1_0
   - libnl=3.11.0=hb9d3cd8_0
-  - libnpp=13.1.0.48=h676940d_0
-  - libnpp-dev=13.1.0.48=h676940d_0
   - libnsl=2.0.1=hb9d3cd8_1
   - libntlm=1.8=hb9d3cd8_0
   - libnuma=2.0.18=hb03c661_3
   - libnvcomp=5.1.0.21=h7bcfba5_0
   - libnvcomp-dev=5.1.0.21=h7bcfba5_0
-  - libnvfatbin=13.2.78=hecca717_0
-  - libnvfatbin-dev=13.2.78=hecca717_0
   - libnvimgcodec=0.7.0=h40eb5e6_2
   - libnvimgcodec0=0.7.0=h7bcfba5_2
   - libnvjitlink=13.2.78=hecca717_0
-  - libnvjitlink-dev=13.2.78=hecca717_0
-  - libnvjpeg=13.1.0.48=hecca717_0
-  - libnvjpeg-dev=13.1.0.48=ha770c72_0
+  - libnvjpeg=13.0.3.75=hecca717_0
   - libnvjpeg2k0=0.9.1.47=h276d11f_1
-  - libnvptxcompiler-dev=13.2.78=ha770c72_0
-  - libnvptxcompiler-dev_linux-64=13.2.78=ha770c72_0
+  - libnvptxcompiler-dev=13.1.115=ha770c72_0
+  - libnvptxcompiler-dev_linux-64=13.1.115=ha770c72_0
   - libnvtiff=0.6.0.78=ha770c72_1
   - libnvtiff0=0.6.0.78=h276d11f_1
   - libopenblas=0.3.32=pthreads_h94d23a6_0
-  - libopengl=1.7.0=ha4b6fd6_2
   - libopentelemetry-cpp=1.26.0=h9692893_0
   - libopentelemetry-cpp-headers=1.26.0=ha770c72_0
   - libparquet=24.0.0=h7376487_0_cpu
@@ -322,13 +258,11 @@ dependencies:
   - libre2-11=2025.11.05=h0dc7533_1
   - librmm=26.04.00=cuda13_260408_48b36cc6
   - librttopo=1.1.0=h46dd2a8_20
-  - libsanitizer=14.3.0=h8f1669f_18
   - libsodium=1.0.21=h280c20c_3
   - libspatialite=5.1.0=gpl_hab3fe16_120
   - libsqlite=3.53.0=hf4e2dac_0
   - libssh2=1.11.1=hcf80075_0
   - libstdcxx=15.2.0=h934c35e_18
-  - libstdcxx-devel_linux-64=14.3.0=h9f08a49_118
   - libstdcxx-ng=15.2.0=hdf11a46_18
   - libsystemd0=260.1=h6569c3e_0
   - libthrift=0.22.0=h7d032f7_2
@@ -342,8 +276,6 @@ dependencies:
   - libxcb=1.17.0=h8a09558_0
   - libxcrypt=4.4.36=hd590300_1
   - libxgboost=3.2.0=rapidsai_h571e1f8_1
-  - libxkbcommon=1.13.1=hca5e8e5_0
-  - libxkbfile=1.1.0=h166bdaf_1
   - libxml2=2.15.3=h49c6c72_0
   - libxml2-16=2.15.3=hca6bf5a_0
   - libxml2-devel=2.15.3=h49c6c72_0
@@ -364,7 +296,6 @@ dependencies:
   - mdurl=0.1.2=pyhd8ed1ab_1
   - minizip=4.0.10=h05a5f5f_0
   - mistune=3.2.0=pyhcf101f3_0
-  - mpfr=4.2.2=he0a73b1_0
   - mpi=1.0.1=openmpi
   - mpi4py=4.1.1=py314hab80c86_103
   - msgpack-python=1.1.2=py314h9891dd4_1
@@ -381,17 +312,12 @@ dependencies:
   - networkx=3.6.1=pyhcf101f3_0
   - nlohmann_json=3.12.0=h54a6638_1
   - nodejs=25.8.2=he4ff34a_0
-  - nsight-compute=2026.1.1.2=h60dd89f_0
-  - nspr=4.38=h29cc59b_0
-  - nss=3.118=h445c969_0
   - numba=0.64.0=py314h8169c2f_0
   - numba-cuda=0.28.2=py314h118ebf0_0
   - numpy=2.4.3=py314h2b28147_0
   - nvidia-ml-py=13.595.45=pyhd8ed1ab_1
   - nvtx=0.2.15=py314h5bd0f2a_0
   - nx-cugraph=26.04.00=py_260409_45918e26
-  - ocl-icd=2.3.3=hb9d3cd8_0
-  - opencl-headers=2025.06.13=hecca717_0
   - openjpeg=2.5.4=h55fea9a_0
   - openjph=0.27.0=h8d634f6_0
   - openmpi=5.0.8=h2fe1745_110
@@ -435,7 +361,7 @@ dependencies:
   - python-dateutil=2.9.0.post0=pyhe01879c_2
   - python-fastjsonschema=2.21.2=pyhe01879c_0
   - python-gil=3.14.4=h4df99d1_100
-  - python-json-logger=2.0.7=pyhd8ed1ab_0
+  - python-json-logger=3.2.1=pyh332efcf_0
   - python-tzdata=2026.2=pyhd8ed1ab_0
   - python_abi=3.14=8_cp314
   - pytz=2026.1.post1=pyhcf101f3_0
@@ -477,7 +403,6 @@ dependencies:
   - sqlite=3.53.0=h04a0ce9_0
   - streamz=0.6.6=pyh332efcf_0
   - svt-av1=4.0.1=hecca717_0
-  - sysroot_linux-64=2.34=h087de78_3
   - tblib=3.2.2=pyhcf101f3_0
   - terminado=0.18.1=pyhc90fa1f_1
   - threadpoolctl=3.6.0=pyhecae5ae_0
@@ -501,34 +426,15 @@ dependencies:
   - uri-template=1.3.0=pyhd8ed1ab_1
   - uriparser=0.9.8=hac33072_0
   - urllib3=2.6.3=pyhd8ed1ab_0
-  - wayland=1.25.0=hd6090a7_0
   - webcolors=25.10.0=pyhd8ed1ab_0
   - webencodings=0.5.1=pyhd8ed1ab_3
   - websocket-client=1.9.0=pyhd8ed1ab_0
   - wrapt=2.1.2=py314h5bd0f2a_0
   - xarray=2026.4.0=pyhc364b38_0
-  - xcb-util=0.4.1=h4f16b4b_2
-  - xcb-util-cursor=0.1.6=hb03c661_0
-  - xcb-util-image=0.4.0=hb711507_2
-  - xcb-util-keysyms=0.4.1=hb711507_0
-  - xcb-util-renderutil=0.3.10=hb711507_0
-  - xcb-util-wm=0.4.2=hb711507_0
   - xerces-c=3.3.0=hd9031aa_1
   - xgboost=3.2.0=rapidsai_pyh3d5ed11_1
-  - xkeyboard-config=2.47=hb03c661_0
-  - xorg-libice=1.1.2=hb9d3cd8_0
-  - xorg-libsm=1.2.6=he73a12e_0
-  - xorg-libx11=1.8.13=he1eb515_0
   - xorg-libxau=1.0.12=hb03c661_1
-  - xorg-libxcomposite=0.4.7=hb03c661_0
-  - xorg-libxdamage=1.1.6=hb9d3cd8_0
   - xorg-libxdmcp=1.1.5=hb03c661_1
-  - xorg-libxext=1.3.7=hb03c661_0
-  - xorg-libxfixes=6.0.2=hb03c661_0
-  - xorg-libxi=1.8.2=hb9d3cd8_0
-  - xorg-libxrandr=1.5.5=hb03c661_0
-  - xorg-libxrender=0.9.12=hb9d3cd8_0
-  - xorg-libxtst=1.2.5=hb9d3cd8_3
   - xyzservices=2026.3.0=pyhd8ed1ab_0
   - yaml=0.2.5=h280c20c_3
   - yarl=1.23.0=pyh7db6752_0
@@ -539,4 +445,4 @@ dependencies:
   - zlib=1.3.2=h25fd6f3_2
   - zlib-ng=2.3.3=hceb46e0_1
   - zstd=1.5.7=hb78ec9c_6
-prefix: /home/ec2-user/miniforge3/envs/rapids-26.04
+prefix: /home/ec2-user/miniconda3/envs/rapids-26.04
