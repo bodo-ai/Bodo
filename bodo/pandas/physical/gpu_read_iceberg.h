@@ -5,6 +5,7 @@
 #include <cudf/io/datasource.hpp>
 #include <cudf/types.hpp>
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <utility>
 #include "../../libs/_utils.h"
@@ -66,12 +67,6 @@ class GPUIcebergRankBatchGenerator {
         MPI_Comm_rank(comm, &rank_);
         MPI_Comm_size(comm, &size_);
 
-        // Initialize CUDF AST filters for row-level filtering
-        // We need to pass a copy because tableFilterSetToCudfAST is destructive
-        auto filter_exprs_copy = filter_exprs.Copy();
-        tableFilterSetToCudfAST(*filter_exprs_copy, arrow_schema->field_names(),
-                                filter_ast_tree, filter_scalars);
-
         get_dataset(catalog, table_id, arrow_schema, iceberg_filter,
                     iceberg_schema, snapshot_id, target_rows);
 
@@ -124,7 +119,7 @@ class GPUIcebergRankBatchGenerator {
                     continue;
                 }
 
-                // Handle rows_to_skip
+                // Handle rows_to_skip (manual slicing)
                 if (rows_to_skip > 0) {
                     size_t n = tbl->num_rows();
                     size_t to_skip = std::min((size_t)rows_to_skip, n);
@@ -135,7 +130,8 @@ class GPUIcebergRankBatchGenerator {
                     std::vector<cudf::size_type> splits = {
                         (cudf::size_type)to_skip, (cudf::size_type)n};
                     auto sliced = cudf::slice(tbl->view(), splits, se->stream);
-                    tbl = std::make_unique<cudf::table>(sliced[0]);
+                    // sliced[1] is the part to keep
+                    tbl = std::make_unique<cudf::table>(sliced[1]);
                     rows_to_skip -= (int64_t)to_skip;
                 }
 
@@ -220,25 +216,50 @@ class GPUIcebergRankBatchGenerator {
         }
         curr_read_schema = scanner_read_schemas[next_scanner_idx++];
 
+        // Identify all columns to read: those in selected_columns_ PLUS those
+        // needed for filters.
+        std::set<int> columns_to_read_set(selected_columns_.begin(),
+                                          selected_columns_.end());
+        for (const auto& pair : filter_exprs_->filters) {
+            columns_to_read_set.insert(pair.first);
+        }
+
         // Identify existing columns and their file names
         std::vector<std::string> file_col_names;
         curr_col_mapping.clear();
+        std::map<int, int> col_to_file_idx;
 
-        for (size_t i = 0; i < selected_columns_.size(); i++) {
-            int col_idx = selected_columns_[i];
+        for (int col_idx : columns_to_read_set) {
             std::string name = curr_read_schema->field(col_idx)->name();
-            if (name.starts_with("_BODO_TEMP_")) {
-                // Column doesn't exist in file
-                curr_col_mapping.emplace_back(-1, i);
-            } else {
-                curr_col_mapping.emplace_back((int)file_col_names.size(), i);
+            if (!name.starts_with("_BODO_TEMP_")) {
+                col_to_file_idx[col_idx] = (int)file_col_names.size();
                 file_col_names.push_back(name);
             }
         }
 
+        // Map selected columns to their indices in the read table
+        for (size_t i = 0; i < selected_columns_.size(); i++) {
+            int col_idx = selected_columns_[i];
+            if (col_to_file_idx.count(col_idx)) {
+                curr_col_mapping.emplace_back(col_to_file_idx[col_idx], i);
+            } else {
+                // Column doesn't exist in file
+                curr_col_mapping.emplace_back(-1, i);
+            }
+        }
+
+        // Rebuild filter AST for this schema group to handle potential renames
+        filter_ast_tree = cudf::ast::tree();
+        filter_scalars.clear();
+        auto filter_exprs_copy = filter_exprs_->Copy();
+        tableFilterSetToCudfAST(*filter_exprs_copy,
+                                curr_read_schema->field_names(),
+                                filter_ast_tree, filter_scalars);
+
         cudf::io::parquet_reader_options opts =
             cudf::io::parquet_reader_options::builder(cudf::io::source_info());
         opts.set_column_names(file_col_names);
+
         if (filter_ast_tree.size() > 0) {
             opts.set_filter(filter_ast_tree.back());
         }
@@ -848,6 +869,10 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
         auto next_batch_tup = batch_gen->next(se);
         auto result = next_batch_tup.second ? OperatorResult::FINISHED
                                             : OperatorResult::HAVE_MORE_OUTPUT;
+
+        if (next_batch_tup.first) {
+            this->metrics.rows_read += next_batch_tup.first->num_rows();
+        }
 
         GPU_DATA ret(std::move(next_batch_tup.first), output_arrow_schema, se);
         this->metrics.produce_time += end_timer(start_produce);
