@@ -206,12 +206,13 @@ class GPUIcebergRankBatchGenerator {
         }
 
         // Get schema group info
-        if (next_scanner_idx >= scanner_read_schemas.size()) {
+        if (schema_group_idx < 0 ||
+            (size_t)schema_group_idx >= scanner_read_schemas.size()) {
             throw std::runtime_error(
-                "GPUIcebergRankBatchGenerator::init_next_reader: scanner index "
-                "out of bounds");
+                "GPUIcebergRankBatchGenerator::init_next_reader: schema group "
+                "index out of bounds");
         }
-        curr_read_schema = scanner_read_schemas[next_scanner_idx++];
+        curr_read_schema = scanner_read_schemas[schema_group_idx];
 
         // Identify all columns to read: those in selected_columns_ PLUS those
         // needed for filters.
@@ -249,45 +250,67 @@ class GPUIcebergRankBatchGenerator {
         filter_ast_tree = cudf::ast::tree();
         filter_scalars.clear();
 
-        // 1. DuckDB filters -> cuDF AST
-        auto filter_exprs_copy = filter_exprs_->Copy();
-        tableFilterSetToCudfAST(*filter_exprs_copy,
-                                curr_read_schema->field_names(),
-                                filter_ast_tree, filter_scalars);
-        const cudf::ast::expression* duckdb_filter_root =
-            filter_ast_tree.size() > 0 ? &filter_ast_tree.back() : nullptr;
-
-        // 2. Iceberg filter -> cuDF AST
-        // Build field_id -> col_idx map
-        std::map<int, int> field_id_to_col_idx;
-        PyObject* field_ids_tuple =
-            this->scanner_field_ids[next_scanner_idx - 1].get();
-        for (int i = 0; i < (int)PyTuple_Size(field_ids_tuple); i++) {
-            PyObject* item = PyTuple_GetItem(field_ids_tuple, i);
-            int field_id = -1;
-            if (PyLong_Check(item)) {
-                field_id = (int)PyLong_AsLong(item);
-            } else if (PyTuple_Check(item)) {
-                field_id = (int)PyLong_AsLong(PyTuple_GetItem(item, 0));
-            }
-            if (field_id != -1) {
-                field_id_to_col_idx[field_id] = i;
+        // Check if any filter column was excluded from reading (is a
+        // _BODO_TEMP_ placeholder for a field missing from this file).
+        // All values for such columns are NULL, so the filter is always FALSE.
+        bool filter_col_missing = false;
+        for (const auto& pair : filter_exprs_->filters) {
+            if (!col_to_file_idx.count(pair.first)) {
+                filter_col_missing = true;
+                break;
             }
         }
 
-        build_pyiceberg_cudf_ast_node(this->iceberg_filter_cudf_ast.get(),
-                                      field_id_to_col_idx, curr_read_schema,
-                                      filter_ast_tree, filter_scalars, stream);
-        const cudf::ast::expression* iceberg_filter_root =
-            &filter_ast_tree.back();
-
-        // 3. AND them together
-        if (duckdb_filter_root) {
+        if (filter_col_missing) {
+            auto false_scalar =
+                std::make_unique<cudf::numeric_scalar<bool>>(false, true);
+            filter_scalars.push_back(std::move(false_scalar));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
+                    filter_scalars.back().get())));
             filter_ast_tree.push(cudf::ast::operation(
-                cudf::ast::ast_operator::LOGICAL_AND, *duckdb_filter_root,
-                *iceberg_filter_root));
+                cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back()));
         } else {
-            // No duckdb filter, just use iceberg filter
+            // 1. DuckDB filters -> cuDF AST
+            auto filter_exprs_copy = filter_exprs_->Copy();
+            tableFilterSetToCudfAST(*filter_exprs_copy,
+                                    curr_read_schema->field_names(),
+                                    filter_ast_tree, filter_scalars);
+            const cudf::ast::expression* duckdb_filter_root =
+                filter_ast_tree.size() > 0 ? &filter_ast_tree.back() : nullptr;
+
+            // 2. Iceberg filter -> cuDF AST
+            // Build field_id -> col_idx map
+            std::map<int, int> field_id_to_col_idx;
+            PyObject* field_ids_tuple =
+                this->scanner_field_ids[schema_group_idx].get();
+            for (int i = 0; i < (int)PyTuple_Size(field_ids_tuple); i++) {
+                PyObject* item = PyTuple_GetItem(field_ids_tuple, i);
+                int field_id = -1;
+                if (PyLong_Check(item)) {
+                    field_id = (int)PyLong_AsLong(item);
+                } else if (PyTuple_Check(item)) {
+                    field_id = (int)PyLong_AsLong(PyTuple_GetItem(item, 0));
+                }
+                if (field_id != -1) {
+                    field_id_to_col_idx[field_id] = i;
+                }
+            }
+
+            build_pyiceberg_cudf_ast_node(
+                this->iceberg_filter_cudf_ast.get(), field_id_to_col_idx,
+                curr_read_schema, filter_ast_tree, filter_scalars, stream);
+            const cudf::ast::expression* iceberg_filter_root =
+                &filter_ast_tree.back();
+
+            // 3. AND them together
+            if (duckdb_filter_root) {
+                filter_ast_tree.push(cudf::ast::operation(
+                    cudf::ast::ast_operator::LOGICAL_AND, *duckdb_filter_root,
+                    *iceberg_filter_root));
+            } else {
+                // No duckdb filter, just use iceberg filter
+            }
         }
 
         cudf::io::parquet_reader_options opts =
@@ -485,6 +508,7 @@ class GPUIcebergRankBatchGenerator {
         std::vector<std::unique_ptr<cudf::column>> output_cols;
         output_cols.reserve(selected_columns_.size());
 
+        size_t num_rows = tbl->num_rows();
         auto released_cols = tbl->release();
 
         for (size_t i = 0; i < selected_columns_.size(); i++) {
@@ -498,7 +522,7 @@ class GPUIcebergRankBatchGenerator {
                 auto null_scalar = arrow_scalar_to_cudf(
                     arrow::MakeNullScalar(arrow_type), stream);
                 output_cols.push_back(cudf::make_column_from_scalar(
-                    *null_scalar, tbl->num_rows(), stream));
+                    *null_scalar, num_rows, stream));
             } else {
                 auto source_field = curr_read_schema->field(col_idx);
                 output_cols.push_back(
@@ -1065,8 +1089,6 @@ class GPUIcebergRankBatchGenerator {
     std::vector<IcebergPieceInfo> pieces_;
     std::vector<std::shared_ptr<arrow::Schema>> scanner_read_schemas;
     int64_t rows_to_skip = 0;
-    size_t next_scanner_idx = 0;
-
     const std::vector<int>& selected_columns_;
     std::shared_ptr<arrow::Schema> output_arrow_schema;
 
