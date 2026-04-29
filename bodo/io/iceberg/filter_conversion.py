@@ -178,3 +178,121 @@ class _ConvertToArrowExpressionStringAndScalar(
         return f"({left_result[0]}) | ({right_result[0]})", left_result[
             1
         ] + right_result[1]
+
+
+class _ConvertToCudfAst(BoundBooleanExpressionVisitor[tuple]):
+    """Visitor to convert a bound Iceberg expression to a cuDF AST tree structure.
+    The result is a tree of tuples that C++ can walk to build cuDF AST nodes.
+    Leaf nodes use Iceberg field IDs for stable column identification across
+    schema evolution, and Python native values for literals.
+    """
+
+    def visit_in(self, term: BoundTerm[Any], literals: set[Any]) -> tuple:
+        from pyiceberg.io.pyarrow import _convert_scalar, schema_to_pyarrow
+
+        schema_to_pyarrow(term.ref().field.field_type)
+        field_id = term.ref().field.field_id
+        # Convert all literals to Python native values
+        converted = []
+        for lit in literals:
+            scalar = _convert_scalar(lit.value, term.ref().field.field_type)
+            converted.append(scalar.as_py())
+        return ("in", field_id, converted)
+
+    def visit_not_in(self, term: BoundTerm[Any], literals: set[Any]) -> tuple:
+        from pyiceberg.io.pyarrow import _convert_scalar, schema_to_pyarrow
+
+        schema_to_pyarrow(term.ref().field.field_type)
+        field_id = term.ref().field.field_id
+        converted = []
+        for lit in literals:
+            scalar = _convert_scalar(lit.value, term.ref().field.field_type)
+            converted.append(scalar.as_py())
+        return ("not_in", field_id, converted)
+
+    def visit_is_nan(self, term: BoundTerm[Any]) -> tuple:
+        # Not supported by cuDF AST, skip (no-op)
+        return ("true",)
+
+    def visit_not_nan(self, term: BoundTerm[Any]) -> tuple:
+        # Not supported by cuDF AST, skip (no-op)
+        return ("true",)
+
+    def visit_is_null(self, term: BoundTerm[Any]) -> tuple:
+        return ("is_null", term.ref().field.field_id)
+
+    def visit_not_null(self, term: BoundTerm[Any]) -> tuple:
+        return ("is_not_null", term.ref().field.field_id)
+
+    def visit_equal(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+        from pyiceberg.io.pyarrow import _convert_scalar
+
+        scalar = _convert_scalar(literal.value, term.ref().field.field_type)
+        return ("eq", term.ref().field.field_id, scalar.as_py())
+
+    def visit_not_equal(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+        from pyiceberg.io.pyarrow import _convert_scalar
+
+        scalar = _convert_scalar(literal.value, term.ref().field.field_type)
+        return ("neq", term.ref().field.field_id, scalar.as_py())
+
+    def visit_greater_than_or_equal(
+        self, term: BoundTerm[Any], literal: Literal[Any]
+    ) -> tuple:
+        from pyiceberg.io.pyarrow import _convert_scalar
+
+        scalar = _convert_scalar(literal.value, term.ref().field.field_type)
+        return ("gte", term.ref().field.field_id, scalar.as_py())
+
+    def visit_greater_than(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+        from pyiceberg.io.pyarrow import _convert_scalar
+
+        scalar = _convert_scalar(literal.value, term.ref().field.field_type)
+        return ("gt", term.ref().field.field_id, scalar.as_py())
+
+    def visit_less_than(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+        from pyiceberg.io.pyarrow import _convert_scalar
+
+        scalar = _convert_scalar(literal.value, term.ref().field.field_type)
+        return ("lt", term.ref().field.field_id, scalar.as_py())
+
+    def visit_less_than_or_equal(
+        self, term: BoundTerm[Any], literal: Literal[Any]
+    ) -> tuple:
+        from pyiceberg.io.pyarrow import _convert_scalar
+
+        scalar = _convert_scalar(literal.value, term.ref().field.field_type)
+        return ("lte", term.ref().field.field_id, scalar.as_py())
+
+    def visit_starts_with(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+        # Not supported by cuDF AST, skip (no-op)
+        return ("true",)
+
+    def visit_not_starts_with(
+        self, term: BoundTerm[Any], literal: Literal[Any]
+    ) -> tuple:
+        # Not supported by cuDF AST, skip (no-op)
+        return ("true",)
+
+    def visit_true(self) -> tuple:
+        return ("true",)
+
+    def visit_false(self) -> tuple:
+        return ("false",)
+
+    def visit_not(self, child_result: tuple) -> tuple:
+        return ("not", child_result)
+
+    def visit_and(
+        self,
+        left_result: tuple,
+        right_result: tuple,
+    ) -> tuple:
+        return ("and", left_result, right_result)
+
+    def visit_or(
+        self,
+        left_result: tuple,
+        right_result: tuple,
+    ) -> tuple:
+        return ("or", left_result, right_result)

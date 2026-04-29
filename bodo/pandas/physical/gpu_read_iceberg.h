@@ -248,10 +248,47 @@ class GPUIcebergRankBatchGenerator {
         // Rebuild filter AST for this schema group to handle potential renames
         filter_ast_tree = cudf::ast::tree();
         filter_scalars.clear();
+
+        // 1. DuckDB filters -> cuDF AST
         auto filter_exprs_copy = filter_exprs_->Copy();
         tableFilterSetToCudfAST(*filter_exprs_copy,
                                 curr_read_schema->field_names(),
                                 filter_ast_tree, filter_scalars);
+        const cudf::ast::expression* duckdb_filter_root =
+            filter_ast_tree.size() > 0 ? &filter_ast_tree.back() : nullptr;
+
+        // 2. Iceberg filter -> cuDF AST
+        // Build field_id -> col_idx map
+        std::map<int, int> field_id_to_col_idx;
+        PyObject* field_ids_tuple =
+            this->scanner_field_ids[next_scanner_idx - 1].get();
+        for (int i = 0; i < (int)PyTuple_Size(field_ids_tuple); i++) {
+            PyObject* item = PyTuple_GetItem(field_ids_tuple, i);
+            int field_id = -1;
+            if (PyLong_Check(item)) {
+                field_id = (int)PyLong_AsLong(item);
+            } else if (PyTuple_Check(item)) {
+                field_id = (int)PyLong_AsLong(PyTuple_GetItem(item, 0));
+            }
+            if (field_id != -1) {
+                field_id_to_col_idx[field_id] = i;
+            }
+        }
+
+        build_pyiceberg_cudf_ast_node(this->iceberg_filter_cudf_ast.get(),
+                                      field_id_to_col_idx, curr_read_schema,
+                                      filter_ast_tree, filter_scalars, stream);
+        const cudf::ast::expression* iceberg_filter_root =
+            &filter_ast_tree.back();
+
+        // 3. AND them together
+        if (duckdb_filter_root) {
+            filter_ast_tree.push(cudf::ast::operation(
+                cudf::ast::ast_operator::LOGICAL_AND, *duckdb_filter_root,
+                *iceberg_filter_root));
+        } else {
+            // No duckdb filter, just use iceberg filter
+        }
 
         cudf::io::parquet_reader_options opts =
             cudf::io::parquet_reader_options::builder(cudf::io::source_info());
@@ -475,6 +512,322 @@ class GPUIcebergRankBatchGenerator {
         return ret;
     }
 
+    // Helper: convert a Python native value to a cuDF scalar based on the
+    // target Arrow type.
+    static std::unique_ptr<cudf::scalar> py_value_to_cudf_scalar(
+        PyObject* value_py, const std::shared_ptr<arrow::DataType>& type,
+        rmm::cuda_stream_view stream) {
+        std::shared_ptr<arrow::Scalar> arrow_scalar;
+        switch (type->id()) {
+            case arrow::Type::BOOL:
+                arrow_scalar =
+                    arrow::MakeScalar(type, value_py == Py_True).ValueOrDie();
+                break;
+            case arrow::Type::INT8:
+                arrow_scalar =
+                    arrow::MakeScalar(type, (int8_t)PyLong_AsLong(value_py))
+                        .ValueOrDie();
+                break;
+            case arrow::Type::INT16:
+                arrow_scalar =
+                    arrow::MakeScalar(type, (int16_t)PyLong_AsLong(value_py))
+                        .ValueOrDie();
+                break;
+            case arrow::Type::INT32:
+                arrow_scalar =
+                    arrow::MakeScalar(type, (int32_t)PyLong_AsLong(value_py))
+                        .ValueOrDie();
+                break;
+            case arrow::Type::INT64:
+                arrow_scalar = arrow::MakeScalar(
+                                   type, (int64_t)PyLong_AsLongLong(value_py))
+                                   .ValueOrDie();
+                break;
+            case arrow::Type::UINT8:
+                arrow_scalar =
+                    arrow::MakeScalar(type, (uint8_t)PyLong_AsLong(value_py))
+                        .ValueOrDie();
+                break;
+            case arrow::Type::UINT16:
+                arrow_scalar =
+                    arrow::MakeScalar(type, (uint16_t)PyLong_AsLong(value_py))
+                        .ValueOrDie();
+                break;
+            case arrow::Type::UINT32:
+                arrow_scalar =
+                    arrow::MakeScalar(type, (uint32_t)PyLong_AsLong(value_py))
+                        .ValueOrDie();
+                break;
+            case arrow::Type::UINT64:
+                arrow_scalar = arrow::MakeScalar(
+                                   type, (uint64_t)PyLong_AsLongLong(value_py))
+                                   .ValueOrDie();
+                break;
+            case arrow::Type::FLOAT:
+                arrow_scalar =
+                    arrow::MakeScalar(type, (float)PyFloat_AsDouble(value_py))
+                        .ValueOrDie();
+                break;
+            case arrow::Type::DOUBLE:
+                arrow_scalar =
+                    arrow::MakeScalar(type, PyFloat_AsDouble(value_py))
+                        .ValueOrDie();
+                break;
+            case arrow::Type::STRING:
+            case arrow::Type::LARGE_STRING: {
+                const char* str = PyUnicode_AsUTF8(value_py);
+                arrow_scalar =
+                    arrow::MakeScalar(type, std::string(str)).ValueOrDie();
+                break;
+            }
+            default:
+                throw std::runtime_error(
+                    "py_value_to_cudf_scalar: unsupported type: " +
+                    type->ToString());
+        }
+        return arrow_scalar_to_cudf(arrow_scalar, stream);
+    }
+
+    // Recursively walk a pyiceberg cuDF AST filter tree (nested Python tuples)
+    // and push cuDF AST nodes onto filter_ast_tree. The root node of this
+    // subtree ends up at filter_ast_tree.back().
+    void build_pyiceberg_cudf_ast_node(
+        PyObject* node, const std::map<int, int>& field_id_to_col_idx,
+        const std::shared_ptr<arrow::Schema>& read_schema,
+        cudf::ast::tree& filter_ast_tree,
+        std::vector<std::unique_ptr<cudf::scalar>>& filter_scalars,
+        rmm::cuda_stream_view stream) {
+        if (!PyTuple_Check(node)) {
+            // Invalid node, push identity(true) as no-op
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<bool>>(true, true);
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
+                    filter_scalars.back().get())));
+            cudf::ast::operation expr = cudf::ast::operation(
+                cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+            return;
+        }
+
+        PyObject* op_py = PyTuple_GetItem(node, 0);
+        if (!op_py || !PyUnicode_Check(op_py)) {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<bool>>(true, true);
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
+                    filter_scalars.back().get())));
+            cudf::ast::operation expr = cudf::ast::operation(
+                cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+            return;
+        }
+        const char* op = PyUnicode_AsUTF8(op_py);
+
+        // Always-true / always-false leaf nodes
+        if (strcmp(op, "true") == 0) {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<bool>>(true, true);
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
+                    filter_scalars.back().get())));
+            cudf::ast::operation expr = cudf::ast::operation(
+                cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+            return;
+        }
+
+        if (strcmp(op, "false") == 0) {
+            auto literal_value =
+                std::make_unique<cudf::numeric_scalar<bool>>(false, true);
+            filter_scalars.push_back(std::move(literal_value));
+            filter_ast_tree.push(
+                cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
+                    filter_scalars.back().get())));
+            cudf::ast::operation expr = cudf::ast::operation(
+                cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+            return;
+        }
+
+        // Resolve field_id -> column index and name
+        auto get_col_info =
+            [&](PyObject* node_inner) -> std::pair<int, std::string> {
+            PyObject* field_id_py = PyTuple_GetItem(node_inner, 1);
+            int field_id = (int)PyLong_AsLong(field_id_py);
+            auto it = field_id_to_col_idx.find(field_id);
+            if (it == field_id_to_col_idx.end()) {
+                throw std::runtime_error(
+                    "build_pyiceberg_cudf_ast_node: field ID " +
+                    std::to_string(field_id) + " not found in schema group");
+            }
+            int col_idx = it->second;
+            return {col_idx, read_schema->field(col_idx)->name()};
+        };
+
+        // is_null / is_not_null
+        if (strcmp(op, "is_null") == 0 || strcmp(op, "is_not_null") == 0) {
+            auto [col_idx, col_name] = get_col_info(node);
+            cudf::ast::column_name_reference col_ref(col_name);
+            filter_ast_tree.push(col_ref);
+            cudf::ast::operation expr = cudf::ast::operation(
+                cudf::ast::ast_operator::IS_NULL, filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+            if (strcmp(op, "is_not_null") == 0) {
+                filter_ast_tree.push(cudf::ast::operation(
+                    cudf::ast::ast_operator::NOT, filter_ast_tree.back()));
+            }
+            return;
+        }
+
+        // Comparison ops: eq, neq, gt, gte, lt, lte
+        static const std::unordered_map<std::string, cudf::ast::ast_operator>
+            cmp_ops = {
+                {"eq", cudf::ast::ast_operator::EQUAL},
+                {"neq", cudf::ast::ast_operator::NOT_EQUAL},
+                {"gt", cudf::ast::ast_operator::GREATER},
+                {"gte", cudf::ast::ast_operator::GREATER_EQUAL},
+                {"lt", cudf::ast::ast_operator::LESS},
+                {"lte", cudf::ast::ast_operator::LESS_EQUAL},
+            };
+        auto cmp_it = cmp_ops.find(op);
+        if (cmp_it != cmp_ops.end()) {
+            auto [col_idx, col_name] = get_col_info(node);
+            PyObject* value_py = PyTuple_GetItem(node, 2);
+            auto col_type = read_schema->field(col_idx)->type();
+
+            cudf::ast::column_name_reference col_ref(col_name);
+            filter_ast_tree.push(col_ref);
+
+            auto cudf_scalar =
+                py_value_to_cudf_scalar(value_py, col_type, stream);
+            filter_scalars.push_back(std::move(cudf_scalar));
+            filter_ast_tree.push(cudf::ast::literal(*filter_scalars.back()));
+
+            cudf::ast::operation expr = cudf::ast::operation(
+                cmp_it->second, filter_ast_tree[filter_ast_tree.size() - 2],
+                filter_ast_tree.back());
+            filter_ast_tree.push(expr);
+            return;
+        }
+
+        // IN / NOT IN
+        if (strcmp(op, "in") == 0 || strcmp(op, "not_in") == 0) {
+            auto [col_idx, col_name] = get_col_info(node);
+            auto col_type = read_schema->field(col_idx)->type();
+            PyObject* values_list = PyTuple_GetItem(node, 2);
+            Py_ssize_t n_values = PyList_Size(values_list);
+
+            if (n_values > 100) {
+                throw std::runtime_error(
+                    "build_pyiceberg_cudf_ast_node: IN with more than 100 "
+                    "values is not supported");
+            }
+            if (n_values == 0) {
+                // Empty IN -> no rows match. Push IDENTITY(false).
+                auto literal_value =
+                    std::make_unique<cudf::numeric_scalar<bool>>(false, true);
+                filter_scalars.push_back(std::move(literal_value));
+                filter_ast_tree.push(cudf::ast::literal(
+                    *static_cast<cudf::numeric_scalar<bool>*>(
+                        filter_scalars.back().get())));
+                cudf::ast::operation expr = cudf::ast::operation(
+                    cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
+                filter_ast_tree.push(expr);
+                return;
+            }
+
+            // Expand to OR of EQUAL comparisons
+            PyObject* first_val = PyList_GetItem(values_list, 0);
+            cudf::ast::column_name_reference col_ref(col_name);
+            filter_ast_tree.push(col_ref);
+            auto first_scalar =
+                py_value_to_cudf_scalar(first_val, col_type, stream);
+            filter_scalars.push_back(std::move(first_scalar));
+            filter_ast_tree.push(cudf::ast::literal(*filter_scalars.back()));
+
+            const cudf::ast::expression* acc =
+                &filter_ast_tree.push(cudf::ast::operation(
+                    cudf::ast::ast_operator::EQUAL,
+                    filter_ast_tree[filter_ast_tree.size() - 3],
+                    filter_ast_tree.back()));
+
+            for (Py_ssize_t i = 1; i < n_values; i++) {
+                PyObject* val = PyList_GetItem(values_list, i);
+                cudf::ast::column_name_reference col_ref_i(col_name);
+                filter_ast_tree.push(col_ref_i);
+                auto cudf_scalar =
+                    py_value_to_cudf_scalar(val, col_type, stream);
+                filter_scalars.push_back(std::move(cudf_scalar));
+                filter_ast_tree.push(
+                    cudf::ast::literal(*filter_scalars.back()));
+
+                const cudf::ast::expression* eq_node =
+                    &filter_ast_tree.push(cudf::ast::operation(
+                        cudf::ast::ast_operator::EQUAL,
+                        filter_ast_tree[filter_ast_tree.size() - 3],
+                        filter_ast_tree.back()));
+
+                acc = &filter_ast_tree.push(cudf::ast::operation(
+                    cudf::ast::ast_operator::LOGICAL_OR, *acc, *eq_node));
+            }
+
+            if (strcmp(op, "not_in") == 0) {
+                filter_ast_tree.push(cudf::ast::operation(
+                    cudf::ast::ast_operator::NOT, filter_ast_tree.back()));
+            }
+            return;
+        }
+
+        // NOT
+        if (strcmp(op, "not") == 0) {
+            PyObject* child = PyTuple_GetItem(node, 1);
+            build_pyiceberg_cudf_ast_node(child, field_id_to_col_idx,
+                                          read_schema, filter_ast_tree,
+                                          filter_scalars, stream);
+            filter_ast_tree.push(cudf::ast::operation(
+                cudf::ast::ast_operator::NOT, filter_ast_tree.back()));
+            return;
+        }
+
+        // AND / OR
+        if (strcmp(op, "and") == 0 || strcmp(op, "or") == 0) {
+            PyObject* left = PyTuple_GetItem(node, 1);
+            PyObject* right = PyTuple_GetItem(node, 2);
+
+            build_pyiceberg_cudf_ast_node(left, field_id_to_col_idx,
+                                          read_schema, filter_ast_tree,
+                                          filter_scalars, stream);
+            const cudf::ast::expression* left_root = &filter_ast_tree.back();
+            build_pyiceberg_cudf_ast_node(right, field_id_to_col_idx,
+                                          read_schema, filter_ast_tree,
+                                          filter_scalars, stream);
+            const cudf::ast::expression* right_root = &filter_ast_tree.back();
+
+            cudf::ast::ast_operator comb_op =
+                (strcmp(op, "and") == 0) ? cudf::ast::ast_operator::LOGICAL_AND
+                                         : cudf::ast::ast_operator::LOGICAL_OR;
+
+            filter_ast_tree.push(
+                cudf::ast::operation(comb_op, *left_root, *right_root));
+            return;
+        }
+
+        // Unknown op, treat as no-op (true)
+        auto literal_value =
+            std::make_unique<cudf::numeric_scalar<bool>>(true, true);
+        filter_scalars.push_back(std::move(literal_value));
+        filter_ast_tree.push(
+            cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
+                filter_scalars.back().get())));
+        cudf::ast::operation expr = cudf::ast::operation(
+            cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back());
+        filter_ast_tree.push(expr);
+    }
+
     void get_dataset(PyObject* catalog, const std::string& table_id,
                      const std::shared_ptr<arrow::Schema>& arrow_schema,
                      PyObject* iceberg_filter, PyObject* iceberg_schema,
@@ -518,6 +871,21 @@ class GPUIcebergRankBatchGenerator {
         if (PyErr_Occurred()) {
             throw std::runtime_error(
                 "failed to import bodo.io.iceberg.common module");
+        }
+
+        // Convert iceberg filter to cuDF AST
+        PyObjectPtr cudf_ast_func = PyObject_GetAttrString(
+            iceberg_common_mod.get(), "pyiceberg_filter_to_cudf_ast");
+        if (!cudf_ast_func || !PyCallable_Check(cudf_ast_func)) {
+            throw std::runtime_error(
+                "failed to get pyiceberg_filter_to_cudf_ast function");
+        }
+        this->iceberg_filter_cudf_ast = PyObjectPtr(
+            PyObject_CallFunctionObjArgs(cudf_ast_func.get(), iceberg_filter,
+                                         iceberg_schema, Py_True, nullptr));
+        if (!this->iceberg_filter_cudf_ast) {
+            throw std::runtime_error(
+                "failed to convert iceberg filter to cuDF AST");
         }
 
         PyObjectPtr convert_func = PyObject_GetAttrString(
@@ -650,6 +1018,8 @@ class GPUIcebergRankBatchGenerator {
                 "schema",
                 read_schema);
             this->scanner_read_schemas.push_back(read_schema);
+            this->scanner_field_ids.emplace_back(
+                PyObject_GetAttrString(schema_group, "iceberg_field_ids"));
         }
 
         // rows_to_skip is always 0 for GPU (piece-level read, no offset)
@@ -687,6 +1057,8 @@ class GPUIcebergRankBatchGenerator {
     std::shared_ptr<arrow::Schema> curr_read_schema;
     std::unique_ptr<cudf::table> leftover_tbl;
     std::vector<std::pair<int, int>> curr_col_mapping;
+    PyObjectPtr iceberg_filter_cudf_ast = nullptr;
+    std::vector<PyObjectPtr> scanner_field_ids;
     MetricBase::TimerValue evolve_time_ = 0;
 };
 
