@@ -197,13 +197,11 @@ class GPUIcebergRankBatchGenerator {
             return;
         }
 
+        // Process one piece at a time to avoid schema mismatch across files
+        // within the same schema group.
         int64_t schema_group_idx = pieces_[curr_piece_idx].schema_group_idx;
-        std::vector<std::string> group_paths;
-        while (curr_piece_idx < pieces_.size() &&
-               pieces_[curr_piece_idx].schema_group_idx == schema_group_idx) {
-            group_paths.push_back(pieces_[curr_piece_idx].path);
-            curr_piece_idx++;
-        }
+        std::string path = pieces_[curr_piece_idx].path;
+        curr_piece_idx++;
 
         // Get schema group info
         if (schema_group_idx < 0 ||
@@ -322,15 +320,13 @@ class GPUIcebergRankBatchGenerator {
         }
 
         std::vector<std::unique_ptr<cudf::io::datasource>> sources;
-        for (const auto& path : group_paths) {
-            if (filesystem_->type_name() != "local") {
-                std::shared_ptr<arrow::io::RandomAccessFile> arrow_file =
-                    filesystem_->OpenInputFile(path).ValueOrDie();
-                sources.push_back(
-                    std::make_unique<arrow_file_datasource>(arrow_file));
-            } else {
-                sources.push_back(cudf::io::datasource::create(path));
-            }
+        if (filesystem_->type_name() != "local") {
+            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file =
+                filesystem_->OpenInputFile(path).ValueOrDie();
+            sources.push_back(
+                std::make_unique<arrow_file_datasource>(arrow_file));
+        } else {
+            sources.push_back(cudf::io::datasource::create(path));
         }
 
         curr_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
