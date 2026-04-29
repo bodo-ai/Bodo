@@ -32,8 +32,8 @@ pytestmark = [pytest.mark.iceberg]
             "SIMPLE_MAP_TABLE",
             marks=pytest.mark.skip(reason="Need to support reading maps from parquet."),
         ),
-        "SIMPLE_STRING_TABLE",
-        "PARTITIONS_DT_TABLE",
+        pytest.param("SIMPLE_STRING_TABLE", marks=pytest.mark.gpu),
+        pytest.param("PARTITIONS_DT_TABLE", marks=pytest.mark.gpu),
         "SIMPLE_DT_TSZ_TABLE",
         "SIMPLE_DECIMALS_TABLE",
     ],
@@ -141,6 +141,7 @@ def test_table_read_head(
         "SIMPLE_STRING_TABLE",
     ],
 )
+@pytest.mark.gpu
 def test_table_read_selected_fields(
     iceberg_database,
     iceberg_table_conn,
@@ -174,6 +175,7 @@ def test_table_read_selected_fields(
         "SIMPLE_STRING_TABLE",
     ],
 )
+@pytest.mark.gpu
 def test_table_read_select_columns(
     iceberg_database,
     iceberg_table_conn,
@@ -208,6 +210,7 @@ def test_table_read_select_columns(
         "SIMPLE_NUMERIC_TABLE",
     ],
 )
+@pytest.mark.gpu
 def test_table_read_row_filter(
     iceberg_database,
     iceberg_table_conn,
@@ -255,6 +258,7 @@ def test_table_read_row_filter(
         "SIMPLE_NUMERIC_TABLE",
     ],
 )
+@pytest.mark.gpu
 def test_table_read_time_travel(
     iceberg_database,
     iceberg_table_conn,
@@ -339,6 +343,7 @@ def test_table_read_time_travel(
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
+@pytest.mark.gpu
 def test_table_read_filter_pushdown(
     table_name,
     op,
@@ -382,6 +387,7 @@ def test_table_read_filter_pushdown(
         "SIMPLE_NUMERIC_TABLE",
     ],
 )
+@pytest.mark.gpu
 def test_table_read_filter_pushdown_multiple(
     iceberg_database,
     iceberg_table_conn,
@@ -420,6 +426,7 @@ def test_table_read_filter_pushdown_multiple(
         "SIMPLE_NUMERIC_TABLE",
     ],
 )
+@pytest.mark.gpu
 def test_table_read_filter_pushdown_and_row_filter(
     iceberg_database,
     iceberg_table_conn,
@@ -460,6 +467,7 @@ def test_table_read_filter_pushdown_and_row_filter(
     "table_name",
     ["ADVERSARIAL_SCHEMA_EVOLUTION_TABLE"],
 )
+@pytest.mark.gpu
 def test_table_read_schema_evolved_filter_pushdown(
     iceberg_database,
     iceberg_table_conn,
@@ -499,6 +507,7 @@ def test_table_read_schema_evolved_filter_pushdown(
         "PARTITIONS_DT_TABLE",
     ],
 )
+@pytest.mark.gpu
 def test_table_read_partitioned_file_pruning(
     iceberg_database,
     iceberg_table_conn,
@@ -591,6 +600,7 @@ def test_write():
         assert snapshot.summary.get("p_key") == "p_value"
 
 
+@pytest.mark.gpu
 def test_read_s3_tables_location():
     from bodo.io.iceberg.catalog.s3_tables import (
         S3TABLES_REGION,
@@ -616,6 +626,7 @@ def test_read_s3_tables_location():
     )
 
 
+@pytest.mark.gpu
 def test_read_s3_tables_read_iceberg_table():
     from bodo.io.iceberg.catalog.s3_tables import (
         S3TABLES_REGION,
@@ -686,6 +697,7 @@ def test_write_s3_tables_location():
         catalog.purge_table(table_id)
 
 
+@pytest.mark.gpu
 def test_read_iceberg_rename():
     from bodo.io.iceberg.catalog.s3_tables import (
         S3TABLES_REGION,
@@ -730,6 +742,7 @@ def test_read_iceberg_rename():
     )
 
 
+@pytest.mark.gpu
 def test_join_filter(
     iceberg_database,
     iceberg_table_conn,
