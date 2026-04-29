@@ -38,7 +38,7 @@
 
 std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     cudf::table_view const& _input, std::vector<uint64_t>& key_indices,
-    std::vector<uint64_t>& column_indices,
+    bool drop_na_keys, std::vector<uint64_t>& column_indices,
     std::vector<cudf::groupby::aggregation_request>& aggregation_requests,
     col_to_col_fn_vec& aggregation_fns, col_to_col_fn_vec& post_agg_fns,
     tbl_to_tbl_fn_vec& pre_agg_table_fns, rmm::cuda_stream_view& stream) {
@@ -65,7 +65,9 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     // Create a view with just the key columns.
     cudf::table_view keys{key_columns};
     // Build the groupby object
-    cudf::groupby::groupby gb_obj(keys, cudf::null_policy::EXCLUDE);
+    cudf::groupby::groupby gb_obj(keys, drop_na_keys
+                                            ? cudf::null_policy::EXCLUDE
+                                            : cudf::null_policy::INCLUDE);
 
     std::vector<std::unique_ptr<cudf::column>> fn_cols;
     // Put the column view for the aggregations into aggregation_requests.
@@ -131,10 +133,10 @@ bool CudaGroupbyState::build_consume_batch(
         std::shared_ptr<StreamAndEvent> local_groupby_se =
             make_stream_and_event(g_use_async);
         input_se->event.wait(local_groupby_se->stream);
-        std::shared_ptr<cudf::table> new_data =
-            do_groupby(input_table->view(), key_indices, column_indices,
-                       aggregation_requests, aggregation_fns, post_agg_fns,
-                       pre_agg_table_fns, local_groupby_se->stream);
+        std::shared_ptr<cudf::table> new_data = do_groupby(
+            input_table->view(), key_indices, drop_na_keys, column_indices,
+            aggregation_requests, aggregation_fns, post_agg_fns,
+            pre_agg_table_fns, local_groupby_se->stream);
         local_groupby_se->event.record(local_groupby_se->stream);
         merge_shuffler.append_batch(new_data, shuffle_key_indices,
                                     local_groupby_se);
@@ -175,10 +177,10 @@ bool CudaGroupbyState::build_consume_batch(
     // Make one table out of all the views.
     auto combined = cudf::concatenate(views, output_stream);
     // Do the groupby on the combined table.
-    accumulation =
-        do_groupby(combined->view(), merge_key_indices, merge_column_indices,
-                   merge_aggregation_requests, merge_aggregation_fns,
-                   post_merge_agg_fns, pre_merge_agg_table_fns, output_stream);
+    accumulation = do_groupby(combined->view(), merge_key_indices, drop_na_keys,
+                              merge_column_indices, merge_aggregation_requests,
+                              merge_aggregation_fns, post_merge_agg_fns,
+                              pre_merge_agg_table_fns, output_stream);
     return global_is_last;
 }
 
