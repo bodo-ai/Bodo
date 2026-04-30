@@ -373,7 +373,6 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
             Bodo_CTypes::CTypeEnum::UINT64));
         std::vector<std::string> names = {std::string("count_star()")};
         out_schema = std::make_shared<bodo::Schema>(std::move(types), names);
-        PhysicalGPUSource::EnsureNoNumpyColumns(out_schema);
         out_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
     }
@@ -417,7 +416,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
                     OperatorResult::FINISHED};
         }
 
-        cudf::numeric_scalar<uint64_t> s(global_count, true);
+        cudf::numeric_scalar<uint64_t> s(global_count, true, se->stream);
         auto col = cudf::make_column_from_scalar(s, 1, se->stream);
         std::vector<std::unique_ptr<cudf::column>> cols;
         cols.push_back(std::move(col));
