@@ -169,8 +169,8 @@ def tpch_q03(lineitem, orders, customer, pd=bodo.pandas):
     """Pandas code adapted from:
     https://github.com/pola-rs/polars-benchmark/blob/main/queries/pandas/q3.py
     """
-    var1 = "HOUSEHOLD"
-    var2 = datetime.date(1995, 3, 4)
+    var1 = "BUILDING"
+    var2 = datetime.date(1995, 3, 15)
 
     fcustomer = customer[customer["C_MKTSEGMENT"] == var1]
 
@@ -641,26 +641,26 @@ def tpch_q19(lineitem, part, pd=bodo.pandas):
     jn1 = lineitem.merge(part, left_on="L_PARTKEY", right_on="P_PARTKEY")
     jn1 = jn1[
         (
-            (jn1["P_BRAND"] == "Brand#31")
+            (jn1["P_BRAND"] == "Brand#12")
             & (jn1["P_CONTAINER"].isin(("SM CASE", "SM BOX", "SM PACK", "SM PKG")))
-            & ((jn1["L_QUANTITY"] >= 4) & (jn1["L_QUANTITY"] <= 14))
-            & (jn1["P_SIZE"] <= 5)
+            & ((jn1["L_QUANTITY"] >= 1) & (jn1["L_QUANTITY"] <= 11))
+            & ((jn1["P_SIZE"] >= 1) & (jn1["P_SIZE"] <= 5))
             & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
             & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
         )
         | (
-            (jn1["P_BRAND"] == "Brand#43")
+            (jn1["P_BRAND"] == "Brand#23")
             & (jn1["P_CONTAINER"].isin(("MED BAG", "MED BOX", "MED PKG", "MED PACK")))
-            & ((jn1["L_QUANTITY"] >= 15) & (jn1["L_QUANTITY"] <= 25))
+            & ((jn1["L_QUANTITY"] >= 10) & (jn1["L_QUANTITY"] <= 20))
             & ((jn1["P_SIZE"] >= 1) & (jn1["P_SIZE"] <= 10))
             & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
             & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
         )
         | (
-            (jn1["P_BRAND"] == "Brand#43")
+            (jn1["P_BRAND"] == "Brand#34")
             & (jn1["P_CONTAINER"].isin(("LG CASE", "LG BOX", "LG PACK", "LG PKG")))
-            & ((jn1["L_QUANTITY"] >= 26) & (jn1["L_QUANTITY"] <= 36))
-            & (jn1["P_SIZE"] <= 15)
+            & ((jn1["L_QUANTITY"] >= 20) & (jn1["L_QUANTITY"] <= 30))
+            & ((jn1["P_SIZE"] >= 1) & (jn1["P_SIZE"] <= 15))
             & (jn1["L_SHIPMODE"].isin(("AIR", "AIR REG")))
             & (jn1["L_SHIPINSTRUCT"] == "DELIVER IN PERSON")
         )
@@ -776,153 +776,136 @@ def tpch_q22(customer, orders, pd=bodo.pandas):
     return result_df
 
 
-show_output = False
-
-
-def exec_func(res):
-    global show_output
-
-    if show_output:
-        print(res)
-    elif isinstance(
-        res, (bodo.pandas.BodoDataFrame, bodo.pandas.BodoSeries, bodo.pandas.BodoScalar)
-    ):
-        res.execute_plan()
-    return res
-
-
 @timethis
 @collect_datasets
 def q01(lineitem, pd):
-    return exec_func(tpch_q01(lineitem, pd))
+    return tpch_q01(lineitem, pd)
 
 
 @timethis
 @collect_datasets
 def q02(part, partsupp, supplier, nation, region, pd):
-    return exec_func(tpch_q02(part, partsupp, supplier, nation, region, pd))
+    return tpch_q02(part, partsupp, supplier, nation, region, pd)
 
 
 @timethis
 @collect_datasets
 def q03(lineitem, orders, customer, pd):
-    return exec_func(tpch_q03(lineitem, orders, customer, pd))
+    return tpch_q03(lineitem, orders, customer, pd)
 
 
 @timethis
 @collect_datasets
 def q04(lineitem, orders, pd):
-    return exec_func(tpch_q04(lineitem, orders, pd))
+    return tpch_q04(lineitem, orders, pd)
 
 
 @timethis
 @collect_datasets
 def q05(lineitem, orders, customer, nation, region, supplier, pd):
-    return exec_func(tpch_q05(lineitem, orders, customer, nation, region, supplier, pd))
+    return tpch_q05(lineitem, orders, customer, nation, region, supplier, pd)
 
 
 @timethis
 @collect_datasets
 def q06(lineitem, pd):
-    return exec_func(tpch_q06(lineitem, pd))
+    return tpch_q06(lineitem, pd)
 
 
 @timethis
 @collect_datasets
 def q07(lineitem, supplier, orders, customer, nation, pd):
-    return exec_func(tpch_q07(lineitem, supplier, orders, customer, nation, pd))
+    return tpch_q07(lineitem, supplier, orders, customer, nation, pd)
 
 
 @timethis
 @collect_datasets
 def q08(part, lineitem, supplier, orders, customer, nation, region, pd):
-    return exec_func(
-        tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd)
-    )
+    return tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd)
 
 
 @timethis
 @collect_datasets
 def q09(lineitem, orders, part, nation, partsupp, supplier, pd):
-    return exec_func(tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd))
+    return tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd)
 
 
 @timethis
 @collect_datasets
 def q10(lineitem, orders, customer, nation, pd):
-    return exec_func(tpch_q10(lineitem, orders, customer, nation, pd))
+    return tpch_q10(lineitem, orders, customer, nation, pd)
 
 
 @timethis
 @collect_datasets
 def q11(partsupp, supplier, nation, scale_factor, pd):
-    return exec_func(tpch_q11(partsupp, supplier, nation, scale_factor, pd))
+    return tpch_q11(partsupp, supplier, nation, scale_factor, pd)
 
 
 @timethis
 @collect_datasets
 def q12(lineitem, orders, pd):
-    return exec_func(tpch_q12(lineitem, orders, pd))
+    return tpch_q12(lineitem, orders, pd)
 
 
 @timethis
 @collect_datasets
 def q13(customer, orders, pd):
-    return exec_func(tpch_q13(customer, orders, pd))
+    return tpch_q13(customer, orders, pd)
 
 
 @timethis
 @collect_datasets
 def q14(lineitem, part, pd):
-    return exec_func(tpch_q14(lineitem, part, pd))
+    return tpch_q14(lineitem, part, pd)
 
 
 @timethis
 @collect_datasets
 def q15(lineitem, supplier, pd):
-    return exec_func(tpch_q15(lineitem, supplier, pd))
+    return tpch_q15(lineitem, supplier, pd)
 
 
 @timethis
 @collect_datasets
 def q16(part, partsupp, supplier, pd):
-    return exec_func(tpch_q16(part, partsupp, supplier, pd))
+    return tpch_q16(part, partsupp, supplier, pd)
 
 
 @timethis
 @collect_datasets
 def q17(lineitem, part, pd):
-    return exec_func(tpch_q17(lineitem, part, pd))
+    return tpch_q17(lineitem, part, pd)
 
 
 @timethis
 @collect_datasets
 def q18(lineitem, orders, customer, pd):
-    return exec_func(tpch_q18(lineitem, orders, customer, pd))
+    return tpch_q18(lineitem, orders, customer, pd)
 
 
 @timethis
 @collect_datasets
 def q19(lineitem, part, pd):
-    return exec_func(tpch_q19(lineitem, part, pd))
+    return tpch_q19(lineitem, part, pd)
 
 
 @timethis
 @collect_datasets
 def q20(lineitem, part, nation, partsupp, supplier, pd):
-    return exec_func(tpch_q20(lineitem, part, nation, partsupp, supplier, pd))
+    return tpch_q20(lineitem, part, nation, partsupp, supplier, pd)
 
 
 @timethis
 @collect_datasets
 def q21(lineitem, orders, supplier, nation, pd):
-    return exec_func(tpch_q21(lineitem, orders, supplier, nation, pd))
+    return tpch_q21(lineitem, orders, supplier, nation, pd)
 
 
 @timethis
 @collect_datasets
 def q22(customer, orders, pd):
-    return exec_func(tpch_q22(customer, orders, pd))
+    return tpch_q22(customer, orders, pd)
 
 
 def _load_args(query: int, root: str, scale_factor: float, backend):
@@ -945,12 +928,15 @@ def run_queries(
     warmup: bool,
     log_file: str | None = None,
     answers_path: str | None = None,
+    output_path: str | None = None,
+    show_output: bool = False,
 ):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
 
     total_start = time.time()
     success = 0
+    failed_queries = []
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
@@ -968,22 +954,48 @@ def run_queries(
         try:
             if warmup:
                 # Warm up run:
-                query_func()
+                result = query_func()
+                result.execute_plan()
 
             # Second run for timing:
             result = query_func()
+            # if show_output:
+            #     print(result)
+            # else:
+            #     result.execute_plan()
 
             if answers_path:
                 from bodo.tests.utils import _test_equal
 
-                answer_df = pd.read_parquet(f"{answers_path}/q{query:02}.pq")
-                _test_equal(result, answer_df)
+                answer_df = (
+                    pd.read_parquet(
+                        f"{answers_path}/q{query:02}.pq", dtype_backend="pyarrow"
+                    )
+                    .rename(columns=str.upper)
+                    .rename(
+                        {
+                            "O_ORDERDAT": "O_ORDERDATE",
+                            "COL6": "L_QUANTITY",
+                        },
+                        axis=1,
+                    )
+                )
+
+                answer_df = answer_df[
+                    list(result.columns)
+                ]  # reorder columns to match result
+                _test_equal(result, answer_df, sort_output=True, reset_index=True)
             success += 1
+            if output_path:
+                result.to_parquet(f"{output_path}/q{query:02}.pq")
         except Exception as e:
             print(f"Error running query {query}: {e}")
+            failed_queries.append(query)
 
     print(f"Total query execution time (s): {time.time() - total_start}")
     print(f"Total successful queries: {success}/{len(queries)}")
+    if failed_queries:
+        print(f"Failed queries: {failed_queries}")
 
 
 def main():
@@ -1039,15 +1051,18 @@ def main():
         required=False,
         help="Path to diectory containing pre-computed answers (in parquet format), expects names like q<query>.pq",
     )
-
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        required=False,
+        help="Path to directory to write query outputs (in parquet format), will write files like q<query>.pq",
+    )
     args = parser.parse_args()
     data_set = args.folder
     scale_factor = args.scale_factor
     backend = args.backend
     assert backend in ["bodo", "pandas", "pd"]
 
-    global show_output
-    show_output = args.show_output
     do_warmup = not args.no_warmup
 
     queries = list(range(1, 23))
@@ -1068,6 +1083,9 @@ def main():
         print("Running bodo.pandas: GPU enabled?: ", bodo.gpu_enabled)
 
         print(backend_module.DataFrame({"A": [1, 2, 3]})["A"])
+
+    if args.output_path:
+        os.makedirs(args.output_path, exist_ok=True)
     run_queries(
         data_set,
         queries=queries,
@@ -1076,6 +1094,8 @@ def main():
         warmup=do_warmup,
         log_file=args.log_timings,
         answers_path=args.answers_path,
+        output_path=args.output_path,
+        show_output=args.show_output,
     )
 
 

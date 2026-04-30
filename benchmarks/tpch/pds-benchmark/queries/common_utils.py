@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import sys
 from importlib.metadata import version
@@ -119,6 +120,8 @@ def run_query_generic(
             name=f"Run {library_name} query {query_number}", unit="s"
         ) as timer:
             result = query()
+        os.makedirs("answers", exist_ok=True)
+        result.to_pandas().to_parquet(f"answers/q{query_number:02}.pq")
 
         if settings.run.log_timings:
             log_query_timing(
