@@ -70,6 +70,7 @@ def get_iceberg_pq_dataset(
     force_row_level_read: bool = True,
     snapshot_id: int = -1,
     limit: int = -1,
+    communicator=None,
 ) -> IcebergParquetDataset:
     """
     Top-Level Function for Planning Iceberg Parquet Files at Runtime
@@ -98,6 +99,8 @@ def get_iceberg_pq_dataset(
         snapshot_id (int, default: -1): The snapshot ID to use for the Iceberg
             table. If -1, the latest snapshot will be used.
         limit (int, default: -1): Limit on the number of rows to read.
+        communicator: MPI Communicator to use for parallel processing. If None,
+            MPI.COMM_WORLD will be used.
 
     Returns:
         IcebergParquetDataset: Contains all the pieces to read, along
@@ -113,7 +116,7 @@ def get_iceberg_pq_dataset(
 
     ev = tracing.Event("get_iceberg_pq_dataset")
     metrics = IcebergPqDatasetMetrics()
-    comm = MPI.COMM_WORLD
+    comm = communicator if communicator is not None else MPI.COMM_WORLD
 
     # Get list of files. This is the list after
     # applying the iceberg_filter (metadata-level).

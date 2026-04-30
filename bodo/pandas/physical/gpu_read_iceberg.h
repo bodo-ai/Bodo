@@ -68,7 +68,7 @@ class GPUIcebergRankBatchGenerator {
         MPI_Comm_size(comm, &size_);
 
         get_dataset(catalog, table_id, arrow_schema, iceberg_filter,
-                    iceberg_schema, snapshot_id, target_rows);
+                    iceberg_schema, snapshot_id, target_rows, comm);
 
         // Distribute pieces
         distribute_pieces();
@@ -872,7 +872,8 @@ class GPUIcebergRankBatchGenerator {
     void get_dataset(PyObject* catalog, const std::string& table_id,
                      const std::shared_ptr<arrow::Schema>& arrow_schema,
                      PyObject* iceberg_filter, PyObject* iceberg_schema,
-                     int64_t snapshot_id, int64_t tot_rows_to_read) {
+                     int64_t snapshot_id, int64_t tot_rows_to_read,
+                     MPI_Comm comm) {
         // import bodo.io.iceberg
         PyObjectPtr iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
         if (PyErr_Occurred()) {
@@ -955,8 +956,14 @@ class GPUIcebergRankBatchGenerator {
         PyObject* filter_scalars_py =
             PyTuple_GetItem(filter_f_str_and_scalars.get(), 1);
 
+        // Wrap C++ MPI communicator as mpi4py communicator
+        MPI_Fint fcomm = MPI_Comm_c2f(comm);
+        PyObjectPtr mpi4py = PyImport_ImportModule("mpi4py.MPI");
+        PyObjectPtr comm_obj =
+            PyObject_CallMethod(mpi4py.get(), "Comm.f2py", "i", fcomm);
+
         PyObjectPtr ds = PyObject_CallMethod(
-            iceberg_mod.get(), "get_iceberg_pq_dataset", "OsOOOsOOLL", catalog,
+            iceberg_mod.get(), "get_iceberg_pq_dataset", "OsOOOsOOLLO", catalog,
             table_id.c_str(), this->pyarrow_schema.get(),
             str_as_dict_cols_py.get(),
             py_iceberg_filter_and_duckdb_filter.get(),
@@ -965,7 +972,7 @@ class GPUIcebergRankBatchGenerator {
                 : "",
             filter_scalars_py, force_row_level_py,
             static_cast<long long>(snapshot_id),
-            static_cast<long long>(tot_rows_to_read));
+            static_cast<long long>(tot_rows_to_read), comm_obj.get());
 
         if (ds == nullptr || PyErr_Occurred()) {
             throw std::runtime_error(
@@ -1213,6 +1220,9 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override {
+        std::cout
+            << "PhysicalGPUReadIceberg::ProduceBatchGPU called, batch_gen is "
+            << (batch_gen ? "initialized " : "not initialized ") << std::endl;
         if (!batch_gen) {
             time_pt start_init = start_timer();
             init_batch_gen();
@@ -1235,6 +1245,11 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
 
         GPU_DATA ret(std::move(next_batch_tup.first), output_arrow_schema, se);
         this->metrics.produce_time += end_timer(start_produce);
+        std::cout
+            << "PhysicalGPUReadIceberg::ProduceBatchGPU produced batch with "
+            << (ret.table ? std::to_string(ret.table->num_rows()) + " rows"
+                          : "no table")
+            << ", result: " << toString(result) << std::endl;
         return {std::move(ret), result};
     }
 
