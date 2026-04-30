@@ -638,7 +638,7 @@ struct PhysicalGPUReadParquetMetrics {
     time_t produce_time = 0;
 };
 
-std::shared_ptr<arrow::Schema> MakeNullableSchema(
+static std::shared_ptr<arrow::Schema> MakeNullableSchema(
     std::shared_ptr<arrow::Schema> s) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(s->num_fields());
