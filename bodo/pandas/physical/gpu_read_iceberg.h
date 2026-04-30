@@ -60,7 +60,7 @@ class GPUIcebergRankBatchGenerator {
           py_filesystem(nullptr),
           selected_columns_(selected_columns),
           output_arrow_schema(std::move(output_arrow_schema)) {
-        // Only assign parts to GPU-pinned ranks
+        // Get file list on all ranks and only assign parts to GPU-pinned ranks
 
         MPI_Comm_rank(comm, &rank_);
         MPI_Comm_size(comm, &size_);
@@ -763,11 +763,6 @@ class GPUIcebergRankBatchGenerator {
             PyObject* values_list = PyTuple_GetItem(node, 2);
             Py_ssize_t n_values = PyList_Size(values_list);
 
-            if (n_values > 100) {
-                throw std::runtime_error(
-                    "build_pyiceberg_cudf_ast_node: IN with more than 100 "
-                    "values is not supported");
-            }
             if (n_values == 0) {
                 // Empty IN -> no rows match. Push IDENTITY(false).
                 push_cudf_identity(false, filter_ast_tree, filter_scalars);
@@ -857,7 +852,9 @@ class GPUIcebergRankBatchGenerator {
         // import bodo.io.iceberg
         PyObjectPtr iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
         if (PyErr_Occurred()) {
-            throw std::runtime_error("python");
+            throw std::runtime_error(
+                "GPUIcebergRankBatchGenerator::get_dataset: failed to import "
+                "bodo.io.iceberg module");
         }
 
         // For now, we don't support dict-encoded strings on GPU yet (or we'll
@@ -973,7 +970,9 @@ class GPUIcebergRankBatchGenerator {
         PyObjectPtr iceberg_mod =
             PyImport_ImportModule("bodo.io.iceberg.read_parquet");
         if (PyErr_Occurred()) {
-            throw std::runtime_error("python");
+            throw std::runtime_error(
+                "GPUIcebergRankBatchGenerator::distribute_pieces: failed to "
+                "import bodo.io.iceberg.read_parquet module");
         }
 
         PyObjectPtr rank_py = PyLong_FromLong(rank_);
@@ -986,7 +985,9 @@ class GPUIcebergRankBatchGenerator {
             iceberg_mod.get(), "distribute_pieces", "OOO",
             this->py_pieces.get(), rank_py.get(), size_py.get());
         if (pieces_myrank_py == nullptr && PyErr_Occurred()) {
-            throw std::runtime_error("python");
+            throw std::runtime_error(
+                "GPUIcebergRankBatchGenerator::distribute_pieces: "
+                "distribute_pieces call failed");
         }
 
         PyObject* piece;
