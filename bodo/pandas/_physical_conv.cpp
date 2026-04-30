@@ -193,7 +193,14 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                     "aggregate expression for reduction.");
             }
 #ifdef USE_CUDF
-            auto physical_op = std::make_shared<PhysicalGPUCountStar>();
+            std::variant<std::shared_ptr<PhysicalCountStar>,
+                         std::shared_ptr<PhysicalGPUCountStar>>
+                physical_op;
+            if (node_run_on_gpu(op)) {
+                physical_op = std::make_shared<PhysicalGPUCountStar>();
+            } else {
+                physical_op = std::make_shared<PhysicalCountStar>();
+            }
 #else   // USE_CUDF
             auto physical_op = std::make_shared<PhysicalCountStar>();
 #endif  // USE_CUDF
@@ -202,7 +209,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
         // The same operator will exist in both pipelines.  The sink of the
         // previous pipeline and the source of the next one.
         // We record the pipeline dependency between these two pipelines.
-            FinishPipelineOneOperator(physical_op);
+            std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); },
+                       physical_op);
             return;
         }
         // bind_info in every expression stores the same schema for the entire
