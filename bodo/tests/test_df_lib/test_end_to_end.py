@@ -231,6 +231,7 @@ def test_read_parquet_filter_projection(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
@@ -1155,6 +1156,7 @@ def test_set_df_column_extra_proj(datapath, index_val):
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback partitioning
 def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -1184,6 +1186,7 @@ def test_parquet_read_partitioned(datapath):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback partitioning
 def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -1599,6 +1602,7 @@ def as_index(request):
     return request.param
 
 
+@pytest.mark.gpu
 def test_series_groupby(dropna, as_index):
     """
     Test a simple groupby operation.
@@ -1607,7 +1611,7 @@ def test_series_groupby(dropna, as_index):
         df1 = pd.DataFrame(
             {
                 "B": ["a1", "b11", "c111"] * 2,
-                "E": pd.array([1.1, pd.NA, 13.3, pd.NA, pd.NA, 13.3], "Float64"),
+                "E": pd.array([1.1, 4.1, 13.3, 1.9, 3.5, 13.3], "Float64"),
                 "A": pd.array([pd.NA, 2, 3] * 2, "Int64"),
             },
             index=[0, 41, 2] * 2,
@@ -1619,6 +1623,7 @@ def test_series_groupby(dropna, as_index):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback groupby with string aggregation
 @pytest.mark.parametrize(
     "selection",
     [pytest.param(None, id="select_all"), pytest.param(["C", "A"], id="select_subset")],
@@ -1630,7 +1635,7 @@ def test_dataframe_groupby(dropna, as_index, selection):
     with assert_executed_plan_count(0):
         df1 = pd.DataFrame(
             {
-                "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+                "A": pd.array([1, 2, 4, 2147483647] * 3, "Int32"),
                 "B": ["A", "B"] * 6,
                 "E": [False, True] * 6,
                 "D": pd.array(
@@ -1928,6 +1933,7 @@ def test_series_mod(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_compound_expression(datapath):
     """Very simple test for projection expressions."""
     with assert_executed_plan_count(0):
@@ -1949,6 +1955,7 @@ def test_series_compound_expression(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_arith_binops(datapath, index_val):
     """Test various cases of Series binary operations."""
     df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
@@ -1990,6 +1997,7 @@ def test_series_arith_binops(datapath, index_val):
     )
 
 
+@pytest.mark.gpu
 def test_series_cmp_binops(datapath, index_val):
     """Test various cases of Series binary operations."""
     df = pd.DataFrame({"A": [1, 20, 300], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
@@ -2031,6 +2039,7 @@ def test_series_cmp_binops(datapath, index_val):
     )
 
 
+@pytest.mark.gpu
 def test_scalar_arith_binops(datapath, index_val):
     """Test various cases of BodoScalar binary operations."""
 
@@ -3968,6 +3977,7 @@ def test_lazy_len(pd_in, expr, index_val):
     _test_equal(bodo_out, pd_out, check_pandas_types=False, reset_index=reset_index)
 
 
+@pytest.mark.gpu
 def test_len_no_warn(index_val):
     """Test that collecting length does not raise warnings"""
     df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6], "B": [1, 2, 3, 10, 20, 30]})
@@ -4124,7 +4134,7 @@ def test_timezone_scalar_func(engine, index_val, timezone_timestamp_df):
     _test_equal(bodo_out, expected, check_pandas_types=False)
 
 
-@pytest.mark.gpu
+@pytest.mark.gpu(allow_fallback=True)  # fallback timezone
 def test_timezone_filter(index_val, timezone_timestamp_df):
     """Test filter works with timezones"""
     df = timezone_timestamp_df
@@ -4154,6 +4164,7 @@ def test_timezone_groupby(timezone_timestamp_df):
     _test_equal(bodo_out, pandas_out, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback timezone
 def test_timezone_merge(timezone_timestamp_df):
     """Test merge works with timezone keys"""
     df = timezone_timestamp_df

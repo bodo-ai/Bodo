@@ -1205,8 +1205,12 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
             return cudf::data_type{type_id::TIMESTAMP_MICROSECONDS};
 
         case LogicalTypeId::TIMESTAMP_NS:
-        case LogicalTypeId::TIMESTAMP_TZ:
             return cudf::data_type{type_id::TIMESTAMP_NANOSECONDS};
+
+        case LogicalTypeId::TIMESTAMP_TZ:
+            throw std::runtime_error(
+                "duckdb_logicaltype_to_cudf: cudf does not support "
+                "TIMESTAMP_TZ type");
 
         // Date / Time / Interval
         case LogicalTypeId::DATE:
@@ -1522,8 +1526,14 @@ cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
             return cudf::data_type{type_id::STRING};
 
         case Type::TIMESTAMP: {
-            auto unit =
-                std::static_pointer_cast<arrow::TimestampType>(t)->unit();
+            auto timestamp = std::static_pointer_cast<arrow::TimestampType>(t);
+            if (!timestamp->timezone().empty()) {
+                throw std::runtime_error(
+                    "Arrow timestamp has timezone '" + timestamp->timezone() +
+                    "' but cuDF does not support timezones.");
+            }
+
+            auto unit = timestamp->unit();
             switch (unit) {
                 case arrow::TimeUnit::SECOND:
                     return cudf::data_type{type_id::TIMESTAMP_SECONDS};
