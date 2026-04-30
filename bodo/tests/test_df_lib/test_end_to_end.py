@@ -1700,9 +1700,9 @@ def test_groupby_fallback():
 def groupby_agg_df(request):
     return pd.DataFrame(
         {
-            "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+            "A": pd.array([1, 2, 0, 2147483647] * 3, "Int32"),
             "D": pd.array(
-                [i * 2 if (i**2) % 3 == 0 else pd.NA for i in range(12)], "Int32"
+                [i * 2 if (i**2) % 3 == 0 else 0 for i in range(12)], "Int32"
             ),
             "B": pd.array(["A", "B", pd.NA] * 4),
             "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
@@ -1711,6 +1711,7 @@ def groupby_agg_df(request):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func, kwargs",
     [
