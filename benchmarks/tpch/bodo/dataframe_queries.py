@@ -8,7 +8,6 @@ import time
 import warnings
 from collections.abc import Callable
 
-import boto3
 import pandas as pd
 
 import bodo.pandas
@@ -948,6 +947,7 @@ def run_queries(
 
     total_start = time.time()
     for query in queries:
+        print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
 
         def query_func():
@@ -1039,23 +1039,12 @@ def main():
             with open(args.log_timings, "w") as f:
                 f.write("implementation,query,n_gpus,execution_time\n")
 
-    storage_type = "s3" if args.folder.startswith("s3://") else "local"
-    if storage_type == "s3":
-        session = boto3.Session()
-        credentials = session.get_credentials().get_frozen_credentials()
-
-        # Variables required for using kvikio for S3 reads.
-        os.environ["AWS_ACCESS_KEY_ID"] = credentials.access_key
-        os.environ["AWS_SECRET_ACCESS_KEY"] = credentials.secret_key
-        os.environ["AWS_SESSION_TOKEN"] = credentials.token
-        os.environ["AWS_DEFAULT_REGION"] = (
-            session.region_name if session.region_name else "us-east-2"
-        )
-        os.environ["AWS_REGION"] = (
-            session.region_name if session.region_name else "us-east-2"
-        )
-
     backend_module = bodo.pandas if backend == "bodo" else pd
+    # warmup the cluster
+    if backend == "bodo":
+        print("Running bodo.pandas: GPU enabled?: ", bodo.gpu_enabled)
+
+        print(backend_module.DataFrame({"A": [1, 2, 3]})["A"])
     run_queries(
         data_set,
         queries=queries,

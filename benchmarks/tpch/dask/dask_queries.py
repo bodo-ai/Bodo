@@ -16,8 +16,18 @@ def _load_dataset(dataset_path, table_name, ext=".parquet"):
     )
 
 
+def datetime_or_date_value(value):
+    ts = datetime.strptime(value, "%Y-%m-%d")
+    if dask.config.get("dataframe.backend") == "pandas":
+        return ts.date()
+    # Dask-cuDF does not support date32[day][pyarrow]
+    return ts
+
+
 def query_01(dataset_path, scale, ext=".parquet"):
-    VAR1 = datetime(1998, 9, 2)
+    VAR1 = datetime_or_date_value(
+        "1998-09-02",
+    )
     lineitem_ds = _load_dataset(dataset_path, "lineitem", ext)
 
     lineitem_filtered = lineitem_ds[lineitem_ds.l_shipdate <= VAR1]
@@ -122,7 +132,7 @@ def query_02(dataset_path, scale, ext=".parquet"):
 
 
 def query_03(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-03-15", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-03-15")
     var2 = "BUILDING"
 
     lineitem_ds = _load_dataset(dataset_path, "lineitem", ext)
@@ -151,8 +161,8 @@ def query_03(dataset_path, scale, ext=".parquet"):
 
 
 def query_04(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1993-10-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1993-07-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1993-10-01")
+    date2 = datetime_or_date_value("1993-07-01")
 
     line_item_ds = _load_dataset(dataset_path, "lineitem", ext)
     orders_ds = _load_dataset(dataset_path, "orders", ext)
@@ -175,8 +185,8 @@ def query_04(dataset_path, scale, ext=".parquet"):
 
 
 def query_05(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1994-01-01")
+    date2 = datetime_or_date_value("1995-01-01")
 
     region_ds = _load_dataset(dataset_path, "region", ext)
     nation_ds = _load_dataset(dataset_path, "nation", ext)
@@ -203,8 +213,8 @@ def query_05(dataset_path, scale, ext=".parquet"):
 
 
 def query_06(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1994-01-01")
+    date2 = datetime_or_date_value("1995-01-01")
     var3 = 24
 
     line_item_ds = _load_dataset(dataset_path, "lineitem", ext)
@@ -223,8 +233,8 @@ def query_06(dataset_path, scale, ext=".parquet"):
 
 
 def query_07(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-01-01", "%Y-%m-%d")
-    var2 = datetime.strptime("1997-01-01", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-01-01")
+    var2 = datetime_or_date_value("1997-01-01")
 
     nation_ds = _load_dataset(dataset_path, "nation", ext)
     customer_ds = _load_dataset(dataset_path, "customer", ext)
@@ -317,8 +327,8 @@ def query_07(dataset_path, scale, ext=".parquet"):
 
 
 def query_08(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-01-01", "%Y-%m-%d")
-    var2 = datetime.strptime("1997-01-01", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-01-01")
+    var2 = datetime_or_date_value("1997-01-01")
 
     supplier = _load_dataset(dataset_path, "supplier", ext)
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
@@ -488,8 +498,8 @@ def query_10(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     nation = _load_dataset(dataset_path, "nation", ext)
 
-    orderdate_from = datetime.strptime("1993-10-01", "%Y-%m-%d")
-    orderdate_to = datetime.strptime("1994-01-01", "%Y-%m-%d")
+    orderdate_from = datetime_or_date_value("1993-10-01")
+    orderdate_to = datetime_or_date_value("1994-01-01")
 
     orders = orders[
         (orders.o_orderdate >= orderdate_from) & (orders.o_orderdate < orderdate_to)
@@ -631,7 +641,7 @@ def query_12(dataset_path, scale, ext=".parquet"):
     orders = _load_dataset(dataset_path, "orders", ext)
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
 
-    receiptdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
+    receiptdate_from = datetime_or_date_value("1994-01-01")
     receiptdate_to = receiptdate_from + timedelta(days=365)
 
     table = orders.merge(lineitem, left_on="o_orderkey", right_on="l_orderkey")
@@ -720,8 +730,8 @@ def query_14(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     part = _load_dataset(dataset_path, "part", ext)
 
-    shipdate_from = datetime.strptime("1995-09-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1995-10-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1995-09-01")
+    shipdate_to = datetime_or_date_value("1995-10-01")
 
     table = lineitem.merge(part, left_on="l_partkey", right_on="p_partkey", how="inner")
     table = table[
@@ -787,8 +797,8 @@ def query_15(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     supplier = _load_dataset(dataset_path, "supplier", ext)
 
-    shipdate_from = datetime.strptime("1996-01-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1996-04-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1996-01-01")
+    shipdate_to = datetime_or_date_value("1996-04-01")
 
     # Create revenue view
     lineitem = lineitem[
@@ -1106,8 +1116,8 @@ def query_20(dataset_path, scale, ext=".parquet"):
     nation = _load_dataset(dataset_path, "nation", ext)
     part = _load_dataset(dataset_path, "part", ext)
     partsupp = _load_dataset(dataset_path, "partsupp", ext)
-    shipdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1994-01-01")
+    shipdate_to = datetime_or_date_value("1995-01-01")
 
     res_1 = lineitem[
         (lineitem["l_shipdate"] >= shipdate_from)
@@ -1306,21 +1316,9 @@ def run_single_query(
     total_time = time.time() - start
     if log_file:
         with open(log_file, "a") as f:
-            f.write(
-                f"dask[{backend}],{query_num},{os.environ.get('BODO_NUM_WORKERS', 4)},{total_time:f}\n"
-            )
+            f.write(f"dask[{backend}],{query_num},-,{total_time:f}\n")
     print(f"Query {query_num} execution time: {total_time:.2f} seconds")
     return total_time
-
-
-def run_queries(query_nums, dataset_path, scale_factor, log_file=None) -> None:
-    total_start = time.time()
-
-    for i in query_nums:
-        run_single_query(i, dataset_path, scale_factor, log_file=log_file)
-
-    total_time = time.time() - total_start
-    print(f"Total execution time: {total_time:.4f} seconds")
 
 
 def main():
@@ -1360,7 +1358,7 @@ def main():
         "--instance_profile_name",
         type=str,
         default=None,
-        help="IAM instance profile name for EC2 instances for accessing S3",
+        help="IAM instance profile name (e.g. dask-benchmark) for EC2 instances for accessing S3",
     )
     parser.add_argument(
         "--subnet_id",
@@ -1389,7 +1387,7 @@ def main():
             with open(args.log_timings, "w") as f:
                 f.write("implementation,query,n_gpus,execution_time\n")
 
-    dask.config.set({"dataframe.backend": args.backend})
+    # dask.config.set({"dataframe.backend": args.backend})
     dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
     dask.config.set({"distributed.comm.timeouts.connect": "600s"})
 
@@ -1418,8 +1416,8 @@ def main():
                 "worker_class": "dask_cuda.CUDAWorker",
                 "worker_options": {"rmm_managed_memory": True},
                 "docker_args": "--shm-size=256m -e EXTRA_CONDA_PACKAGES=s3fs",
-                "n_workers": args.n_workers,
-                "filesystem_size": 250,  # GB
+                "n_workers": 4,
+                "filesystem_size": 1000,  # GB
                 "region": "us-east-2",
                 "subnet_id": args.subnet_id,
                 "ami": ami,
@@ -1450,10 +1448,16 @@ def main():
             with cluster.get_client() as client:
                 print("DASHBOARD LINK: ", client.dashboard_link)
 
-                # Running dummy job to warm-up cluster
-                client.submit(lambda: 1).result()
-
                 start = time.time()
+
+                print(f"Warmup cluster with query {queries[0]} at {datetime.now()}")
+                run_single_query(
+                    queries[0],
+                    dataset_path,
+                    scale_factor,
+                    backend=args.backend,
+                    log_file=args.log_timings,
+                )
                 for query in queries:
                     try:
                         print(f"Submitting query {query} at {datetime.now()}")
@@ -1481,7 +1485,7 @@ def main():
         else:
             client = Client()
 
-            total_start = time.time()
+        total_start = time.time()
 
         for query in queries:
             run_single_query(
