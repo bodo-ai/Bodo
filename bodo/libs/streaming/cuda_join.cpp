@@ -157,7 +157,8 @@ bool CudaJoin::BuildConsumeBatch(
 std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     std::unique_ptr<cudf::table> table, bool global_is_last,
     rmm::cuda_stream_view stream) {
-    if (!global_is_last || !duckdb::PropagatesBuildSide(this->join_type)) {
+    if (!global_is_last || !duckdb::PropagatesBuildSide(this->join_type) ||
+        unmatched_build_rows == nullptr) {
         return table;
     }
 
@@ -194,9 +195,6 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     cudf::table_view build_kept_view = _build_table->select(
         this->build_kept_cols.begin(), this->build_kept_cols.end());
 
-    if (unmatched_build_rows == nullptr) {
-        return table;
-    }
     // For right and outer joins, we need to output unmatched build rows
     // at the end. We can identify these using the matched_build_rows
     // boolean mask.
