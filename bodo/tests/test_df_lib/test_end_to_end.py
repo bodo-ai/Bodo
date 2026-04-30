@@ -3977,6 +3977,7 @@ def test_lazy_len(pd_in, expr, index_val):
     _test_equal(bodo_out, pd_out, check_pandas_types=False, reset_index=reset_index)
 
 
+@pytest.mark.gpu
 def test_len_no_warn(index_val):
     """Test that collecting length does not raise warnings"""
     df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6], "B": [1, 2, 3, 10, 20, 30]})
