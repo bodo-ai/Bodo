@@ -950,6 +950,7 @@ def run_queries(
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
 
     total_start = time.time()
+    success = 0
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
@@ -964,20 +965,25 @@ def run_queries(
             query=query,
         )
 
-        if warmup:
-            # Warm up run:
-            query_func()
+        try:
+            if warmup:
+                # Warm up run:
+                query_func()
 
-        # Second run for timing:
-        result = query_func()
+            # Second run for timing:
+            result = query_func()
 
-        if answers_path:
-            from bodo.tests.utils import _test_equal
+            if answers_path:
+                from bodo.tests.utils import _test_equal
 
-            answer_df = pd.read_parquet(f"{answers_path}/q{query:02}.pq")
-            _test_equal(result, answer_df)
+                answer_df = pd.read_parquet(f"{answers_path}/q{query:02}.pq")
+                _test_equal(result, answer_df)
+            success += 1
+        except Exception as e:
+            print(f"Error running query {query}: {e}")
 
     print(f"Total query execution time (s): {time.time() - total_start}")
+    print(f"Total successful queries: {success}/{len(queries)}")
 
 
 def main():
@@ -1069,6 +1075,7 @@ def main():
         backend=backend_module,
         warmup=do_warmup,
         log_file=args.log_timings,
+        answers_path=args.answers_path,
     )
 
 
