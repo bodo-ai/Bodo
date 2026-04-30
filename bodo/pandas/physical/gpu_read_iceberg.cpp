@@ -1,5 +1,9 @@
 #include "physical/gpu_read_iceberg.h"
 
+// GPU-side reader for Iceberg tables. Each GPU rank processes a subset of
+// Parquet files, applying DuckDB and Iceberg filters at the row level via
+// cuDF AST, then evolves column schemas to match the Iceberg table schema.
+
 #include <Python.h>
 #include <arrow/io/file.h>
 #include <arrow/python/api.h>
@@ -47,6 +51,7 @@ GPUIcebergRankBatchGenerator::GPUIcebergRankBatchGenerator(
     get_dataset(catalog, table_id, arrow_schema, iceberg_filter, iceberg_schema,
                 snapshot_id, target_rows, comm);
 
+    // Non-GPU ranks only participate in collective MPI ops inside get_dataset.
     if (!is_gpu_rank()) {
         return;
     }
@@ -65,6 +70,7 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
     std::vector<std::unique_ptr<cudf::table>> gpu_tables;
     size_t rows_accum = 0;
 
+    // Consume leftover rows from the previous batch first.
     if (leftover_tbl) {
         std::size_t n = leftover_tbl->num_rows();
         if (n <= target_rows_) {
@@ -96,6 +102,9 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
             }
 
             if (rows_to_skip > 0) {
+                // Some pieces may have a row offset (e.g. from file-level
+                // filtering); discard leading rows until the skip count is
+                // exhausted.
                 size_t n = tbl->num_rows();
                 size_t to_skip = std::min((size_t)rows_to_skip, n);
                 if (to_skip == n) {
@@ -191,6 +200,8 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
 
     for (int col_idx : columns_to_read_set) {
         std::string name = curr_read_schema->field(col_idx)->name();
+        // _BODO_TEMP_ columns are placeholders for fields absent from
+        // this particular file.
         if (!name.starts_with("_BODO_TEMP_")) {
             col_to_file_idx[col_idx] = (int)file_col_names.size();
             file_col_names.push_back(name);
@@ -207,6 +218,8 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
     }
 
     if (last_filter_schema_group_idx != schema_group_idx) {
+        // Rebuild the filter AST only when the schema group changes
+        // (which determines column name -> index mappings).
         filter_ast_tree = cudf::ast::tree();
         filter_scalars.clear();
 
@@ -261,6 +274,8 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
                 filter_ast_tree.push(cudf::ast::operation(
                     cudf::ast::ast_operator::LOGICAL_AND, *duckdb_filter_root,
                     *iceberg_filter_root));
+            } else {
+                // No duckdb filter, just use iceberg filter
             }
         }
         last_filter_schema_group_idx = schema_group_idx;
@@ -283,6 +298,7 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
         sources.push_back(cudf::io::datasource::create(path));
     }
 
+    // 0 chunk_read_limit -> use the default chunk size.
     curr_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
         0, std::move(sources), std::vector<cudf::io::parquet::FileMetaData>(),
         opts, stream);
@@ -461,6 +477,7 @@ std::unique_ptr<cudf::table> GPUIcebergRankBatchGenerator::evolve_table(
         auto target_field = output_arrow_schema->field(i);
 
         if (mapping.first == -1) {
+            // Column doesn't exist in this file — fill with nulls.
             auto arrow_type = target_field->type();
             auto null_scalar =
                 arrow_scalar_to_cudf(arrow::MakeNullScalar(arrow_type), stream);

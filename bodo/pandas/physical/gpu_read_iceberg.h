@@ -26,6 +26,14 @@
  */
 class GPUIcebergRankBatchGenerator {
    public:
+    /**
+     * @brief Initialize the generator by fetching the Iceberg dataset,
+     * distributing pieces across GPU ranks, and initializing per-schema-group
+     * read schemas and field-id mappings.
+     *
+     * On non-GPU ranks, only the dataset is fetched (to participate in
+     * collective MPI operations); pieces and scanners are skipped.
+     */
     GPUIcebergRankBatchGenerator(
         PyObject* catalog, const std::string& table_id,
         PyObject* iceberg_filter, PyObject* iceberg_schema,
@@ -35,20 +43,46 @@ class GPUIcebergRankBatchGenerator {
         std::size_t target_rows, MPI_Comm comm,
         std::shared_ptr<arrow::Schema> output_arrow_schema);
 
+    /**
+     * @brief Produce the next batch of up to target_rows_ rows.
+     *
+     * Reads from individual Parquet files via chunked readers, applies
+     * DuckDB and Iceberg filters, evolves columns to match the output
+     * schema, and concatenates chunks to hit the target row count.
+     *
+     * @return A pair of (table, finished). If no more data is available,
+     *         returns an empty table with the output schema and finished=true.
+     */
     std::pair<std::unique_ptr<cudf::table>, bool> next(
         std::shared_ptr<StreamAndEvent> se);
 
+    /**
+     * @brief Report per-operator metrics (num_pieces, evolve_time).
+     */
     void ReportMetrics(std::vector<MetricBase>& metrics_out);
 
    private:
     void init_next_reader(rmm::cuda_stream_view stream);
 
+    /**
+     * @brief Reconstruct a column from released contents after child
+     * evolution. Shares the null-mask + column-construction boilerplate
+     * between list and map evolution paths.
+     */
     static std::unique_ptr<cudf::column> make_column_from_contents(
         cudf::column::contents&& col_data, cudf::size_type num_row,
         cudf::size_type null_count, cudf::data_type type,
         std::vector<std::unique_ptr<cudf::column>>&& children,
         rmm::cuda_stream_view stream);
 
+    /**
+     * @brief Evolve a single column from the file's read schema to the
+     * output schema.
+     *
+     * Handles lists, maps, and structs recursively. Primitive types are
+     * cast to the target type when needed. Columns missing in the file
+     * are filled with nulls by the caller (evolve_table).
+     */
     std::unique_ptr<cudf::column> evolve_column(
         std::unique_ptr<cudf::column> col,
         const std::shared_ptr<arrow::Field>& source_field,
@@ -67,6 +101,13 @@ class GPUIcebergRankBatchGenerator {
         cudf::ast::tree& filter_ast_tree,
         std::vector<std::unique_ptr<cudf::scalar>>& filter_scalars);
 
+    /**
+     * @brief Recursively walk a pyiceberg cuDF AST filter tree (nested
+     * Python tuples) and push cuDF AST nodes onto filter_ast_tree.
+     *
+     * Supported operators: true, false, is_null, is_not_null, eq, neq,
+     * gt, gte, lt, lte, in, not_in, not, and, or.
+     */
     void build_pyiceberg_cudf_ast_node(
         PyObject* node, const std::map<int, int>& field_id_to_col_idx,
         const std::shared_ptr<arrow::Schema>& read_schema,
@@ -74,6 +115,15 @@ class GPUIcebergRankBatchGenerator {
         std::vector<std::unique_ptr<cudf::scalar>>& filter_scalars,
         rmm::cuda_stream_view stream);
 
+    /**
+     * @brief Fetch the Iceberg dataset from Python (all ranks participate
+     * in the collective call), unwrap the Arrow filesystem, and store
+     * pieces and schema groups for later distribution.
+     *
+     * Also converts the combined DuckDB+Iceberg filter to both a cuDF AST
+     * (for GPU row-level filtering) and an Arrow format string (for
+     * file-level filtering via pyiceberg).
+     */
     void get_dataset(PyObject* catalog, const std::string& table_id,
                      const std::shared_ptr<arrow::Schema>& arrow_schema,
                      PyObject* iceberg_filter, PyObject* iceberg_schema,
@@ -129,6 +179,13 @@ struct PhysicalGPUReadIcebergMetrics {
     time_t produce_time = 0;
 };
 
+/**
+ * @brief Physical operator for reading Iceberg tables on GPU.
+ *
+ * Uses GPUIcebergRankBatchGenerator to produce GPU-side cudf::table
+ * batches. Filters are applied at both the file level (via pyiceberg)
+ * and the row level (via cuDF AST). Non-GPU ranks produce empty results.
+ */
 class PhysicalGPUReadIceberg : public PhysicalGPUSource {
    private:
     PyObject* catalog;
