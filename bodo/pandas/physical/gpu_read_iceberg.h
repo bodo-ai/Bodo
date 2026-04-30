@@ -976,10 +976,13 @@ class GPUIcebergRankBatchGenerator {
 
         this->py_filesystem = PyObject_GetAttrString(ds.get(), "filesystem");
         ensure_pa_wrappers_imported();
-        CHECK_ARROW_AND_ASSIGN(
-            arrow::py::unwrap_filesystem(this->py_filesystem.get()),
-            "Error during Iceberg read: Failed to unwrap Arrow filesystem",
-            this->filesystem_);
+        if (!(this->py_filesystem == nullptr ||
+              this->py_filesystem == Py_None)) {
+            CHECK_ARROW_AND_ASSIGN(
+                arrow::py::unwrap_filesystem(this->py_filesystem.get()),
+                "Error during Iceberg read: Failed to unwrap Arrow filesystem",
+                this->filesystem_);
+        }
 
         this->py_pieces = PyObject_GetAttrString(ds.get(), "pieces");
         this->py_schema_groups =
