@@ -201,16 +201,17 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             } else {
                 physical_op = std::make_shared<PhysicalCountStar>();
             }
-#else   // USE_CUDF
-            auto physical_op = std::make_shared<PhysicalCountStar>();
-#endif  // USE_CUDF
-        // Finish the pipeline at this point so that Finalize can run
-        // to reduce the number of collected rows to the desired amount.
-        // The same operator will exist in both pipelines.  The sink of the
-        // previous pipeline and the source of the next one.
-        // We record the pipeline dependency between these two pipelines.
             std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); },
                        physical_op);
+#else   // USE_CUDF
+            auto physical_op = std::make_shared<PhysicalCountStar>();
+            // Finish the pipeline at this point so that Finalize can run
+            // to reduce the number of collected rows to the desired amount.
+            // The same operator will exist in both pipelines.  The sink of the
+            // previous pipeline and the source of the next one.
+            // We record the pipeline dependency between these two pipelines.
+            FinishPipelineOneOperator(physical_op);
+#endif  // USE_CUDF
             return;
         }
         // bind_info in every expression stores the same schema for the entire
