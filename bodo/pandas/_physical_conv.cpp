@@ -605,6 +605,8 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     // This makes code simpler later if we know a column will appear
     // in the map if it is projected.  (Empty projection map means
     // everything is projected.)
+    comp_join.children[0]->ResolveOperatorTypes();
+    comp_join.children[1]->ResolveOperatorTypes();
     fill_if_empty(probe_proj_map_copy, comp_join.children[0]->types.size());
     fill_if_empty(build_proj_map_copy, comp_join.children[1]->types.size());
 

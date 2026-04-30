@@ -273,6 +273,7 @@ class DevicePlanNode {
         }
         rows_out = op.estimated_cardinality;
         rows_out_width = 1;
+        op.ResolveOperatorTypes();
         for (auto &type : op.types) {
             rows_out_width += GetTypeIdSize(type.InternalType());
         }

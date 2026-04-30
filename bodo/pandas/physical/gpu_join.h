@@ -76,10 +76,12 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         }
 
         // Get build side row width.
+        buildSide.ResolveOperatorTypes();
         uint64_t build_row_size = std::transform_reduce(
             buildSide.types.begin(), buildSide.types.end(), 0LL, std::plus<>{},
             [](auto const& s) { return GetTypeIdSize(s.InternalType()); });
         // Get probe side row width.
+        probeSide.ResolveOperatorTypes();
         uint64_t probe_row_size = std::transform_reduce(
             probeSide.types.begin(), probeSide.types.end(), 0LL, std::plus<>{},
             [](auto const& s) { return GetTypeIdSize(s.InternalType()); });

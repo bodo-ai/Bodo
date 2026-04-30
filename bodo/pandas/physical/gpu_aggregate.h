@@ -70,6 +70,7 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
             {colref.binding.table_index, colref.binding.column_index});
 
         // cudf doesn't support sum aggregation on string columns
+        logical_aggregate.children[0]->ResolveOperatorTypes();
         if (agg_expr.function.name == "sum" &&
             logical_aggregate.children[0]->types[col_idx].id() ==
                 duckdb::LogicalTypeId::VARCHAR) {
