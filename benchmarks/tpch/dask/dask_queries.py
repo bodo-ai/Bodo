@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 import dask
 import dask.dataframe as dd
+import pandas as pd
 from dask.distributed import Client
 
 
@@ -659,12 +660,17 @@ def query_12(dataset_path, scale, ext=".parquet"):
     table["low_line_count"] = 0
     table["low_line_count"] = table.low_line_count.where(mask, 1)
 
-    return (
-        table.groupby("l_shipmode")
-        .agg({"high_line_count": "sum", "low_line_count": "sum"})
+    res = (
+        table.groupby("l_shipmode")["high_line_count", "low_line_count"]
+        .sum()
         .reset_index()
         .sort_values(by="l_shipmode")
     )
+    if dask.config.get("dataframe.backend") == "cudf":
+        # Workaround extra column added at runtime in dask-cudf 26.04
+        res = res.compute()[["l_shipmode", "high_line_count", "low_line_count"]]
+
+    return res
 
 
 def query_13(dataset_path, scale, ext=".parquet"):
@@ -1305,18 +1311,36 @@ def get_query_func(q_num: int) -> Callable:
     return globals()[f"query_{q_num:02d}"]
 
 
+def is_eager_type(result):
+    eager_types = [pd.DataFrame]
+    if dask.config.get("dataframe.backend") == "cudf":
+        import cudf
+
+        eager_types.append(cudf.DataFrame)
+
+    return isinstance(result, tuple(eager_types))
+
+
 def run_single_query(
-    query_num, dataset_path, scale_factor, backend, log_file=None
+    query_num, dataset_path, scale_factor, log_file=None, show_output=False
 ) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
     query_func = get_query_func(query_num)
 
     start = time.time()
-    query_func(dataset_path, scale_factor, ext=".pq").compute()
+    res = query_func(dataset_path, scale_factor, ext=".pq")
+    if not is_eager_type(res):
+        res = res.compute()
     total_time = time.time() - start
+
+    if show_output:
+        print(res)
+
     if log_file:
         with open(log_file, "a") as f:
-            f.write(f"dask[{backend}],{query_num},-,{total_time:f}\n")
+            f.write(
+                f"dask[{dask.config.get('dataframe.backend')}],{query_num},-,{total_time:f}\n"
+            )
     print(f"Query {query_num} execution time: {total_time:.2f} seconds")
     return total_time
 
@@ -1372,6 +1396,11 @@ def main():
         default=None,
         help="Path to log timings.",
     )
+    parser.add_argument(
+        "--show_output",
+        action="store_true",
+        help="Whether to print query outputs.",
+    )
 
     args = parser.parse_args()
     dataset_path = args.folder
@@ -1387,7 +1416,7 @@ def main():
             with open(args.log_timings, "w") as f:
                 f.write("implementation,query,n_gpus,execution_time\n")
 
-    # dask.config.set({"dataframe.backend": args.backend})
+    dask.config.set({"dataframe.backend": args.backend})
     dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
     dask.config.set({"distributed.comm.timeouts.connect": "600s"})
 
@@ -1455,8 +1484,8 @@ def main():
                     queries[0],
                     dataset_path,
                     scale_factor,
-                    backend=args.backend,
                     log_file=args.log_timings,
+                    show_output=args.show_output,
                 )
                 for query in queries:
                     try:
@@ -1465,8 +1494,8 @@ def main():
                             query,
                             dataset_path,
                             scale_factor,
-                            backend=args.backend,
                             log_file=args.log_timings,
+                            show_output=args.show_output,
                         )
                     except Exception as e:
                         print(f"Query {query} failed with an exception: {e}")
@@ -1492,8 +1521,8 @@ def main():
                 query,
                 dataset_path,
                 scale_factor,
-                backend=args.backend,
                 log_file=args.log_timings,
+                show_output=args.show_output,
             )
 
         total_time = time.time() - total_start

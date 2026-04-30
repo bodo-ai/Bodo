@@ -71,7 +71,7 @@ def timethis(
     @functools.wraps(q)
     def wrapped(*args, **kwargs):
         t = time.time()
-        q(*args, **kwargs)
+        result = q(*args, **kwargs)
         msg = name or f"{q.__name__.upper()} Execution time (s):"
         total_time = time.time() - t
         if log_file:
@@ -79,8 +79,8 @@ def timethis(
                 f.write(
                     f"bodo,{query},{os.environ.get('BODO_NUM_WORKERS', 4)},{total_time:f}\n"
                 )
-
         print(f"{msg} {total_time:f}")
+        return result
 
     return wrapped
 
@@ -788,138 +788,141 @@ def exec_func(res):
         res, (bodo.pandas.BodoDataFrame, bodo.pandas.BodoSeries, bodo.pandas.BodoScalar)
     ):
         res.execute_plan()
+    return res
 
 
 @timethis
 @collect_datasets
 def q01(lineitem, pd):
-    exec_func(tpch_q01(lineitem, pd))
+    return exec_func(tpch_q01(lineitem, pd))
 
 
 @timethis
 @collect_datasets
 def q02(part, partsupp, supplier, nation, region, pd):
-    exec_func(tpch_q02(part, partsupp, supplier, nation, region, pd))
+    return exec_func(tpch_q02(part, partsupp, supplier, nation, region, pd))
 
 
 @timethis
 @collect_datasets
 def q03(lineitem, orders, customer, pd):
-    exec_func(tpch_q03(lineitem, orders, customer, pd))
+    return exec_func(tpch_q03(lineitem, orders, customer, pd))
 
 
 @timethis
 @collect_datasets
 def q04(lineitem, orders, pd):
-    exec_func(tpch_q04(lineitem, orders, pd))
+    return exec_func(tpch_q04(lineitem, orders, pd))
 
 
 @timethis
 @collect_datasets
 def q05(lineitem, orders, customer, nation, region, supplier, pd):
-    exec_func(tpch_q05(lineitem, orders, customer, nation, region, supplier, pd))
+    return exec_func(tpch_q05(lineitem, orders, customer, nation, region, supplier, pd))
 
 
 @timethis
 @collect_datasets
 def q06(lineitem, pd):
-    exec_func(tpch_q06(lineitem, pd))
+    return exec_func(tpch_q06(lineitem, pd))
 
 
 @timethis
 @collect_datasets
 def q07(lineitem, supplier, orders, customer, nation, pd):
-    exec_func(tpch_q07(lineitem, supplier, orders, customer, nation, pd))
+    return exec_func(tpch_q07(lineitem, supplier, orders, customer, nation, pd))
 
 
 @timethis
 @collect_datasets
 def q08(part, lineitem, supplier, orders, customer, nation, region, pd):
-    exec_func(tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd))
+    return exec_func(
+        tpch_q08(part, lineitem, supplier, orders, customer, nation, region, pd)
+    )
 
 
 @timethis
 @collect_datasets
 def q09(lineitem, orders, part, nation, partsupp, supplier, pd):
-    exec_func(tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd))
+    return exec_func(tpch_q09(lineitem, orders, part, nation, partsupp, supplier, pd))
 
 
 @timethis
 @collect_datasets
 def q10(lineitem, orders, customer, nation, pd):
-    exec_func(tpch_q10(lineitem, orders, customer, nation, pd))
+    return exec_func(tpch_q10(lineitem, orders, customer, nation, pd))
 
 
 @timethis
 @collect_datasets
 def q11(partsupp, supplier, nation, scale_factor, pd):
-    exec_func(tpch_q11(partsupp, supplier, nation, scale_factor, pd))
+    return exec_func(tpch_q11(partsupp, supplier, nation, scale_factor, pd))
 
 
 @timethis
 @collect_datasets
 def q12(lineitem, orders, pd):
-    exec_func(tpch_q12(lineitem, orders, pd))
+    return exec_func(tpch_q12(lineitem, orders, pd))
 
 
 @timethis
 @collect_datasets
 def q13(customer, orders, pd):
-    exec_func(tpch_q13(customer, orders, pd))
+    return exec_func(tpch_q13(customer, orders, pd))
 
 
 @timethis
 @collect_datasets
 def q14(lineitem, part, pd):
-    exec_func(tpch_q14(lineitem, part, pd))
+    return exec_func(tpch_q14(lineitem, part, pd))
 
 
 @timethis
 @collect_datasets
 def q15(lineitem, supplier, pd):
-    exec_func(tpch_q15(lineitem, supplier, pd))
+    return exec_func(tpch_q15(lineitem, supplier, pd))
 
 
 @timethis
 @collect_datasets
 def q16(part, partsupp, supplier, pd):
-    exec_func(tpch_q16(part, partsupp, supplier, pd))
+    return exec_func(tpch_q16(part, partsupp, supplier, pd))
 
 
 @timethis
 @collect_datasets
 def q17(lineitem, part, pd):
-    exec_func(tpch_q17(lineitem, part, pd))
+    return exec_func(tpch_q17(lineitem, part, pd))
 
 
 @timethis
 @collect_datasets
 def q18(lineitem, orders, customer, pd):
-    exec_func(tpch_q18(lineitem, orders, customer, pd))
+    return exec_func(tpch_q18(lineitem, orders, customer, pd))
 
 
 @timethis
 @collect_datasets
 def q19(lineitem, part, pd):
-    exec_func(tpch_q19(lineitem, part, pd))
+    return exec_func(tpch_q19(lineitem, part, pd))
 
 
 @timethis
 @collect_datasets
 def q20(lineitem, part, nation, partsupp, supplier, pd):
-    exec_func(tpch_q20(lineitem, part, nation, partsupp, supplier, pd))
+    return exec_func(tpch_q20(lineitem, part, nation, partsupp, supplier, pd))
 
 
 @timethis
 @collect_datasets
 def q21(lineitem, orders, supplier, nation, pd):
-    exec_func(tpch_q21(lineitem, orders, supplier, nation, pd))
+    return exec_func(tpch_q21(lineitem, orders, supplier, nation, pd))
 
 
 @timethis
 @collect_datasets
 def q22(customer, orders, pd):
-    exec_func(tpch_q22(customer, orders, pd))
+    return exec_func(tpch_q22(customer, orders, pd))
 
 
 def _load_args(query: int, root: str, scale_factor: float, backend):
@@ -941,6 +944,7 @@ def run_queries(
     backend,
     warmup: bool,
     log_file: str | None = None,
+    answers_path: str | None = None,
 ):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
@@ -951,7 +955,7 @@ def run_queries(
         q = globals()[f"q{query:02}"]
 
         def query_func():
-            q(*_load_args(query, root, scale_factor, backend))
+            return q(*_load_args(query, root, scale_factor, backend))
 
         query_func = timethis(
             query_func,
@@ -965,7 +969,14 @@ def run_queries(
             query_func()
 
         # Second run for timing:
-        query_func()
+        result = query_func()
+
+        if answers_path:
+            from bodo.tests.utils import _test_equal
+
+            answer_df = pd.read_parquet(f"{answers_path}/q{query:02}.pq")
+            _test_equal(result, answer_df)
+
     print(f"Total query execution time (s): {time.time() - total_start}")
 
 
@@ -1015,6 +1026,12 @@ def main():
         type=str,
         required=False,
         help="File to log timings.",
+    )
+    parser.add_argument(
+        "--answers_path",
+        type=str,
+        required=False,
+        help="Path to diectory containing pre-computed answers (in parquet format), expects names like q<query>.pq",
     )
 
     args = parser.parse_args()
