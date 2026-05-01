@@ -166,19 +166,15 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     const MPI_Comm comm = this->probe_shuffle_manager->get_mpi_comm();
     if (this->is_broadcast_join && !this->build_matches_synced) {
         if (this->sync_build_matches_req == MPI_REQUEST_NULL) {
-            this->n_build_rows = this->unmatched_build_rows->size();
-            this->unmatched_build_rows_contents =
-                std::make_unique<cudf::column::contents>(
-                    this->unmatched_build_rows->release());
-            auto* d_buf = static_cast<uint8_t*>(
-                unmatched_build_rows_contents->data->data());
-            cudaHostAlloc(&this->unmatched_build_rows_host, n_build_rows,
+            int n = this->unmatched_build_rows->size();
+            auto d_buf = unmatched_build_rows->view().data<uint8_t>();
+            cudaHostAlloc(&this->unmatched_build_rows_host, n,
                           cudaHostAllocDefault);
-            cudaMemcpy(unmatched_build_rows_host, d_buf, n_build_rows,
+            cudaMemcpy(unmatched_build_rows_host, d_buf, n,
                        cudaMemcpyDeviceToHost);
             CHECK_MPI(
-                MPI_Iallreduce(MPI_IN_PLACE, unmatched_build_rows_host,
-                               n_build_rows, MPI_UINT8_T, MPI_BAND, comm,
+                MPI_Iallreduce(MPI_IN_PLACE, unmatched_build_rows_host, n,
+                               MPI_UINT8_T, MPI_BAND, comm,
                                &this->sync_build_matches_req),
                 "produce_unmatched_build_rows: MPI error on MPI_Iallreduce ");
             return table;
@@ -189,14 +185,11 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
                       "produce_unmatched_build_rows: MPI error on MPI_Test ");
             if (flag) {
                 this->build_matches_synced = true;
-                auto* d_buf = static_cast<uint8_t*>(
-                    unmatched_build_rows_contents->data->data());
-                cudaMemcpy(d_buf, unmatched_build_rows_host, n_build_rows,
+                auto* d_buf =
+                    unmatched_build_rows->mutable_view().data<uint8_t>();
+                cudaMemcpy(d_buf, unmatched_build_rows_host,
+                           unmatched_build_rows->size(),
                            cudaMemcpyHostToDevice);
-                this->unmatched_build_rows = std::make_unique<cudf::column>(
-                    cudf::data_type{cudf::type_id::BOOL8}, n_build_rows,
-                    std::move(*unmatched_build_rows_contents->data),
-                    std::move(*unmatched_build_rows_contents->null_mask), 0);
             } else {
                 return table;
             }
