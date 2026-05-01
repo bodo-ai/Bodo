@@ -703,6 +703,7 @@ def tpch_q20(lineitem, part, nation, partsupp, supplier, pd=bodo.pandas):
         right_on=["L_SUPPKEY", "L_PARTKEY"],
     )
     jn3 = jn3[jn3["PS_AVAILQTY"] > jn3["SUM_QUANTITY"]]
+    jn3 = jn3.drop_duplicates(subset=["PS_SUPPKEY"])
     jn4 = jn1.merge(jn3, left_on="S_SUPPKEY", right_on="PS_SUPPKEY")
 
     result_df = jn4[["S_NAME", "S_ADDRESS"]].sort_values("S_NAME", ascending=True)
