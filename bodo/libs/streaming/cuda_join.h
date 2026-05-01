@@ -45,6 +45,12 @@ struct CudaJoin {
     std::unique_ptr<cudf::column> unmatched_build_rows =
         nullptr;  // Used for right/outer joins to track which
                   // build rows have been matched
+    size_t n_build_rows = 0;
+    uint8_t* unmatched_build_rows_host;  // Host buffer for
+                                         // unmatched_build_rows reduction
+    std::unique_ptr<cudf::column::contents>
+        unmatched_build_rows_contents;  // Device buffer for
+                                        // unmatched_build_rows reduction result
     // For broadcast joins on RIGHT/OUTER joins we need to sync the build table
     // matches globally to only produce unmatched build rows once.
     MPI_Request sync_build_matches_req = MPI_REQUEST_NULL;
