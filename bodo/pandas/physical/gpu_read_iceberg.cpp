@@ -79,7 +79,7 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
             leftover_tbl = nullptr;
         } else {
             cudf::table_view tv = leftover_tbl->view();
-            auto sliced =
+            std::vector<cudf::table_view> sliced =
                 cudf::slice(tv, {0, (int)target_rows_, (int)n}, se->stream);
             gpu_tables.push_back(std::make_unique<cudf::table>(sliced[0]));
             leftover_tbl = std::make_unique<cudf::table>(sliced[1]);
@@ -94,8 +94,10 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
 
         while (curr_reader && curr_reader->has_next() &&
                rows_accum < target_rows_) {
-            auto table_and_metadata = curr_reader->read_chunk();
-            auto tbl = std::move(table_and_metadata.tbl);
+            cudf::io::table_with_metadata table_and_metadata =
+                curr_reader->read_chunk();
+            std::unique_ptr<cudf::table> tbl =
+                std::move(table_and_metadata.tbl);
 
             if (!tbl || tbl->num_rows() == 0) {
                 continue;
@@ -113,12 +115,14 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
                 }
                 std::vector<cudf::size_type> splits = {(cudf::size_type)to_skip,
                                                        (cudf::size_type)n};
-                auto sliced = cudf::slice(tbl->view(), splits, se->stream);
+                std::vector<cudf::table_view> sliced =
+                    cudf::slice(tbl->view(), splits, se->stream);
                 tbl = std::make_unique<cudf::table>(sliced[1]);
                 rows_to_skip -= (int64_t)to_skip;
             }
 
-            auto evolved_tbl = evolve_table(std::move(tbl), se->stream);
+            std::unique_ptr<cudf::table> evolved_tbl =
+                evolve_table(std::move(tbl), se->stream);
 
             std::size_t tbl_n = evolved_tbl->num_rows();
             if (rows_accum + tbl_n <= target_rows_) {
@@ -127,7 +131,7 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
             } else {
                 std::size_t need = target_rows_ - rows_accum;
                 cudf::table_view tv = evolved_tbl->view();
-                auto sliced =
+                std::vector<cudf::table_view> sliced =
                     cudf::slice(tv, {0, (int)need, (int)tbl_n}, se->stream);
                 gpu_tables.push_back(std::make_unique<cudf::table>(sliced[0]));
                 leftover_tbl = std::make_unique<cudf::table>(sliced[1]);
@@ -146,7 +150,7 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
 
     std::vector<cudf::table_view> views;
     views.reserve(gpu_tables.size());
-    for (auto& tptr : gpu_tables) {
+    for (std::unique_ptr<cudf::table>& tptr : gpu_tables) {
         views.emplace_back(tptr->view());
     }
 
@@ -190,7 +194,9 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
 
     std::set<int> columns_to_read_set(selected_columns_.begin(),
                                       selected_columns_.end());
-    for (const auto& pair : filter_exprs_->filters) {
+    for (const std::pair<const duckdb::idx_t,
+                         duckdb::unique_ptr<duckdb::TableFilter>>& pair :
+         filter_exprs_->filters) {
         columns_to_read_set.insert(pair.first);
     }
 
@@ -224,7 +230,9 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
         filter_scalars.clear();
 
         bool filter_col_missing = false;
-        for (const auto& pair : filter_exprs_->filters) {
+        for (const std::pair<const duckdb::idx_t,
+                             duckdb::unique_ptr<duckdb::TableFilter>>& pair :
+             filter_exprs_->filters) {
             if (!col_to_file_idx.count(pair.first)) {
                 filter_col_missing = true;
                 break;
@@ -232,7 +240,7 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
         }
 
         if (filter_col_missing) {
-            auto false_scalar =
+            std::unique_ptr<cudf::numeric_scalar<bool>> false_scalar =
                 std::make_unique<cudf::numeric_scalar<bool>>(false, true);
             filter_scalars.push_back(std::move(false_scalar));
             filter_ast_tree.push(
@@ -241,7 +249,8 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
             filter_ast_tree.push(cudf::ast::operation(
                 cudf::ast::ast_operator::IDENTITY, filter_ast_tree.back()));
         } else {
-            auto filter_exprs_copy = filter_exprs_->Copy();
+            duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs_copy =
+                filter_exprs_->Copy();
             tableFilterSetToCudfAST(*filter_exprs_copy,
                                     curr_read_schema->field_names(),
                                     filter_ast_tree, filter_scalars);
@@ -411,9 +420,9 @@ std::unique_ptr<cudf::column> GPUIcebergRankBatchGenerator::evolve_column(
                                          stream);
 
     } else if (target_field->type()->id() == arrow::Type::STRUCT) {
-        auto source_type =
+        std::shared_ptr<arrow::StructType> source_type =
             std::dynamic_pointer_cast<arrow::StructType>(source_field->type());
-        auto target_type =
+        std::shared_ptr<arrow::StructType> target_type =
             std::dynamic_pointer_cast<arrow::StructType>(target_field->type());
 
         cudf::size_type num_row = col->size();
@@ -430,7 +439,8 @@ std::unique_ptr<cudf::column> GPUIcebergRankBatchGenerator::evolve_column(
         }
 
         for (int i = 0; i < target_type->num_fields(); i++) {
-            auto target_child_field = target_type->field(i);
+            std::shared_ptr<arrow::Field> target_child_field =
+                target_type->field(i);
             int id = get_iceberg_field_id(target_child_field);
             if (source_id_to_idx.contains(id)) {
                 int source_idx = source_id_to_idx[id];
@@ -439,8 +449,10 @@ std::unique_ptr<cudf::column> GPUIcebergRankBatchGenerator::evolve_column(
                                   source_type->field(source_idx),
                                   target_child_field, stream));
             } else {
-                auto null_scalar = arrow_scalar_to_cudf(
-                    arrow::MakeNullScalar(target_child_field->type()), stream);
+                std::unique_ptr<cudf::scalar> null_scalar =
+                    arrow_scalar_to_cudf(
+                        arrow::MakeNullScalar(target_child_field->type()),
+                        stream);
                 evolved_children.push_back(cudf::make_column_from_scalar(
                     *null_scalar, num_row, stream));
             }
@@ -455,7 +467,7 @@ std::unique_ptr<cudf::column> GPUIcebergRankBatchGenerator::evolve_column(
                                          stream);
     }
 
-    auto target_cudf_type = arrow_to_cudf_type(target_field->type());
+    cudf::data_type target_cudf_type = arrow_to_cudf_type(target_field->type());
     if (col->type() != target_cudf_type) {
         return cudf::cast(col->view(), target_cudf_type, stream);
     }
@@ -469,29 +481,32 @@ std::unique_ptr<cudf::table> GPUIcebergRankBatchGenerator::evolve_table(
     output_cols.reserve(selected_columns_.size());
 
     size_t num_rows = tbl->num_rows();
-    auto released_cols = tbl->release();
+    std::vector<std::unique_ptr<cudf::column>> released_cols = tbl->release();
 
     for (size_t i = 0; i < selected_columns_.size(); i++) {
         int col_idx = selected_columns_[i];
-        const auto& mapping = curr_col_mapping[i];
-        auto target_field = output_arrow_schema->field(i);
+        const std::pair<int, int>& mapping = curr_col_mapping[i];
+        std::shared_ptr<arrow::Field> target_field =
+            output_arrow_schema->field(i);
 
         if (mapping.first == -1) {
             // Column doesn't exist in this file — fill with nulls.
-            auto arrow_type = target_field->type();
-            auto null_scalar =
+            std::shared_ptr<arrow::DataType> arrow_type = target_field->type();
+            std::unique_ptr<cudf::scalar> null_scalar =
                 arrow_scalar_to_cudf(arrow::MakeNullScalar(arrow_type), stream);
             output_cols.push_back(
                 cudf::make_column_from_scalar(*null_scalar, num_rows, stream));
         } else {
-            auto source_field = curr_read_schema->field(col_idx);
+            std::shared_ptr<arrow::Field> source_field =
+                curr_read_schema->field(col_idx);
             output_cols.push_back(
                 evolve_column(std::move(released_cols[mapping.first]),
                               source_field, target_field, stream));
         }
     }
 
-    auto ret = std::make_unique<cudf::table>(std::move(output_cols));
+    std::unique_ptr<cudf::table> ret =
+        std::make_unique<cudf::table>(std::move(output_cols));
     this->evolve_time_ += end_timer(start_evolve);
     return ret;
 }
@@ -499,7 +514,7 @@ std::unique_ptr<cudf::table> GPUIcebergRankBatchGenerator::evolve_table(
 void GPUIcebergRankBatchGenerator::push_cudf_identity(
     bool value, cudf::ast::tree& filter_ast_tree,
     std::vector<std::unique_ptr<cudf::scalar>>& filter_scalars) {
-    auto literal_value =
+    std::unique_ptr<cudf::numeric_scalar<bool>> literal_value =
         std::make_unique<cudf::numeric_scalar<bool>>(value, true);
     filter_scalars.push_back(std::move(literal_value));
     filter_ast_tree.push(
@@ -516,8 +531,9 @@ void GPUIcebergRankBatchGenerator::push_literal_to_cudf_ast(
     bool is_null = (value_py == Py_None);
     switch (type->id()) {
         case arrow::Type::BOOL: {
-            auto literal_value = std::make_unique<cudf::numeric_scalar<bool>>(
-                is_null ? false : (value_py == Py_True), !is_null);
+            std::unique_ptr<cudf::numeric_scalar<bool>> literal_value =
+                std::make_unique<cudf::numeric_scalar<bool>>(
+                    is_null ? false : (value_py == Py_True), !is_null);
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<bool>*>(
@@ -525,8 +541,9 @@ void GPUIcebergRankBatchGenerator::push_literal_to_cudf_ast(
             return;
         }
         case arrow::Type::INT8: {
-            auto literal_value = std::make_unique<cudf::numeric_scalar<int8_t>>(
-                is_null ? 0 : (int8_t)PyLong_AsLong(value_py), !is_null);
+            std::unique_ptr<cudf::numeric_scalar<int8_t>> literal_value =
+                std::make_unique<cudf::numeric_scalar<int8_t>>(
+                    is_null ? 0 : (int8_t)PyLong_AsLong(value_py), !is_null);
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<int8_t>*>(
@@ -534,7 +551,7 @@ void GPUIcebergRankBatchGenerator::push_literal_to_cudf_ast(
             return;
         }
         case arrow::Type::INT16: {
-            auto literal_value =
+            std::unique_ptr<cudf::numeric_scalar<int16_t>> literal_value =
                 std::make_unique<cudf::numeric_scalar<int16_t>>(
                     is_null ? 0 : (int16_t)PyLong_AsLong(value_py), !is_null);
             filter_scalars.push_back(std::move(literal_value));
@@ -544,7 +561,7 @@ void GPUIcebergRankBatchGenerator::push_literal_to_cudf_ast(
             return;
         }
         case arrow::Type::INT32: {
-            auto literal_value =
+            std::unique_ptr<cudf::numeric_scalar<int32_t>> literal_value =
                 std::make_unique<cudf::numeric_scalar<int32_t>>(
                     is_null ? 0 : (int32_t)PyLong_AsLong(value_py), !is_null);
             filter_scalars.push_back(std::move(literal_value));
@@ -554,7 +571,7 @@ void GPUIcebergRankBatchGenerator::push_literal_to_cudf_ast(
             return;
         }
         case arrow::Type::INT64: {
-            auto literal_value =
+            std::unique_ptr<cudf::numeric_scalar<int64_t>> literal_value =
                 std::make_unique<cudf::numeric_scalar<int64_t>>(
                     is_null ? 0 : (int64_t)PyLong_AsLongLong(value_py),
                     !is_null);
@@ -565,8 +582,10 @@ void GPUIcebergRankBatchGenerator::push_literal_to_cudf_ast(
             return;
         }
         case arrow::Type::FLOAT: {
-            auto literal_value = std::make_unique<cudf::numeric_scalar<float>>(
-                is_null ? 0.0f : (float)PyFloat_AsDouble(value_py), !is_null);
+            std::unique_ptr<cudf::numeric_scalar<float>> literal_value =
+                std::make_unique<cudf::numeric_scalar<float>>(
+                    is_null ? 0.0f : (float)PyFloat_AsDouble(value_py),
+                    !is_null);
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<float>*>(
@@ -574,8 +593,9 @@ void GPUIcebergRankBatchGenerator::push_literal_to_cudf_ast(
             return;
         }
         case arrow::Type::DOUBLE: {
-            auto literal_value = std::make_unique<cudf::numeric_scalar<double>>(
-                is_null ? 0.0 : PyFloat_AsDouble(value_py), !is_null);
+            std::unique_ptr<cudf::numeric_scalar<double>> literal_value =
+                std::make_unique<cudf::numeric_scalar<double>>(
+                    is_null ? 0.0 : PyFloat_AsDouble(value_py), !is_null);
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::numeric_scalar<double>*>(
@@ -584,8 +604,9 @@ void GPUIcebergRankBatchGenerator::push_literal_to_cudf_ast(
         }
         case arrow::Type::STRING: {
             const char* str = is_null ? "" : PyUnicode_AsUTF8(value_py);
-            auto literal_value = std::make_unique<cudf::string_scalar>(
-                std::string(str), !is_null);
+            std::unique_ptr<cudf::string_scalar> literal_value =
+                std::make_unique<cudf::string_scalar>(std::string(str),
+                                                      !is_null);
             filter_scalars.push_back(std::move(literal_value));
             filter_ast_tree.push(
                 cudf::ast::literal(*static_cast<cudf::string_scalar*>(
@@ -631,7 +652,8 @@ void GPUIcebergRankBatchGenerator::build_pyiceberg_cudf_ast_node(
         [&](PyObject* node_inner) -> std::pair<int, std::string> {
         PyObject* field_id_py = PyTuple_GetItem(node_inner, 1);
         int field_id = (int)PyLong_AsLong(field_id_py);
-        auto it = field_id_to_col_idx.find(field_id);
+        std::map<int, int>::const_iterator it =
+            field_id_to_col_idx.find(field_id);
         if (it == field_id_to_col_idx.end()) {
             throw std::runtime_error(
                 "build_pyiceberg_cudf_ast_node: field ID " +
@@ -642,8 +664,8 @@ void GPUIcebergRankBatchGenerator::build_pyiceberg_cudf_ast_node(
     };
 
     if (strcmp(op, "is_null") == 0 || strcmp(op, "is_not_null") == 0) {
-        auto [col_idx, col_name] = get_col_info(node);
-        cudf::ast::column_name_reference col_ref(col_name);
+        std::pair<int, std::string> col_info = get_col_info(node);
+        cudf::ast::column_name_reference col_ref(col_info.second);
         filter_ast_tree.push(col_ref);
         cudf::ast::operation expr = cudf::ast::operation(
             cudf::ast::ast_operator::IS_NULL, filter_ast_tree.back());
@@ -664,11 +686,15 @@ void GPUIcebergRankBatchGenerator::build_pyiceberg_cudf_ast_node(
             {"lt", cudf::ast::ast_operator::LESS},
             {"lte", cudf::ast::ast_operator::LESS_EQUAL},
         };
-    auto cmp_it = cmp_ops.find(op);
+    std::unordered_map<std::string, cudf::ast::ast_operator>::const_iterator
+        cmp_it = cmp_ops.find(op);
     if (cmp_it != cmp_ops.end()) {
-        auto [col_idx, col_name] = get_col_info(node);
+        std::pair<int, std::string> col_info = get_col_info(node);
+        int col_idx = col_info.first;
+        std::string col_name = col_info.second;
         PyObject* value_py = PyTuple_GetItem(node, 2);
-        auto col_type = read_schema->field(col_idx)->type();
+        std::shared_ptr<arrow::DataType> col_type =
+            read_schema->field(col_idx)->type();
 
         cudf::ast::column_name_reference col_ref(col_name);
         filter_ast_tree.push(col_ref);
@@ -683,8 +709,11 @@ void GPUIcebergRankBatchGenerator::build_pyiceberg_cudf_ast_node(
     }
 
     if (strcmp(op, "in") == 0 || strcmp(op, "not_in") == 0) {
-        auto [col_idx, col_name] = get_col_info(node);
-        auto col_type = read_schema->field(col_idx)->type();
+        std::pair<int, std::string> col_info = get_col_info(node);
+        int col_idx = col_info.first;
+        std::string col_name = col_info.second;
+        std::shared_ptr<arrow::DataType> col_type =
+            read_schema->field(col_idx)->type();
         PyObject* values_list = PyTuple_GetItem(node, 2);
         Py_ssize_t n_values = PyList_Size(values_list);
 
@@ -1016,9 +1045,11 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUReadIceberg::ProduceBatchGPU(
     }
 
     time_pt start_produce = start_timer();
-    auto next_batch_tup = batch_gen->next(se);
-    auto result = next_batch_tup.second ? OperatorResult::FINISHED
-                                        : OperatorResult::HAVE_MORE_OUTPUT;
+    std::pair<std::unique_ptr<cudf::table>, bool> next_batch_tup =
+        batch_gen->next(se);
+    OperatorResult result = next_batch_tup.second
+                                ? OperatorResult::FINISHED
+                                : OperatorResult::HAVE_MORE_OUTPUT;
 
     if (next_batch_tup.first) {
         this->metrics.rows_read += next_batch_tup.first->num_rows();
@@ -1035,7 +1066,7 @@ PhysicalGPUReadIceberg::getOutputSchemaInternal() {
 }
 
 void PhysicalGPUReadIceberg::init_batch_gen() {
-    auto batch_size = get_gpu_streaming_batch_size();
+    int batch_size = get_gpu_streaming_batch_size();
     this->filter_exprs = this->join_filter_col_stats.insert_filters(
         std::move(this->filter_exprs), this->selected_columns);
     batch_gen = std::make_shared<GPUIcebergRankBatchGenerator>(

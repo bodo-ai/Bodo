@@ -57,7 +57,7 @@ class GPUIcebergRankBatchGenerator {
         std::shared_ptr<StreamAndEvent> se);
 
     /**
-     * @brief Report per-operator metrics (num_pieces, evolve_time).
+     * @brief Report per-operator metrics.
      */
     void ReportMetrics(std::vector<MetricBase>& metrics_out);
 
