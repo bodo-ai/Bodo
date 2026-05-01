@@ -58,6 +58,25 @@ GPUIcebergRankBatchGenerator::GPUIcebergRankBatchGenerator(
 
     distribute_pieces();
     init_scanners(comm);
+
+    // Estimate bytes per piece and compute an appropriate chunk size
+    // by sampling parquet file metadata, reusing the logic from
+    // estimate_parquet_metadata in gpu_read_parquet.h.
+    if (!pieces_.empty()) {
+        std::vector<FilePart> file_parts;
+        file_parts.reserve(pieces_.size());
+        for (const auto& piece : pieces_) {
+            file_parts.push_back(FilePart{
+                .path = piece.path,
+                .start_row_group = 0,
+                .end_row_group = std::nullopt,
+            });
+        }
+        ParquetMetadataEstimate est =
+            estimate_parquet_metadata(filesystem_, file_parts, target_rows_);
+        bytes_per_part_estimate_ = est.bytes_per_part;
+        chunked_reader_limit_ = est.chunked_reader_limit;
+    }
 }
 
 std::pair<std::unique_ptr<cudf::table>, bool>
@@ -307,10 +326,9 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
         sources.push_back(cudf::io::datasource::create(path));
     }
 
-    // 0 chunk_read_limit -> use the default chunk size.
     curr_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
-        0, std::move(sources), std::vector<cudf::io::parquet::FileMetaData>(),
-        opts, stream);
+        chunked_reader_limit_, std::move(sources),
+        std::vector<cudf::io::parquet::FileMetaData>(), opts, stream);
 }
 
 std::unique_ptr<cudf::column>

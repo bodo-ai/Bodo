@@ -139,6 +139,59 @@ struct FilePart {
                                        // groups in the file)
 };
 
+struct ParquetMetadataEstimate {
+    int64_t bytes_per_part;
+    size_t chunked_reader_limit;
+};
+
+inline ParquetMetadataEstimate estimate_parquet_metadata(
+    std::shared_ptr<arrow::fs::FileSystem> filesystem,
+    const std::vector<FilePart> &parts, size_t target_rows) {
+    ParquetMetadataEstimate result{0, 0};
+
+    std::mt19937 rng(PARQUET_SAMPLING_RANDOM_SEED);
+    std::uniform_int_distribution<size_t> dist(0, parts.size() - 1);
+    size_t num_samples =
+        std::min(parts.size(),
+                 std::max(PARQUET_SAMPLING_MIN_FILES,
+                          (size_t)(parts.size() * PARQUET_SAMPLING_FRACTION)));
+    std::vector<FilePart> sampled_parts;
+    std::ranges::sample(parts.begin(), parts.end(),
+                        std::back_inserter(sampled_parts), num_samples, rng);
+
+    int64_t total_sample_rows = 0;
+    int64_t total_sample_bytes = 0;
+    for (const auto &part : sampled_parts) {
+        std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+        CHECK_ARROW_AND_ASSIGN(
+            filesystem->OpenInputFile(part.path),
+            "Error opening file via Arrow filesystem: " + part.path,
+            arrow_file);
+        std::unique_ptr<parquet::ParquetFileReader> pf =
+            parquet::ParquetFileReader::Open(arrow_file);
+        std::shared_ptr<parquet::FileMetaData> metadata = pf->metadata();
+        int start_row_group = part.start_row_group;
+        int end_row_group =
+            part.end_row_group.value_or(metadata->num_row_groups());
+        for (int i = start_row_group; i < end_row_group; i++) {
+            std::unique_ptr<parquet::RowGroupMetaData> rg_meta =
+                metadata->RowGroup(i);
+            total_sample_rows += rg_meta->num_rows();
+            total_sample_bytes += rg_meta->total_byte_size();
+        }
+    }
+
+    result.bytes_per_part = (sampled_parts.size() > 0)
+                                ? total_sample_bytes / sampled_parts.size()
+                                : 0;
+    result.chunked_reader_limit =
+        (total_sample_rows > 0)
+            ? (total_sample_bytes / total_sample_rows) * target_rows
+            : 0;
+
+    return result;
+}
+
 struct RankBatchGeneratorMetrics {
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
@@ -432,47 +485,10 @@ class RankBatchGenerator {
     void estimate_parquet_metadata() {
         auto start_estimate_parquet_metadata = start_timer();
 
-        std::mt19937 rng(PARQUET_SAMPLING_RANDOM_SEED);
-        std::uniform_int_distribution<size_t> dist(0, parts_.size() - 1);
-        size_t num_samples = std::min(
-            parts_.size(),
-            std::max(PARQUET_SAMPLING_MIN_FILES,
-                     (size_t)(parts_.size() * PARQUET_SAMPLING_FRACTION)));
-        std::vector<FilePart> sampled_parts;
-        std::ranges::sample(parts_.begin(), parts_.end(),
-                            std::back_inserter(sampled_parts), num_samples,
-                            rng);
-
-        int64_t total_sample_rows = 0;
-        int64_t total_sample_bytes = 0;
-        for (const auto &part : sampled_parts) {
-            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
-            CHECK_ARROW_AND_ASSIGN(
-                filesystem_->OpenInputFile(part.path),
-                "Error opening file via Arrow filesystem: " + part.path,
-                arrow_file);
-            std::unique_ptr<parquet::ParquetFileReader> pf =
-                parquet::ParquetFileReader::Open(arrow_file);
-            std::shared_ptr<parquet::FileMetaData> metadata = pf->metadata();
-            int start_row_group = part.start_row_group;
-            int end_row_group =
-                part.end_row_group.value_or(metadata->num_row_groups());
-            for (int i = start_row_group; i < end_row_group; i++) {
-                std::unique_ptr<parquet::RowGroupMetaData> rg_meta =
-                    metadata->RowGroup(i);
-                total_sample_rows += rg_meta->num_rows();
-                total_sample_bytes += rg_meta->total_byte_size();
-            }
-        }
-
-        bytes_per_part_estimate =
-            (sampled_parts.size() > 0)
-                ? total_sample_bytes / sampled_parts.size()
-                : 0;
-        chunked_reader_limit =
-            (total_sample_rows > 0)
-                ? (total_sample_bytes / total_sample_rows) * target_rows_
-                : 0;
+        ParquetMetadataEstimate estimate =
+            ::estimate_parquet_metadata(filesystem_, parts_, target_rows_);
+        bytes_per_part_estimate = estimate.bytes_per_part;
+        chunked_reader_limit = estimate.chunked_reader_limit;
 
         this->metrics.estimate_parquet_metadata_time +=
             end_timer(start_estimate_parquet_metadata);
