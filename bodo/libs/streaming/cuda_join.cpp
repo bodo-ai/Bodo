@@ -2,7 +2,6 @@
 #include <arrow/array/util.h>
 #include <arrow/compute/api_aggregate.h>
 #include <mpi.h>
-#include <cudf/aggregation.hpp>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/column/column_view.hpp>
 #include <cudf/concatenate.hpp>
@@ -12,6 +11,7 @@
 #include <cudf/join/filtered_join.hpp>
 #include <cudf/join/join.hpp>
 #include <cudf/join/mixed_join.hpp>
+#include <cudf/reduction.hpp>
 #include <cudf/sorting.hpp>
 #include <cudf/stream_compaction.hpp>
 #include <cudf/types.hpp>

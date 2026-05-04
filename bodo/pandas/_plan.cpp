@@ -1915,10 +1915,7 @@ void set_cudf_vars(bool use_cudf, std::string cache_dir, bool dump_plans,
     g_use_async = use_async;
 }
 
-bool get_use_cudf() {
-    char *gpu_env = std::getenv("BODO_GPU");
-    return gpu_env && std::string(gpu_env) != "0";
-}
+bool get_use_cudf() { return g_use_cudf; }
 
 std::string get_cache_dir() { return g_cache_dir; }
 
