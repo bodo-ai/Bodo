@@ -77,38 +77,25 @@ void PhysicalGPUWriteIceberg::parse_partition_spec(
             "PhysicalGPUWriteIceberg: partition_tuples is not a list");
     }
 
-    std::map<std::string, int> name_to_idx;
-    for (int i = 0; i < schema->num_fields(); i++) {
-        name_to_idx[schema->field(i)->name()] = i;
-    }
-
     Py_ssize_t n = PyList_Size(partition_tuples_py);
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject* tup = PyList_GetItem(partition_tuples_py, i);
-        if (!PyTuple_Check(tup) || PyTuple_Size(tup) < 2) {
+        // Tuple format from build_partition_sort_tuples:
+        //   (col_idx, transform_name, arg, partition_name)
+        if (!PyTuple_Check(tup) || PyTuple_Size(tup) < 4) {
             throw std::runtime_error(
-                "PhysicalGPUWriteIceberg: invalid partition tuple");
+                "PhysicalGPUWriteIceberg: invalid partition tuple "
+                "(expected 4 elements)");
         }
 
-        const char* transform = PyUnicode_AsUTF8(PyTuple_GET_ITEM(tup, 0));
-        const char* col_name = PyUnicode_AsUTF8(PyTuple_GET_ITEM(tup, 1));
+        int64_t col_idx = PyLong_AsLongLong(PyTuple_GET_ITEM(tup, 0));
+        const char* transform = PyUnicode_AsUTF8(PyTuple_GET_ITEM(tup, 1));
+        long arg = PyLong_AsLong(PyTuple_GET_ITEM(tup, 2));
+        const char* partition_name = PyUnicode_AsUTF8(PyTuple_GET_ITEM(tup, 3));
 
-        auto it = name_to_idx.find(col_name);
-        if (it == name_to_idx.end()) {
-            throw std::runtime_error(
-                "PhysicalGPUWriteIceberg: partition column '" +
-                std::string(col_name) + "' not found in schema");
-        }
-
-        long arg = 0;
-        if (PyTuple_Size(tup) >= 3) {
-            PyObject* arg_obj = PyTuple_GetItem(tup, 2);
-            if (arg_obj && arg_obj != Py_None) {
-                arg = static_cast<long>(PyLong_AsLong(arg_obj));
-            }
-        }
-
-        partition_fields.push_back({it->second, col_name, transform, arg});
+        std::string col_name = schema->field(col_idx)->name();
+        partition_fields.push_back({static_cast<cudf::size_type>(col_idx),
+                                    col_name, transform, arg, partition_name});
     }
 }
 
@@ -123,29 +110,23 @@ void PhysicalGPUWriteIceberg::parse_sort_order(
             "PhysicalGPUWriteIceberg: sort_tuples is not a list");
     }
 
-    std::map<std::string, int> name_to_idx;
-    for (int i = 0; i < schema->num_fields(); i++) {
-        name_to_idx[schema->field(i)->name()] = i;
-    }
-
     Py_ssize_t n = PyList_Size(sort_tuples_py);
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject* tup = PyList_GetItem(sort_tuples_py, i);
-        if (!PyTuple_Check(tup) || PyTuple_Size(tup) != 1) {
+        // Tuple format from build_partition_sort_tuples:
+        //   (col_idx, transform_name, arg, is_asc, nulls_last)
+        if (!PyTuple_Check(tup) || PyTuple_Size(tup) < 5) {
             throw std::runtime_error(
-                "PhysicalGPUWriteIceberg: invalid sort tuple");
+                "PhysicalGPUWriteIceberg: invalid sort tuple "
+                "(expected 5 elements)");
         }
 
-        const char* col_name = PyUnicode_AsUTF8(PyTuple_GET_ITEM(tup, 0));
+        int64_t col_idx = PyLong_AsLongLong(PyTuple_GET_ITEM(tup, 0));
+        // transform_name (1), arg (2), is_asc (3), nulls_last (4)
+        // are parsed for future use but not applied yet (all sorts are
+        // asc + nulls_last for now).
 
-        auto it = name_to_idx.find(col_name);
-        if (it == name_to_idx.end()) {
-            throw std::runtime_error("PhysicalGPUWriteIceberg: sort column '" +
-                                     std::string(col_name) +
-                                     "' not found in schema");
-        }
-
-        sort_fields.push_back({it->second});
+        sort_fields.push_back({static_cast<cudf::size_type>(col_idx)});
     }
 }
 
@@ -596,7 +577,7 @@ std::string PhysicalGPUWriteIceberg::build_partition_path(
         if (!path.empty()) {
             path += "/";
         }
-        path += partition_fields[i].col_name + "=";
+        path += partition_fields[i].partition_name + "=";
         std::shared_ptr<arrow::Scalar> scalar = partition_values[i];
         if (!scalar->is_valid) {
             path += "__HIVE_DEFAULT_PARTITION__";

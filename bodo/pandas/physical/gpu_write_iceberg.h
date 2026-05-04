@@ -66,11 +66,13 @@
  * Supported transforms (initial scope): `identity`, `void`.
  */
 struct PartitionField {
-    cudf::size_type col_idx;  ///< Index of this column in the input table.
-    std::string col_name;     ///< Column name (from Arrow schema).
-    std::string transform;    ///< Transform name: "identity", "void", etc.
-    long arg;                 ///< Transform argument (N for bucket, W for
-                              ///< truncate; 0 if unused).
+    cudf::size_type col_idx;     ///< Index of this column in the input table.
+    std::string col_name;        ///< Column name (from Arrow schema).
+    std::string transform;       ///< Transform name: "identity", "void", etc.
+    long arg;                    ///< Transform argument (N for bucket, W for
+                                 ///< truncate; 0 if unused).
+    std::string partition_name;  ///< Name used in the partition directory path
+                                 ///< (e.g. "region" for "region=US/").
 };
 
 /**
