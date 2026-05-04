@@ -371,10 +371,15 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         std::string dir_path_str = fs->type_name() == "local"
                                        ? dir_path.string()
                                        : dir_path.generic_string();
-        arrow::Status mkdir_status = fs->CreateDir(dir_path_str);
-        if (!mkdir_status.ok() && !mkdir_status.IsAlreadyExists()) {
-            CHECK_ARROW_GPU_ICEBERG(
-                mkdir_status, "PhysicalGPUWriteIceberg: CreateDir failed");
+        if (fs->type_name() == "local") {
+            std::filesystem::create_directories(dir_path);
+        } else {
+            // S3 / HDFS create parent dirs automatically when writing.
+            arrow::Status mkdir_status = fs->CreateDir(dir_path_str);
+            if (!mkdir_status.ok() && !mkdir_status.IsAlreadyExists()) {
+                CHECK_ARROW_GPU_ICEBERG(
+                    mkdir_status, "PhysicalGPUWriteIceberg: CreateDir failed");
+            }
         }
 
         // Build file name
@@ -449,7 +454,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         //        *partition_values
         PyObject* file_info_tuple = PyTuple_New(7 + n_part_vals);
         PyTuple_SetItem(file_info_tuple, 0,
-                        PyUnicode_FromString(out_path_str.c_str()));
+                        PyUnicode_FromString(fname.c_str()));
         PyTuple_SetItem(file_info_tuple, 1, PyLong_FromLongLong(record_count));
         PyTuple_SetItem(file_info_tuple, 2, PyLong_FromLongLong(file_size));
         PyTuple_SetItem(file_info_tuple, 3, value_counts_dict);
