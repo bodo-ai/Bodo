@@ -942,7 +942,7 @@ def run_queries(
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
 
     total_start = time.time()
-    success = 0
+    n_passed = 0
     failed_queries = []
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
@@ -964,8 +964,6 @@ def run_queries(
                 result = query_func()
 
             # Second run for timing:
-
-            # with set_broadcast_join(True):
             result = query_func()
 
             if show_output:
@@ -981,7 +979,7 @@ def run_queries(
                     list(result.columns)
                 ]  # reorder columns to match result
                 _test_equal(result, answer_df, sort_output=True, reset_index=True)
-            success += 1
+            n_passed += 1
             if output_path:
                 result.to_parquet(f"{output_path}/q{query:02}.pq")
         except Exception as e:
@@ -989,7 +987,7 @@ def run_queries(
             failed_queries.append(query)
 
     print(f"Total query execution time (s): {time.time() - total_start}")
-    print(f"Total successful queries: {success}/{len(queries)}")
+    print(f"Total successful queries: {n_passed}/{len(queries)}")
     if failed_queries:
         print(f"Failed queries: {failed_queries}")
 
@@ -1074,10 +1072,10 @@ def main():
                 f.write("implementation,query,n_gpus,execution_time\n")
 
     backend_module = bodo.pandas if backend == "bodo" else pd
-    # warmup the cluster
+
     if backend == "bodo":
         print("Running bodo.pandas: GPU enabled?: ", bodo.gpu_enabled)
-
+        # warmup GPU cluster
         print(backend_module.DataFrame({"A": [1, 2, 3]})["A"])
 
     if args.output_path:
