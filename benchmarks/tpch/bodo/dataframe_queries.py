@@ -944,6 +944,7 @@ def run_queries(
     scale_factor: float,
     backend,
     warmup: bool,
+    n_iters: int = 1,
     log_file: str | None = None,
     answers_path: str | None = None,
     output_path: str | None = None,
@@ -974,24 +975,27 @@ def run_queries(
                 result = query_func()
 
             # Second run for timing:
-            result = query_func()
+            for _ in range(n_iters):
+                result = query_func()
 
-            if answers_path:
-                from bodo.tests.utils import _test_equal
+                if answers_path:
+                    from bodo.tests.utils import _test_equal
 
-                answer_df = pd.read_parquet(
-                    f"{answers_path}/q{query:02}.pq", dtype_backend="pyarrow"
-                )
-                answer_df = answer_df[
-                    list(result.columns)
-                ]  # reorder columns to match result
-                _test_equal(result, answer_df, sort_output=True, reset_index=True)
-            n_passed += 1
-            if output_path:
-                result.to_parquet(f"{output_path}/q{query:02}.pq")
+                    answer_df = pd.read_parquet(
+                        f"{answers_path}/q{query:02}.pq", dtype_backend="pyarrow"
+                    )
+                    answer_df = answer_df[
+                        list(result.columns)
+                    ]  # reorder columns to match result
+                    _test_equal(result, answer_df, sort_output=True, reset_index=True)
+
+                if output_path:
+                    result.to_parquet(f"{output_path}/q{query:02}.pq")
         except Exception as e:
             print(f"Error running query {query}: {e}")
             failed_queries.append(query)
+        else:
+            n_passed += 1
 
     print(f"Total query execution time (s): {time.time() - total_start}")
     print(f"Total successful queries: {n_passed}/{len(queries)}")
@@ -1039,6 +1043,13 @@ def main():
         action="store_true",
         required=False,
         help="Whether to do warmup run.",
+    )
+    parser.add_argument(
+        "--n_iters",
+        type=int,
+        required=False,
+        default=1,
+        help="Number of iterations to run each query.",
     )
     parser.add_argument(
         "--log_timings",
@@ -1095,6 +1106,7 @@ def main():
         scale_factor=scale_factor,
         backend=backend_module,
         warmup=do_warmup,
+        n_iters=args.n_iters,
         log_file=args.log_timings,
         answers_path=args.answers_path,
         output_path=args.output_path,
