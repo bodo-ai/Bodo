@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 import dask
 import dask.dataframe as dd
+import pandas as pd
 from dask.distributed import Client
 
 
@@ -16,8 +17,18 @@ def _load_dataset(dataset_path, table_name, ext=".parquet"):
     )
 
 
+def datetime_or_date_value(value):
+    ts = datetime.strptime(value, "%Y-%m-%d")
+    if dask.config.get("dataframe.backend") == "pandas":
+        return ts.date()
+    # Dask-cuDF does not support date32[day][pyarrow]
+    return ts
+
+
 def query_01(dataset_path, scale, ext=".parquet"):
-    VAR1 = datetime(1998, 9, 2)
+    VAR1 = datetime_or_date_value(
+        "1998-09-02",
+    )
     lineitem_ds = _load_dataset(dataset_path, "lineitem", ext)
 
     lineitem_filtered = lineitem_ds[lineitem_ds.l_shipdate <= VAR1]
@@ -122,7 +133,7 @@ def query_02(dataset_path, scale, ext=".parquet"):
 
 
 def query_03(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-03-15", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-03-15")
     var2 = "BUILDING"
 
     lineitem_ds = _load_dataset(dataset_path, "lineitem", ext)
@@ -151,8 +162,8 @@ def query_03(dataset_path, scale, ext=".parquet"):
 
 
 def query_04(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1993-10-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1993-07-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1993-10-01")
+    date2 = datetime_or_date_value("1993-07-01")
 
     line_item_ds = _load_dataset(dataset_path, "lineitem", ext)
     orders_ds = _load_dataset(dataset_path, "orders", ext)
@@ -175,8 +186,8 @@ def query_04(dataset_path, scale, ext=".parquet"):
 
 
 def query_05(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1994-01-01")
+    date2 = datetime_or_date_value("1995-01-01")
 
     region_ds = _load_dataset(dataset_path, "region", ext)
     nation_ds = _load_dataset(dataset_path, "nation", ext)
@@ -203,8 +214,8 @@ def query_05(dataset_path, scale, ext=".parquet"):
 
 
 def query_06(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1994-01-01")
+    date2 = datetime_or_date_value("1995-01-01")
     var3 = 24
 
     line_item_ds = _load_dataset(dataset_path, "lineitem", ext)
@@ -223,8 +234,8 @@ def query_06(dataset_path, scale, ext=".parquet"):
 
 
 def query_07(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-01-01", "%Y-%m-%d")
-    var2 = datetime.strptime("1997-01-01", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-01-01")
+    var2 = datetime_or_date_value("1997-01-01")
 
     nation_ds = _load_dataset(dataset_path, "nation", ext)
     customer_ds = _load_dataset(dataset_path, "customer", ext)
@@ -317,8 +328,8 @@ def query_07(dataset_path, scale, ext=".parquet"):
 
 
 def query_08(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-01-01", "%Y-%m-%d")
-    var2 = datetime.strptime("1997-01-01", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-01-01")
+    var2 = datetime_or_date_value("1997-01-01")
 
     supplier = _load_dataset(dataset_path, "supplier", ext)
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
@@ -488,8 +499,8 @@ def query_10(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     nation = _load_dataset(dataset_path, "nation", ext)
 
-    orderdate_from = datetime.strptime("1993-10-01", "%Y-%m-%d")
-    orderdate_to = datetime.strptime("1994-01-01", "%Y-%m-%d")
+    orderdate_from = datetime_or_date_value("1993-10-01")
+    orderdate_to = datetime_or_date_value("1994-01-01")
 
     orders = orders[
         (orders.o_orderdate >= orderdate_from) & (orders.o_orderdate < orderdate_to)
@@ -631,7 +642,7 @@ def query_12(dataset_path, scale, ext=".parquet"):
     orders = _load_dataset(dataset_path, "orders", ext)
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
 
-    receiptdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
+    receiptdate_from = datetime_or_date_value("1994-01-01")
     receiptdate_to = receiptdate_from + timedelta(days=365)
 
     table = orders.merge(lineitem, left_on="o_orderkey", right_on="l_orderkey")
@@ -649,16 +660,17 @@ def query_12(dataset_path, scale, ext=".parquet"):
     table["low_line_count"] = 0
     table["low_line_count"] = table.low_line_count.where(mask, 1)
 
-    result = (
-        table.groupby("l_shipmode")[["high_line_count", "low_line_count"]]
+    res = (
+        table.groupby("l_shipmode")["high_line_count", "low_line_count"]
         .sum()
         .reset_index()
-        .sort_values(by="l_shipmode")[
-            ["l_shipmode", "high_line_count", "low_line_count"]
-        ]
+        .sort_values(by="l_shipmode")
     )
-    # Workaround to avoid extra column called "index" in output dask-cudf 26.04
-    return result.compute()[["l_shipmode", "high_line_count", "low_line_count"]]
+    if dask.config.get("dataframe.backend") == "cudf":
+        # Workaround extra column added at runtime in dask-cudf 26.04
+        res = res.compute()[["l_shipmode", "high_line_count", "low_line_count"]]
+
+    return res
 
 
 def query_13(dataset_path, scale, ext=".parquet"):
@@ -724,8 +736,8 @@ def query_14(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     part = _load_dataset(dataset_path, "part", ext)
 
-    shipdate_from = datetime.strptime("1995-09-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1995-10-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1995-09-01")
+    shipdate_to = datetime_or_date_value("1995-10-01")
 
     table = lineitem.merge(part, left_on="l_partkey", right_on="p_partkey", how="inner")
     table = table[
@@ -791,8 +803,8 @@ def query_15(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     supplier = _load_dataset(dataset_path, "supplier", ext)
 
-    shipdate_from = datetime.strptime("1996-01-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1996-04-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1996-01-01")
+    shipdate_to = datetime_or_date_value("1996-04-01")
 
     # Create revenue view
     lineitem = lineitem[
@@ -1110,8 +1122,8 @@ def query_20(dataset_path, scale, ext=".parquet"):
     nation = _load_dataset(dataset_path, "nation", ext)
     part = _load_dataset(dataset_path, "part", ext)
     partsupp = _load_dataset(dataset_path, "partsupp", ext)
-    shipdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1994-01-01")
+    shipdate_to = datetime_or_date_value("1995-01-01")
 
     res_1 = lineitem[
         (lineitem["l_shipdate"] >= shipdate_from)
@@ -1299,32 +1311,36 @@ def get_query_func(q_num: int) -> Callable:
     return globals()[f"query_{q_num:02d}"]
 
 
+def is_eager_type(result):
+    eager_types = [pd.DataFrame]
+    if dask.config.get("dataframe.backend") == "cudf":
+        import cudf
+
+        eager_types.append(cudf.DataFrame)
+
+    return isinstance(result, tuple(eager_types))
+
+
 def run_single_query(
-    query_num, dataset_path, scale_factor, backend, log_file=None
+    query_num, dataset_path, scale_factor, log_file=None, show_output=False
 ) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
-
-    def is_lazy(res, backend):
-        if backend == "cudf":
-            import cudf
-
-            return not isinstance(res, cudf.DataFrame)
-        else:
-            import pandas as pd
-
-            return not isinstance(res, pd.DataFrame)
-
     query_func = get_query_func(query_num)
 
     start = time.time()
     res = query_func(dataset_path, scale_factor, ext=".pq")
-    if is_lazy(res, backend):
+    if not is_eager_type(res):
         res = res.compute()
-    print(res)
     total_time = time.time() - start
+
+    if show_output:
+        print(res)
+
     if log_file:
         with open(log_file, "a") as f:
-            f.write(f"dask[{backend}],{query_num},-,{total_time:f}\n")
+            f.write(
+                f"dask[{dask.config.get('dataframe.backend')}],{query_num},-,{total_time:f}\n"
+            )
     print(f"Query {query_num} execution time: {total_time:.2f} seconds")
     return total_time
 
@@ -1379,6 +1395,11 @@ def main():
         type=str,
         default=None,
         help="Path to log timings.",
+    )
+    parser.add_argument(
+        "--show_output",
+        action="store_true",
+        help="Whether to print query outputs.",
     )
 
     args = parser.parse_args()
@@ -1463,8 +1484,8 @@ def main():
                     queries[0],
                     dataset_path,
                     scale_factor,
-                    backend=args.backend,
                     log_file=args.log_timings,
+                    show_output=args.show_output,
                 )
                 for query in queries:
                     try:
@@ -1473,8 +1494,8 @@ def main():
                             query,
                             dataset_path,
                             scale_factor,
-                            backend=args.backend,
                             log_file=args.log_timings,
+                            show_output=args.show_output,
                         )
                     except Exception as e:
                         print(f"Query {query} failed with an exception: {e}")
@@ -1500,8 +1521,8 @@ def main():
                 query,
                 dataset_path,
                 scale_factor,
-                backend=args.backend,
                 log_file=args.log_timings,
+                show_output=args.show_output,
             )
 
         total_time = time.time() - total_start
