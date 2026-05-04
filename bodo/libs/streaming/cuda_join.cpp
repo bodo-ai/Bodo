@@ -12,7 +12,6 @@
 #include <cudf/join/filtered_join.hpp>
 #include <cudf/join/join.hpp>
 #include <cudf/join/mixed_join.hpp>
-#include <cudf/reduction.hpp>
 #include <cudf/sorting.hpp>
 #include <cudf/stream_compaction.hpp>
 #include <cudf/types.hpp>
@@ -20,7 +19,6 @@
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_uvector.hpp>
 #include <stdexcept>
-#include <string>
 #include "../../pandas/physical/gpu_expression.h"
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
