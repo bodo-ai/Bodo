@@ -16,12 +16,14 @@
 #include <cudf/types.hpp>
 #include <memory>
 #include <rmm/cuda_stream_view.hpp>
+#include <rmm/device_buffer.hpp>
 #include <rmm/device_uvector.hpp>
 #include <stdexcept>
 #include "../../pandas/physical/gpu_expression.h"
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
 #include "_util.h"
+#include "cuda_runtime_api.h"
 #include "duckdb/common/enum_util.hpp"
 #include "duckdb/common/enums/join_type.hpp"
 
@@ -157,19 +159,25 @@ bool CudaJoin::BuildConsumeBatch(
 std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     std::unique_ptr<cudf::table> table, bool global_is_last,
     rmm::cuda_stream_view stream) {
-    if (!global_is_last || !duckdb::PropagatesBuildSide(this->join_type) ||
-        unmatched_build_rows == nullptr) {
+    if (!global_is_last || !duckdb::PropagatesBuildSide(this->join_type)) {
         return table;
     }
 
     const MPI_Comm comm = this->probe_shuffle_manager->get_mpi_comm();
     if (this->is_broadcast_join && !this->build_matches_synced) {
         if (this->sync_build_matches_req == MPI_REQUEST_NULL) {
+            int n = this->unmatched_build_rows->size();
+            auto d_buf = unmatched_build_rows->view().data<uint8_t>();
+            cudaHostAlloc(&this->unmatched_build_rows_host, n,
+                          cudaHostAllocDefault);
+            cudaMemcpy(unmatched_build_rows_host, d_buf, n,
+                       cudaMemcpyDeviceToHost);
             CHECK_MPI(
-                MPI_Iallreduce(MPI_IN_PLACE, this->unmatched_build_rows.get(),
-                               this->unmatched_build_rows->size(), MPI_UINT8_T,
-                               MPI_BAND, comm, &this->sync_build_matches_req),
+                MPI_Iallreduce(MPI_IN_PLACE, unmatched_build_rows_host, n,
+                               MPI_UINT8_T, MPI_BAND, comm,
+                               &this->sync_build_matches_req),
                 "produce_unmatched_build_rows: MPI error on MPI_Iallreduce ");
+            return table;
         } else {
             int flag = 0;
             CHECK_MPI(MPI_Test(&this->sync_build_matches_req, &flag,
@@ -177,6 +185,11 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
                       "produce_unmatched_build_rows: MPI error on MPI_Test ");
             if (flag) {
                 this->build_matches_synced = true;
+                auto* d_buf =
+                    unmatched_build_rows->mutable_view().data<uint8_t>();
+                cudaMemcpy(d_buf, unmatched_build_rows_host,
+                           unmatched_build_rows->size(),
+                           cudaMemcpyHostToDevice);
             } else {
                 return table;
             }
@@ -188,7 +201,7 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     // If it's a broadcast join we only want to
     // produce the unmatched rows on one rank since
     // all ranks share a build table
-    if (this->is_broadcast_join && rank > 0) {
+    if ((this->is_broadcast_join && rank > 0) || !this->unmatched_build_rows) {
         return table;
     }
 
