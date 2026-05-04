@@ -4,6 +4,8 @@
 #ifdef USE_CUDF
 #include <cudf/copying.hpp>
 #include <cudf/table/table_view.hpp>
+#include <rmm/mr/cuda_async_memory_resource.hpp>
+// #include <rmm/mr/device/per_device_resource.hpp>
 #endif  // USE_CUDF
 #include "physical/operator.h"
 #include "physical/result_collector.h"
@@ -22,9 +24,34 @@ std::string getGPUStats() {
     free_bytes /= 1024 * 1024 * 1024;
     total_bytes /= 1024 * 1024 * 1024;
 
+    auto *mr = dynamic_cast<rmm::mr::cuda_async_memory_resource *>(
+        rmm::mr::get_current_device_resource());
+    if (!mr) {
+        throw std::runtime_error(
+            "Current RMM resource is not cuda_async_memory_resource");
+    }
+    cudaMemPool_t pool = mr->pool_handle();
+
+    size_t reserved_current = 0;
+    size_t reserved_peak = 0;
+    size_t used_current = 0;
+    size_t used_peak = 0;
+
+    cudaMemPoolGetAttribute(pool, cudaMemPoolAttrReservedMemCurrent,
+                            &reserved_current);
+    cudaMemPoolGetAttribute(pool, cudaMemPoolAttrReservedMemHigh,
+                            &reserved_peak);
+    cudaMemPoolGetAttribute(pool, cudaMemPoolAttrUsedMemCurrent, &used_current);
+    cudaMemPoolGetAttribute(pool, cudaMemPoolAttrUsedMemHigh, &used_peak);
+    reserved_current /= (1024 * 1024);
+    reserved_peak /= (1024 * 1024);
+    used_current /= (1024 * 1024);
+    used_peak /= (1024 * 1024);
+
     std::stringstream sstr;
     sstr << "GPUMem: " << free_bytes << "/" << total_bytes << "/"
-         << (int)(percentage * 100) << "%";
+         << (int)(percentage * 100) << "% " << reserved_current << "/"
+         << reserved_peak << "/" << used_current << "/" << used_peak;
     return sstr.str();
 #else   // USE_CUDF
     return std::string();
