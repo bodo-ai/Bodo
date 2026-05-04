@@ -128,7 +128,7 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
         std::shared_ptr<bodo::Schema> in_bodo_schema,
         IcebergWriteFunctionData& bind_data);
 
-    virtual ~PhysicalGPUWriteIceberg();
+    virtual ~PhysicalGPUWriteIceberg() = default;
 
     /**
      * @brief Consume a GPU-side batch and accumulate into the write buffer.
@@ -318,7 +318,7 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
 
     // ---- File tracking ----
 
-    PyObjectPtr iceberg_files_info_py;  ///< Python list of
+    PyObject* iceberg_files_info_py;  ///< Python list of
                                         ///< `(file_name, record_count,
                                         ///< file_size, *partition_values)`
                                         ///< tuples. After finalization, holds
