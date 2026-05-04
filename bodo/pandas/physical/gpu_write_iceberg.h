@@ -20,12 +20,15 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/io/file.h>
 #include <arrow/python/api.h>
+#include <arrow/scalar.h>
 #include <arrow/util/key_value_metadata.h>
+#include <cudf/column/column_factories.hpp>
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/io/data_sink.hpp>
 #include <cudf/io/parquet.hpp>
 #include <cudf/io/types.hpp>
+#include <cudf/reduction.hpp>
 #include <cudf/sorting.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
@@ -254,6 +257,53 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
     cudf::io::compression_type pq_compression_from_string(const std::string& c);
 
     /**
+     * @brief Compute per-column Iceberg file statistics on GPU and return
+     * the four Python stat dicts.
+     *
+     * For each output column in the partition group slice:
+     * - `value_counts` = col.size()
+     * - `null_count`   = col.null_count()
+     * - lower/upper bounds from `cudf::minmax(col)` (skipped for all-null
+     *   columns and nested types).  Results are serialized to Iceberg
+     *   binary format on the host side after a single batched GPU→host
+     *   transfer of the min/max scalars.
+     *
+     * @param group_view     Sliced view of the partition group's output
+     *                       columns (on GPU, stays on GPU).
+     * @param output_col_names Names of the output columns (drives Iceberg
+     *                         field ID lookups).
+     * @param se             Stream and event for CUDA operations.
+     * @param value_counts_dict Output dict: {field_id: value_count}.
+     * @param null_count_dict   Output dict: {field_id: null_count}.
+     * @param lower_bound_dict  Output dict: {field_id: bytes}.
+     * @param upper_bound_dict  Output dict: {field_id: bytes}.
+     */
+    void compute_field_metrics_gpu(
+        cudf::table_view group_view,
+        const std::vector<std::string>& output_col_names,
+        std::shared_ptr<StreamAndEvent> se, PyObject* value_counts_dict,
+        PyObject* null_count_dict, PyObject* lower_bound_dict,
+        PyObject* upper_bound_dict);
+
+    /**
+     * @brief Serialize an Arrow scalar to Iceberg binary format.
+     *
+     * Follows
+     * https://iceberg.apache.org/spec/#appendix-d-single-value-serialization
+     *
+     * @param scalar Arrow scalar.
+     * @return Python bytes object.
+     */
+    static PyObject* arrow_scalar_to_iceberg_bytes(
+        const std::shared_ptr<arrow::Scalar>& scalar);
+
+    /**
+     * @brief Serialize a native value to little-endian Python bytes.
+     */
+    template <typename T>
+    static PyObject* buffer_to_little_endian_bytes(T value);
+
+    /**
      * @brief Populate a metrics vector for reporting to
      * `QueryProfileCollector`.
      *
@@ -319,10 +369,14 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
     // ---- File tracking ----
 
     PyObject* iceberg_files_info_py;  ///< Python list of
-                                        ///< `(file_name, record_count,
-                                        ///< file_size, *partition_values)`
-                                        ///< tuples. After finalization, holds
-                                        ///< the MPI-gathered result.
+                                      ///< `(file_name, record_count,
+                                      ///< file_size, value_counts_dict,
+                                      ///< null_count_dict,
+                                      ///< lower_bound_dict,
+                                      ///< upper_bound_dict,
+                                      ///< *partition_values)` tuples.
+                                      ///< After finalization, holds
+                                      ///< the MPI-gathered result.
 
     // ---- Counters and metrics ----
 

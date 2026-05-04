@@ -13,6 +13,7 @@
 #include <cudf/sorting.hpp>
 #include <cudf/types.hpp>
 
+#include "../io/iceberg_helpers.h"
 #include "../libs/_query_profile_collector.h"
 #include "physical/gpu_write_parquet.h"
 
@@ -430,15 +431,33 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
                                        ? out_path.string()
                                        : out_path.generic_string();
 
+        // Compute per-column stats on GPU via cudf::minmax.
+        PyObject* value_counts_dict = PyDict_New();
+        PyObject* null_count_dict = PyDict_New();
+        PyObject* lower_bound_dict = PyDict_New();
+        PyObject* upper_bound_dict = PyDict_New();
+        compute_field_metrics_gpu(group_view, output_col_names, se,
+                                  value_counts_dict, null_count_dict,
+                                  lower_bound_dict, upper_bound_dict);
+
         auto& partition_vals = partition_group_values[gi];
-        PyObjectPtr file_info_tuple =
-            PyTuple_New(3 + static_cast<Py_ssize_t>(partition_vals.size()));
+        int n_part_vals = static_cast<int>(partition_vals.size());
+
+        // Tuple: file_name, record_count, file_size,
+        //        value_counts_dict, null_count_dict,
+        //        lower_bound_dict,  upper_bound_dict,
+        //        *partition_values
+        PyObject* file_info_tuple = PyTuple_New(7 + n_part_vals);
         PyTuple_SetItem(file_info_tuple, 0,
                         PyUnicode_FromString(out_path_str.c_str()));
         PyTuple_SetItem(file_info_tuple, 1, PyLong_FromLongLong(record_count));
         PyTuple_SetItem(file_info_tuple, 2, PyLong_FromLongLong(file_size));
+        PyTuple_SetItem(file_info_tuple, 3, value_counts_dict);
+        PyTuple_SetItem(file_info_tuple, 4, null_count_dict);
+        PyTuple_SetItem(file_info_tuple, 5, lower_bound_dict);
+        PyTuple_SetItem(file_info_tuple, 6, upper_bound_dict);
 
-        for (size_t pi = 0; pi < partition_vals.size(); pi++) {
+        for (int pi = 0; pi < n_part_vals; pi++) {
             std::shared_ptr<arrow::Scalar> scalar = partition_vals[pi];
             PyObject* py_val = nullptr;
             if (!scalar->is_valid) {
@@ -533,11 +552,11 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
                         break;
                 }
             }
-            PyTuple_SetItem(file_info_tuple, 3 + static_cast<Py_ssize_t>(pi),
-                            py_val);
+            PyTuple_SetItem(file_info_tuple, 7 + pi, py_val);
         }
 
         PyList_Append(iceberg_files_info_py, file_info_tuple);
+        Py_DECREF(file_info_tuple);
 
         metrics.n_files_written++;
     }
@@ -613,7 +632,7 @@ void PhysicalGPUWriteIceberg::FinalizeSink() {
             "gather operation failed");
     }
 
-    iceberg_files_info_py = PyObjectPtr(all_infos);
+    iceberg_files_info_py = all_infos;
     metrics.finalize_time = end_timer(start_finalize);
 
     std::vector<MetricBase> metrics_out;
@@ -645,4 +664,199 @@ void PhysicalGPUWriteIceberg::ReportMetrics(
         TimerMetric("file_write_time", metrics.file_write_time));
     metrics_out.emplace_back(
         TimerMetric("finalize_time", metrics.finalize_time));
+}
+
+// ========================================================================
+// Iceberg binary serialization and GPU-based field metrics
+// ========================================================================
+
+template <typename T>
+PyObject* PhysicalGPUWriteIceberg::buffer_to_little_endian_bytes(T value) {
+    const char* initial_bytes = reinterpret_cast<const char*>(&value);
+    if constexpr (std::endian::native == std::endian::little) {
+        return PyBytes_FromStringAndSize(initial_bytes, sizeof(T));
+    } else {
+        std::string str = std::string(initial_bytes, sizeof(T));
+        std::ranges::reverse(str);
+        const char* bytes = str.c_str();
+        return PyBytes_FromStringAndSize(bytes, sizeof(T));
+    }
+}
+
+PyObject* PhysicalGPUWriteIceberg::arrow_scalar_to_iceberg_bytes(
+    const std::shared_ptr<arrow::Scalar>& scalar) {
+    switch (scalar->type->id()) {
+        case arrow::Type::BOOL: {
+            auto b = std::static_pointer_cast<arrow::BooleanScalar>(scalar);
+            char byte_value = b->value ? 0x1 : 0x0;
+            return PyBytes_FromStringAndSize(&byte_value, 1);
+        }
+        case arrow::Type::INT32:
+            return buffer_to_little_endian_bytes<int32_t>(
+                std::static_pointer_cast<arrow::Int32Scalar>(scalar)->value);
+        case arrow::Type::INT64:
+            return buffer_to_little_endian_bytes<int64_t>(
+                std::static_pointer_cast<arrow::Int64Scalar>(scalar)->value);
+        case arrow::Type::FLOAT:
+            return buffer_to_little_endian_bytes<float>(
+                std::static_pointer_cast<arrow::FloatScalar>(scalar)->value);
+        case arrow::Type::DOUBLE:
+            return buffer_to_little_endian_bytes<double>(
+                std::static_pointer_cast<arrow::DoubleScalar>(scalar)->value);
+        case arrow::Type::DATE32:
+            return buffer_to_little_endian_bytes<int32_t>(
+                std::static_pointer_cast<arrow::Date32Scalar>(scalar)->value);
+        case arrow::Type::TIME64:
+            return buffer_to_little_endian_bytes<int64_t>(
+                std::static_pointer_cast<arrow::Time64Scalar>(scalar)->value);
+        case arrow::Type::TIMESTAMP:
+            return buffer_to_little_endian_bytes<int64_t>(
+                std::static_pointer_cast<arrow::TimestampScalar>(scalar)
+                    ->value);
+        case arrow::Type::STRING: {
+            auto s = std::static_pointer_cast<arrow::StringScalar>(scalar);
+            return PyBytes_FromStringAndSize(
+                reinterpret_cast<const char*>(s->value->data()),
+                s->value->size());
+        }
+        case arrow::Type::LARGE_STRING: {
+            auto s = std::static_pointer_cast<arrow::LargeStringScalar>(scalar);
+            return PyBytes_FromStringAndSize(
+                reinterpret_cast<const char*>(s->value->data()),
+                s->value->size());
+        }
+        case arrow::Type::BINARY: {
+            auto b = std::static_pointer_cast<arrow::BinaryScalar>(scalar);
+            return PyBytes_FromStringAndSize(
+                reinterpret_cast<const char*>(b->value->data()),
+                b->value->size());
+        }
+        case arrow::Type::LARGE_BINARY: {
+            auto b = std::static_pointer_cast<arrow::LargeBinaryScalar>(scalar);
+            return PyBytes_FromStringAndSize(
+                reinterpret_cast<const char*>(b->value->data()),
+                b->value->size());
+        }
+        default:
+            throw std::runtime_error(
+                "arrow_scalar_to_iceberg_bytes: unsupported type " +
+                scalar->type->ToString());
+    }
+}
+
+void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
+    cudf::table_view group_view,
+    const std::vector<std::string>& output_col_names,
+    std::shared_ptr<StreamAndEvent> se, PyObject* value_counts_dict,
+    PyObject* null_count_dict, PyObject* lower_bound_dict,
+    PyObject* upper_bound_dict) {
+    // Collect per-column stats on GPU.
+    std::vector<int64_t> value_counts;
+    std::vector<int64_t> null_counts;
+    std::vector<std::unique_ptr<cudf::scalar>> min_scalars;
+    std::vector<std::unique_ptr<cudf::scalar>> max_scalars;
+    std::vector<bool> has_bounds;
+    std::vector<int64_t> field_ids;
+    std::vector<cudf::type_id> col_type_ids;
+
+    for (size_t i = 0; i < output_col_names.size(); i++) {
+        cudf::column_view col = group_view.column(i);
+        std::string col_name = output_col_names[i];
+        auto field = iceberg_schema->GetFieldByName(col_name);
+        int64_t fid = get_iceberg_field_id(field);
+        field_ids.push_back(fid);
+
+        int64_t vc = col.size();
+        int64_t nc = col.null_count();
+        value_counts.push_back(vc);
+        null_counts.push_back(nc);
+
+        // Skip min/max for nested types on GPU; will store
+        // Py_None in the bounds dicts for these fields.
+        cudf::type_id tid = col.type().id();
+        col_type_ids.push_back(tid);
+        bool is_nested =
+            (tid == cudf::type_id::LIST || tid == cudf::type_id::STRUCT);
+        bool can_bound = !is_nested && (nc < vc);
+        has_bounds.push_back(can_bound);
+
+        if (can_bound) {
+            auto [min_s, max_s] = cudf::minmax(col);
+            min_scalars.push_back(std::move(min_s));
+            max_scalars.push_back(std::move(max_s));
+        } else {
+            min_scalars.push_back(nullptr);
+            max_scalars.push_back(nullptr);
+        }
+    }
+
+    // Populate value_counts and null_counts dicts on host.
+    for (size_t i = 0; i < output_col_names.size(); i++) {
+        PyObject* fid_py = PyLong_FromLongLong(field_ids[i]);
+        PyObject* vc_py = PyLong_FromLongLong(value_counts[i]);
+        PyDict_SetItem(value_counts_dict, fid_py, vc_py);
+        Py_DECREF(vc_py);
+        PyObject* nc_py = PyLong_FromLongLong(null_counts[i]);
+        PyDict_SetItem(null_count_dict, fid_py, nc_py);
+        Py_DECREF(nc_py);
+        Py_DECREF(fid_py);
+    }
+
+    // Batch-transfer all min/max scalars to host at once.
+    // Build a 1-row cudf table of mins and another of maxes, then
+    // convert each to Arrow to extract the scalars.
+    std::vector<std::unique_ptr<cudf::column>> min_cols;
+    std::vector<std::unique_ptr<cudf::column>> max_cols;
+    std::vector<std::shared_ptr<arrow::Field>> bound_fields;
+    std::vector<size_t> bound_indices;
+
+    for (size_t i = 0; i < output_col_names.size(); i++) {
+        if (!has_bounds[i])
+            continue;
+        min_cols.push_back(cudf::make_column_from_scalar(*min_scalars[i], 1));
+        max_cols.push_back(cudf::make_column_from_scalar(*max_scalars[i], 1));
+        auto field = iceberg_schema->GetFieldByName(output_col_names[i]);
+        bound_fields.push_back(field);
+        bound_indices.push_back(i);
+    }
+
+    if (!min_cols.empty()) {
+        auto min_table = std::make_unique<cudf::table>(std::move(min_cols));
+        auto max_table = std::make_unique<cudf::table>(std::move(max_cols));
+        auto bound_schema = arrow::schema(bound_fields);
+
+        auto min_arrow = convertGPUToArrow(
+            GPU_DATA(std::shared_ptr<cudf::table>(std::move(min_table)),
+                     bound_schema, se));
+        auto max_arrow = convertGPUToArrow(
+            GPU_DATA(std::shared_ptr<cudf::table>(std::move(max_table)),
+                     bound_schema, se));
+
+        for (size_t bi = 0; bi < bound_indices.size(); bi++) {
+            size_t orig_i = bound_indices[bi];
+            PyObject* fid_py = PyLong_FromLongLong(field_ids[orig_i]);
+            auto min_s = min_arrow->column(bi)->GetScalar(0).ValueOrDie();
+            auto max_s = max_arrow->column(bi)->GetScalar(0).ValueOrDie();
+            PyObject* min_obj = arrow_scalar_to_iceberg_bytes(min_s);
+            PyObject* max_obj = arrow_scalar_to_iceberg_bytes(max_s);
+            PyDict_SetItem(lower_bound_dict, fid_py, min_obj);
+            PyDict_SetItem(upper_bound_dict, fid_py, max_obj);
+            Py_DECREF(min_obj);
+            Py_DECREF(max_obj);
+            Py_DECREF(fid_py);
+        }
+    }
+
+    // Store Py_None for columns that couldn't be bounded (nested
+    // types or all-null columns).
+    for (size_t i = 0; i < output_col_names.size(); i++) {
+        if (has_bounds[i])
+            continue;
+        PyObject* fid_py = PyLong_FromLongLong(field_ids[i]);
+        Py_INCREF(Py_None);
+        PyDict_SetItem(lower_bound_dict, fid_py, Py_None);
+        Py_INCREF(Py_None);
+        PyDict_SetItem(upper_bound_dict, fid_py, Py_None);
+        Py_DECREF(fid_py);
+    }
 }
