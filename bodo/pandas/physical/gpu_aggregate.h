@@ -75,6 +75,19 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
                 duckdb::LogicalTypeId::VARCHAR) {
             return false;
         }
+
+        if (agg_expr.function.name != "sum" &&
+            agg_expr.function.name != "count" &&
+            agg_expr.function.name != "mean" &&
+            agg_expr.function.name != "min" &&
+            agg_expr.function.name != "max" &&
+            agg_expr.function.name != "size" &&
+            agg_expr.function.name != "nunique" &&
+            agg_expr.function.name != "skew" &&
+            agg_expr.function.name != "std" &&
+            agg_expr.function.name != "var") {
+            return false;
+        }
     }
     return true;
 }

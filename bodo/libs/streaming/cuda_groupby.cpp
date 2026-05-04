@@ -465,7 +465,21 @@ std::unique_ptr<cudf::column> skew_final_merge(
                                        cudf::binary_operator::DIV, out_type,
                                        output_stream);
 
-    return skew;
+    // Replace skew with 0 if m2 is zero or very small.
+    // For identical values m2 will be very small instead of exactly zero due to
+    // floating point precision loss.
+    auto eps_scalar = std::make_unique<cudf::numeric_scalar<double>>(
+        1e-8, true, output_stream);
+    auto m2_is_tiny = cudf::binary_operation(
+        m2->view(), *eps_scalar, cudf::binary_operator::LESS,
+        cudf::data_type{cudf::type_id::BOOL8}, output_stream);
+
+    auto zero_scalar = std::make_unique<cudf::numeric_scalar<double>>(
+        0.0, true, output_stream);
+    auto result = cudf::copy_if_else(*zero_scalar, skew->view(),
+                                     m2_is_tiny->view(), output_stream);
+
+    return result;
 }
 
 std::unique_ptr<cudf::column> nunique_final_merge(
