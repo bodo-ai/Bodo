@@ -199,6 +199,14 @@ struct CudaJoin {
         cudf::table_view const& build_kept_view,
         cudf::column_view const& build_idx_view, bool global_is_last,
         rmm::cuda_stream_view stream);
+
+    /**
+     * @brief Sort build table in lexicographical order to make broadcast join
+     * build_indices consistent across all ranks.
+     * TODO(scott): Sort build chunks as they are received to avoid sorting at
+     * the end.
+     */
+    void sort_build_table();
 };
 
 struct CudaHashJoin : public CudaJoin {
