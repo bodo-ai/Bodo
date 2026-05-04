@@ -1,5 +1,6 @@
 #include "_executor.h"
 #include "_bodo_scan_function.h"
+#include "_bodo_write_function.h"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_set_operation.hpp"
@@ -152,7 +153,11 @@ class DevicePlanNode {
             }
 
             case duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE:
-                return true;
+                duckdb::LogicalCopyToFile &copy_to_file =
+                    op.Cast<duckdb::LogicalCopyToFile>();
+                BodoWriteFunctionData &write_data =
+                    copy_to_file.bind_data->Cast<BodoWriteFunctionData>();
+                return write_data.canRunOnGPU();
 
             case duckdb::LogicalOperatorType::LOGICAL_PROJECTION:
                 return ::gpu_capable(op.Cast<duckdb::LogicalProjection>());

@@ -28,6 +28,7 @@ class BodoWriteFunctionData : public duckdb::FunctionData {
                          std::shared_ptr<PhysicalGPUSink>>
     CreatePhysicalOperator(std::shared_ptr<bodo::Schema> in_table_schema,
                            bool run_on_gpu) = 0;
+    virtual bool CanRunOnGPU() const { return false; }
 };
 
 /**
@@ -60,6 +61,8 @@ struct ParquetWriteFunctionData : public BodoWriteFunctionData {
             this->path, this->arrow_schema, this->compression,
             this->bucket_region, this->row_group_size);
     }
+
+    bool CanRunOnGPU() const override { return true; }
 
     std::variant<std::shared_ptr<PhysicalSink>,
                  std::shared_ptr<PhysicalGPUSink>>
@@ -133,6 +136,8 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
                  std::shared_ptr<PhysicalGPUSink>>
     CreatePhysicalOperator(std::shared_ptr<bodo::Schema> in_table_schema,
                            bool run_on_gpu) override;
+
+    bool CanRunOnGPU() const override { return true; }
 
     std::shared_ptr<arrow::Schema> in_schema;
     std::string table_loc;
