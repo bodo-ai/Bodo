@@ -7,6 +7,9 @@
 #include <mpi.h>
 #include <pyerrors.h>
 #include <tupleobject.h>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/io/parquet.hpp>
 #include <cudf/io/types.hpp>
@@ -240,6 +243,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
 
     // Sort by sort_cols + partition_cols
     if (!sort_cols.empty()) {
+        // TODO: handle sort order/null placement
         std::vector<cudf::order> column_order(sort_cols.size(),
                                               cudf::order::ASCENDING);
         std::vector<cudf::null_order> null_precedence(sort_cols.size(),
@@ -334,8 +338,6 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
 
-    std::string fname_prefix = get_fname_prefix(iter);
-
     // Determine which columns to include in output (exclude void columns)
     std::vector<cudf::size_type> output_col_indices;
     std::vector<std::string> output_col_names;
@@ -383,11 +385,16 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         }
 
         // Build file name
-        std::string fname =
-            fname_prefix +
-            std::string(5 - std::to_string(myrank).length(), '0') +
-            std::to_string(myrank) + ".parquet";
+        std::string fname = generate_iceberg_file_name();
         std::filesystem::path out_path = dir_path / fname;
+
+        // Relative path from table_loc (for the file-info tuple).
+        std::string rel_path;
+        if (part_path.empty()) {
+            rel_path = fname;
+        } else {
+            rel_path = part_path + "/" + fname;
+        }
 
         // Slice sorted table to this partition group's rows
         cudf::table_view stv = sorted_table->view();
@@ -454,7 +461,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         //        *partition_values
         PyObject* file_info_tuple = PyTuple_New(7 + n_part_vals);
         PyTuple_SetItem(file_info_tuple, 0,
-                        PyUnicode_FromString(fname.c_str()));
+                        PyUnicode_FromString(rel_path.c_str()));
         PyTuple_SetItem(file_info_tuple, 1, PyLong_FromLongLong(record_count));
         PyTuple_SetItem(file_info_tuple, 2, PyLong_FromLongLong(file_size));
         PyTuple_SetItem(file_info_tuple, 3, value_counts_dict);
@@ -864,4 +871,22 @@ void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
         PyDict_SetItem(upper_bound_dict, fid_py, Py_None);
         Py_DECREF(fid_py);
     }
+}
+
+std::string PhysicalGPUWriteIceberg::generate_iceberg_file_name() {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    boost::uuids::uuid _uuid = boost::uuids::random_generator()();
+    std::string uuid = boost::uuids::to_string(_uuid);
+    // Format: {rank:05d}-{rank}-{uuid}.parquet
+    // (matches the CPU writer in bodo/io/iceberg_parquet_write.cpp)
+    std::vector<char> fname;
+    fname.resize(20 + uuid.length());
+    int check = snprintf(fname.data(), fname.size(), "%05d-%d-%s.parquet", rank,
+                         rank, uuid.c_str());
+    if (size_t(check + 1) > fname.size()) {
+        throw std::runtime_error(
+            "generate_iceberg_file_name: snprintf overflow");
+    }
+    return std::string(fname.data());
 }

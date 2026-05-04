@@ -62,6 +62,7 @@
  * The constructor of `PhysicalGPUWriteIceberg` parses these into
  * `PartitionField` structs.
  *
+ * TODO: Support all transforms
  * Supported transforms (initial scope): `identity`, `void`.
  */
 struct PartitionField {
@@ -302,6 +303,14 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      */
     template <typename T>
     static PyObject* buffer_to_little_endian_bytes(T value);
+
+    /**
+     * @brief Generate a UUID-based Iceberg data file name.
+     *
+     * Format: `{rank:05d}-{rank}-{uuid}.parquet`
+     * (matches the CPU writer's `generate_iceberg_file_name`).
+     */
+    static std::string generate_iceberg_file_name();
 
     /**
      * @brief Populate a metrics vector for reporting to
