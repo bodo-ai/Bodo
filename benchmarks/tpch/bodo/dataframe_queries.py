@@ -85,10 +85,6 @@ def timethis(
     return wrapped
 
 
-def exec_func(df):
-    return df.execute_plan()
-
-
 _query_to_args: dict[int, list[str]] = {}
 
 
@@ -781,6 +777,21 @@ def tpch_q22(customer, orders, pd=bodo.pandas):
     return result_df
 
 
+show_output = False
+
+
+def exec_func(res):
+    global show_output
+
+    if show_output:
+        print(res)
+    elif isinstance(
+        res, (bodo.pandas.BodoDataFrame, bodo.pandas.BodoSeries, bodo.pandas.BodoScalar)
+    ):
+        res.execute_plan()
+    return res
+
+
 @timethis
 @collect_datasets
 def q01(lineitem, pd):
@@ -936,7 +947,6 @@ def run_queries(
     log_file: str | None = None,
     answers_path: str | None = None,
     output_path: str | None = None,
-    show_output: bool = False,
 ):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
@@ -965,9 +975,6 @@ def run_queries(
 
             # Second run for timing:
             result = query_func()
-
-            if show_output:
-                print(result)
 
             if answers_path:
                 from bodo.tests.utils import _test_equal
@@ -1057,6 +1064,8 @@ def main():
     backend = args.backend
     assert backend in ["bodo", "pandas", "pd"]
 
+    global show_output
+    show_output = args.show_output
     do_warmup = not args.no_warmup
 
     queries = list(range(1, 23))
@@ -1089,7 +1098,6 @@ def main():
         log_file=args.log_timings,
         answers_path=args.answers_path,
         output_path=args.output_path,
-        show_output=args.show_output,
     )
 
 
