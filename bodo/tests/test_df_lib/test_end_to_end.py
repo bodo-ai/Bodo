@@ -1816,6 +1816,7 @@ def test_size_no_val(groupby_agg_df, as_index):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func",
     [
