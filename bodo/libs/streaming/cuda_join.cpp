@@ -18,7 +18,6 @@
 #include <cudf/types.hpp>
 #include <memory>
 #include <rmm/cuda_stream_view.hpp>
-#include <rmm/device_buffer.hpp>
 #include <rmm/device_uvector.hpp>
 #include <stdexcept>
 #include <string>
