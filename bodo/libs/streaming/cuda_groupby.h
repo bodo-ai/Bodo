@@ -210,8 +210,12 @@ class CudaGroupbyState {
                 break;
             case Bodo_FTypes::nunique:
                 add_agg_entry(
+                    // Nulls have to be included to avoid droping non-null
+                    // values from other data columns during cudf::explode().
+                    // The cudf::lists::count_elements() call at the end skips
+                    // nulls.
                     cudf::make_collect_set_aggregation<
-                        cudf::groupby_aggregation>(cudf::null_policy::EXCLUDE,
+                        cudf::groupby_aggregation>(cudf::null_policy::INCLUDE,
                                                    cudf::null_equality::UNEQUAL,
                                                    cudf::nan_equality::UNEQUAL),
                     aggregation_requests, aggregation_fns, post_agg_fns,
