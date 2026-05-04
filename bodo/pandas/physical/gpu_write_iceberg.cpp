@@ -411,6 +411,10 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         cudf::io::table_input_metadata write_meta{out_tv};
         for (int i = 0; i < (int)output_col_names.size(); i++) {
             write_meta.column_metadata[i].set_name(output_col_names[i]);
+            auto field = iceberg_schema->GetFieldByName(output_col_names[i]);
+            int64_t field_id = get_iceberg_field_id(field);
+            write_meta.column_metadata[i].set_parquet_field_id(
+                static_cast<int32_t>(field_id));
         }
 
         // Build writer options with key-value metadata
