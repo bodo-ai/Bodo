@@ -2,14 +2,10 @@
 #pragma once
 
 #include <utility>
-#include "_util.h"
 
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/python/api.h>
 #include "duckdb/function/function.hpp"
-#include "duckdb/function/table_function.hpp"
-#include "duckdb/planner/bound_result_modifier.hpp"
-#include "fmt/core.h"
 #include "physical/operator.h"
 
 /**
@@ -28,7 +24,7 @@ class BodoWriteFunctionData : public duckdb::FunctionData {
                          std::shared_ptr<PhysicalGPUSink>>
     CreatePhysicalOperator(std::shared_ptr<bodo::Schema> in_table_schema,
                            bool run_on_gpu) = 0;
-    virtual bool CanRunOnGPU() const { return false; }
+    virtual bool canRunOnGPU() const { return false; }
 };
 
 /**
@@ -62,7 +58,7 @@ struct ParquetWriteFunctionData : public BodoWriteFunctionData {
             this->bucket_region, this->row_group_size);
     }
 
-    bool CanRunOnGPU() const override { return true; }
+    bool canRunOnGPU() const override { return true; }
 
     std::variant<std::shared_ptr<PhysicalSink>,
                  std::shared_ptr<PhysicalGPUSink>>
@@ -137,7 +133,7 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
     CreatePhysicalOperator(std::shared_ptr<bodo::Schema> in_table_schema,
                            bool run_on_gpu) override;
 
-    bool CanRunOnGPU() const override { return true; }
+    bool canRunOnGPU() const override { return true; }
 
     std::shared_ptr<arrow::Schema> in_schema;
     std::string table_loc;

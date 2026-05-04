@@ -20,7 +20,6 @@
 #include <rmm/device_buffer.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <vector>
 
@@ -29,7 +28,6 @@
 #include "physical/gpu_join.h"
 #include "physical/gpu_limit.h"
 #include "physical/gpu_project.h"
-#include "physical/gpu_reduce.h"
 #include "physical/gpu_sort.h"
 #include "physical/gpu_union_all.h"
 #endif
@@ -152,12 +150,13 @@ class DevicePlanNode {
                     (bool)lget.extra_info.limit_val);
             }
 
-            case duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE:
+            case duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE: {
                 duckdb::LogicalCopyToFile &copy_to_file =
                     op.Cast<duckdb::LogicalCopyToFile>();
                 BodoWriteFunctionData &write_data =
                     copy_to_file.bind_data->Cast<BodoWriteFunctionData>();
                 return write_data.canRunOnGPU();
+            }
 
             case duckdb::LogicalOperatorType::LOGICAL_PROJECTION:
                 return ::gpu_capable(op.Cast<duckdb::LogicalProjection>());
