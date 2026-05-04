@@ -750,12 +750,8 @@ def gatherv_overload(
     """support gatherv inside jit functions"""
     from bodo.libs.distributed_impl import gatherv_impl_jit
 
-    return (
-        lambda data,
-        allgather=False,
-        warn_if_rep=True,
-        root=DEFAULT_ROOT,
-        comm=0: gatherv_impl_jit(data, allgather, warn_if_rep, root, comm)
+    return lambda data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0: (
+        gatherv_impl_jit(data, allgather, warn_if_rep, root, comm)
     )  # pragma: no cover
 
 
@@ -824,12 +820,8 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
 def rebalance_overload(
     data, dests=None, random=False, random_seed=None, parallel=False
 ):
-    return (
-        lambda data,
-        dests=None,
-        random=False,
-        random_seed=None,
-        parallel=False: rebalance_impl(data, dests, random, random_seed, parallel)
+    return lambda data, dests=None, random=False, random_seed=None, parallel=False: (
+        rebalance_impl(data, dests, random, random_seed, parallel)
     )
 
 
@@ -949,12 +941,8 @@ def random_shuffle(data, seed=None, dests=None, n_samples=None, parallel=False):
 def random_shuffle_overload(
     data, seed=None, dests=None, n_samples=None, parallel=False
 ):
-    return (
-        lambda data,
-        seed=None,
-        dests=None,
-        n_samples=None,
-        parallel=False: random_shuffle_impl(data, seed, dests, n_samples, parallel)
+    return lambda data, seed=None, dests=None, n_samples=None, parallel=False: (
+        random_shuffle_impl(data, seed, dests, n_samples, parallel)
     )
 
 
@@ -1347,12 +1335,8 @@ def scatterv_overload(
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
         data, "bodo.scatterv()"
     )
-    return (
-        lambda data,
-        send_counts=None,
-        warn_if_dist=True,
-        root=DEFAULT_ROOT,
-        comm=0: scatterv_impl_jit(data, send_counts, warn_if_dist, root, comm)
+    return lambda data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0: (
+        scatterv_impl_jit(data, send_counts, warn_if_dist, root, comm)
     )  # pragma: no cover
 
 
@@ -2811,8 +2795,8 @@ def bcast_impl(data, comm_ranks, root=DEFAULT_ROOT, comm=0):  # pragma: no cover
         return impl_tuple
 
     if data is types.none:  # pragma: no cover
-        return (
-            lambda data, comm_ranks, root=DEFAULT_ROOT, comm=0: None
+        return lambda data, comm_ranks, root=DEFAULT_ROOT, comm=0: (
+            None
         )  # pragma: no cover
 
     raise BodoError(f"bcast(): unsupported input type {data}")

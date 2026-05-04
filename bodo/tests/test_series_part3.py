@@ -887,9 +887,11 @@ def test_heterogeneous_series_df_apply_astype(to_type):
             "float64": np.float64,
         }
         exp_output = df_float.map(
-            lambda x: float_func[to_type](x)
-            if not pd.isna(x)
-            else float_func[to_type](np.nan)
+            lambda x: (
+                float_func[to_type](x)
+                if not pd.isna(x)
+                else float_func[to_type](np.nan)
+            )
         )
         check_func(test_impl, (df_float,), py_output=exp_output, check_dtype=False)
     elif to_type == "datetime64[ns]":

@@ -821,8 +821,8 @@ def is_field_value_null(s, field_name):  # pragma: no cover
 def overload_is_field_value_null(s, field_name):
     """return True if struct field is NA"""
     field_ind = _get_struct_field_ind(s, field_name, "element access (getitem)")
-    return (
-        lambda s, field_name: get_struct_null_bitmap(s)[field_ind] == 0
+    return lambda s, field_name: (
+        get_struct_null_bitmap(s)[field_ind] == 0
     )  # pragma: no cover
 
 
@@ -920,9 +920,11 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ):
 
             na_val = context.compile_internal(
                 builder,
-                lambda arr, ind: np.uint8(0)
-                if bodo.libs.array_kernels.isna(arr, ind)
-                else np.uint8(1),
+                lambda arr, ind: (
+                    np.uint8(0)
+                    if bodo.libs.array_kernels.isna(arr, ind)
+                    else np.uint8(1)
+                ),
                 types.uint8(arr_typ, types.int64),
                 [arr_ptr, ind],
             )

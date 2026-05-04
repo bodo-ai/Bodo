@@ -564,9 +564,9 @@ class TypingTransforms:
         # see test_groupby_agg_func_list
         if isinstance(rhs, ir.Expr) and rhs.op in ("build_tuple", "build_list"):
             tup_typ = self.typemap.get(assign.target.name, None)
-            is_func_literal = lambda t: isinstance(
-                t, types.MakeFunctionLiteral
-            ) or is_expr(t, "make_function")
+            is_func_literal = lambda t: (
+                isinstance(t, types.MakeFunctionLiteral) or is_expr(t, "make_function")
+            )
             # check for BaseTuple since could be types.unknown
             if (
                 isinstance(tup_typ, (types.BaseTuple, types.LiteralList))

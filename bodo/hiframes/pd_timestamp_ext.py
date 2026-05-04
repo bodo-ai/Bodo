@@ -645,19 +645,9 @@ def overload_pd_timestamp(
     # for pd.Timestamp(), just return input
     if isinstance(ts_input, PandasTimestampType):
         return (
-            lambda ts_input=_no_input,
-            freq=None,
-            tz=None,
-            unit=None,
-            year=None,
-            month=None,
-            day=None,
-            hour=None,
-            minute=None,
-            second=None,
-            microsecond=None,
-            nanosecond=None,
-            tzinfo=None: ts_input
+            lambda ts_input=_no_input, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None: (
+                ts_input
+            )
         )  # pragma: no cover
 
     if ts_input == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
@@ -1126,8 +1116,8 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
     # Create a fast path for a naive timezone that remains naive
     if is_overload_none(tz) and ptt.tz is None:
         # Create a fast path for a naive timezone that remains naive
-        return (
-            lambda ptt, tz, ambiguous="raise", nonexistent="raise": ptt
+        return lambda ptt, tz, ambiguous="raise", nonexistent="raise": (
+            ptt
         )  # pragma: no cover
     if is_overload_none(tz):
         # If we are converting to naive then we add
@@ -1993,16 +1983,9 @@ def overload_to_datetime(
         arg_a, bodo.types.DatetimeArrayType
     ):
         return (
-            lambda arg_a,
-            errors="raise",
-            dayfirst=False,
-            yearfirst=False,
-            utc=None,
-            format=None,
-            exact=True,
-            unit=None,
-            origin="unix",
-            cache=True: bodo.hiframes.pd_index_ext.init_datetime_index(arg_a, None)
+            lambda arg_a, errors="raise", dayfirst=False, yearfirst=False, utc=None, format=None, exact=True, unit=None, origin="unix", cache=True: (
+                bodo.hiframes.pd_index_ext.init_datetime_index(arg_a, None)
+            )
         )  # pragma: no cover
 
     # string_array_type as input
