@@ -2,7 +2,6 @@
 #include <arrow/array/util.h>
 #include <arrow/compute/api_aggregate.h>
 #include <mpi.h>
-#include <cudf/aggregation.hpp>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/column/column_view.hpp>
 #include <cudf/concatenate.hpp>
@@ -18,10 +17,8 @@
 #include <cudf/types.hpp>
 #include <memory>
 #include <rmm/cuda_stream_view.hpp>
-#include <rmm/device_buffer.hpp>
 #include <rmm/device_uvector.hpp>
 #include <stdexcept>
-#include <string>
 #include "../../pandas/physical/gpu_expression.h"
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
