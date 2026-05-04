@@ -99,7 +99,6 @@ def rewrite_table(src_path: str, dst_path: str) -> None:
         return
 
     if info.type == fs.FileType.Directory:
-        # Make the dataset/table directory itself up front
         dst_fs.create_dir(dst_path, recursive=True)
 
         selector = fs.FileSelector(src_path, allow_not_found=False, recursive=False)
