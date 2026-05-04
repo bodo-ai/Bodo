@@ -849,8 +849,6 @@ CudaNonEquiJoin::ProbeProcessBatch(
     // Update which build table indices we've matched if it's relevant
     if (duckdb::PropagatesBuildSide(this->join_type) &&
         this->unmatched_build_rows && build_idx_view.size()) {
-        std::cout << " setting idxs at " << __FILE__ << ":" << __LINE__
-                  << std::endl;
         cudf_set_bools_from_indices<false>(
             this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
     }
