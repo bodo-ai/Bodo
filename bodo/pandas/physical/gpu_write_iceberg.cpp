@@ -291,6 +291,11 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
             /*values=*/{}, se->stream);
 
         const auto& offsets = groups.offsets;
+        if (offsets.size() < 2) {
+            throw std::runtime_error(
+                "PhysicalGPUWriteIceberg: groupby returned fewer "
+                "than 2 offsets");
+        }
         cudf::size_type n_groups =
             static_cast<cudf::size_type>(offsets.size() - 1);
 
@@ -300,8 +305,30 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
             partition_groups.emplace_back(offsets[gi], offsets[gi + 1]);
         }
 
-        // Convert keys table (one row per group) to Arrow to extract
-        // partition group values
+        // Gather the first row of each group from the sorted table's
+        // partition columns — guarantees column types match the input
+        // schema and avoids relying on groupby's internal key
+        // representation.
+        std::vector<cudf::size_type> group_starts;
+        group_starts.reserve(n_groups);
+        for (cudf::size_type gi = 0; gi < n_groups; gi++) {
+            group_starts.push_back(static_cast<cudf::size_type>(offsets[gi]));
+        }
+        auto gather_map = cudf::make_numeric_column(
+            cudf::data_type{cudf::type_id::INT32},
+            static_cast<cudf::size_type>(group_starts.size()),
+            cudf::mask_state::UNALLOCATED, se->stream);
+        auto gather_view = gather_map->mutable_view();
+        CHECK_CUDA(
+            cudaMemcpyAsync(gather_view.head<int32_t>(), group_starts.data(),
+                            group_starts.size() * sizeof(cudf::size_type),
+                            cudaMemcpyHostToDevice, se->stream.value()));
+
+        auto gathered =
+            cudf::gather(part_tv, gather_map->view(),
+                         cudf::out_of_bounds_policy::DONT_CHECK, se->stream);
+
+        // Transfer the gathered rows (one per group) to Arrow
         std::vector<std::shared_ptr<arrow::Field>> key_fields;
         for (int idx : partition_col_idxs) {
             key_fields.push_back(in_schema->field(idx));
@@ -309,7 +336,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         auto key_arrow_schema = arrow::schema(key_fields);
 
         std::shared_ptr<arrow::Table> key_arrow_table = convertGPUToArrow(
-            GPU_DATA(std::shared_ptr<cudf::table>(std::move(groups.keys)),
+            GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered)),
                      key_arrow_schema, se));
 
         int n_part_cols = static_cast<int>(partition_col_idxs.size());
@@ -470,7 +497,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
 
         for (int pi = 0; pi < n_part_vals; pi++) {
             std::shared_ptr<arrow::Scalar> scalar = partition_vals[pi];
-            PyObjectPtr py_val = nullptr;
+            PyObject* py_val = nullptr;
             if (!scalar->is_valid) {
                 py_val = Py_None;
                 Py_INCREF(py_val);
@@ -557,10 +584,42 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
                                 scalar)
                                 ->value);
                         break;
-                    default:
-                        std::string str_val = scalar->ToString();
-                        py_val = PyUnicode_FromString(str_val.c_str());
+                    case arrow::Type::LARGE_STRING: {
+                        auto s =
+                            std::static_pointer_cast<arrow::LargeStringScalar>(
+                                scalar);
+                        py_val =
+                            PyUnicode_FromString(s->value->ToString().c_str());
                         break;
+                    }
+                    case arrow::Type::BINARY: {
+                        auto b = std::static_pointer_cast<arrow::BinaryScalar>(
+                            scalar);
+                        py_val = PyUnicode_FromStringAndSize(
+                            reinterpret_cast<const char*>(b->value->data()),
+                            static_cast<Py_ssize_t>(b->value->size()));
+                        break;
+                    }
+                    case arrow::Type::LARGE_BINARY: {
+                        auto b =
+                            std::static_pointer_cast<arrow::LargeBinaryScalar>(
+                                scalar);
+                        py_val = PyUnicode_FromStringAndSize(
+                            reinterpret_cast<const char*>(b->value->data()),
+                            static_cast<Py_ssize_t>(b->value->size()));
+                        break;
+                    }
+                    case arrow::Type::DECIMAL128: {
+                        py_val =
+                            PyUnicode_FromString(scalar->ToString().c_str());
+                        break;
+                    }
+                    default:
+                        throw std::runtime_error(
+                            "PhysicalGPUWriteIceberg: unsupported "
+                            "partition value type: " +
+                            scalar->type->ToString() +
+                            " (name=" + scalar->type->name() + ")");
                 }
             }
             PyTuple_SetItem(file_info_tuple, 7 + pi, py_val);
