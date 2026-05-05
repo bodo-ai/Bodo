@@ -235,8 +235,8 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      * 2. Sort by sort_cols + partition_cols using `cudf::sort_by_key`.
      *    Sort direction and null precedence follow the per-field
      *    `SortField` spec; partition columns sort ascending, nulls last.
-     * 3. Extract partition columns to host Arrow arrays, walk rows to
-     *    detect partition boundaries, and build partition groups.
+     * 3. Detect partition boundaries on GPU via
+     *    `cudf::groupby(sorted::YES)`
      * 4. For each partition group:
      *    - Build the partition directory path.
      *    - Slice the sorted table and select non-void output columns.

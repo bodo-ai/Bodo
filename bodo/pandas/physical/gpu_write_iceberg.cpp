@@ -11,6 +11,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <cudf/copying.hpp>
+#include <cudf/groupby.hpp>
 #include <cudf/io/parquet.hpp>
 #include <cudf/io/types.hpp>
 #include <cudf/sorting.hpp>
@@ -127,8 +128,11 @@ void PhysicalGPUWriteIceberg::parse_sort_order(
         bool is_asc = PyObject_IsTrue(PyTuple_GET_ITEM(tup, 3));
         bool nulls_last = PyObject_IsTrue(PyTuple_GET_ITEM(tup, 4));
 
-        SortField sf{static_cast<cudf::size_type>(col_idx), is_asc, nulls_last,
-                     transform, arg};
+        SortField sf{.col_idx = static_cast<cudf::size_type>(col_idx),
+                     .is_asc = is_asc,
+                     .nulls_last = nulls_last,
+                     .transform = transform,
+                     .arg = arg};
         if (!sf.is_noop_transform()) {
             throw std::runtime_error(
                 "PhysicalGPUWriteIceberg: sort transform '" + sf.transform +
@@ -263,10 +267,9 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
     metrics.sort_time += end_timer(start_sort);
     time_pt start_file_write = start_timer();
 
-    // Detect partition boundaries by transferring partition columns
-    // to host and walking rows
-    // TODO: If this becomes a bottleneck, we could consider doing this on the
-    // GPU
+    // Detect partition boundaries on GPU using groupby on the already-sorted
+    // partition columns.  groupby(keys_are_sorted=YES) scans in O(n) without
+    // re-sorting.
     std::vector<std::pair<cudf::size_type, cudf::size_type>> partition_groups;
     std::vector<std::vector<std::shared_ptr<arrow::Scalar>>>
         partition_group_values;
@@ -276,60 +279,47 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
             0, static_cast<cudf::size_type>(sorted_table->num_rows()));
         partition_group_values.emplace_back();
     } else {
-        // Extract partition columns as owned table and convert to Arrow
-        std::vector<std::unique_ptr<cudf::column>> part_cols;
+        cudf::table_view part_tv =
+            sorted_table->view().select(partition_col_idxs);
+
+        // Keys are already sorted by sort_cols + partition_cols, so
+        // partition columns are contiguous and sorted.
+        cudf::groupby::groupby gb(part_tv, cudf::null_policy::INCLUDE,
+                                  cudf::sorted::YES);
+
+        auto groups = gb.get_groups(
+            /*values=*/{}, se->stream);
+
+        const auto& offsets = groups.offsets;
+        cudf::size_type n_groups =
+            static_cast<cudf::size_type>(offsets.size() - 1);
+
+        // Build partition_groups from offsets
+        partition_groups.reserve(n_groups);
+        for (cudf::size_type gi = 0; gi < n_groups; gi++) {
+            partition_groups.emplace_back(offsets[gi], offsets[gi + 1]);
+        }
+
+        // Convert keys table (one row per group) to Arrow to extract
+        // partition group values
+        std::vector<std::shared_ptr<arrow::Field>> key_fields;
         for (int idx : partition_col_idxs) {
-            part_cols.push_back(std::make_unique<cudf::column>(
-                sorted_table->view().column(idx), se->stream));
+            key_fields.push_back(in_schema->field(idx));
         }
-        auto part_table = std::make_unique<cudf::table>(std::move(part_cols));
+        auto key_arrow_schema = arrow::schema(key_fields);
 
-        std::vector<std::shared_ptr<arrow::Field>> fields;
-        for (int idx : partition_col_idxs) {
-            fields.push_back(in_schema->field(idx));
-        }
-        auto part_arrow_schema = arrow::schema(fields);
+        std::shared_ptr<arrow::Table> key_arrow_table = convertGPUToArrow(
+            GPU_DATA(std::shared_ptr<cudf::table>(std::move(groups.keys)),
+                     key_arrow_schema, se));
 
-        std::shared_ptr<arrow::Table> part_arrow_table = convertGPUToArrow(
-            GPU_DATA(std::shared_ptr<cudf::table>(std::move(part_table)),
-                     part_arrow_schema, se));
-
-        cudf::size_type n_rows = sorted_table->num_rows();
-        cudf::size_type grp_start = 0;
-        int n_part_cols = (int)partition_col_idxs.size();
-
-        for (cudf::size_type r = 1; r < n_rows; r++) {
-            bool same = true;
-            for (int ci = 0; ci < n_part_cols; ci++) {
-                std::shared_ptr<arrow::Scalar> prev =
-                    part_arrow_table->column(ci)->GetScalar(r - 1).ValueOrDie();
-                std::shared_ptr<arrow::Scalar> curr =
-                    part_arrow_table->column(ci)->GetScalar(r).ValueOrDie();
-                if (!prev->Equals(*curr)) {
-                    same = false;
-                    break;
-                }
-            }
-            if (!same) {
-                partition_groups.emplace_back(grp_start, r);
-                std::vector<std::shared_ptr<arrow::Scalar>> vals;
-                for (int ci = 0; ci < n_part_cols; ci++) {
-                    vals.push_back(part_arrow_table->column(ci)
-                                       ->GetScalar(grp_start)
-                                       .ValueOrDie());
-                }
-                partition_group_values.push_back(std::move(vals));
-                grp_start = r;
-            }
-        }
-        // Final group
-        partition_groups.emplace_back(grp_start, n_rows);
-        {
+        int n_part_cols = static_cast<int>(partition_col_idxs.size());
+        partition_group_values.reserve(n_groups);
+        for (cudf::size_type gi = 0; gi < n_groups; gi++) {
             std::vector<std::shared_ptr<arrow::Scalar>> vals;
+            vals.reserve(n_part_cols);
             for (int ci = 0; ci < n_part_cols; ci++) {
-                vals.push_back(part_arrow_table->column(ci)
-                                   ->GetScalar(grp_start)
-                                   .ValueOrDie());
+                vals.push_back(
+                    key_arrow_table->column(ci)->GetScalar(gi).ValueOrDie());
             }
             partition_group_values.push_back(std::move(vals));
         }
