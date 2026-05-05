@@ -478,8 +478,8 @@ def query_10(dataset_path, scale, ext=".parquet"):
     where
         c_custkey = o_custkey
         and l_orderkey = o_orderkey
-        and o_orderdate >= date '1994-11-01'
-        and o_orderdate < date '1995-02-01'
+        and o_orderdate >= date '1993-10-01'
+        and o_orderdate < date '1994-01-01'
         and l_returnflag = 'R'
         and c_nationkey = n_nationkey
     group by
@@ -499,8 +499,8 @@ def query_10(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     nation = _load_dataset(dataset_path, "nation", ext)
 
-    orderdate_from = datetime_or_date_value("1994-11-01")
-    orderdate_to = datetime_or_date_value("1995-02-01")
+    orderdate_from = datetime_or_date_value("1993-10-01")
+    orderdate_to = datetime_or_date_value("1994-01-01")
 
     orders = orders[
         (orders.o_orderdate >= orderdate_from) & (orders.o_orderdate < orderdate_to)

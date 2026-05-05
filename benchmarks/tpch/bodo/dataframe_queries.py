@@ -398,8 +398,8 @@ def tpch_q10(lineitem, orders, customer, nation, pd=bodo.pandas):
     """Adapted from:
     https://github.com/coiled/benchmarks/blob/13ebb9c72b1941c90b602e3aaea82ac18fafcddc/tests/tpch/dask_queries.py
     """
-    var1 = datetime.date(1994, 11, 1)
-    var2 = datetime.date(1995, 2, 1)
+    var1 = datetime.date(1993, 10, 1)
+    var2 = datetime.date(1994, 1, 1)
 
     forders = orders[(orders.O_ORDERDATE >= var1) & (orders.O_ORDERDATE < var2)]
     flineitem = lineitem[lineitem.L_RETURNFLAG == "R"]
