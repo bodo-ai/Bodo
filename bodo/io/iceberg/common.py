@@ -215,6 +215,30 @@ def _format_data_loc(data_loc: str, fs: FileSystem) -> str:
     return data_loc
 
 
+def pyiceberg_filter_to_cudf_ast(
+    expr: BooleanExpression, schema: Schema, case_sensitive: bool = True
+) -> tuple:
+    """Turns a pyiceberg filter into a cuDF AST tree structure (as nested tuples)
+    for use in GPU Iceberg reads. The tree uses Iceberg field IDs for column
+    references, so it can be applied per-schema-group.
+
+    Args:
+        expr (BooleanExpression): PyIceberg filter expression.
+        schema (Schema): PyIceberg schema to bind the expression against.
+        case_sensitive (bool, optional): Whether the filter is case-sensitive.
+
+    Returns:
+        tuple: Nested tuple tree representing the filter. Leaf nodes are
+            tuples like ("eq", field_id, python_value).
+    """
+    from pyiceberg.expressions.visitors import bind, visit
+
+    from bodo.io.iceberg.filter_conversion import _ConvertToCudfAst
+
+    bound_expr = bind(schema, expr, case_sensitive=case_sensitive)
+    return visit(bound_expr, _ConvertToCudfAst())
+
+
 def pyiceberg_filter_to_pyarrow_format_str_and_scalars(
     expr: BooleanExpression, schema: Schema, case_sensitive: bool
 ) -> tuple[str, list[tuple[str, Any]]]:

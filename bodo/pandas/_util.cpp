@@ -815,7 +815,7 @@ PyObject *duckdbFilterSetToPyicebergFilter(
         std::shared_ptr<arrow::Field> field = arrow_schema->field(tf.first);
         std::string field_name = field->name();
         PyObject *py_expr = _duckdbFilterToPyicebergFilter(
-            std::move(tf.second), field_name, pyiceberg_expression_mod);
+            tf.second->Copy(), field_name, pyiceberg_expression_mod);
         PyObject *original_ret = ret;
         ret = PyObject_CallMethod(ret, "__and__", "O", py_expr);
         if (!ret) {

@@ -116,6 +116,8 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 * drop_duplicates, concat, Series.isin
 
+* Iceberg read (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
+
 ## Unsupported Capabilities
 
 No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.

@@ -735,6 +735,7 @@ if (USE_CUDF)
     "bodo/libs/streaming/cuda_sort.cpp"
     "bodo/libs/gpu_bloom_filter.cu"
     "bodo/libs/gpu_utils.cu"
+    "bodo/pandas/physical/gpu_read_iceberg.cpp"
     )
 
     list(APPEND allow_implicit_fallthrough_list
