@@ -166,19 +166,9 @@ cudf::io::compression_type PhysicalGPUWriteIceberg::pq_compression_from_string(
 OperatorResult PhysicalGPUWriteIceberg::ConsumeBatchGPU(
     GPU_DATA input_batch, OperatorResult prev_op_result,
     std::shared_ptr<StreamAndEvent> se) {
-    if (!is_gpu_rank()) {
-        if (prev_op_result == OperatorResult::FINISHED) {
-            finished = true;
-        }
-        return finished ? OperatorResult::FINISHED
-                        : OperatorResult::NEED_MORE_INPUT;
-    }
-
-    if (prev_batch_se) {
-        prev_batch_se->event.wait(se->stream);
-    }
-    prev_batch_se = se;
-
+    // All ranks must participate in sync_is_last_non_blocking (it uses
+    // MPI_Ibarrier on MPI_COMM_WORLD).  Do this before the GPU rank
+    // check so non-GPU ranks don't skip the barrier and deadlock.
     if (this->finished) {
         return OperatorResult::FINISHED;
     }
@@ -186,6 +176,20 @@ OperatorResult PhysicalGPUWriteIceberg::ConsumeBatchGPU(
     bool is_last = (prev_op_result == OperatorResult::FINISHED);
     is_last = static_cast<bool>(sync_is_last_non_blocking(
         is_last_state.get(), static_cast<int32_t>(is_last)));
+
+    if (!is_gpu_rank()) {
+        if (is_last) {
+            finished = true;
+        }
+        return finished ? OperatorResult::FINISHED
+                        : OperatorResult::NEED_MORE_INPUT;
+    }
+    // ---- GPU rank only below ----
+
+    if (prev_batch_se) {
+        prev_batch_se->event.wait(se->stream);
+    }
+    prev_batch_se = se;
 
     time_pt start_accumulate = start_timer();
 
