@@ -1091,6 +1091,9 @@ def main():
             with open(args.log_timings, "w") as f:
                 f.write("implementation,query,n_gpus,execution_time\n")
 
+    if args.output_path:
+        os.makedirs(args.output_path, exist_ok=True)
+
     backend_module = bodo.pandas if backend == "bodo" else pd
 
     if backend == "bodo":
@@ -1098,8 +1101,6 @@ def main():
         # warmup GPU cluster
         print(backend_module.DataFrame({"A": [1, 2, 3]})["A"])
 
-    if args.output_path:
-        os.makedirs(args.output_path, exist_ok=True)
     run_queries(
         data_set,
         queries=queries,
