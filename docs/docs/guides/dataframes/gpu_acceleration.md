@@ -141,6 +141,7 @@ Column selection and built-in arithmetic/boolean expressions are supported on GP
 ### GroupBy
 
 The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nunique) are supported on GPU. Custom aggregations implemented as UDFs or Python callbacks will run on CPU.
+`sum` of an all-NA group produces NA output (libcudf behavior) instead of zero (Pandas behavior).
 
 ### Joins
 

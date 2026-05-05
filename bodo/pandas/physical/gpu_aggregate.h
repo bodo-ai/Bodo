@@ -75,6 +75,19 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
                 duckdb::LogicalTypeId::VARCHAR) {
             return false;
         }
+
+        if (agg_expr.function.name != "sum" &&
+            agg_expr.function.name != "count" &&
+            agg_expr.function.name != "mean" &&
+            agg_expr.function.name != "min" &&
+            agg_expr.function.name != "max" &&
+            agg_expr.function.name != "size" &&
+            agg_expr.function.name != "nunique" &&
+            agg_expr.function.name != "skew" &&
+            agg_expr.function.name != "std" &&
+            agg_expr.function.name != "var") {
+            return false;
+        }
     }
     return true;
 }
@@ -373,7 +386,6 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
             Bodo_CTypes::CTypeEnum::UINT64));
         std::vector<std::string> names = {std::string("count_star()")};
         out_schema = std::make_shared<bodo::Schema>(std::move(types), names);
-        PhysicalGPUSource::EnsureNoNumpyColumns(out_schema);
         out_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
     }
@@ -417,7 +429,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
                     OperatorResult::FINISHED};
         }
 
-        cudf::numeric_scalar<uint64_t> s(global_count, true);
+        cudf::numeric_scalar<uint64_t> s(global_count, true, se->stream);
         auto col = cudf::make_column_from_scalar(s, 1, se->stream);
         std::vector<std::unique_ptr<cudf::column>> cols;
         cols.push_back(std::move(col));

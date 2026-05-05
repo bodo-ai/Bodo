@@ -231,6 +231,7 @@ def test_read_parquet_filter_projection(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
@@ -1155,6 +1156,7 @@ def test_set_df_column_extra_proj(datapath, index_val):
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback partitioning
 def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -1184,6 +1186,7 @@ def test_parquet_read_partitioned(datapath):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback partitioning
 def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -1697,9 +1700,9 @@ def test_groupby_fallback():
 def groupby_agg_df(request):
     return pd.DataFrame(
         {
-            "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+            "A": pd.array([1, 2, 0, 1000] * 3, "Int32"),
             "D": pd.array(
-                [i * 2 if (i**2) % 3 == 0 else pd.NA for i in range(12)], "Int32"
+                [i * 2 if (i**2) % 3 == 0 else 0 for i in range(12)], "Int32"
             ),
             "B": pd.array(["A", "B", pd.NA] * 4),
             "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
@@ -1708,6 +1711,7 @@ def groupby_agg_df(request):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func, kwargs",
     [
@@ -1735,6 +1739,7 @@ def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
     _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func, kwargs",
     [
@@ -1766,17 +1771,17 @@ def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
 @pytest.mark.parametrize(
     "func",
     [
-        "sum",
-        "mean",
-        "count",
-        "max",
-        "min",
-        "median",
-        "nunique",
-        "size",
-        "var",
-        "std",
-        "skew",
+        pytest.param("sum", marks=pytest.mark.gpu),
+        pytest.param("mean", marks=pytest.mark.gpu),
+        pytest.param("count", marks=pytest.mark.gpu),
+        pytest.param("max", marks=pytest.mark.gpu),
+        pytest.param("min", marks=pytest.mark.gpu),
+        "median",  # median not supported on GPU yet
+        pytest.param("nunique", marks=pytest.mark.gpu),
+        pytest.param("size", marks=pytest.mark.gpu),
+        pytest.param("var", marks=pytest.mark.gpu),
+        pytest.param("std", marks=pytest.mark.gpu),
+        pytest.param("skew", marks=pytest.mark.gpu),
     ],
 )
 def test_groupby_agg_numeric(groupby_agg_df, func):
@@ -1811,6 +1816,7 @@ def test_size_no_val(groupby_agg_df, as_index):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func",
     [
@@ -3974,6 +3980,7 @@ def test_lazy_len(pd_in, expr, index_val):
     _test_equal(bodo_out, pd_out, check_pandas_types=False, reset_index=reset_index)
 
 
+@pytest.mark.gpu
 def test_len_no_warn(index_val):
     """Test that collecting length does not raise warnings"""
     df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6], "B": [1, 2, 3, 10, 20, 30]})

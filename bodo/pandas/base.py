@@ -192,9 +192,7 @@ def read_parquet(
     empty_df = arrow_to_empty_df(arrow_schema)
 
     plan = LogicalGetParquetRead(
-        empty_df,
-        path,
-        storage_options,
+        empty_df, path, storage_options, pq_dataset.partitioning is not None
     )
     return wrap_plan(plan=plan)
 

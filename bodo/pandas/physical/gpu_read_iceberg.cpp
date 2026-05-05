@@ -9,15 +9,21 @@
 #include <arrow/python/api.h>
 #include <longobject.h>
 #include <mpi.h>
+#include <parquet/metadata.h>
+#include <parquet/schema.h>
+#include <algorithm>
+#include <atomic>
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/io/parquet.hpp>
 #include <cudf/table/table.hpp>
 #include <cudf/table/table_view.hpp>
 #include <memory>
+#include <numeric>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -59,6 +65,13 @@ GPUIcebergRankBatchGenerator::GPUIcebergRankBatchGenerator(
     distribute_pieces();
     init_scanners(comm);
 
+    // Subdivide schema groups by physical Parquet schema so that files
+    // with mismatched column types (e.g. int32 vs int64 from schema
+    // evolution) are not batched into the same chunked reader.
+    time_pt start_fp = start_timer();
+    compute_physical_schema_fingerprints();
+    this->fingerprint_time_ += end_timer(start_fp);
+
     // Estimate bytes per piece and compute an appropriate chunk size
     // by sampling parquet file metadata, reusing the logic from
     // estimate_parquet_metadata in gpu_read_parquet.h.
@@ -77,6 +90,7 @@ GPUIcebergRankBatchGenerator::GPUIcebergRankBatchGenerator(
         bytes_per_part_estimate_ = est.bytes_per_part;
         chunked_reader_limit_ = est.chunked_reader_limit;
     }
+    chunked_reader_se = make_stream_and_event(g_use_async);
 }
 
 std::pair<std::unique_ptr<cudf::table>, bool>
@@ -99,7 +113,8 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
         } else {
             cudf::table_view tv = leftover_tbl->view();
             std::vector<cudf::table_view> sliced =
-                cudf::slice(tv, {0, (int)target_rows_, (int)n}, se->stream);
+                cudf::slice(tv, {0, (int)target_rows_, (int)n},
+                            this->chunked_reader_se->stream);
             gpu_tables.push_back(std::make_unique<cudf::table>(sliced[0]));
             leftover_tbl = std::make_unique<cudf::table>(sliced[1]);
             rows_accum = target_rows_;
@@ -108,7 +123,7 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
 
     while (rows_accum < target_rows_ && curr_piece_idx < pieces_.size()) {
         if (!curr_reader) {
-            init_next_reader(se->stream);
+            init_next_reader(this->chunked_reader_se->stream);
         }
 
         while (curr_reader && curr_reader->has_next() &&
@@ -123,8 +138,8 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
             }
 
             if (rows_to_skip > 0) {
-                // Some pieces may have a row offset (e.g. from file-level
-                // filtering); discard leading rows until the skip count is
+                // Some pieces may have a row offset
+                // discard leading rows until the skip count is
                 // exhausted.
                 size_t n = tbl->num_rows();
                 size_t to_skip = std::min((size_t)rows_to_skip, n);
@@ -134,14 +149,14 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
                 }
                 std::vector<cudf::size_type> splits = {(cudf::size_type)to_skip,
                                                        (cudf::size_type)n};
-                std::vector<cudf::table_view> sliced =
-                    cudf::slice(tbl->view(), splits, se->stream);
+                std::vector<cudf::table_view> sliced = cudf::slice(
+                    tbl->view(), splits, this->chunked_reader_se->stream);
                 tbl = std::make_unique<cudf::table>(sliced[1]);
                 rows_to_skip -= (int64_t)to_skip;
             }
 
             std::unique_ptr<cudf::table> evolved_tbl =
-                evolve_table(std::move(tbl), se->stream);
+                evolve_table(std::move(tbl), this->chunked_reader_se->stream);
 
             std::size_t tbl_n = evolved_tbl->num_rows();
             if (rows_accum + tbl_n <= target_rows_) {
@@ -151,7 +166,8 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
                 std::size_t need = target_rows_ - rows_accum;
                 cudf::table_view tv = evolved_tbl->view();
                 std::vector<cudf::table_view> sliced =
-                    cudf::slice(tv, {0, (int)need, (int)tbl_n}, se->stream);
+                    cudf::slice(tv, {0, (int)need, (int)tbl_n},
+                                this->chunked_reader_se->stream);
                 gpu_tables.push_back(std::make_unique<cudf::table>(sliced[0]));
                 leftover_tbl = std::make_unique<cudf::table>(sliced[1]);
                 rows_accum = target_rows_;
@@ -162,6 +178,9 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
             curr_reader.reset();
         }
     }
+    // Sync batch stream with chunked reader stream.
+    chunked_reader_se->event.record(chunked_reader_se->stream);
+    se->event.wait(chunked_reader_se->stream);
 
     if (gpu_tables.empty()) {
         return {empty_table_from_arrow_schema(output_arrow_schema), true};
@@ -191,6 +210,8 @@ void GPUIcebergRankBatchGenerator::ReportMetrics(
     MetricBase::StatValue pieces = pieces_.size();
     metrics_out.emplace_back(StatMetric("num_pieces", pieces));
     metrics_out.emplace_back(TimerMetric("evolve_time", this->evolve_time_));
+    metrics_out.emplace_back(
+        TimerMetric("fingerprint_time", this->fingerprint_time_));
 }
 
 void GPUIcebergRankBatchGenerator::init_next_reader(
@@ -200,8 +221,6 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
     }
 
     int64_t schema_group_idx = pieces_[curr_piece_idx].schema_group_idx;
-    std::string path = pieces_[curr_piece_idx].path;
-    curr_piece_idx++;
 
     if (schema_group_idx < 0 ||
         (size_t)schema_group_idx >= scanner_read_schemas.size()) {
@@ -312,18 +331,28 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
     cudf::io::parquet_reader_options opts =
         cudf::io::parquet_reader_options::builder(cudf::io::source_info());
     opts.set_column_names(file_col_names);
+    opts.enable_allow_mismatched_pq_schemas(true);
 
     if (filter_ast_tree.size() > 0) {
         opts.set_filter(filter_ast_tree.back());
     }
 
     std::vector<std::unique_ptr<cudf::io::datasource>> sources;
-    if (filesystem_->type_name() != "local") {
-        std::shared_ptr<arrow::io::RandomAccessFile> arrow_file =
-            filesystem_->OpenInputFile(path).ValueOrDie();
-        sources.push_back(std::make_unique<arrow_file_datasource>(arrow_file));
-    } else {
-        sources.push_back(cudf::io::datasource::create(path));
+    const PiecePhysicalSchema& curr_schema =
+        piece_physical_schemas_[curr_piece_idx];
+    while (curr_piece_idx < pieces_.size() &&
+           pieces_[curr_piece_idx].schema_group_idx == schema_group_idx &&
+           piece_physical_schemas_[curr_piece_idx] == curr_schema) {
+        std::string path = pieces_[curr_piece_idx].path;
+        if (filesystem_->type_name() != "local") {
+            std::shared_ptr<arrow::io::RandomAccessFile> arrow_file =
+                filesystem_->OpenInputFile(path).ValueOrDie();
+            sources.push_back(
+                std::make_unique<arrow_file_datasource>(arrow_file));
+        } else {
+            sources.push_back(cudf::io::datasource::create(path));
+        }
+        curr_piece_idx++;
     }
 
     curr_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
@@ -983,6 +1012,124 @@ void GPUIcebergRankBatchGenerator::init_scanners(MPI_Comm comm) {
         this->scanner_field_ids.emplace_back(
             PyObject_GetAttrString(schema_group, "iceberg_field_ids"));
     }
+}
+
+void GPUIcebergRankBatchGenerator::compute_physical_schema_fingerprints() {
+    if (pieces_.empty()) {
+        return;
+    }
+
+    size_t n = pieces_.size();
+    piece_physical_schemas_.resize(n);
+
+    // Read Parquet footers in parallel to compute schema fingerprints.
+    int num_threads =
+        std::max(std::min(arrow::io::GetIOThreadPoolCapacity(), int(n)), 1);
+    std::vector<std::thread> threads;
+    std::atomic<size_t> next_idx{0};
+    std::atomic<bool> has_error{false};
+    std::string error_msg;
+
+    // Build the column-read set once — same for all files.
+    std::set<int> columns_to_read(selected_columns_.begin(),
+                                  selected_columns_.end());
+    for (const auto& pair : filter_exprs_->filters) {
+        columns_to_read.insert(pair.first);
+    }
+
+    for (int t = 0; t < num_threads; t++) {
+        threads.emplace_back([&]() {
+            while (true) {
+                size_t i = next_idx.fetch_add(1);
+                if (i >= n || has_error.load(std::memory_order_acquire)) {
+                    break;
+                }
+
+                try {
+                    const auto& piece = pieces_[i];
+                    std::shared_ptr<arrow::io::RandomAccessFile> arrow_file;
+                    CHECK_ARROW_AND_ASSIGN(
+                        filesystem_->OpenInputFile(piece.path),
+                        "compute_physical_schema_fingerprints: failed to "
+                        "open file",
+                        arrow_file);
+                    std::unique_ptr<parquet::ParquetFileReader> pf =
+                        parquet::ParquetFileReader::Open(arrow_file);
+                    std::shared_ptr<parquet::FileMetaData> metadata =
+                        pf->metadata();
+                    auto* schema = metadata->schema();
+                    auto read_schema =
+                        scanner_read_schemas[piece.schema_group_idx];
+
+                    PiecePhysicalSchema fp;
+                    for (int col_idx : columns_to_read) {
+                        std::string name = read_schema->field(col_idx)->name();
+                        if (name.starts_with("_BODO_TEMP_")) {
+                            fp.properties.push_back(-1);
+                            continue;
+                        }
+                        int pq_idx = schema->ColumnIndex(name);
+                        if (pq_idx < 0) {
+                            fp.properties.push_back(-2);
+                            continue;
+                        }
+                        auto* col = schema->Column(pq_idx);
+                        fp.properties.push_back(
+                            static_cast<int32_t>(col->physical_type()));
+                        fp.properties.push_back(
+                            static_cast<int32_t>(col->converted_type()));
+                        fp.properties.push_back(
+                            col->logical_type()
+                                ? static_cast<int32_t>(
+                                      col->logical_type()->type())
+                                : -1);
+                        fp.properties.push_back(col->max_repetition_level());
+                        fp.properties.push_back(col->max_definition_level());
+                        fp.properties.push_back(col->type_length());
+                    }
+                    piece_physical_schemas_[i] = std::move(fp);
+                } catch (const std::exception& e) {
+                    if (!has_error.exchange(true, std::memory_order_acq_rel)) {
+                        error_msg = e.what();
+                    }
+                } catch (...) {
+                    if (!has_error.exchange(true, std::memory_order_acq_rel)) {
+                        error_msg = "unknown error reading parquet metadata";
+                    }
+                }
+            }
+        });
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
+    if (has_error.load(std::memory_order_acquire)) {
+        throw std::runtime_error("compute_physical_schema_fingerprints: " +
+                                 error_msg);
+    }
+
+    // Sort pieces by (schema_group_idx, fingerprint, path) so that files
+    // with identical physical schemas are contiguous for batching.
+    std::vector<size_t> indices(n);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::ranges::sort(indices, [&](size_t a, size_t b) {
+        if (pieces_[a].schema_group_idx != pieces_[b].schema_group_idx) {
+            return pieces_[a].schema_group_idx < pieces_[b].schema_group_idx;
+        }
+        if (piece_physical_schemas_[a] != piece_physical_schemas_[b]) {
+            return piece_physical_schemas_[a] < piece_physical_schemas_[b];
+        }
+        return pieces_[a].path < pieces_[b].path;
+    });
+
+    std::vector<IcebergPieceInfo> sorted_pieces(n);
+    std::vector<PiecePhysicalSchema> sorted_schemas(n);
+    for (size_t i = 0; i < n; i++) {
+        sorted_pieces[i] = std::move(pieces_[indices[i]]);
+        sorted_schemas[i] = std::move(piece_physical_schemas_[indices[i]]);
+    }
+    pieces_ = std::move(sorted_pieces);
+    piece_physical_schemas_ = std::move(sorted_schemas);
 }
 
 PhysicalGPUReadIceberg::PhysicalGPUReadIceberg(

@@ -134,6 +134,36 @@ class GPUIcebergRankBatchGenerator {
 
     void init_scanners(MPI_Comm comm);
 
+    /**
+     * @brief Read Parquet footers for all pieces and sort them so that
+     * files with identical physical schemas are contiguous within each
+     * schema group. This prevents cuDF schema-mismatch errors when
+     * batching files with evolved column types (e.g. int32 -> int64).
+     */
+    void compute_physical_schema_fingerprints();
+
+    /**
+     * @brief Compact representation of the Parquet physical schema for
+     * the columns that matter (selected + filter). Stored per-piece so
+     * that files with identical physical schemas can be batched together.
+     */
+    struct PiecePhysicalSchema {
+        // Flattened column properties: for each column in order, we store
+        // (phys_type, conv_type, logical_type, max_rep, max_def, type_len).
+        // Sentinels for columns missing from the file.
+        std::vector<int32_t> properties;
+
+        bool operator==(const PiecePhysicalSchema& other) const {
+            return properties == other.properties;
+        }
+        bool operator!=(const PiecePhysicalSchema& other) const {
+            return properties != other.properties;
+        }
+        bool operator<(const PiecePhysicalSchema& other) const {
+            return properties < other.properties;
+        }
+    };
+
     struct IcebergPieceInfo {
         std::string path;
         int64_t num_rows;
@@ -154,6 +184,7 @@ class GPUIcebergRankBatchGenerator {
     PyObjectPtr py_filesystem;
 
     std::vector<IcebergPieceInfo> pieces_;
+    std::vector<PiecePhysicalSchema> piece_physical_schemas_;
     std::vector<std::shared_ptr<arrow::Schema>> scanner_read_schemas;
     int64_t rows_to_skip = 0;
     const std::vector<int>& selected_columns_;
@@ -168,9 +199,11 @@ class GPUIcebergRankBatchGenerator {
     PyObjectPtr iceberg_filter_cudf_ast = nullptr;
     std::vector<PyObjectPtr> scanner_field_ids;
     MetricBase::TimerValue evolve_time_ = 0;
+    MetricBase::TimerValue fingerprint_time_ = 0;
 
     int64_t bytes_per_part_estimate_ = 0;
     size_t chunked_reader_limit_ = 0;
+    std::shared_ptr<StreamAndEvent> chunked_reader_se;
 };
 
 struct PhysicalGPUReadIcebergMetrics {

@@ -900,7 +900,7 @@ def _get_agg_output_type(
         elif pa.types.is_decimal(pa_type):
             # TODO: Decimal sum
             fallback = True
-    elif func_name in ("mean", "std", "var", "skew"):
+    elif func_name in ("mean", "std", "var", "skew", "median"):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
