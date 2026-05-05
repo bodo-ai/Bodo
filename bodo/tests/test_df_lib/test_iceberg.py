@@ -14,7 +14,7 @@ import pyiceberg.catalog
 import pyiceberg.expressions
 import pytest
 from pyiceberg.partitioning import PartitionField, PartitionSpec
-from pyiceberg.table.sorting import SortField, SortOrder
+from pyiceberg.table.sorting import NullOrder, SortDirection, SortField, SortOrder
 from pyiceberg.transforms import IdentityTransform
 
 import bodo.pandas as bpd
@@ -543,7 +543,17 @@ def test_table_read_partitioned_file_pruning(
     )
 
 
-def test_write():
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "sort_dir, null_order",
+    [
+        (SortDirection.ASC, NullOrder.NULLS_LAST),
+        (SortDirection.ASC, NullOrder.NULLS_FIRST),
+        (SortDirection.DESC, NullOrder.NULLS_LAST),
+        (SortDirection.DESC, NullOrder.NULLS_FIRST),
+    ],
+)
+def test_write(sort_dir, null_order):
     """Simple test for writing a DataFrame to Iceberg."""
     # TODO[BSE-4883]: verify and improve this test when Iceberg CI is enabled
     df = pd.DataFrame(
@@ -564,7 +574,14 @@ def test_write():
         part_spec = PartitionSpec(
             PartitionField(2, 1001, IdentityTransform(), "id_part")
         )
-        sort_order = SortOrder(SortField(source_id=4, transform=IdentityTransform()))
+        sort_order = SortOrder(
+            SortField(
+                source_id=4,
+                transform=IdentityTransform(),
+                direction=sort_dir,
+                null_order=null_order,
+            )
+        )
         bdf.to_iceberg(
             "test_table",
             location=path,
@@ -655,6 +672,7 @@ def test_read_s3_tables_read_iceberg_table():
     )
 
 
+@pytest.mark.gpu
 def test_write_s3_tables_location():
     from bodo.io.iceberg.catalog.s3_tables import (
         S3TABLES_REGION,
