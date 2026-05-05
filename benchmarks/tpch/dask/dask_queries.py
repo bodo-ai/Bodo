@@ -1098,7 +1098,7 @@ def query_20(dataset_path, scale, ext=".parquet"):
                     from
                         part
                     where
-                        p_name like 'forest%'
+                        p_name like 'azure%'
                 )
                 and ps_availqty > (
                     select
@@ -1113,7 +1113,7 @@ def query_20(dataset_path, scale, ext=".parquet"):
                 )
         )
         and s_nationkey = n_nationkey
-        and n_name = 'CANADA'
+        and n_name = 'JORDAN'
     order by
         s_name
     """
@@ -1148,10 +1148,10 @@ def query_20(dataset_path, scale, ext=".parquet"):
         right_on=["l_suppkey", "l_partkey"],
     )
     q_final = q_final[q_final["ps_availqty"] > q_final["sum_quantity"]]
+    q_final = q_final.drop_duplicates(subset=["ps_suppkey"])
     q_final = res_3.merge(
         q_final, how="leftsemi", left_on="s_suppkey", right_on="ps_suppkey"
     )
-    q_final["s_address"] = q_final["s_address"].str.strip()
     return q_final[["s_name", "s_address"]].sort_values("s_name", ascending=True)
 
 
@@ -1322,7 +1322,12 @@ def is_eager_type(result):
 
 
 def run_single_query(
-    query_num, dataset_path, scale_factor, log_file=None, show_output=False
+    query_num,
+    dataset_path,
+    scale_factor,
+    log_file=None,
+    output_path=None,
+    show_output=False,
 ) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
     query_func = get_query_func(query_num)
@@ -1335,6 +1340,9 @@ def run_single_query(
 
     if show_output:
         print(res)
+
+    if output_path:
+        res.to_parquet(f"{output_path}/q{query_num:02}.pq")
 
     if log_file:
         with open(log_file, "a") as f:
@@ -1395,6 +1403,12 @@ def main():
         type=str,
         default=None,
         help="Path to log timings.",
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default=None,
+        help="Path to save query outputs.",
     )
     parser.add_argument(
         "--show_output",
@@ -1495,6 +1509,7 @@ def main():
                             dataset_path,
                             scale_factor,
                             log_file=args.log_timings,
+                            output_path=args.output_path,
                             show_output=args.show_output,
                         )
                     except Exception as e:
@@ -1522,6 +1537,7 @@ def main():
                 dataset_path,
                 scale_factor,
                 log_file=args.log_timings,
+                output_path=args.output_path,
                 show_output=args.show_output,
             )
 
