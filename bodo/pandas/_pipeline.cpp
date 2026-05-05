@@ -4,6 +4,7 @@
 #ifdef USE_CUDF
 #include <cudf/copying.hpp>
 #include <cudf/table/table_view.hpp>
+#include <rmm/mr/cuda_async_memory_resource.hpp>
 #endif  // USE_CUDF
 #include "physical/operator.h"
 #include "physical/result_collector.h"
@@ -13,6 +14,49 @@
 using hrclock = std::chrono::high_resolution_clock;
 #endif
 
+std::string getGPUStats() {
+#ifdef USE_CUDF
+    size_t free_bytes = 0;
+    size_t total_bytes = 0;
+    cudaMemGetInfo(&free_bytes, &total_bytes);
+    double percentage = (double)free_bytes / total_bytes;
+    free_bytes /= 1024 * 1024 * 1024;
+    total_bytes /= 1024 * 1024 * 1024;
+
+    auto *mr = dynamic_cast<rmm::mr::cuda_async_memory_resource *>(
+        rmm::mr::get_current_device_resource());
+    if (!mr) {
+        throw std::runtime_error(
+            "Current RMM resource is not cuda_async_memory_resource");
+    }
+    cudaMemPool_t pool = mr->pool_handle();
+
+    size_t reserved_current = 0;
+    size_t reserved_peak = 0;
+    size_t used_current = 0;
+    size_t used_peak = 0;
+
+    cudaMemPoolGetAttribute(pool, cudaMemPoolAttrReservedMemCurrent,
+                            &reserved_current);
+    cudaMemPoolGetAttribute(pool, cudaMemPoolAttrReservedMemHigh,
+                            &reserved_peak);
+    cudaMemPoolGetAttribute(pool, cudaMemPoolAttrUsedMemCurrent, &used_current);
+    cudaMemPoolGetAttribute(pool, cudaMemPoolAttrUsedMemHigh, &used_peak);
+    reserved_current /= (1024 * 1024);
+    reserved_peak /= (1024 * 1024);
+    used_current /= (1024 * 1024);
+    used_peak /= (1024 * 1024);
+
+    std::stringstream sstr;
+    sstr << "GPUMem: " << free_bytes << "/" << total_bytes << "/"
+         << (int)(percentage * 100) << "% " << reserved_current << "/"
+         << reserved_peak << "/" << used_current << "/" << used_peak;
+    return sstr.str();
+#else   // USE_CUDF
+    return std::string();
+#endif  // USE_CUDF
+}
+
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
 #define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out, batch) \
     do {                                                                      \
@@ -20,7 +64,8 @@ using hrclock = std::chrono::high_resolution_clock;
             out << " ";                                                       \
         out << "Rank " << rank << " midPipelineExecute before ConsumeBatch "  \
             << getNodeString(sink) << " " << toString(prev_op_result)         \
-            << " NumRows=>" << getBatchRows(batch) << std::endl;              \
+            << " NumRows=>" << getBatchRows(batch) << " " << getGPUStats()    \
+            << std::endl;                                                     \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out, batch) \
@@ -29,13 +74,13 @@ using hrclock = std::chrono::high_resolution_clock;
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result, out)       \
-    do {                                                                    \
-        for (unsigned i = 0; i < idx; ++i)                                  \
-            out << " ";                                                     \
-        out << "Rank " << rank << " midPipelineExecute after ConsumeBatch " \
-            << getNodeString(sink) << " " << toString(consume_result)       \
-            << std::endl;                                                   \
+#define DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result, out)        \
+    do {                                                                     \
+        for (unsigned i = 0; i < idx; ++i)                                   \
+            out << " ";                                                      \
+        out << "Rank " << rank << " midPipelineExecute after ConsumeBatch "  \
+            << getNodeString(sink) << " " << toString(consume_result) << " " \
+            << getGPUStats() << std::endl;                                   \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result, out) \
@@ -47,7 +92,7 @@ using hrclock = std::chrono::high_resolution_clock;
 #define DEBUG_PIPELINE_BEFORE_PRODUCE(rank, source, out)                    \
     do {                                                                    \
         out << "Rank " << rank << " Pipeline::Execute before ProduceBatch " \
-            << getNodeString(source) << std::endl;                          \
+            << getNodeString(source) << " " << getGPUStats() << std::endl;  \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_PRODUCE(rank, source, out) \
@@ -60,7 +105,8 @@ using hrclock = std::chrono::high_resolution_clock;
     do {                                                                       \
         out << "Rank " << rank << " Pipeline::Execute after ProduceBatch "     \
             << getNodeString(source) << " " << toString(produce_result)        \
-            << " NumRows=>" << getBatchRows(batch) << std::endl;               \
+            << " NumRows=>" << getBatchRows(batch) << " " << getGPUStats()     \
+            << std::endl;                                                      \
         if (DEBUG_PIPELINE >= 2) {                                             \
             printBatchTypes(out, batch);                                       \
         }                                                                      \
@@ -91,7 +137,8 @@ using hrclock = std::chrono::high_resolution_clock;
             out << " ";                                                      \
         out << "Rank " << rank << " midPipelineExecute before ProcessBatch " \
             << getNodeString(op) << " " << toString(prev_op_result)          \
-            << " NumRows=>" << getBatchRows(batch) << std::endl;             \
+            << " NumRows=>" << getBatchRows(batch) << " " << getGPUStats()   \
+            << std::endl;                                                    \
         if (DEBUG_PIPELINE >= 2) {                                           \
             printBatchTypes(out, batch);                                     \
         }                                                                    \
@@ -114,7 +161,7 @@ using hrclock = std::chrono::high_resolution_clock;
         out << "Rank " << rank << " midPipelineExecute after ProcessBatch "   \
             << getNodeString(op) << " " << toString(prev_op_result) << " "    \
             << " NumRows=>" << getBatchRows(batch) << " " << diff_ms << "us"  \
-            << std::endl;                                                     \
+            << " " << getGPUStats() << std::endl;                             \
         if (DEBUG_PIPELINE >= 2) {                                            \
             printBatchTypes(out, batch);                                      \
         }                                                                     \
@@ -130,7 +177,7 @@ using hrclock = std::chrono::high_resolution_clock;
     do {                                                                    \
         out << "Rank " << rank                                              \
             << " Pipeline::Execute calling with empty batch until finished" \
-            << getNodeString(source) << std::endl;                          \
+            << getNodeString(source) << " " << getGPUStats() << std::endl;  \
     } while (0)
 #else
 #define DEBUG_PIPELINE_SOURCE_FINISHED(rank, source, out) \
@@ -142,7 +189,7 @@ using hrclock = std::chrono::high_resolution_clock;
 #define DEBUG_PIPELINE_FINALIZE(rank, op, out)                           \
     do {                                                                 \
         out << "Rank " << rank << " Pipeline::Execute calling Finalize " \
-            << getNodeString(op) << std::endl;                           \
+            << getNodeString(op) << " " << getGPUStats() << std::endl;   \
     } while (0)
 #else
 #define DEBUG_PIPELINE_FINALIZE(rank, op, out) \
@@ -151,34 +198,34 @@ using hrclock = std::chrono::high_resolution_clock;
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 3)
-#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                        \
-    do {                                                                     \
-        for (unsigned i = 0; i < idx; ++i)                                   \
-            out << " ";                                                      \
-        out << "Rank " << rank << " midPipelineExecute in batch "            \
-            << getNodeString(op) << " NumRows=>" << getBatchRows(batch)      \
-            << std::endl;                                                    \
-        std::visit(                                                          \
-            [&](auto &x) {                                                   \
-                using T = std::decay_t<decltype(x)>;                         \
-                if constexpr (std::is_same_v<T,                              \
-                                             std::shared_ptr<table_info>>) { \
-                    DEBUG_PrintTable(out, x, true);                          \
-                }                                                            \
-            },                                                               \
-            batch);                                                          \
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                          \
+    do {                                                                       \
+        for (unsigned i = 0; i < idx; ++i)                                     \
+            out << " ";                                                        \
+        out << "Rank " << rank << " midPipelineExecute in batch "              \
+            << getNodeString(op) << " NumRows=>" << getBatchRows(batch) << " " \
+            << getGPUStats() << std::endl;                                     \
+        std::visit(                                                            \
+            [&](auto &x) {                                                     \
+                using T = std::decay_t<decltype(x)>;                           \
+                if constexpr (std::is_same_v<T,                                \
+                                             std::shared_ptr<table_info>>) {   \
+                    DEBUG_PrintTable(out, x, true);                            \
+                }                                                              \
+            },                                                                 \
+            batch);                                                            \
     } while (0)
 #elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                   \
-    do {                                                                \
-        for (unsigned i = 0; i < idx; ++i)                              \
-            out << " ";                                                 \
-        out << "Rank " << rank << " midPipelineExecute in batch "       \
-            << getNodeString(op) << " NumRows=>" << getBatchRows(batch) \
-            << std::endl;                                               \
-        if (DEBUG_PIPELINE >= 2) {                                      \
-            printBatchTypes(out, batch);                                \
-        }                                                               \
+#define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out)                          \
+    do {                                                                       \
+        for (unsigned i = 0; i < idx; ++i)                                     \
+            out << " ";                                                        \
+        out << "Rank " << rank << " midPipelineExecute in batch "              \
+            << getNodeString(op) << " NumRows=>" << getBatchRows(batch) << " " \
+            << getGPUStats() << std::endl;                                     \
+        if (DEBUG_PIPELINE >= 2) {                                             \
+            printBatchTypes(out, batch);                                       \
+        }                                                                      \
     } while (0)
 #else
 #define DEBUG_PIPELINE_IN_BATCH(rank, op, batch, out) \
