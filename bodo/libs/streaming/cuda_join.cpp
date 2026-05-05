@@ -12,6 +12,7 @@
 #include <cudf/join/join.hpp>
 #include <cudf/join/mixed_join.hpp>
 #include <cudf/reduction.hpp>
+#include <cudf/sorting.hpp>
 #include <cudf/stream_compaction.hpp>
 #include <cudf/types.hpp>
 #include <memory>
@@ -22,6 +23,7 @@
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
 #include "_util.h"
+#include "cuda_runtime_api.h"
 #include "duckdb/common/enum_util.hpp"
 #include "duckdb/common/enums/join_type.hpp"
 
@@ -164,11 +166,18 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     const MPI_Comm comm = this->probe_shuffle_manager->get_mpi_comm();
     if (this->is_broadcast_join && !this->build_matches_synced) {
         if (this->sync_build_matches_req == MPI_REQUEST_NULL) {
+            int n = this->unmatched_build_rows->size();
+            auto d_buf = unmatched_build_rows->view().data<uint8_t>();
+            cudaHostAlloc(&this->unmatched_build_rows_host, n,
+                          cudaHostAllocDefault);
+            cudaMemcpy(unmatched_build_rows_host, d_buf, n,
+                       cudaMemcpyDeviceToHost);
             CHECK_MPI(
-                MPI_Iallreduce(MPI_IN_PLACE, this->unmatched_build_rows.get(),
-                               this->unmatched_build_rows->size(), MPI_UINT8_T,
-                               MPI_BAND, comm, &this->sync_build_matches_req),
+                MPI_Iallreduce(MPI_IN_PLACE, unmatched_build_rows_host, n,
+                               MPI_UINT8_T, MPI_LAND, comm,
+                               &this->sync_build_matches_req),
                 "produce_unmatched_build_rows: MPI error on MPI_Iallreduce ");
+            return table;
         } else {
             int flag = 0;
             CHECK_MPI(MPI_Test(&this->sync_build_matches_req, &flag,
@@ -176,6 +185,12 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
                       "produce_unmatched_build_rows: MPI error on MPI_Test ");
             if (flag) {
                 this->build_matches_synced = true;
+                auto* d_buf =
+                    unmatched_build_rows->mutable_view().data<uint8_t>();
+                cudaMemcpy(d_buf, unmatched_build_rows_host,
+                           unmatched_build_rows->size(),
+                           cudaMemcpyHostToDevice);
+                cudaFreeHost(this->unmatched_build_rows_host);
             } else {
                 return table;
             }
@@ -187,12 +202,13 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     // If it's a broadcast join we only want to
     // produce the unmatched rows on one rank since
     // all ranks share a build table
-    if (this->is_broadcast_join && rank > 0) {
+    if ((this->is_broadcast_join && rank > 0) || !this->unmatched_build_rows) {
         return table;
     }
 
     cudf::table_view build_kept_view = _build_table->select(
         this->build_kept_cols.begin(), this->build_kept_cols.end());
+
     // For right and outer joins, we need to output unmatched build rows
     // at the end. We can identify these using the matched_build_rows
     // boolean mask.
@@ -289,6 +305,24 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaJoin::materialize_and_output(
             global_is_last && this->build_matches_synced};
 }
 
+void CudaJoin::sort_build_table() {
+    if (!this->_build_table) {
+        throw std::runtime_error(
+            "CudaJoin::sort_build_table called before build table is "
+            "initialized");
+    }
+
+    auto unsorted_build = std::move(this->_build_table);
+    auto order = cudf::sorted_order(
+        unsorted_build->view(),
+        std::vector<cudf::order>(unsorted_build->num_columns(),
+                                 cudf::order::ASCENDING),
+        std::vector<cudf::null_order>(unsorted_build->num_columns(),
+                                      cudf::null_order::AFTER));
+    auto sorted = cudf::gather(unsorted_build->view(), order->view());
+    this->_build_table = std::move(sorted);
+}
+
 void CudaHashJoin::build_hash_table(
     const std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
     std::vector<cudf::table_view> build_views;
@@ -299,6 +333,11 @@ void CudaHashJoin::build_hash_table(
     }
     if (build_views.size() > 0) {
         this->_build_table = cudf::concatenate(build_views);
+
+        if (this->is_broadcast_join &&
+            duckdb::PropagatesBuildSide(this->join_type)) {
+            sort_build_table();
+        }
     } else {
         std::shared_ptr<arrow::Schema> build_table_arrow_schema =
             this->build_table_schema->ToArrowSchema();
@@ -685,6 +724,10 @@ void CudaNonEquiJoin::FinalizeBuild() {
         this->unmatched_build_rows = cudf::make_column_from_scalar(
             cudf::numeric_scalar(true), this->_build_table->num_rows(),
             cudf::get_default_stream());
+
+        if (this->is_broadcast_join) {
+            sort_build_table();
+        }
     }
 }
 

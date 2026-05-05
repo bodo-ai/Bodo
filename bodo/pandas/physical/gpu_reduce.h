@@ -28,7 +28,8 @@ inline bool gpu_capable_reduce(duckdb::LogicalAggregate& logical_aggregate) {
             agg_expr.function.name != "min" &&
             agg_expr.function.name != "product" &&
             agg_expr.function.name != "count" &&
-            agg_expr.function.name != "mean") {
+            agg_expr.function.name != "mean" &&
+            agg_expr.function.name != "count_star") {
             return false;
         }
     }

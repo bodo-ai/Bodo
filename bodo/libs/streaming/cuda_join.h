@@ -45,6 +45,8 @@ struct CudaJoin {
     std::unique_ptr<cudf::column> unmatched_build_rows =
         nullptr;  // Used for right/outer joins to track which
                   // build rows have been matched
+    uint8_t* unmatched_build_rows_host;  // Pinned host buffer for
+                                         // unmatched_build_rows reduction
     // For broadcast joins on RIGHT/OUTER joins we need to sync the build table
     // matches globally to only produce unmatched build rows once.
     MPI_Request sync_build_matches_req = MPI_REQUEST_NULL;
@@ -197,6 +199,14 @@ struct CudaJoin {
         cudf::table_view const& build_kept_view,
         cudf::column_view const& build_idx_view, bool global_is_last,
         rmm::cuda_stream_view stream);
+
+    /**
+     * @brief Sort build table in lexicographical order to make broadcast join
+     * build_indices consistent across all ranks.
+     * TODO(scott): Sort build chunks as they are received to avoid sorting at
+     * the end.
+     */
+    void sort_build_table();
 };
 
 struct CudaHashJoin : public CudaJoin {

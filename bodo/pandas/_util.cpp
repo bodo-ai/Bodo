@@ -1292,6 +1292,20 @@ std::unique_ptr<cudf::scalar> make_invalid_like(
             return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ns>>(
                 static_cast<int64_t>(0), false, stream, mr);
 
+        // **durations**
+        case cudf::type_id::DURATION_SECONDS:
+            return std::make_unique<cudf::duration_scalar<cudf::duration_s>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::DURATION_MILLISECONDS:
+            return std::make_unique<cudf::duration_scalar<cudf::duration_ms>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::DURATION_MICROSECONDS:
+            return std::make_unique<cudf::duration_scalar<cudf::duration_us>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::DURATION_NANOSECONDS:
+            return std::make_unique<cudf::duration_scalar<cudf::duration_ns>>(
+                static_cast<int64_t>(0), false, stream, mr);
+
         default:
             throw std::runtime_error(
                 "Unsupported cudf::type_id in make_invalid_like");
@@ -1552,9 +1566,26 @@ cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
             return cudf::data_type{type_id::TIMESTAMP_DAYS};
         }
 
-        default:
+        case Type::DURATION: {
+            auto duration = std::static_pointer_cast<arrow::DurationType>(t);
+            switch (duration->unit()) {
+                case arrow::TimeUnit::SECOND:
+                    return cudf::data_type{type_id::DURATION_SECONDS};
+                case arrow::TimeUnit::MILLI:
+                    return cudf::data_type{type_id::DURATION_MILLISECONDS};
+                case arrow::TimeUnit::MICRO:
+                    return cudf::data_type{type_id::DURATION_MICROSECONDS};
+                case arrow::TimeUnit::NANO:
+                    return cudf::data_type{type_id::DURATION_NANOSECONDS};
+                default:
+                    throw std::runtime_error("Unsupported Arrow duration unit");
+            }
+        }
+
+        default: {
             throw std::runtime_error("Unsupported Arrow type: " +
                                      t->ToString());
+        }
     }
 }
 
@@ -1642,6 +1673,14 @@ std::shared_ptr<arrow::DataType> cudf_to_arrow_type(cudf::data_type &t) {
             return arrow::timestamp(arrow::TimeUnit::NANO);
         case type_id::TIMESTAMP_DAYS:
             return arrow::date32();
+        case type_id::DURATION_SECONDS:
+            return arrow::duration(arrow::TimeUnit::SECOND);
+        case type_id::DURATION_MILLISECONDS:
+            return arrow::duration(arrow::TimeUnit::MILLI);
+        case type_id::DURATION_MICROSECONDS:
+            return arrow::duration(arrow::TimeUnit::MICRO);
+        case type_id::DURATION_NANOSECONDS:
+            return arrow::duration(arrow::TimeUnit::NANO);
         default:
             throw std::runtime_error(
                 "Unsupported cudf data_type for Arrow conversion: " +
