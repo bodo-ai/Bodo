@@ -433,7 +433,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         PyObject* null_count_dict = PyDict_New();
         PyObject* lower_bound_dict = PyDict_New();
         PyObject* upper_bound_dict = PyDict_New();
-        compute_field_metrics_gpu(group_view, output_col_names, se,
+        compute_field_metrics_gpu(out_tv, output_col_names, se,
                                   value_counts_dict, null_count_dict,
                                   lower_bound_dict, upper_bound_dict);
 
@@ -844,18 +844,10 @@ void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
         }
     }
 
-    // Store Py_None for columns that couldn't be bounded (nested
-    // types or all-null columns).
-    for (size_t i = 0; i < output_col_names.size(); i++) {
-        if (has_bounds[i])
-            continue;
-        PyObject* fid_py = PyLong_FromLongLong(field_ids[i]);
-        Py_INCREF(Py_None);
-        PyDict_SetItem(lower_bound_dict, fid_py, Py_None);
-        Py_INCREF(Py_None);
-        PyDict_SetItem(upper_bound_dict, fid_py, Py_None);
-        Py_DECREF(fid_py);
-    }
+    // Columns that cannot be bounded (nested types or all-null
+    // columns) are simply omitted from the bounds dicts, matching
+    // the CPU writer's behavior (generate_iceberg_field_metrics).
+    // PyIceberg expects map values to be bytes, not None.
 }
 
 std::string PhysicalGPUWriteIceberg::generate_iceberg_file_name() {
