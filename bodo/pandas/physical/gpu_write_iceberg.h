@@ -79,12 +79,23 @@ struct PartitionField {
  * @brief Describes a single Iceberg sort field parsed from the Python sort
  * spec.
  *
- * The sort spec is a list of `(col_name, nulls_last?)` tuples. Currently only
- * column index is stored; sort direction and null ordering are deferred to
- * follow-up work.
+ * The sort spec is a list of `(col_idx, transform_name, arg, is_asc,
+ * nulls_last)` tuples produced by `build_partition_sort_tuples`.
  */
 struct SortField {
     cudf::size_type col_idx;  ///< Index of this column in the input table.
+    bool is_asc;              ///< true for ascending, false for descending.
+    bool nulls_last;          ///< true to place nulls after all values, false
+                              ///< to place nulls first.
+    std::string transform;    ///< Transform name: "identity", "bucket", etc.
+    long arg;                 ///< Transform argument (N for bucket, W for
+                              ///< truncate; 0 if unused).
+
+    /// Returns true if the transform acts as a pass-through (identity or
+    /// void), meaning no column transformation is needed before sorting.
+    [[nodiscard]] bool is_noop_transform() const {
+        return transform == "identity" || transform == "void";
+    }
 };
 
 /**
@@ -198,15 +209,20 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
     /**
      * @brief Parse the Python sort order into `SortField` structs.
      *
-     * The sort spec is a Python list of `(col_name, nulls_last?)` tuples.
+     * The sort spec is a Python list of `(col_idx, transform_name, arg,
+     * is_asc, nulls_last)` tuples produced by `build_partition_sort_tuples`.
      * Column names are resolved against `schema` to produce column indices.
-     * Sort direction (`asc`/`desc`) and null ordering are deferred to
-     * follow-up work; all sorts currently use ascending + nulls last.
+     * Sort direction, null ordering, and transform info are stored in each
+     * `SortField`.
+     *
+     * Currently only `identity` and `void` transforms are supported on GPU;
+     * non-trivial transforms (bucket, truncate, year, month, day, hour)
+     * raise `std::runtime_error`.
      *
      * @param schema Arrow schema providing column names.
      * @param sort_tuples_py Python list of sort spec tuples.
-     * @throws std::runtime_error if a column name is not found in the schema
-     *         or the spec is malformed.
+     * @throws std::runtime_error if a transform is unsupported or the spec
+     *         is malformed.
      */
     void parse_sort_order(const std::shared_ptr<arrow::Schema>& schema,
                           PyObject* sort_tuples_py);
@@ -216,8 +232,9 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      *
      * Steps:
      * 1. Concatenate all accumulated tables into one.
-     * 2. Sort by sort_cols + partition_cols (ascending, nulls last) using
-     *    `cudf::sort_by_key`.
+     * 2. Sort by sort_cols + partition_cols using `cudf::sort_by_key`.
+     *    Sort direction and null precedence follow the per-field
+     *    `SortField` spec; partition columns sort ascending, nulls last.
      * 3. Extract partition columns to host Arrow arrays, walk rows to
      *    detect partition boundaries, and build partition groups.
      * 4. For each partition group:

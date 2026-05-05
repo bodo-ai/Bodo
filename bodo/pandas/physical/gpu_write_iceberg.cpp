@@ -122,11 +122,19 @@ void PhysicalGPUWriteIceberg::parse_sort_order(
         }
 
         int64_t col_idx = PyLong_AsLongLong(PyTuple_GET_ITEM(tup, 0));
-        // transform_name (1), arg (2), is_asc (3), nulls_last (4)
-        // are parsed for future use but not applied yet (all sorts are
-        // asc + nulls_last for now).
+        const char* transform = PyUnicode_AsUTF8(PyTuple_GET_ITEM(tup, 1));
+        long arg = PyLong_AsLong(PyTuple_GET_ITEM(tup, 2));
+        bool is_asc = PyObject_IsTrue(PyTuple_GET_ITEM(tup, 3));
+        bool nulls_last = PyObject_IsTrue(PyTuple_GET_ITEM(tup, 4));
 
-        sort_fields.push_back({static_cast<cudf::size_type>(col_idx)});
+        SortField sf{static_cast<cudf::size_type>(col_idx), is_asc, nulls_last,
+                     transform, arg};
+        if (!sf.is_noop_transform()) {
+            throw std::runtime_error(
+                "PhysicalGPUWriteIceberg: sort transform '" + sf.transform +
+                "' is not yet supported on GPU");
+        }
+        sort_fields.push_back(std::move(sf));
     }
 }
 
@@ -224,11 +232,27 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
 
     // Sort by sort_cols + partition_cols
     if (!sort_cols.empty()) {
-        // TODO: handle sort order/null placement
-        std::vector<cudf::order> column_order(sort_cols.size(),
-                                              cudf::order::ASCENDING);
-        std::vector<cudf::null_order> null_precedence(sort_cols.size(),
-                                                      cudf::null_order::AFTER);
+        std::vector<cudf::order> column_order;
+        std::vector<cudf::null_order> null_precedence;
+        column_order.reserve(sort_cols.size());
+        null_precedence.reserve(sort_cols.size());
+
+        // Per-sort-field direction and null placement
+        for (const auto& sf : sort_fields) {
+            column_order.push_back(sf.is_asc ? cudf::order::ASCENDING
+                                             : cudf::order::DESCENDING);
+            null_precedence.push_back(sf.nulls_last ? cudf::null_order::AFTER
+                                                    : cudf::null_order::BEFORE);
+        }
+        // Partition columns: sort direction doesn't affect group
+        // membership, only contiguity. Use ascending + nulls last
+        // as a stable default (partition fields carry no sort
+        // direction in the Iceberg spec).
+        for (size_t i = 0; i < partition_fields.size(); i++) {
+            column_order.push_back(cudf::order::ASCENDING);
+            null_precedence.push_back(cudf::null_order::AFTER);
+        }
+
         cudf::table_view key_tv = sorted_table->view().select(sort_cols);
         std::unique_ptr<cudf::table> sorted =
             cudf::sort_by_key(sorted_table->view(), key_tv, column_order,
