@@ -456,7 +456,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
 
         for (int pi = 0; pi < n_part_vals; pi++) {
             std::shared_ptr<arrow::Scalar> scalar = partition_vals[pi];
-            PyObject* py_val = nullptr;
+            PyObjectPtr py_val = nullptr;
             if (!scalar->is_valid) {
                 py_val = Py_None;
                 Py_INCREF(py_val);
@@ -553,7 +553,6 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         }
 
         PyList_Append(iceberg_files_info_py, file_info_tuple);
-        Py_DECREF(file_info_tuple);
 
         metrics.n_files_written++;
     }
@@ -789,14 +788,11 @@ void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
 
     // Populate value_counts and null_counts dicts on host.
     for (size_t i = 0; i < output_col_names.size(); i++) {
-        PyObject* fid_py = PyLong_FromLongLong(field_ids[i]);
-        PyObject* vc_py = PyLong_FromLongLong(value_counts[i]);
+        PyObjectPtr fid_py = PyLong_FromLongLong(field_ids[i]);
+        PyObjectPtr vc_py = PyLong_FromLongLong(value_counts[i]);
         PyDict_SetItem(value_counts_dict, fid_py, vc_py);
-        Py_DECREF(vc_py);
-        PyObject* nc_py = PyLong_FromLongLong(null_counts[i]);
+        PyObjectPtr nc_py = PyLong_FromLongLong(null_counts[i]);
         PyDict_SetItem(null_count_dict, fid_py, nc_py);
-        Py_DECREF(nc_py);
-        Py_DECREF(fid_py);
     }
 
     // Batch-transfer all min/max scalars to host at once.
@@ -831,16 +827,13 @@ void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
 
         for (size_t bi = 0; bi < bound_indices.size(); bi++) {
             size_t orig_i = bound_indices[bi];
-            PyObject* fid_py = PyLong_FromLongLong(field_ids[orig_i]);
+            PyObjectPtr fid_py = PyLong_FromLongLong(field_ids[orig_i]);
             auto min_s = min_arrow->column(bi)->GetScalar(0).ValueOrDie();
             auto max_s = max_arrow->column(bi)->GetScalar(0).ValueOrDie();
-            PyObject* min_obj = arrow_scalar_to_iceberg_bytes(min_s);
-            PyObject* max_obj = arrow_scalar_to_iceberg_bytes(max_s);
+            PyObjectPtr min_obj = arrow_scalar_to_iceberg_bytes(min_s);
+            PyObjectPtr max_obj = arrow_scalar_to_iceberg_bytes(max_s);
             PyDict_SetItem(lower_bound_dict, fid_py, min_obj);
             PyDict_SetItem(upper_bound_dict, fid_py, max_obj);
-            Py_DECREF(min_obj);
-            Py_DECREF(max_obj);
-            Py_DECREF(fid_py);
         }
     }
 
