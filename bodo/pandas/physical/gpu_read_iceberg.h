@@ -171,6 +171,7 @@ class GPUIcebergRankBatchGenerator {
 
     int64_t bytes_per_part_estimate_ = 0;
     size_t chunked_reader_limit_ = 0;
+    std::shared_ptr<StreamAndEvent> chunked_reader_se;
 };
 
 struct PhysicalGPUReadIcebergMetrics {

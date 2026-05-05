@@ -77,6 +77,7 @@ GPUIcebergRankBatchGenerator::GPUIcebergRankBatchGenerator(
         bytes_per_part_estimate_ = est.bytes_per_part;
         chunked_reader_limit_ = est.chunked_reader_limit;
     }
+    chunked_reader_se = make_stream_and_event(g_use_async);
 }
 
 std::pair<std::unique_ptr<cudf::table>, bool>
@@ -99,7 +100,8 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
         } else {
             cudf::table_view tv = leftover_tbl->view();
             std::vector<cudf::table_view> sliced =
-                cudf::slice(tv, {0, (int)target_rows_, (int)n}, se->stream);
+                cudf::slice(tv, {0, (int)target_rows_, (int)n},
+                            this->chunked_reader_se->stream);
             gpu_tables.push_back(std::make_unique<cudf::table>(sliced[0]));
             leftover_tbl = std::make_unique<cudf::table>(sliced[1]);
             rows_accum = target_rows_;
@@ -108,7 +110,7 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
 
     while (rows_accum < target_rows_ && curr_piece_idx < pieces_.size()) {
         if (!curr_reader) {
-            init_next_reader(se->stream);
+            init_next_reader(this->chunked_reader_se->stream);
         }
 
         while (curr_reader && curr_reader->has_next() &&
@@ -134,14 +136,14 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
                 }
                 std::vector<cudf::size_type> splits = {(cudf::size_type)to_skip,
                                                        (cudf::size_type)n};
-                std::vector<cudf::table_view> sliced =
-                    cudf::slice(tbl->view(), splits, se->stream);
+                std::vector<cudf::table_view> sliced = cudf::slice(
+                    tbl->view(), splits, this->chunked_reader_se->stream);
                 tbl = std::make_unique<cudf::table>(sliced[1]);
                 rows_to_skip -= (int64_t)to_skip;
             }
 
             std::unique_ptr<cudf::table> evolved_tbl =
-                evolve_table(std::move(tbl), se->stream);
+                evolve_table(std::move(tbl), this->chunked_reader_se->stream);
 
             std::size_t tbl_n = evolved_tbl->num_rows();
             if (rows_accum + tbl_n <= target_rows_) {
@@ -151,7 +153,8 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
                 std::size_t need = target_rows_ - rows_accum;
                 cudf::table_view tv = evolved_tbl->view();
                 std::vector<cudf::table_view> sliced =
-                    cudf::slice(tv, {0, (int)need, (int)tbl_n}, se->stream);
+                    cudf::slice(tv, {0, (int)need, (int)tbl_n},
+                                this->chunked_reader_se->stream);
                 gpu_tables.push_back(std::make_unique<cudf::table>(sliced[0]));
                 leftover_tbl = std::make_unique<cudf::table>(sliced[1]);
                 rows_accum = target_rows_;
@@ -162,6 +165,9 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
             curr_reader.reset();
         }
     }
+    // Sync batch stream with chunked reader stream.
+    chunked_reader_se->event.record(chunked_reader_se->stream);
+    se->event.wait(chunked_reader_se->stream);
 
     if (gpu_tables.empty()) {
         return {empty_table_from_arrow_schema(output_arrow_schema), true};
