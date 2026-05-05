@@ -199,6 +199,7 @@ class GPUIcebergRankBatchGenerator {
     PyObjectPtr iceberg_filter_cudf_ast = nullptr;
     std::vector<PyObjectPtr> scanner_field_ids;
     MetricBase::TimerValue evolve_time_ = 0;
+    MetricBase::TimerValue fingerprint_time_ = 0;
 
     int64_t bytes_per_part_estimate_ = 0;
     size_t chunked_reader_limit_ = 0;

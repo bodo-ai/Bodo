@@ -68,7 +68,9 @@ GPUIcebergRankBatchGenerator::GPUIcebergRankBatchGenerator(
     // Subdivide schema groups by physical Parquet schema so that files
     // with mismatched column types (e.g. int32 vs int64 from schema
     // evolution) are not batched into the same chunked reader.
+    time_pt start_fp = start_timer();
     compute_physical_schema_fingerprints();
+    this->fingerprint_time_ += end_timer(start_fp);
 
     // Estimate bytes per piece and compute an appropriate chunk size
     // by sampling parquet file metadata, reusing the logic from
@@ -208,6 +210,8 @@ void GPUIcebergRankBatchGenerator::ReportMetrics(
     MetricBase::StatValue pieces = pieces_.size();
     metrics_out.emplace_back(StatMetric("num_pieces", pieces));
     metrics_out.emplace_back(TimerMetric("evolve_time", this->evolve_time_));
+    metrics_out.emplace_back(
+        TimerMetric("fingerprint_time", this->fingerprint_time_));
 }
 
 void GPUIcebergRankBatchGenerator::init_next_reader(
