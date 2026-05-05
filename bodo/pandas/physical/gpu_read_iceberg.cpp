@@ -125,8 +125,8 @@ GPUIcebergRankBatchGenerator::next(std::shared_ptr<StreamAndEvent> se) {
             }
 
             if (rows_to_skip > 0) {
-                // Some pieces may have a row offset (e.g. from file-level
-                // filtering); discard leading rows until the skip count is
+                // Some pieces may have a row offset
+                // discard leading rows until the skip count is
                 // exhausted.
                 size_t n = tbl->num_rows();
                 size_t to_skip = std::min((size_t)rows_to_skip, n);
