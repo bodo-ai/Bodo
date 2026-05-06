@@ -3,7 +3,7 @@ import argparse
 import os
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import dask
 import dask.dataframe as dd
@@ -162,8 +162,8 @@ def query_03(dataset_path, scale, ext=".parquet"):
 
 
 def query_04(dataset_path, scale, ext=".parquet"):
-    date1 = datetime_or_date_value("1993-10-01")
-    date2 = datetime_or_date_value("1993-07-01")
+    date1 = datetime_or_date_value("1993-11-01")
+    date2 = datetime_or_date_value("1993-08-01")
 
     line_item_ds = _load_dataset(dataset_path, "lineitem", ext)
     orders_ds = _load_dataset(dataset_path, "orders", ext)
@@ -186,8 +186,8 @@ def query_04(dataset_path, scale, ext=".parquet"):
 
 
 def query_05(dataset_path, scale, ext=".parquet"):
-    date1 = datetime_or_date_value("1994-01-01")
-    date2 = datetime_or_date_value("1995-01-01")
+    date1 = datetime_or_date_value("1996-01-01")
+    date2 = datetime_or_date_value("1997-01-01")
 
     region_ds = _load_dataset(dataset_path, "region", ext)
     nation_ds = _load_dataset(dataset_path, "nation", ext)
@@ -214,8 +214,8 @@ def query_05(dataset_path, scale, ext=".parquet"):
 
 
 def query_06(dataset_path, scale, ext=".parquet"):
-    date1 = datetime_or_date_value("1994-01-01")
-    date2 = datetime_or_date_value("1995-01-01")
+    date1 = datetime_or_date_value("1996-01-01")
+    date2 = datetime_or_date_value("1997-01-01")
     var3 = 24
 
     line_item_ds = _load_dataset(dataset_path, "lineitem", ext)
@@ -223,8 +223,8 @@ def query_06(dataset_path, scale, ext=".parquet"):
     sel = (
         (line_item_ds.l_shipdate >= date1)
         & (line_item_ds.l_shipdate < date2)
-        & (line_item_ds.l_discount >= 0.05)
-        & (line_item_ds.l_discount <= 0.07)
+        & (line_item_ds.l_discount >= 0.08)
+        & (line_item_ds.l_discount <= 0.1)
         & (line_item_ds.l_quantity < var3)
     )
 
@@ -411,7 +411,7 @@ def query_09(dataset_path, scale, ext=".parquet"):
                 and p_partkey = l_partkey
                 and o_orderkey = l_orderkey
                 and s_nationkey = n_nationkey
-                and p_name like '%green%'
+                and p_name like '%ghost%'
         ) as profit
     group by
         nation,
@@ -427,7 +427,7 @@ def query_09(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     orders = _load_dataset(dataset_path, "orders", ext)
     nation = _load_dataset(dataset_path, "nation", ext)
-    part = part[part.p_name.str.contains("green")]
+    part = part[part.p_name.str.contains("ghost")]
 
     subquery = (
         part.merge(partsupp, left_on="p_partkey", right_on="ps_partkey", how="inner")
@@ -479,7 +479,7 @@ def query_10(dataset_path, scale, ext=".parquet"):
         c_custkey = o_custkey
         and l_orderkey = o_orderkey
         and o_orderdate >= date '1993-10-01'
-        and o_orderdate < date '1993-10-01' + interval '3' month
+        and o_orderdate < date '1994-01-01'
         and l_returnflag = 'R'
         and c_nationkey = n_nationkey
     group by
@@ -643,7 +643,7 @@ def query_12(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
 
     receiptdate_from = datetime_or_date_value("1994-01-01")
-    receiptdate_to = receiptdate_from + timedelta(days=365)
+    receiptdate_to = datetime_or_date_value("1995-01-01")
 
     table = orders.merge(lineitem, left_on="o_orderkey", right_on="l_orderkey")
     table = table[
@@ -730,14 +730,14 @@ def query_14(dataset_path, scale, ext=".parquet"):
         part
     where
         l_partkey = p_partkey
-        and l_shipdate >= date '1995-09-01'
-        and l_shipdate < date '1995-09-01' + interval '1' month
+        and l_shipdate >= date '1994-03-01'
+        and l_shipdate < date '1994-04-01'
     """
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     part = _load_dataset(dataset_path, "part", ext)
 
-    shipdate_from = datetime_or_date_value("1995-09-01")
-    shipdate_to = datetime_or_date_value("1995-10-01")
+    shipdate_from = datetime_or_date_value("1994-03-01")
+    shipdate_to = datetime_or_date_value("1994-04-01")
 
     table = lineitem.merge(part, left_on="l_partkey", right_on="p_partkey", how="inner")
     table = table[
@@ -1098,7 +1098,7 @@ def query_20(dataset_path, scale, ext=".parquet"):
                     from
                         part
                     where
-                        p_name like 'forest%'
+                        p_name like 'azure%'
                 )
                 and ps_availqty > (
                     select
@@ -1108,12 +1108,12 @@ def query_20(dataset_path, scale, ext=".parquet"):
                     where
                         l_partkey = ps_partkey
                         and l_suppkey = ps_suppkey
-                        and l_shipdate >= date '1994-01-01'
-                        and l_shipdate < date '1994-01-01' + interval '1' year
+                        and l_shipdate >= date '1996-01-01'
+                        and l_shipdate < date '1997-01-01'
                 )
         )
         and s_nationkey = n_nationkey
-        and n_name = 'CANADA'
+        and n_name = 'JORDAN'
     order by
         s_name
     """
@@ -1122,8 +1122,8 @@ def query_20(dataset_path, scale, ext=".parquet"):
     nation = _load_dataset(dataset_path, "nation", ext)
     part = _load_dataset(dataset_path, "part", ext)
     partsupp = _load_dataset(dataset_path, "partsupp", ext)
-    shipdate_from = datetime_or_date_value("1994-01-01")
-    shipdate_to = datetime_or_date_value("1995-01-01")
+    shipdate_from = datetime_or_date_value("1996-01-01")
+    shipdate_to = datetime_or_date_value("1997-01-01")
 
     res_1 = lineitem[
         (lineitem["l_shipdate"] >= shipdate_from)
@@ -1136,9 +1136,9 @@ def query_20(dataset_path, scale, ext=".parquet"):
         .reset_index()
     )
     res_1["sum_quantity"] = res_1["sum_quantity"] * 0.5
-    res_2 = nation[nation["n_name"] == "CANADA"]
+    res_2 = nation[nation["n_name"] == "JORDAN"]
     res_3 = supplier.merge(res_2, left_on="s_nationkey", right_on="n_nationkey")
-    res_4 = part[part["p_name"].str.strip().str.startswith("forest")]
+    res_4 = part[part["p_name"].str.strip().str.startswith("azure")]
 
     q_final = partsupp.merge(
         res_4, how="leftsemi", left_on="ps_partkey", right_on="p_partkey"
@@ -1148,10 +1148,10 @@ def query_20(dataset_path, scale, ext=".parquet"):
         right_on=["l_suppkey", "l_partkey"],
     )
     q_final = q_final[q_final["ps_availqty"] > q_final["sum_quantity"]]
+    q_final = q_final.drop_duplicates(subset=["ps_suppkey"])
     q_final = res_3.merge(
         q_final, how="leftsemi", left_on="s_suppkey", right_on="ps_suppkey"
     )
-    q_final["s_address"] = q_final["s_address"].str.strip()
     return q_final[["s_name", "s_address"]].sort_values("s_name", ascending=True)
 
 
@@ -1322,7 +1322,12 @@ def is_eager_type(result):
 
 
 def run_single_query(
-    query_num, dataset_path, scale_factor, log_file=None, show_output=False
+    query_num,
+    dataset_path,
+    scale_factor,
+    log_file=None,
+    output_path=None,
+    show_output=False,
 ) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
     query_func = get_query_func(query_num)
@@ -1335,6 +1340,9 @@ def run_single_query(
 
     if show_output:
         print(res)
+
+    if output_path:
+        res.to_parquet(f"{output_path}/q{query_num:02}.pq")
 
     if log_file:
         with open(log_file, "a") as f:
@@ -1395,6 +1403,12 @@ def main():
         type=str,
         default=None,
         help="Path to log timings.",
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default=None,
+        help="Path to save query outputs.",
     )
     parser.add_argument(
         "--show_output",
@@ -1495,6 +1509,7 @@ def main():
                             dataset_path,
                             scale_factor,
                             log_file=args.log_timings,
+                            output_path=args.output_path,
                             show_output=args.show_output,
                         )
                     except Exception as e:
@@ -1522,6 +1537,7 @@ def main():
                 dataset_path,
                 scale_factor,
                 log_file=args.log_timings,
+                output_path=args.output_path,
                 show_output=args.show_output,
             )
 
