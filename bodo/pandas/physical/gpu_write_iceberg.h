@@ -342,6 +342,49 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      */
     void ReportMetrics(std::vector<MetricBase>& metrics_out);
 
+    /**
+     * @brief Apply an Iceberg transform to a GPU column and return the
+     * transformed column.
+     *
+     * Dispatch function that routes to the appropriate transform
+     * implementation based on `transform_name`.
+     *
+     * @param col Input column view (on GPU).
+     * @param transform_name Transform name: "identity", "bucket", "truncate",
+     *        "year", "month", "day", "hour", or "void".
+     * @param arg Transform argument (N for bucket, W for truncate; -1 if
+     *        unused).
+     * @param stream CUDA stream.
+     * @return New cudf column with the transformed values.
+     * @throws std::runtime_error on unsupported transforms or types.
+     */
+    static std::unique_ptr<cudf::column> apply_iceberg_transform_gpu(
+        cudf::column_view col, const std::string& transform_name, long arg,
+        rmm::cuda_stream_view stream);
+
+    /**
+     * @brief Render a partition value for use in a Hive-style partition
+     * directory path.
+     *
+     * Uses both the original value (for identity-transform rendering of
+     * complex types like DATE) and the transformed value (for non-identity
+     * transforms like year, month, bucket, etc.).
+     *
+     * @param transform_name Transform name.
+     * @param arg Transform argument (N for bucket, W for truncate; -1 if
+     *        unused).
+     * @param orig_scalar Arrow scalar from the original (untransformed)
+     *        column at the partition group's first row.
+     * @param transformed_scalar Arrow scalar from the transformed column
+     *        at the partition group's first row.
+     * @return String value for the partition directory component (e.g.,
+     *         "2024" for a year transform).
+     */
+    static std::string render_partition_value(
+        const std::string& transform_name, long arg,
+        const std::shared_ptr<arrow::Scalar>& orig_scalar,
+        const std::shared_ptr<arrow::Scalar>& transformed_scalar);
+
     // ---- Bind data (from IcebergWriteFunctionData) ----
 
     const std::shared_ptr<arrow::Schema> in_schema;  ///< Input Arrow schema

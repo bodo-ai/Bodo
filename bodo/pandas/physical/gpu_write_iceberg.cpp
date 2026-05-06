@@ -10,12 +10,17 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <cudf/binaryop.hpp>
 #include <cudf/copying.hpp>
+#include <cudf/datetime.hpp>
 #include <cudf/groupby.hpp>
+#include <cudf/hashing.hpp>
 #include <cudf/io/parquet.hpp>
 #include <cudf/io/types.hpp>
 #include <cudf/sorting.hpp>
+#include <cudf/strings/slice.hpp>
 #include <cudf/types.hpp>
+#include <cudf/unary.hpp>
 
 #include "../io/iceberg_helpers.h"
 #include "../libs/_query_profile_collector.h"
@@ -133,11 +138,6 @@ void PhysicalGPUWriteIceberg::parse_sort_order(
                      .nulls_last = nulls_last,
                      .transform = transform,
                      .arg = arg};
-        if (!sf.is_noop_transform()) {
-            throw std::runtime_error(
-                "PhysicalGPUWriteIceberg: sort transform '" + sf.transform +
-                "' is not yet supported on GPU");
-        }
         sort_fields.push_back(std::move(sf));
     }
 }
@@ -225,9 +225,9 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
     time_pt start_sort = start_timer();
 
     // Concatenate all accumulated tables into one
-    std::unique_ptr<cudf::table> sorted_table;
+    std::unique_ptr<cudf::table> working_table;
     if (accumulated_tables.size() == 1) {
-        sorted_table =
+        working_table =
             std::make_unique<cudf::table>(accumulated_tables[0]->release());
     } else {
         std::vector<cudf::table_view> views;
@@ -235,64 +235,120 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         for (auto& t : accumulated_tables) {
             views.push_back(t->view());
         }
-        sorted_table = cudf::concatenate(views, se->stream);
+        working_table = cudf::concatenate(views, se->stream);
     }
 
-    // Sort by sort_cols + partition_cols
-    if (!sort_cols.empty()) {
+    // Apply Iceberg transforms to create transformed sort and partition
+    // columns. The transformed columns are prepended to the table:
+    //   [sort_xfrm_0, ..., sort_xfrm_N, part_xfrm_0, ..., part_xfrm_M,
+    //    orig_col_0, ...]
+    // Indices 0..(num_sort+num_part-1) are the transform keys used for
+    // sorting and partition-boundary detection. The original columns
+    // start at index (num_sort+num_part).
+    cudf::size_type n_sort = static_cast<cudf::size_type>(sort_fields.size());
+    cudf::size_type n_part =
+        static_cast<cudf::size_type>(partition_fields.size());
+    cudf::size_type num_prepended = n_sort + n_part;
+
+    std::vector<std::unique_ptr<cudf::column>> prepended_cols;
+    if (num_prepended > 0) {
+        prepended_cols.reserve(num_prepended);
+
+        // Sort transform columns (first in prepended group)
+        for (cudf::size_type si = 0; si < n_sort; si++) {
+            const auto& sf = sort_fields[si];
+            cudf::column_view orig_col =
+                working_table->view().column(sf.col_idx);
+            auto xfrm_col = apply_iceberg_transform_gpu(orig_col, sf.transform,
+                                                        sf.arg, se->stream);
+            prepended_cols.push_back(std::move(xfrm_col));
+        }
+
+        // Partition transform columns (second in prepended group)
+        for (cudf::size_type pi = 0; pi < n_part; pi++) {
+            const auto& pf = partition_fields[pi];
+            cudf::column_view orig_col =
+                working_table->view().column(pf.col_idx);
+            auto xfrm_col = apply_iceberg_transform_gpu(orig_col, pf.transform,
+                                                        pf.arg, se->stream);
+            prepended_cols.push_back(std::move(xfrm_col));
+        }
+
+        // Build new table: prepended columns + original columns
+        std::vector<std::unique_ptr<cudf::column>> all_cols;
+        all_cols.reserve(num_prepended + working_table->num_columns());
+        for (auto& pc : prepended_cols) {
+            all_cols.push_back(std::move(pc));
+        }
+        for (cudf::size_type ci = 0; ci < working_table->num_columns(); ci++) {
+            auto col = std::make_unique<cudf::column>(
+                working_table->view().column(ci));
+            all_cols.push_back(std::move(col));
+        }
+        working_table = std::make_unique<cudf::table>(std::move(all_cols));
+    }
+
+    // Build sort keys from the prepended columns (all of them).
+    // Sort by sort-transform keys first, then partition-transform keys.
+    if (num_prepended > 0) {
         std::vector<cudf::order> column_order;
         std::vector<cudf::null_order> null_precedence;
-        column_order.reserve(sort_cols.size());
-        null_precedence.reserve(sort_cols.size());
+        column_order.reserve(num_prepended);
+        null_precedence.reserve(num_prepended);
 
-        // Per-sort-field direction and null placement
+        // Sort transform keys: per-field direction and null placement
         for (const auto& sf : sort_fields) {
             column_order.push_back(sf.is_asc ? cudf::order::ASCENDING
                                              : cudf::order::DESCENDING);
             null_precedence.push_back(sf.nulls_last ? cudf::null_order::AFTER
                                                     : cudf::null_order::BEFORE);
         }
-        // Partition columns: sort direction doesn't affect group
-        // membership, only contiguity. Use ascending + nulls last
-        // as a stable default (partition fields carry no sort
-        // direction in the Iceberg spec).
-        for (size_t i = 0; i < partition_fields.size(); i++) {
+        // Partition transform keys: ascending, nulls last
+        for (cudf::size_type i = 0; i < n_part; i++) {
             column_order.push_back(cudf::order::ASCENDING);
             null_precedence.push_back(cudf::null_order::AFTER);
         }
 
-        cudf::table_view key_tv = sorted_table->view().select(sort_cols);
+        cudf::table_view key_tv =
+            working_table->view().select(std::vector<cudf::size_type>{
+                0, static_cast<cudf::size_type>(num_prepended)});
         std::unique_ptr<cudf::table> sorted =
-            cudf::sort_by_key(sorted_table->view(), key_tv, column_order,
+            cudf::sort_by_key(working_table->view(), key_tv, column_order,
                               null_precedence, se->stream);
-        sorted_table = std::move(sorted);
+        working_table = std::move(sorted);
     }
 
     metrics.sort_time += end_timer(start_sort);
     time_pt start_file_write = start_timer();
 
     // Detect partition boundaries on GPU using groupby on the already-sorted
-    // partition columns.  groupby(keys_are_sorted=YES) scans in O(n) without
-    // re-sorting.
+    // partition-transform columns. These are at indices [n_sort, num_prepended)
+    // in the working table.
     std::vector<std::pair<cudf::size_type, cudf::size_type>> partition_groups;
     std::vector<std::vector<std::shared_ptr<arrow::Scalar>>>
         partition_group_values;
+    std::vector<std::vector<std::shared_ptr<arrow::Scalar>>>
+        partition_group_orig_values;
 
-    if (partition_col_idxs.empty()) {
+    if (n_part == 0) {
         partition_groups.emplace_back(
-            0, static_cast<cudf::size_type>(sorted_table->num_rows()));
+            0, static_cast<cudf::size_type>(working_table->num_rows()));
         partition_group_values.emplace_back();
+        partition_group_orig_values.emplace_back();
     } else {
-        cudf::table_view part_tv =
-            sorted_table->view().select(partition_col_idxs);
+        // Partition transform columns start at index n_sort
+        std::vector<cudf::size_type> part_xfrm_idxs(n_part);
+        for (cudf::size_type pi = 0; pi < n_part; pi++) {
+            part_xfrm_idxs[pi] = n_sort + pi;
+        }
+        cudf::table_view part_tv = working_table->view().select(part_xfrm_idxs);
 
-        // Keys are already sorted by sort_cols + partition_cols, so
-        // partition columns are contiguous and sorted.
+        // Keys are already sorted by sort keys + partition keys, so
+        // partition-transform columns are contiguous and sorted.
         cudf::groupby::groupby gb(part_tv, cudf::null_policy::INCLUDE,
                                   cudf::sorted::YES);
 
-        auto groups = gb.get_groups(
-            /*values=*/{}, se->stream);
+        auto groups = gb.get_groups(/*values=*/{}, se->stream);
 
         const auto& offsets = groups.offsets;
         if (offsets.size() < 2) {
@@ -309,10 +365,10 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
             partition_groups.emplace_back(offsets[gi], offsets[gi + 1]);
         }
 
-        // Gather the first row of each group from the sorted table's
-        // partition columns — guarantees column types match the input
-        // schema and avoids relying on groupby's internal key
-        // representation.
+        // Gather the first row of each group from BOTH:
+        //   - the transformed partition columns (for render_partition_value)
+        //   - the original partition columns (for identity-transform
+        //     rendering of complex types like DATE)
         std::vector<cudf::size_type> group_starts;
         group_starts.reserve(n_groups);
         for (cudf::size_type gi = 0; gi < n_groups; gi++) {
@@ -328,31 +384,74 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
                             group_starts.size() * sizeof(cudf::size_type),
                             cudaMemcpyHostToDevice, se->stream.value()));
 
-        auto gathered =
+        // Gather from transformed partition columns
+        auto gathered_xfrm =
             cudf::gather(part_tv, gather_map->view(),
                          cudf::out_of_bounds_policy::DONT_CHECK, se->stream);
 
-        // Transfer the gathered rows (one per group) to Arrow
-        std::vector<std::shared_ptr<arrow::Field>> key_fields;
-        for (int idx : partition_col_idxs) {
-            key_fields.push_back(in_schema->field(idx));
+        // Gather from original partition columns (indices offset by
+        // num_prepended)
+        std::vector<cudf::size_type> orig_part_idxs;
+        orig_part_idxs.reserve(n_part);
+        for (const auto& pf : partition_fields) {
+            orig_part_idxs.push_back(num_prepended + pf.col_idx);
         }
-        auto key_arrow_schema = arrow::schema(key_fields);
+        cudf::table_view orig_part_tv =
+            working_table->view().select(orig_part_idxs);
+        auto gathered_orig =
+            cudf::gather(orig_part_tv, gather_map->view(),
+                         cudf::out_of_bounds_policy::DONT_CHECK, se->stream);
 
-        std::shared_ptr<arrow::Table> key_arrow_table = convertGPUToArrow(
-            GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered)),
-                     key_arrow_schema, se));
-
-        int n_part_cols = static_cast<int>(partition_col_idxs.size());
-        partition_group_values.reserve(n_groups);
-        for (cudf::size_type gi = 0; gi < n_groups; gi++) {
-            std::vector<std::shared_ptr<arrow::Scalar>> vals;
-            vals.reserve(n_part_cols);
-            for (int ci = 0; ci < n_part_cols; ci++) {
-                vals.push_back(
-                    key_arrow_table->column(ci)->GetScalar(gi).ValueOrDie());
+        // Transfer both gathered sets to Arrow
+        std::vector<std::shared_ptr<arrow::Field>> xfrm_fields;
+        std::vector<std::shared_ptr<arrow::Field>> orig_fields;
+        for (const auto& pf : partition_fields) {
+            orig_fields.push_back(in_schema->field(pf.col_idx));
+            // Transformed type varies by transform — use INT32 for
+            // numeric transforms, STRING for truncate-on-string
+            if (pf.transform == "truncate" &&
+                in_schema->field(pf.col_idx)->type()->id() ==
+                    arrow::Type::STRING) {
+                xfrm_fields.push_back(arrow::field(pf.col_name, arrow::utf8()));
+            } else if (pf.transform == "bucket") {
+                xfrm_fields.push_back(
+                    arrow::field(pf.col_name, arrow::uint32()));
+            } else if (pf.transform == "day") {
+                xfrm_fields.push_back(
+                    arrow::field(pf.col_name, arrow::int64()));
+            } else if (pf.transform == "identity" || pf.transform == "void") {
+                xfrm_fields.push_back(in_schema->field(pf.col_idx));
+            } else {
+                // year, month, hour, and others produce int32
+                xfrm_fields.push_back(
+                    arrow::field(pf.col_name, arrow::int32()));
             }
-            partition_group_values.push_back(std::move(vals));
+        }
+        auto xfrm_arrow_schema = arrow::schema(xfrm_fields);
+        auto orig_arrow_schema = arrow::schema(orig_fields);
+
+        auto xfrm_arrow_table = convertGPUToArrow(
+            GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered_xfrm)),
+                     xfrm_arrow_schema, se));
+        auto orig_arrow_table = convertGPUToArrow(
+            GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered_orig)),
+                     orig_arrow_schema, se));
+
+        partition_group_values.reserve(n_groups);
+        partition_group_orig_values.reserve(n_groups);
+        for (cudf::size_type gi = 0; gi < n_groups; gi++) {
+            std::vector<std::shared_ptr<arrow::Scalar>> xfrm_vals;
+            std::vector<std::shared_ptr<arrow::Scalar>> orig_vals;
+            xfrm_vals.reserve(n_part);
+            orig_vals.reserve(n_part);
+            for (int pi = 0; pi < static_cast<int>(n_part); pi++) {
+                xfrm_vals.push_back(
+                    xfrm_arrow_table->column(pi)->GetScalar(gi).ValueOrDie());
+                orig_vals.push_back(
+                    orig_arrow_table->column(pi)->GetScalar(gi).ValueOrDie());
+            }
+            partition_group_values.push_back(std::move(xfrm_vals));
+            partition_group_orig_values.push_back(std::move(orig_vals));
         }
     }
 
@@ -387,9 +486,22 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
             continue;
         }
 
-        // Build partition directory path
-        std::string part_path =
-            build_partition_path(partition_group_values[gi]);
+        // Build partition directory path using the transformed
+        // partition values. render_partition_value handles
+        // transform-specific formatting (e.g., year→"2024").
+        std::string part_path;
+        if (n_part > 0) {
+            for (size_t pi = 0; pi < static_cast<size_t>(n_part); pi++) {
+                if (!part_path.empty()) {
+                    part_path += "/";
+                }
+                const auto& pf = partition_fields[pi];
+                std::string val_str = render_partition_value(
+                    pf.transform, pf.arg, partition_group_orig_values[gi][pi],
+                    partition_group_values[gi][pi]);
+                part_path += pf.partition_name + "=" + val_str;
+            }
+        }
 
         std::filesystem::path dir_path(table_loc);
         if (!part_path.empty()) {
@@ -422,13 +534,20 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
             rel_path = part_path + "/" + fname;
         }
 
-        // Slice sorted table to this partition group's rows
-        cudf::table_view stv = sorted_table->view();
+        // Slice working table to this partition group's rows.
+        // Strip the prepended transform columns (num_prepended) and
+        // select output columns by offsetting their indices.
+        cudf::table_view stv = working_table->view();
         std::vector<cudf::table_view> sliced = cudf::slice(stv, {start, end});
         cudf::table_view group_view = sliced[0];
 
-        // Select output columns from the sliced view
-        cudf::table_view out_tv = group_view.select(output_col_indices);
+        // Output column indices are offset by num_prepended
+        std::vector<cudf::size_type> out_idxs;
+        out_idxs.reserve(output_col_indices.size());
+        for (auto idx : output_col_indices) {
+            out_idxs.push_back(num_prepended + idx);
+        }
+        cudf::table_view out_tv = group_view.select(out_idxs);
 
         // Build metadata with iceberg.schema
         std::map<std::string, std::string> kv_meta;
@@ -737,6 +856,302 @@ void PhysicalGPUWriteIceberg::ReportMetrics(
         TimerMetric("file_write_time", metrics.file_write_time));
     metrics_out.emplace_back(
         TimerMetric("finalize_time", metrics.finalize_time));
+}
+
+// Iceberg transform kernels (GPU)
+
+std::unique_ptr<cudf::column>
+PhysicalGPUWriteIceberg::apply_iceberg_transform_gpu(
+    cudf::column_view col, const std::string& transform_name, long arg,
+    rmm::cuda_stream_view stream) {
+    cudf::size_type n = col.size();
+
+    // Helper: create a filled numeric column from a scalar value.
+    auto make_filled_col = [&](auto value) {
+        auto s = std::make_unique<cudf::numeric_scalar<decltype(value)>>(
+            value, true, stream);
+        return cudf::make_column_from_scalar(*s, n, stream);
+    };
+
+    if (transform_name == "identity") {
+        // identity transform: pass-through for most types, but DATETIME
+        // (TIMESTAMP_NANOSECONDS) must be converted to microseconds for
+        // partition correctness (two different ns values may map to the
+        // same µs).
+        if (col.type().id() == cudf::type_id::TIMESTAMP_NANOSECONDS) {
+            auto ts_i64 =
+                cudf::cast(col, cudf::data_type{cudf::type_id::INT64}, stream);
+            auto col_1000 = make_filled_col(static_cast<int64_t>(1000));
+            auto us_i64 = cudf::binary_operation(
+                ts_i64->view(), col_1000->view(), cudf::binary_operator::DIV,
+                cudf::data_type{cudf::type_id::INT64}, stream);
+            return cudf::cast(
+                us_i64->view(),
+                cudf::data_type{cudf::type_id::TIMESTAMP_MICROSECONDS}, stream);
+        }
+        return std::make_unique<cudf::column>(col);
+    }
+    if (transform_name == "void") {
+        auto null_scalar =
+            std::make_unique<cudf::numeric_scalar<int32_t>>(0, false, stream);
+        return cudf::make_column_from_scalar(*null_scalar, n, stream);
+    }
+    if (transform_name == "year") {
+        cudf::type_id tid = col.type().id();
+        if (tid == cudf::type_id::TIMESTAMP_NANOSECONDS ||
+            tid == cudf::type_id::TIMESTAMP_MICROSECONDS ||
+            tid == cudf::type_id::TIMESTAMP_MILLISECONDS ||
+            tid == cudf::type_id::TIMESTAMP_SECONDS ||
+            tid == cudf::type_id::TIMESTAMP_DAYS) {
+            auto year_col = cudf::datetime::extract_datetime_component(
+                col, cudf::datetime::datetime_component::YEAR, stream);
+            auto yr_int32 =
+                cudf::cast(year_col->view(),
+                           cudf::data_type{cudf::type_id::INT32}, stream);
+            auto col_1970 = make_filled_col(static_cast<int32_t>(1970));
+            auto result = cudf::binary_operation(
+                yr_int32->view(), col_1970->view(), cudf::binary_operator::SUB,
+                cudf::data_type{cudf::type_id::INT32}, stream);
+            return result;
+        }
+        throw std::runtime_error(
+            "apply_iceberg_transform_gpu: year transform requires "
+            "TIMESTAMP or DATE type, got " +
+            std::to_string(static_cast<int>(tid)));
+    }
+    if (transform_name == "month") {
+        cudf::type_id tid = col.type().id();
+        if (tid == cudf::type_id::TIMESTAMP_NANOSECONDS ||
+            tid == cudf::type_id::TIMESTAMP_MICROSECONDS ||
+            tid == cudf::type_id::TIMESTAMP_MILLISECONDS ||
+            tid == cudf::type_id::TIMESTAMP_SECONDS ||
+            tid == cudf::type_id::TIMESTAMP_DAYS) {
+            auto year_col = cudf::datetime::extract_datetime_component(
+                col, cudf::datetime::datetime_component::YEAR, stream);
+            auto month_col = cudf::datetime::extract_datetime_component(
+                col, cudf::datetime::datetime_component::MONTH, stream);
+            // months_since_epoch = (year - 1970) * 12 + (month - 1)
+            auto yr_int32 =
+                cudf::cast(year_col->view(),
+                           cudf::data_type{cudf::type_id::INT32}, stream);
+            auto mo_int32 =
+                cudf::cast(month_col->view(),
+                           cudf::data_type{cudf::type_id::INT32}, stream);
+            auto col_1970 = make_filled_col(static_cast<int32_t>(1970));
+            auto yr_minus = cudf::binary_operation(
+                yr_int32->view(), col_1970->view(), cudf::binary_operator::SUB,
+                cudf::data_type{cudf::type_id::INT32}, stream);
+            auto col_12 = make_filled_col(static_cast<int32_t>(12));
+            auto yr_mul = cudf::binary_operation(
+                yr_minus->view(), col_12->view(), cudf::binary_operator::MUL,
+                cudf::data_type{cudf::type_id::INT32}, stream);
+            auto col_1 = make_filled_col(static_cast<int32_t>(1));
+            auto mo_minus = cudf::binary_operation(
+                mo_int32->view(), col_1->view(), cudf::binary_operator::SUB,
+                cudf::data_type{cudf::type_id::INT32}, stream);
+            auto result = cudf::binary_operation(
+                yr_mul->view(), mo_minus->view(), cudf::binary_operator::ADD,
+                cudf::data_type{cudf::type_id::INT32}, stream);
+            return result;
+        }
+        throw std::runtime_error(
+            "apply_iceberg_transform_gpu: month transform requires "
+            "TIMESTAMP or DATE type, got " +
+            std::to_string(static_cast<int>(tid)));
+    }
+    if (transform_name == "day") {
+        cudf::type_id tid = col.type().id();
+        if (tid == cudf::type_id::TIMESTAMP_DAYS) {
+            return cudf::cast(col, cudf::data_type{cudf::type_id::INT64},
+                              stream);
+        }
+        if (tid == cudf::type_id::TIMESTAMP_NANOSECONDS) {
+            constexpr int64_t ns_per_day =
+                24LL * 60LL * 60LL * 1000LL * 1000LL * 1000LL;
+            auto col_ns = make_filled_col(ns_per_day);
+            auto ts_i64 =
+                cudf::cast(col, cudf::data_type{cudf::type_id::INT64}, stream);
+            auto result = cudf::binary_operation(
+                ts_i64->view(), col_ns->view(), cudf::binary_operator::DIV,
+                cudf::data_type{cudf::type_id::INT64}, stream);
+            return result;
+        }
+        throw std::runtime_error(
+            "apply_iceberg_transform_gpu: day transform requires "
+            "TIMESTAMP or DATE type, got " +
+            std::to_string(static_cast<int>(tid)));
+    }
+    if (transform_name == "hour") {
+        cudf::type_id tid = col.type().id();
+        if (tid == cudf::type_id::TIMESTAMP_NANOSECONDS) {
+            constexpr int64_t ns_per_hour =
+                60LL * 60LL * 1000LL * 1000LL * 1000LL;
+            auto col_ns = make_filled_col(ns_per_hour);
+            auto ts_i64 =
+                cudf::cast(col, cudf::data_type{cudf::type_id::INT64}, stream);
+            auto result_i64 = cudf::binary_operation(
+                ts_i64->view(), col_ns->view(), cudf::binary_operator::DIV,
+                cudf::data_type{cudf::type_id::INT64}, stream);
+            return cudf::cast(result_i64->view(),
+                              cudf::data_type{cudf::type_id::INT32}, stream);
+        }
+        throw std::runtime_error(
+            "apply_iceberg_transform_gpu: hour transform requires "
+            "TIMESTAMP type, got " +
+            std::to_string(static_cast<int>(tid)));
+    }
+    if (transform_name == "truncate") {
+        long W = arg;
+        if (W <= 0) {
+            throw std::runtime_error(
+                "apply_iceberg_transform_gpu: truncate W must be > 0");
+        }
+        cudf::type_id tid = col.type().id();
+        if (tid == cudf::type_id::STRING) {
+            auto start_scalar =
+                std::make_unique<cudf::numeric_scalar<int>>(0, true, stream);
+            auto stop_scalar = std::make_unique<cudf::numeric_scalar<int>>(
+                static_cast<int>(W), true, stream);
+            auto step_scalar =
+                std::make_unique<cudf::numeric_scalar<int>>(1, true, stream);
+            return cudf::strings::slice_strings(cudf::strings_column_view{col},
+                                                *start_scalar, *stop_scalar,
+                                                *step_scalar, stream);
+        }
+        if (tid == cudf::type_id::INT32 || tid == cudf::type_id::INT64) {
+            // v - (((v % W) + W) % W)
+            auto col_w = (tid == cudf::type_id::INT32)
+                             ? make_filled_col(static_cast<int32_t>(W))
+                             : make_filled_col(static_cast<int64_t>(W));
+            auto mod1 = cudf::binary_operation(col, col_w->view(),
+                                               cudf::binary_operator::MOD,
+                                               col.type(), stream);
+            auto mod2 = cudf::binary_operation(mod1->view(), col_w->view(),
+                                               cudf::binary_operator::ADD,
+                                               col.type(), stream);
+            auto mod3 = cudf::binary_operation(mod2->view(), col_w->view(),
+                                               cudf::binary_operator::MOD,
+                                               col.type(), stream);
+            auto result = cudf::binary_operation(col, mod3->view(),
+                                                 cudf::binary_operator::SUB,
+                                                 col.type(), stream);
+            return result;
+        }
+        throw std::runtime_error(
+            "apply_iceberg_transform_gpu: truncate transform requires "
+            "INT32, INT64, or STRING type, got " +
+            std::to_string(static_cast<int>(tid)));
+    }
+    if (transform_name == "bucket") {
+        long N = arg;
+        if (N <= 0) {
+            throw std::runtime_error(
+                "apply_iceberg_transform_gpu: bucket N must be > 0");
+        }
+        // MurmurHash3_x86_32 requires a table_view, so wrap column.
+        auto col_wrapper = std::make_unique<cudf::column>(col);
+        std::vector<std::unique_ptr<cudf::column>> cols;
+        cols.push_back(std::move(col_wrapper));
+        auto tmp_table = std::make_unique<cudf::table>(std::move(cols));
+        auto hash_col =
+            cudf::hashing::murmurhash3_x86_32(tmp_table->view(), 0, stream);
+        auto col_mask = make_filled_col(static_cast<uint32_t>(INT_MAX));
+        auto masked = cudf::binary_operation(
+            hash_col->view(), col_mask->view(),
+            cudf::binary_operator::BITWISE_AND,
+            cudf::data_type{cudf::type_id::UINT32}, stream);
+        auto col_n = make_filled_col(static_cast<uint32_t>(N));
+        auto result = cudf::binary_operation(
+            masked->view(), col_n->view(), cudf::binary_operator::MOD,
+            cudf::data_type{cudf::type_id::UINT32}, stream);
+        return result;
+    }
+    throw std::runtime_error(
+        "apply_iceberg_transform_gpu: unsupported transform '" +
+        transform_name + "'");
+}
+
+/**
+ * @brief Convert Arrow scalar to string for partition path rendering.
+ *
+ * Handles identity-transform cases where the Iceberg spec uses the
+ * scalar's natural rendering (e.g., dates as "YYYY-MM-DD").
+ * For non-identity transforms, uses the transformed scalar value
+ * and applies transform-specific formatting.
+ */
+std::string PhysicalGPUWriteIceberg::render_partition_value(
+    const std::string& transform_name, long arg,
+    const std::shared_ptr<arrow::Scalar>& orig_scalar,
+    const std::shared_ptr<arrow::Scalar>& transformed_scalar) {
+    if (!transformed_scalar->is_valid) {
+        return "__HIVE_DEFAULT_PARTITION__";
+    }
+    if (transform_name == "identity" || transform_name == "void") {
+        // Identity/void: render the original scalar as-is
+        // (void transforms produce all-null, which is caught above)
+        return orig_scalar->is_valid ? orig_scalar->ToString()
+                                     : "__HIVE_DEFAULT_PARTITION__";
+    }
+    if (transform_name == "bucket") {
+        return std::to_string(
+            std::static_pointer_cast<arrow::UInt32Scalar>(transformed_scalar)
+                ->value);
+    }
+    if (transform_name == "truncate") {
+        return transformed_scalar->ToString();
+    }
+    if (transform_name == "year") {
+        int32_t v =
+            std::static_pointer_cast<arrow::Int32Scalar>(transformed_scalar)
+                ->value;
+        return std::to_string(v + 1970);
+    }
+    if (transform_name == "month") {
+        int32_t v =
+            std::static_pointer_cast<arrow::Int32Scalar>(transformed_scalar)
+                ->value;
+        int32_t yr = (v / 12) + 1970;
+        int32_t mo = (v % 12) + 1;
+        // Lets use fmt instead
+        return fmt::format("{:04}-{:02}", yr, mo);
+    }
+    if (transform_name == "day") {
+        int64_t v =
+            std::static_pointer_cast<arrow::Int64Scalar>(transformed_scalar)
+                ->value;
+        // days since epoch → date string
+        // Compute year/month/day from days since 1970-01-01
+        int64_t days = v;
+        // Use the original scalar to render the date string if available
+        // (the original holds the actual date value for DATE types)
+        if (orig_scalar->is_valid &&
+            (orig_scalar->type->id() == arrow::Type::DATE32 ||
+             orig_scalar->type->id() == arrow::Type::TIMESTAMP)) {
+            // For DATE inputs, the original scalar's ToString() gives
+            // the properly formatted date.
+            return orig_scalar->ToString();
+        }
+        // Fallback for DATETIME input: render as ISO date from days since
+        // epoch.
+        // Simple approach: the original datetime scalar's ToString() works.
+        if (orig_scalar->is_valid) {
+            return orig_scalar->ToString();
+        }
+        // Absolute fallback: days value as-is
+        return std::to_string(days);
+    }
+    if (transform_name == "hour") {
+        int32_t v =
+            std::static_pointer_cast<arrow::Int32Scalar>(transformed_scalar)
+                ->value;
+        // hours since epoch: render as date string from original scalar
+        if (orig_scalar->is_valid) {
+            return orig_scalar->ToString();
+        }
+        return std::to_string(v);
+    }
+    // Unknown transform: fallback to string representation
+    return transformed_scalar->ToString();
 }
 
 // ========================================================================
