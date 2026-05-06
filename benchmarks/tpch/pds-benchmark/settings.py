@@ -12,8 +12,9 @@ IoType: TypeAlias = Literal["skip", "parquet", "feather", "csv", "duckdb"]
 class Paths(BaseSettings):
     answers: Path = Path("data/answers")
     tables: Path = Path("data/tables").absolute()
-    # BODO Change: override computed path
+    # BODO Change: override computed path, store output
     data_folder: str | None = None
+    output_dir: str | None = None
 
     timings: Path = Path("output/run")
     timings_filename: str = "timings.csv"
