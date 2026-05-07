@@ -338,9 +338,22 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
     }
 
     std::vector<std::unique_ptr<cudf::io::datasource>> sources;
+
+    // Cap the number of files given to a single chunked reader to
+    // avoid OOM when many files share the same schema group and
+    // physical schema.
+    size_t max_parts_for_reader =
+        bytes_per_part_estimate_ > 0
+            ? std::max(size_t{1}, (size_t)std::ceil(
+                                      (double)CHUNKED_READER_TOTAL_BYTES_LIMIT /
+                                      bytes_per_part_estimate_))
+            : pieces_.size() - curr_piece_idx;
+
     const PiecePhysicalSchema& curr_schema =
         piece_physical_schemas_[curr_piece_idx];
+    size_t parts_in_reader = 0;
     while (curr_piece_idx < pieces_.size() &&
+           parts_in_reader < max_parts_for_reader &&
            pieces_[curr_piece_idx].schema_group_idx == schema_group_idx &&
            piece_physical_schemas_[curr_piece_idx] == curr_schema) {
         std::string path = pieces_[curr_piece_idx].path;
@@ -353,6 +366,7 @@ void GPUIcebergRankBatchGenerator::init_next_reader(
             sources.push_back(cudf::io::datasource::create(path));
         }
         curr_piece_idx++;
+        parts_in_reader++;
     }
 
     curr_reader = std::make_unique<cudf::io::chunked_parquet_reader>(
