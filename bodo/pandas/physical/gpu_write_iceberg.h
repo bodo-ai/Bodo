@@ -207,15 +207,13 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
     /**
      * @brief Parse the Python partition spec into `PartitionField` structs.
      *
-     * The partition spec is a Python list of `(transform_name, col_name,
-     * [arg])` tuples. Column names are resolved against `schema` to produce
-     * column indices. Currently only `identity` and `void` transforms are
-     * processed; other transforms are stored but not handled during flush.
+     * The partition spec is a Python list of
+     * `(col_idx, transform_name, arg, partition_name)` tuples produced by
+     * `build_partition_sort_tuples`.
      *
      * @param schema Arrow schema providing column names.
      * @param partition_tuples_py Python list of partition spec tuples.
-     * @throws std::runtime_error if a column name is not found in the schema
-     *         or the spec is malformed.
+     * @throws std::runtime_error if the spec is malformed.
      */
     void parse_partition_spec(const std::shared_ptr<arrow::Schema>& schema,
                               PyObject* partition_tuples_py);
@@ -338,7 +336,9 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      * @brief Build a Hive-style partition directory path.
      *
      * For each partition field, appends `<col_name>=<value>`, separated by
-     * `/`. Null values produce `__HIVE_DEFAULT_PARTITION__`.
+     * `/`. Null values produce `__HIVE_DEFAULT_PARTITION__`. Uses the
+     * scalar's `ToString()` for rendering (prefer `render_partition_value`
+     * for transform-aware path building in `write_group`).
      *
      * @param partition_values Arrow scalars for this partition group's
      *                        identity, in partition-spec order.
@@ -434,7 +434,7 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      * `QueryProfileCollector`.
      *
      * Includes buffer, file, and partition-group statistics along with
-     * per-stage timers and dictionary-builder metrics (placeholder).
+     * per-stage timers.
      *
      * @param metrics_out Output vector to append metrics to.
      */
