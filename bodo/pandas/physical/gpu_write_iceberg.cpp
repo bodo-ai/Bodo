@@ -472,21 +472,15 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
 
-    // Determine which columns to include in output (exclude void columns)
+    // Determine which columns to include in output.
+    // Note: void transform columns are NOT excluded — the transform
+    // creates an all-null column for partitioning, but the original
+    // column is still written, matching the CPU writer behavior.
     std::vector<cudf::size_type> output_col_indices;
     std::vector<std::string> output_col_names;
     for (int i = 0; i < in_schema->num_fields(); i++) {
-        bool is_void_col = false;
-        for (const auto& pf : partition_fields) {
-            if (pf.col_idx == i && pf.transform == "void") {
-                is_void_col = true;
-                break;
-            }
-        }
-        if (!is_void_col) {
-            output_col_indices.push_back(i);
-            output_col_names.push_back(in_schema->field_names()[i]);
-        }
+        output_col_indices.push_back(i);
+        output_col_names.push_back(in_schema->field_names()[i]);
     }
 
     for (size_t gi = 0; gi < partition_groups.size(); gi++) {
