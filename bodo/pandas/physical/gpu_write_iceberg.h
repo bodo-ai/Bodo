@@ -97,6 +97,22 @@ struct SortField {
 };
 
 /**
+ * @brief Holds the rows and partition values for one partition group detected
+ * during flush.
+ *
+ * Produced by `detect_partition_groups` and consumed by `write_group`.
+ */
+struct PartitionGroup {
+    cudf::size_type start_row;  ///< First row index in the working table for
+                                ///< this partition group.
+    cudf::size_type end_row;    ///< One past the last row index.
+    std::vector<std::shared_ptr<arrow::Scalar>>
+        xfrm_values;  ///< Transformed partition values at the first row.
+    std::vector<std::shared_ptr<arrow::Scalar>>
+        orig_values;  ///< Original partition values at the first row.
+};
+
+/**
  * @brief Tracks per-operator metrics for `PhysicalGPUWriteIceberg`.
  *
  * Reported to `QueryProfileCollector` during `FinalizeSink`.
@@ -222,23 +238,96 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
                           PyObject* sort_tuples_py);
 
     /**
+     * @brief Concatenate all accumulated tables into one working table.
+     *
+     * Handles the single-table fast-path (avoiding a copy) and clears
+     * `accumulated_tables`.
+     *
+     * @param se Stream and event for CUDA operations.
+     * @return Concatenated cuDF table.
+     */
+    std::unique_ptr<cudf::table> concatenate_accumulated(
+        std::shared_ptr<StreamAndEvent> se);
+
+    /**
+     * @brief Apply sort and partition transforms, prepending the resulting
+     * columns to the working table.
+     *
+     * The output table has layout:
+     *   [sort_xfrm_0, ..., sort_xfrm_N, part_xfrm_0, ..., part_xfrm_M,
+     *    orig_col_0, ...]
+     *
+     * @param working_table Concatenated table (consumed, columns released).
+     * @param se Stream and event for CUDA operations.
+     * @return Table with prepended transform columns.
+     */
+    std::unique_ptr<cudf::table> prepend_transform_columns(
+        std::unique_ptr<cudf::table> working_table,
+        std::shared_ptr<StreamAndEvent> se);
+
+    /**
+     * @brief Sort the working table by sort keys then partition-transform
+     * keys.
+     *
+     * Builds sort-key indices, column orders, and null precedences from
+     * `sort_fields` and `partition_fields`. Void partition columns are
+     * skipped. Calls `cudf::sort_by_key` and replaces `working_table` in
+     * place.
+     *
+     * @param working_table Table to sort (mutated in place).
+     * @param se Stream and event for CUDA operations.
+     */
+    void sort_working_table(std::unique_ptr<cudf::table>& working_table,
+                            std::shared_ptr<StreamAndEvent> se);
+
+    /**
+     * @brief Detect partition boundaries in a sorted working table using
+     * GPU group-by.
+     *
+     * For non-partitioned tables, produces a single group covering all
+     * rows. For partitioned tables, uses `cudf::groupby(sorted::YES)` on
+     * the transformed partition columns, gathers the first-row values,
+     * and converts them to Arrow scalars.
+     *
+     * @param working_table Sorted working table (with prepended transform
+     *        columns).
+     * @param groups Output vector of partition groups.
+     * @param se Stream and event for CUDA operations.
+     */
+    void detect_partition_groups(
+        const std::unique_ptr<cudf::table>& working_table,
+        std::vector<PartitionGroup>& groups,
+        std::shared_ptr<StreamAndEvent> se);
+
+    /**
+     * @brief Write a single partition group as a Parquet file and record
+     * its metadata.
+     *
+     * Handles: partition directory path building, directory creation,
+     * slicing the working table, Parquet metadata (iceberg.schema +
+     * field IDs), the `cudf::io::write_parquet` call, per-column
+     * statistics via `compute_field_metrics_gpu`, and appending the
+     * file-info tuple to `iceberg_files_info_py`.
+     *
+     * @param working_tv Full working table view (with prepended columns).
+     * @param num_prepended Number of prepended transform columns.
+     * @param output_col_names Names of output columns.
+     * @param output_col_indices Original column indices for output.
+     * @param group Partition group to write.
+     * @param se Stream and event for CUDA operations.
+     */
+    void write_group(const cudf::table_view& working_tv,
+                     cudf::size_type num_prepended,
+                     const std::vector<std::string>& output_col_names,
+                     const std::vector<cudf::size_type>& output_col_indices,
+                     const PartitionGroup& group,
+                     std::shared_ptr<StreamAndEvent> se);
+
+    /**
      * @brief Flush all accumulated tables to Parquet files.
      *
-     * Steps:
-     * 1. Concatenate all accumulated tables into one.
-     * 2. Sort by sort_cols + partition_cols using `cudf::sort_by_key`.
-     *    Sort direction and null precedence follow the per-field
-     *    `SortField` spec; partition columns sort ascending, nulls last.
-     * 3. Detect partition boundaries on GPU via
-     *    `cudf::groupby(sorted::YES)`
-     * 4. For each partition group:
-     *    - Build the partition directory path.
-     *    - Slice the sorted table and select non-void output columns.
-     *    - Write a Parquet file via `BodoDataSink` with `iceberg.schema`
-     *      in the key-value metadata.
-     *    - Record `(file_name, record_count, file_size, *partition_values)`
-     *      in `iceberg_files_info_py`.
-     * 5. Clear the accumulation buffer.
+     * Orchestrates: concatenation, transform prepending, sorting,
+     * partition-boundary detection, and per-group file writing.
      *
      * @param se Stream and event for CUDA operations.
      * @param is_last Whether this is the final flush (pipeline done).
@@ -309,6 +398,21 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      * @return Python bytes object.
      */
     static PyObject* arrow_scalar_to_iceberg_bytes(
+        const std::shared_ptr<arrow::Scalar>& scalar);
+
+    /**
+     * @brief Convert an Arrow scalar to a Python object (new reference).
+     *
+     * Handles all Arrow types used in partition values: integers (signed
+     * and unsigned), floats, strings, booleans, DATE32, TIMESTAMP, BINARY,
+     * and DECIMAL128.
+     *
+     * @param scalar Arrow scalar.
+     * @return New Python object reference (PyLong, PyFloat, PyUnicode,
+     *         Py_True/Py_False, or Py_None).
+     * @throws std::runtime_error on unsupported types.
+     */
+    static PyObject* arrow_scalar_to_pyobject(
         const std::shared_ptr<arrow::Scalar>& scalar);
 
     /**

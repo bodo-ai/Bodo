@@ -219,11 +219,8 @@ OperatorResult PhysicalGPUWriteIceberg::ConsumeBatchGPU(
     return OperatorResult::NEED_MORE_INPUT;
 }
 
-void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
-                                           bool is_last) {
-    time_pt start_sort = start_timer();
-
-    // Concatenate all accumulated tables into one
+std::unique_ptr<cudf::table> PhysicalGPUWriteIceberg::concatenate_accumulated(
+    std::shared_ptr<StreamAndEvent> se) {
     std::unique_ptr<cudf::table> working_table;
     if (accumulated_tables.size() == 1) {
         working_table =
@@ -237,60 +234,62 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         working_table = cudf::concatenate(views, se->stream);
     }
     accumulated_tables.clear();
+    return working_table;
+}
 
-    // Apply Iceberg transforms to create transformed sort and partition
-    // columns. The transformed columns are prepended to the table:
-    //   [sort_xfrm_0, ..., sort_xfrm_N, part_xfrm_0, ..., part_xfrm_M,
-    //    orig_col_0, ...]
-    // Indices 0..(num_sort+num_part-1) are the transform keys used for
-    // sorting and partition-boundary detection. The original columns
-    // start at index (num_sort+num_part).
+std::unique_ptr<cudf::table> PhysicalGPUWriteIceberg::prepend_transform_columns(
+    std::unique_ptr<cudf::table> working_table,
+    std::shared_ptr<StreamAndEvent> se) {
     cudf::size_type n_sort = static_cast<cudf::size_type>(sort_fields.size());
     cudf::size_type n_part =
         static_cast<cudf::size_type>(partition_fields.size());
     cudf::size_type num_prepended = n_sort + n_part;
 
-    std::vector<std::unique_ptr<cudf::column>> prepended_cols;
-    if (num_prepended > 0) {
-        prepended_cols.reserve(num_prepended);
-
-        // Sort transform columns (first in prepended group)
-        for (cudf::size_type si = 0; si < n_sort; si++) {
-            const auto& sf = sort_fields[si];
-            cudf::column_view orig_col =
-                working_table->view().column(sf.col_idx);
-            auto xfrm_col = apply_iceberg_transform_gpu(orig_col, sf.transform,
-                                                        sf.arg, se->stream);
-            prepended_cols.push_back(std::move(xfrm_col));
-        }
-
-        // Partition transform columns (second in prepended group)
-        for (cudf::size_type pi = 0; pi < n_part; pi++) {
-            const auto& pf = partition_fields[pi];
-            cudf::column_view orig_col =
-                working_table->view().column(pf.col_idx);
-            auto xfrm_col = apply_iceberg_transform_gpu(orig_col, pf.transform,
-                                                        pf.arg, se->stream);
-            prepended_cols.push_back(std::move(xfrm_col));
-        }
-
-        // Build new table: prepended columns + original columns.
-        // Release columns from the working table to avoid copies.
-        auto released_cols = working_table->release();
-        std::vector<std::unique_ptr<cudf::column>> all_cols;
-        all_cols.reserve(num_prepended + released_cols.size());
-        for (auto& pc : prepended_cols) {
-            all_cols.push_back(std::move(pc));
-        }
-        for (auto& col : released_cols) {
-            all_cols.push_back(std::move(col));
-        }
-        working_table = std::make_unique<cudf::table>(std::move(all_cols));
+    if (num_prepended == 0) {
+        return working_table;
     }
 
-    // Sort by sort-transform keys first, then partition-transform keys.
-    // Exclude void transform columns (all-null) from sort keys — they
-    // don't affect ordering
+    std::vector<std::unique_ptr<cudf::column>> prepended_cols;
+    prepended_cols.reserve(num_prepended);
+
+    // Sort transform columns (first in prepended group)
+    for (cudf::size_type si = 0; si < n_sort; si++) {
+        const auto& sf = sort_fields[si];
+        cudf::column_view orig_col = working_table->view().column(sf.col_idx);
+        auto xfrm_col = apply_iceberg_transform_gpu(orig_col, sf.transform,
+                                                    sf.arg, se->stream);
+        prepended_cols.push_back(std::move(xfrm_col));
+    }
+
+    // Partition transform columns (second in prepended group)
+    for (cudf::size_type pi = 0; pi < n_part; pi++) {
+        const auto& pf = partition_fields[pi];
+        cudf::column_view orig_col = working_table->view().column(pf.col_idx);
+        auto xfrm_col = apply_iceberg_transform_gpu(orig_col, pf.transform,
+                                                    pf.arg, se->stream);
+        prepended_cols.push_back(std::move(xfrm_col));
+    }
+
+    // Build new table: prepended columns + original columns.
+    auto released_cols = working_table->release();
+    std::vector<std::unique_ptr<cudf::column>> all_cols;
+    all_cols.reserve(num_prepended + released_cols.size());
+    for (auto& pc : prepended_cols) {
+        all_cols.push_back(std::move(pc));
+    }
+    for (auto& col : released_cols) {
+        all_cols.push_back(std::move(col));
+    }
+    return std::make_unique<cudf::table>(std::move(all_cols));
+}
+
+void PhysicalGPUWriteIceberg::sort_working_table(
+    std::unique_ptr<cudf::table>& working_table,
+    std::shared_ptr<StreamAndEvent> se) {
+    cudf::size_type n_sort = static_cast<cudf::size_type>(sort_fields.size());
+    cudf::size_type n_part =
+        static_cast<cudf::size_type>(partition_fields.size());
+
     std::vector<cudf::size_type> sort_key_indices;
     std::vector<cudf::order> column_order;
     std::vector<cudf::null_order> null_precedence;
@@ -306,7 +305,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
     }
     for (cudf::size_type pi = 0; pi < n_part; pi++) {
         if (partition_fields[pi].transform == "void") {
-            continue;  // all-null, skip
+            continue;
         }
         sort_key_indices.push_back(n_sort + pi);
         column_order.push_back(cudf::order::ASCENDING);
@@ -321,431 +320,304 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
                               null_precedence, se->stream);
         working_table = std::move(sorted);
     }
+}
+
+void PhysicalGPUWriteIceberg::detect_partition_groups(
+    const std::unique_ptr<cudf::table>& working_table,
+    std::vector<PartitionGroup>& groups, std::shared_ptr<StreamAndEvent> se) {
+    cudf::size_type n_sort = static_cast<cudf::size_type>(sort_fields.size());
+    cudf::size_type n_part =
+        static_cast<cudf::size_type>(partition_fields.size());
+    cudf::size_type num_prepended = n_sort + n_part;
+
+    if (n_part == 0) {
+        groups.push_back(
+            {0,
+             static_cast<cudf::size_type>(working_table->num_rows()),
+             {},
+             {}});
+        return;
+    }
+
+    // Partition transform columns start at index n_sort
+    std::vector<cudf::size_type> part_xfrm_idxs(n_part);
+    for (cudf::size_type pi = 0; pi < n_part; pi++) {
+        part_xfrm_idxs[pi] = n_sort + pi;
+    }
+    cudf::table_view part_tv = working_table->view().select(part_xfrm_idxs);
+
+    cudf::groupby::groupby gb(part_tv, cudf::null_policy::INCLUDE,
+                              cudf::sorted::YES);
+
+    auto gb_groups = gb.get_groups(/*values=*/{}, se->stream);
+
+    const auto& offsets = gb_groups.offsets;
+    if (offsets.size() < 2) {
+        throw std::runtime_error(
+            "PhysicalGPUWriteIceberg: groupby returned fewer "
+            "than 2 offsets");
+    }
+    cudf::size_type n_groups = static_cast<cudf::size_type>(offsets.size() - 1);
+
+    // Gather the first row of each group from BOTH:
+    //   - the transformed partition columns (for render_partition_value)
+    //   - the original partition columns (for identity-transform
+    //     rendering of complex types like DATE)
+    std::vector<cudf::size_type> group_starts;
+    group_starts.reserve(n_groups);
+    for (cudf::size_type gi = 0; gi < n_groups; gi++) {
+        group_starts.push_back(static_cast<cudf::size_type>(offsets[gi]));
+    }
+    auto gather_map = cudf::make_numeric_column(
+        cudf::data_type{cudf::type_id::INT32},
+        static_cast<cudf::size_type>(group_starts.size()),
+        cudf::mask_state::UNALLOCATED, se->stream);
+    auto gather_view = gather_map->mutable_view();
+    CHECK_CUDA(cudaMemcpyAsync(gather_view.head<int32_t>(), group_starts.data(),
+                               group_starts.size() * sizeof(cudf::size_type),
+                               cudaMemcpyHostToDevice, se->stream.value()));
+
+    // Gather from transformed partition columns
+    auto gathered_xfrm =
+        cudf::gather(part_tv, gather_map->view(),
+                     cudf::out_of_bounds_policy::DONT_CHECK, se->stream);
+
+    // Gather from original partition columns
+    std::vector<cudf::size_type> orig_part_idxs;
+    orig_part_idxs.reserve(n_part);
+    for (const auto& pf : partition_fields) {
+        orig_part_idxs.push_back(num_prepended + pf.col_idx);
+    }
+    cudf::table_view orig_part_tv =
+        working_table->view().select(orig_part_idxs);
+    auto gathered_orig =
+        cudf::gather(orig_part_tv, gather_map->view(),
+                     cudf::out_of_bounds_policy::DONT_CHECK, se->stream);
+
+    // Build Arrow schemas for the gathered columns
+    std::vector<std::shared_ptr<arrow::Field>> xfrm_fields;
+    std::vector<std::shared_ptr<arrow::Field>> orig_fields;
+    for (const auto& pf : partition_fields) {
+        orig_fields.push_back(in_schema->field(pf.col_idx));
+        if (pf.transform == "truncate" &&
+            in_schema->field(pf.col_idx)->type()->id() == arrow::Type::STRING) {
+            xfrm_fields.push_back(arrow::field(pf.col_name, arrow::utf8()));
+        } else if (pf.transform == "bucket") {
+            xfrm_fields.push_back(arrow::field(pf.col_name, arrow::uint32()));
+        } else if (pf.transform == "day") {
+            xfrm_fields.push_back(arrow::field(pf.col_name, arrow::int64()));
+        } else if (pf.transform == "identity" || pf.transform == "void") {
+            xfrm_fields.push_back(in_schema->field(pf.col_idx));
+        } else {
+            // year, month, hour, and others produce int32
+            xfrm_fields.push_back(arrow::field(pf.col_name, arrow::int32()));
+        }
+    }
+    auto xfrm_arrow_schema = arrow::schema(xfrm_fields);
+    auto orig_arrow_schema = arrow::schema(orig_fields);
+
+    auto xfrm_arrow_table = convertGPUToArrow(
+        GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered_xfrm)),
+                 xfrm_arrow_schema, se));
+    auto orig_arrow_table = convertGPUToArrow(
+        GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered_orig)),
+                 orig_arrow_schema, se));
+
+    groups.reserve(n_groups);
+    for (cudf::size_type gi = 0; gi < n_groups; gi++) {
+        std::vector<std::shared_ptr<arrow::Scalar>> xfrm_vals;
+        std::vector<std::shared_ptr<arrow::Scalar>> orig_vals;
+        xfrm_vals.reserve(n_part);
+        orig_vals.reserve(n_part);
+        for (int pi = 0; pi < static_cast<int>(n_part); pi++) {
+            xfrm_vals.push_back(
+                xfrm_arrow_table->column(pi)->GetScalar(gi).ValueOrDie());
+            orig_vals.push_back(
+                orig_arrow_table->column(pi)->GetScalar(gi).ValueOrDie());
+        }
+        groups.push_back({static_cast<cudf::size_type>(offsets[gi]),
+                          static_cast<cudf::size_type>(offsets[gi + 1]),
+                          std::move(xfrm_vals), std::move(orig_vals)});
+    }
+}
+
+void PhysicalGPUWriteIceberg::write_group(
+    const cudf::table_view& working_tv, cudf::size_type num_prepended,
+    const std::vector<std::string>& output_col_names,
+    const std::vector<cudf::size_type>& output_col_indices,
+    const PartitionGroup& group, std::shared_ptr<StreamAndEvent> se) {
+    cudf::size_type start = group.start_row;
+    cudf::size_type end = group.end_row;
+    if (end <= start) {
+        return;
+    }
+
+    cudf::size_type n_part =
+        static_cast<cudf::size_type>(partition_fields.size());
+
+    // Build partition directory path
+    std::string part_path;
+    if (n_part > 0) {
+        for (size_t pi = 0; pi < static_cast<size_t>(n_part); pi++) {
+            if (!part_path.empty()) {
+                part_path += "/";
+            }
+            const auto& pf = partition_fields[pi];
+            std::string val_str = render_partition_value(pf.transform, pf.arg,
+                                                         group.orig_values[pi],
+                                                         group.xfrm_values[pi]);
+            part_path += pf.partition_name + "=" + val_str;
+        }
+    }
+
+    std::filesystem::path dir_path(table_loc);
+    if (!part_path.empty()) {
+        dir_path /= part_path;
+    }
+
+    std::string dir_path_str = fs->type_name() == "local"
+                                   ? dir_path.string()
+                                   : dir_path.generic_string();
+    if (fs->type_name() == "local") {
+        std::filesystem::create_directories(dir_path);
+    } else {
+        arrow::Status mkdir_status = fs->CreateDir(dir_path_str);
+        if (!mkdir_status.ok() && !mkdir_status.IsAlreadyExists()) {
+            CHECK_ARROW_GPU_ICEBERG(
+                mkdir_status, "PhysicalGPUWriteIceberg: CreateDir failed");
+        }
+    }
+
+    // Build file name
+    std::string fname = generate_iceberg_file_name();
+    std::filesystem::path out_path = dir_path / fname;
+
+    // Relative path from table_loc
+    std::string rel_path;
+    if (part_path.empty()) {
+        rel_path = fname;
+    } else {
+        rel_path = part_path + "/" + fname;
+    }
+
+    // Slice working table to this partition group's rows
+    std::vector<cudf::table_view> sliced =
+        cudf::slice(working_tv, {start, end});
+    cudf::table_view group_view = sliced[0];
+
+    // Output column indices are offset by num_prepended
+    std::vector<cudf::size_type> out_idxs;
+    out_idxs.reserve(output_col_indices.size());
+    for (auto idx : output_col_indices) {
+        out_idxs.push_back(num_prepended + idx);
+    }
+    cudf::table_view out_tv = group_view.select(out_idxs);
+
+    // Build metadata with iceberg.schema
+    std::map<std::string, std::string> kv_meta;
+    kv_meta["iceberg.schema"] = iceberg_schema_str;
+
+    cudf::io::table_input_metadata write_meta{out_tv};
+    for (int i = 0; i < (int)output_col_names.size(); i++) {
+        write_meta.column_metadata[i].set_name(output_col_names[i]);
+        auto field = iceberg_schema->GetFieldByName(output_col_names[i]);
+        int64_t field_id = get_iceberg_field_id(field);
+        write_meta.column_metadata[i].set_parquet_field_id(
+            static_cast<int32_t>(field_id));
+    }
+
+    // Build writer options with key-value metadata
+    BodoDataSink bodo_data_sink(fs, out_path);
+    auto sink = cudf::io::sink_info(&bodo_data_sink);
+    auto builder =
+        cudf::io::parquet_writer_options::builder(sink, out_tv)
+            .metadata(write_meta)
+            .key_value_metadata(
+                std::vector<std::map<std::string, std::string>>{kv_meta});
+    builder =
+        builder.stats_level(cudf::io::statistics_freq::STATISTICS_ROWGROUP);
+    try {
+        builder.compression(static_cast<cudf::io::compression_type>(
+            pq_compression_from_string(compression)));
+    } catch (...) {
+        throw std::runtime_error(
+            "PhysicalGPUWriteIceberg: "
+            "pq_compression_from_string failed.");
+    }
+
+    auto options = builder.build();
+    cudf::io::write_parquet(options, se->stream);
+
+    // Record file metadata
+    cudf::size_type record_count = end - start;
+    size_t file_size = bodo_data_sink.bytes_written();
+
+    // Compute per-column stats on GPU
+    PyObject* value_counts_dict = PyDict_New();
+    PyObject* null_count_dict = PyDict_New();
+    PyObject* lower_bound_dict = PyDict_New();
+    PyObject* upper_bound_dict = PyDict_New();
+    compute_field_metrics_gpu(out_tv, output_col_names, se, value_counts_dict,
+                              null_count_dict, lower_bound_dict,
+                              upper_bound_dict);
+
+    int n_part_vals = static_cast<int>(group.xfrm_values.size());
+
+    // Tuple: file_name, record_count, file_size,
+    //        value_counts_dict, null_count_dict,
+    //        lower_bound_dict,  upper_bound_dict,
+    //        *partition_values
+    PyObject* file_info_tuple = PyTuple_New(7 + n_part_vals);
+    PyTuple_SetItem(file_info_tuple, 0, PyUnicode_FromString(rel_path.c_str()));
+    PyTuple_SetItem(file_info_tuple, 1, PyLong_FromLongLong(record_count));
+    PyTuple_SetItem(file_info_tuple, 2, PyLong_FromLongLong(file_size));
+    PyTuple_SetItem(file_info_tuple, 3, value_counts_dict);
+    PyTuple_SetItem(file_info_tuple, 4, null_count_dict);
+    PyTuple_SetItem(file_info_tuple, 5, lower_bound_dict);
+    PyTuple_SetItem(file_info_tuple, 6, upper_bound_dict);
+
+    for (int pi = 0; pi < n_part_vals; pi++) {
+        PyObject* py_val = arrow_scalar_to_pyobject(group.xfrm_values[pi]);
+        PyTuple_SetItem(file_info_tuple, 7 + pi, py_val);
+    }
+
+    PyList_Append(iceberg_files_info_py, file_info_tuple);
+
+    metrics.n_files_written++;
+}
+
+void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
+                                           bool is_last) {
+    time_pt start_sort = start_timer();
+
+    auto working_table = concatenate_accumulated(se);
+    working_table = prepend_transform_columns(std::move(working_table), se);
+    sort_working_table(working_table, se);
 
     metrics.sort_time += end_timer(start_sort);
     time_pt start_file_write = start_timer();
 
-    // Detect partition boundaries on GPU using groupby on the already-sorted
-    // partition-transform columns. These are at indices [n_sort, num_prepended)
-    // in the working table.
-    std::vector<std::pair<cudf::size_type, cudf::size_type>> partition_groups;
-    std::vector<std::vector<std::shared_ptr<arrow::Scalar>>>
-        partition_group_values;
-    std::vector<std::vector<std::shared_ptr<arrow::Scalar>>>
-        partition_group_orig_values;
+    cudf::size_type n_sort = static_cast<cudf::size_type>(sort_fields.size());
+    cudf::size_type n_part =
+        static_cast<cudf::size_type>(partition_fields.size());
+    cudf::size_type num_prepended = n_sort + n_part;
 
-    if (n_part == 0) {
-        partition_groups.emplace_back(
-            0, static_cast<cudf::size_type>(working_table->num_rows()));
-        partition_group_values.emplace_back();
-        partition_group_orig_values.emplace_back();
-    } else {
-        // Partition transform columns start at index n_sort
-        std::vector<cudf::size_type> part_xfrm_idxs(n_part);
-        for (cudf::size_type pi = 0; pi < n_part; pi++) {
-            part_xfrm_idxs[pi] = n_sort + pi;
-        }
-        cudf::table_view part_tv = working_table->view().select(part_xfrm_idxs);
-
-        // Keys are already sorted by sort keys + partition keys, so
-        // partition-transform columns are contiguous and sorted.
-        cudf::groupby::groupby gb(part_tv, cudf::null_policy::INCLUDE,
-                                  cudf::sorted::YES);
-
-        auto groups = gb.get_groups(/*values=*/{}, se->stream);
-
-        const auto& offsets = groups.offsets;
-        if (offsets.size() < 2) {
-            throw std::runtime_error(
-                "PhysicalGPUWriteIceberg: groupby returned fewer "
-                "than 2 offsets");
-        }
-        cudf::size_type n_groups =
-            static_cast<cudf::size_type>(offsets.size() - 1);
-
-        // Build partition_groups from offsets
-        partition_groups.reserve(n_groups);
-        for (cudf::size_type gi = 0; gi < n_groups; gi++) {
-            partition_groups.emplace_back(offsets[gi], offsets[gi + 1]);
-        }
-
-        // Gather the first row of each group from BOTH:
-        //   - the transformed partition columns (for render_partition_value)
-        //   - the original partition columns (for identity-transform
-        //     rendering of complex types like DATE)
-        std::vector<cudf::size_type> group_starts;
-        group_starts.reserve(n_groups);
-        for (cudf::size_type gi = 0; gi < n_groups; gi++) {
-            group_starts.push_back(static_cast<cudf::size_type>(offsets[gi]));
-        }
-        auto gather_map = cudf::make_numeric_column(
-            cudf::data_type{cudf::type_id::INT32},
-            static_cast<cudf::size_type>(group_starts.size()),
-            cudf::mask_state::UNALLOCATED, se->stream);
-        auto gather_view = gather_map->mutable_view();
-        CHECK_CUDA(
-            cudaMemcpyAsync(gather_view.head<int32_t>(), group_starts.data(),
-                            group_starts.size() * sizeof(cudf::size_type),
-                            cudaMemcpyHostToDevice, se->stream.value()));
-
-        // Gather from transformed partition columns
-        auto gathered_xfrm =
-            cudf::gather(part_tv, gather_map->view(),
-                         cudf::out_of_bounds_policy::DONT_CHECK, se->stream);
-
-        // Gather from original partition columns (indices offset by
-        // num_prepended)
-        std::vector<cudf::size_type> orig_part_idxs;
-        orig_part_idxs.reserve(n_part);
-        for (const auto& pf : partition_fields) {
-            orig_part_idxs.push_back(num_prepended + pf.col_idx);
-        }
-        cudf::table_view orig_part_tv =
-            working_table->view().select(orig_part_idxs);
-        auto gathered_orig =
-            cudf::gather(orig_part_tv, gather_map->view(),
-                         cudf::out_of_bounds_policy::DONT_CHECK, se->stream);
-
-        // Transfer both gathered sets to Arrow
-        std::vector<std::shared_ptr<arrow::Field>> xfrm_fields;
-        std::vector<std::shared_ptr<arrow::Field>> orig_fields;
-        for (const auto& pf : partition_fields) {
-            orig_fields.push_back(in_schema->field(pf.col_idx));
-            // Transformed type varies by transform — use INT32 for
-            // numeric transforms, STRING for truncate-on-string
-            if (pf.transform == "truncate" &&
-                in_schema->field(pf.col_idx)->type()->id() ==
-                    arrow::Type::STRING) {
-                xfrm_fields.push_back(arrow::field(pf.col_name, arrow::utf8()));
-            } else if (pf.transform == "bucket") {
-                xfrm_fields.push_back(
-                    arrow::field(pf.col_name, arrow::uint32()));
-            } else if (pf.transform == "day") {
-                xfrm_fields.push_back(
-                    arrow::field(pf.col_name, arrow::int64()));
-            } else if (pf.transform == "identity" || pf.transform == "void") {
-                xfrm_fields.push_back(in_schema->field(pf.col_idx));
-            } else {
-                // year, month, hour, and others produce int32
-                xfrm_fields.push_back(
-                    arrow::field(pf.col_name, arrow::int32()));
-            }
-        }
-        auto xfrm_arrow_schema = arrow::schema(xfrm_fields);
-        auto orig_arrow_schema = arrow::schema(orig_fields);
-
-        auto xfrm_arrow_table = convertGPUToArrow(
-            GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered_xfrm)),
-                     xfrm_arrow_schema, se));
-        auto orig_arrow_table = convertGPUToArrow(
-            GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered_orig)),
-                     orig_arrow_schema, se));
-
-        partition_group_values.reserve(n_groups);
-        partition_group_orig_values.reserve(n_groups);
-        for (cudf::size_type gi = 0; gi < n_groups; gi++) {
-            std::vector<std::shared_ptr<arrow::Scalar>> xfrm_vals;
-            std::vector<std::shared_ptr<arrow::Scalar>> orig_vals;
-            xfrm_vals.reserve(n_part);
-            orig_vals.reserve(n_part);
-            for (int pi = 0; pi < static_cast<int>(n_part); pi++) {
-                xfrm_vals.push_back(
-                    xfrm_arrow_table->column(pi)->GetScalar(gi).ValueOrDie());
-                orig_vals.push_back(
-                    orig_arrow_table->column(pi)->GetScalar(gi).ValueOrDie());
-            }
-            partition_group_values.push_back(std::move(xfrm_vals));
-            partition_group_orig_values.push_back(std::move(orig_vals));
-        }
-    }
-
-    metrics.n_partition_groups +=
-        static_cast<MetricBase::StatValue>(partition_groups.size());
-
-    int myrank = 0;
-    int num_ranks = 1;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-
-    // Determine which columns to include in output.
-    std::vector<cudf::size_type> output_col_indices;
     std::vector<std::string> output_col_names;
+    std::vector<cudf::size_type> output_col_indices;
     for (int i = 0; i < in_schema->num_fields(); i++) {
         output_col_indices.push_back(i);
         output_col_names.push_back(in_schema->field_names()[i]);
     }
 
-    for (size_t gi = 0; gi < partition_groups.size(); gi++) {
-        auto [start, end] = partition_groups[gi];
-        if (end <= start) {
-            continue;
-        }
+    std::vector<PartitionGroup> groups;
+    detect_partition_groups(working_table, groups, se);
 
-        // Build partition directory path using the transformed
-        // partition values. render_partition_value handles
-        // transform-specific formatting (e.g., year→"2024").
-        std::string part_path;
-        if (n_part > 0) {
-            for (size_t pi = 0; pi < static_cast<size_t>(n_part); pi++) {
-                if (!part_path.empty()) {
-                    part_path += "/";
-                }
-                const auto& pf = partition_fields[pi];
-                std::string val_str = render_partition_value(
-                    pf.transform, pf.arg, partition_group_orig_values[gi][pi],
-                    partition_group_values[gi][pi]);
-                part_path += pf.partition_name + "=" + val_str;
-            }
-        }
+    metrics.n_partition_groups +=
+        static_cast<MetricBase::StatValue>(groups.size());
 
-        std::filesystem::path dir_path(table_loc);
-        if (!part_path.empty()) {
-            dir_path /= part_path;
-        }
-
-        std::string dir_path_str = fs->type_name() == "local"
-                                       ? dir_path.string()
-                                       : dir_path.generic_string();
-        if (fs->type_name() == "local") {
-            std::filesystem::create_directories(dir_path);
-        } else {
-            // S3 / HDFS create parent dirs automatically when writing.
-            arrow::Status mkdir_status = fs->CreateDir(dir_path_str);
-            if (!mkdir_status.ok() && !mkdir_status.IsAlreadyExists()) {
-                CHECK_ARROW_GPU_ICEBERG(
-                    mkdir_status, "PhysicalGPUWriteIceberg: CreateDir failed");
-            }
-        }
-
-        // Build file name
-        std::string fname = generate_iceberg_file_name();
-        std::filesystem::path out_path = dir_path / fname;
-
-        // Relative path from table_loc (for the file-info tuple).
-        std::string rel_path;
-        if (part_path.empty()) {
-            rel_path = fname;
-        } else {
-            rel_path = part_path + "/" + fname;
-        }
-
-        // Slice working table to this partition group's rows.
-        // Strip the prepended transform columns (num_prepended) and
-        // select output columns by offsetting their indices.
-        cudf::table_view stv = working_table->view();
-        std::vector<cudf::table_view> sliced = cudf::slice(stv, {start, end});
-        cudf::table_view group_view = sliced[0];
-
-        // Output column indices are offset by num_prepended
-        std::vector<cudf::size_type> out_idxs;
-        out_idxs.reserve(output_col_indices.size());
-        for (auto idx : output_col_indices) {
-            out_idxs.push_back(num_prepended + idx);
-        }
-        cudf::table_view out_tv = group_view.select(out_idxs);
-
-        // Build metadata with iceberg.schema
-        std::map<std::string, std::string> kv_meta;
-        kv_meta["iceberg.schema"] = iceberg_schema_str;
-
-        cudf::io::table_input_metadata write_meta{out_tv};
-        for (int i = 0; i < (int)output_col_names.size(); i++) {
-            write_meta.column_metadata[i].set_name(output_col_names[i]);
-            auto field = iceberg_schema->GetFieldByName(output_col_names[i]);
-            int64_t field_id = get_iceberg_field_id(field);
-            write_meta.column_metadata[i].set_parquet_field_id(
-                static_cast<int32_t>(field_id));
-        }
-
-        // Build writer options with key-value metadata
-        BodoDataSink bodo_data_sink(fs, out_path);
-        auto sink = cudf::io::sink_info(&bodo_data_sink);
-        auto builder =
-            cudf::io::parquet_writer_options::builder(sink, out_tv)
-                .metadata(write_meta)
-                .key_value_metadata(
-                    std::vector<std::map<std::string, std::string>>{kv_meta});
-        builder =
-            builder.stats_level(cudf::io::statistics_freq::STATISTICS_ROWGROUP);
-        try {
-            builder.compression(static_cast<cudf::io::compression_type>(
-                pq_compression_from_string(compression)));
-        } catch (...) {
-            throw std::runtime_error(
-                "PhysicalGPUWriteIceberg: "
-                "pq_compression_from_string failed.");
-        }
-
-        auto options = builder.build();
-        cudf::io::write_parquet(options, se->stream);
-
-        // Record file metadata
-        cudf::size_type record_count = end - start;
-        size_t file_size = bodo_data_sink.bytes_written();
-
-        std::string out_path_str = fs->type_name() == "local"
-                                       ? out_path.string()
-                                       : out_path.generic_string();
-
-        // Compute per-column stats on GPU via cudf::minmax.
-        PyObject* value_counts_dict = PyDict_New();
-        PyObject* null_count_dict = PyDict_New();
-        PyObject* lower_bound_dict = PyDict_New();
-        PyObject* upper_bound_dict = PyDict_New();
-        compute_field_metrics_gpu(out_tv, output_col_names, se,
-                                  value_counts_dict, null_count_dict,
-                                  lower_bound_dict, upper_bound_dict);
-
-        auto& partition_vals = partition_group_values[gi];
-        int n_part_vals = static_cast<int>(partition_vals.size());
-
-        // Tuple: file_name, record_count, file_size,
-        //        value_counts_dict, null_count_dict,
-        //        lower_bound_dict,  upper_bound_dict,
-        //        *partition_values
-        PyObject* file_info_tuple = PyTuple_New(7 + n_part_vals);
-        PyTuple_SetItem(file_info_tuple, 0,
-                        PyUnicode_FromString(rel_path.c_str()));
-        PyTuple_SetItem(file_info_tuple, 1, PyLong_FromLongLong(record_count));
-        PyTuple_SetItem(file_info_tuple, 2, PyLong_FromLongLong(file_size));
-        PyTuple_SetItem(file_info_tuple, 3, value_counts_dict);
-        PyTuple_SetItem(file_info_tuple, 4, null_count_dict);
-        PyTuple_SetItem(file_info_tuple, 5, lower_bound_dict);
-        PyTuple_SetItem(file_info_tuple, 6, upper_bound_dict);
-
-        for (int pi = 0; pi < n_part_vals; pi++) {
-            std::shared_ptr<arrow::Scalar> scalar = partition_vals[pi];
-            PyObject* py_val = nullptr;
-            if (!scalar->is_valid) {
-                py_val = Py_None;
-                Py_INCREF(py_val);
-            } else {
-                switch (scalar->type->id()) {
-                    case arrow::Type::INT8:
-                        py_val = PyLong_FromLong(
-                            std::static_pointer_cast<arrow::Int8Scalar>(scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::INT16:
-                        py_val = PyLong_FromLong(
-                            std::static_pointer_cast<arrow::Int16Scalar>(scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::INT32:
-                        py_val = PyLong_FromLong(
-                            std::static_pointer_cast<arrow::Int32Scalar>(scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::INT64:
-                        py_val = PyLong_FromLongLong(
-                            std::static_pointer_cast<arrow::Int64Scalar>(scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::UINT8:
-                        py_val = PyLong_FromUnsignedLong(
-                            std::static_pointer_cast<arrow::UInt8Scalar>(scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::UINT16:
-                        py_val = PyLong_FromUnsignedLong(
-                            std::static_pointer_cast<arrow::UInt16Scalar>(
-                                scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::UINT32:
-                        py_val = PyLong_FromUnsignedLong(
-                            std::static_pointer_cast<arrow::UInt32Scalar>(
-                                scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::UINT64:
-                        py_val = PyLong_FromUnsignedLongLong(
-                            std::static_pointer_cast<arrow::UInt64Scalar>(
-                                scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::FLOAT:
-                        py_val = PyFloat_FromDouble(
-                            std::static_pointer_cast<arrow::FloatScalar>(scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::DOUBLE:
-                        py_val = PyFloat_FromDouble(
-                            std::static_pointer_cast<arrow::DoubleScalar>(
-                                scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::STRING:
-                        py_val = PyUnicode_FromString(
-                            std::static_pointer_cast<arrow::StringScalar>(
-                                scalar)
-                                ->value->ToString()
-                                .c_str());
-                        break;
-                    case arrow::Type::BOOL:
-                        py_val = std::static_pointer_cast<arrow::BooleanScalar>(
-                                     scalar)
-                                         ->value
-                                     ? Py_True
-                                     : Py_False;
-                        Py_INCREF(py_val);
-                        break;
-                    case arrow::Type::DATE32:
-                        py_val = PyLong_FromLong(
-                            std::static_pointer_cast<arrow::Date32Scalar>(
-                                scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::TIMESTAMP:
-                        py_val = PyLong_FromLongLong(
-                            std::static_pointer_cast<arrow::TimestampScalar>(
-                                scalar)
-                                ->value);
-                        break;
-                    case arrow::Type::LARGE_STRING: {
-                        auto s =
-                            std::static_pointer_cast<arrow::LargeStringScalar>(
-                                scalar);
-                        py_val =
-                            PyUnicode_FromString(s->value->ToString().c_str());
-                        break;
-                    }
-                    case arrow::Type::BINARY: {
-                        auto b = std::static_pointer_cast<arrow::BinaryScalar>(
-                            scalar);
-                        py_val = PyUnicode_FromStringAndSize(
-                            reinterpret_cast<const char*>(b->value->data()),
-                            static_cast<Py_ssize_t>(b->value->size()));
-                        break;
-                    }
-                    case arrow::Type::LARGE_BINARY: {
-                        auto b =
-                            std::static_pointer_cast<arrow::LargeBinaryScalar>(
-                                scalar);
-                        py_val = PyUnicode_FromStringAndSize(
-                            reinterpret_cast<const char*>(b->value->data()),
-                            static_cast<Py_ssize_t>(b->value->size()));
-                        break;
-                    }
-                    case arrow::Type::DECIMAL128: {
-                        py_val =
-                            PyUnicode_FromString(scalar->ToString().c_str());
-                        break;
-                    }
-                    default:
-                        throw std::runtime_error(
-                            "PhysicalGPUWriteIceberg: unsupported "
-                            "partition value type: " +
-                            scalar->type->ToString() +
-                            " (name=" + scalar->type->name() + ")");
-                }
-            }
-            PyTuple_SetItem(file_info_tuple, 7 + pi, py_val);
-        }
-
-        PyList_Append(iceberg_files_info_py, file_info_tuple);
-
-        metrics.n_files_written++;
+    for (const auto& g : groups) {
+        write_group(working_table->view(), num_prepended, output_col_names,
+                    output_col_indices, g, se);
     }
 
     metrics.file_write_time += end_timer(start_file_write);
@@ -1226,6 +1098,90 @@ PyObject* PhysicalGPUWriteIceberg::arrow_scalar_to_iceberg_bytes(
     }
 }
 
+PyObject* PhysicalGPUWriteIceberg::arrow_scalar_to_pyobject(
+    const std::shared_ptr<arrow::Scalar>& scalar) {
+    if (!scalar->is_valid) {
+        Py_RETURN_NONE;
+    }
+    switch (scalar->type->id()) {
+        case arrow::Type::INT8:
+            return PyLong_FromLong(
+                std::static_pointer_cast<arrow::Int8Scalar>(scalar)->value);
+        case arrow::Type::INT16:
+            return PyLong_FromLong(
+                std::static_pointer_cast<arrow::Int16Scalar>(scalar)->value);
+        case arrow::Type::INT32:
+            return PyLong_FromLong(
+                std::static_pointer_cast<arrow::Int32Scalar>(scalar)->value);
+        case arrow::Type::INT64:
+            return PyLong_FromLongLong(
+                std::static_pointer_cast<arrow::Int64Scalar>(scalar)->value);
+        case arrow::Type::UINT8:
+            return PyLong_FromUnsignedLong(
+                std::static_pointer_cast<arrow::UInt8Scalar>(scalar)->value);
+        case arrow::Type::UINT16:
+            return PyLong_FromUnsignedLong(
+                std::static_pointer_cast<arrow::UInt16Scalar>(scalar)->value);
+        case arrow::Type::UINT32:
+            return PyLong_FromUnsignedLong(
+                std::static_pointer_cast<arrow::UInt32Scalar>(scalar)->value);
+        case arrow::Type::UINT64:
+            return PyLong_FromUnsignedLongLong(
+                std::static_pointer_cast<arrow::UInt64Scalar>(scalar)->value);
+        case arrow::Type::FLOAT:
+            return PyFloat_FromDouble(
+                std::static_pointer_cast<arrow::FloatScalar>(scalar)->value);
+        case arrow::Type::DOUBLE:
+            return PyFloat_FromDouble(
+                std::static_pointer_cast<arrow::DoubleScalar>(scalar)->value);
+        case arrow::Type::STRING: {
+            return PyUnicode_FromString(
+                std::static_pointer_cast<arrow::StringScalar>(scalar)
+                    ->value->ToString()
+                    .c_str());
+        }
+        case arrow::Type::BOOL: {
+            PyObject* res =
+                std::static_pointer_cast<arrow::BooleanScalar>(scalar)->value
+                    ? Py_True
+                    : Py_False;
+            Py_INCREF(res);
+            return res;
+        }
+        case arrow::Type::DATE32:
+            return PyLong_FromLong(
+                std::static_pointer_cast<arrow::Date32Scalar>(scalar)->value);
+        case arrow::Type::TIMESTAMP:
+            return PyLong_FromLongLong(
+                std::static_pointer_cast<arrow::TimestampScalar>(scalar)
+                    ->value);
+        case arrow::Type::LARGE_STRING: {
+            auto s = std::static_pointer_cast<arrow::LargeStringScalar>(scalar);
+            return PyUnicode_FromString(s->value->ToString().c_str());
+        }
+        case arrow::Type::BINARY: {
+            auto b = std::static_pointer_cast<arrow::BinaryScalar>(scalar);
+            return PyUnicode_FromStringAndSize(
+                reinterpret_cast<const char*>(b->value->data()),
+                static_cast<Py_ssize_t>(b->value->size()));
+        }
+        case arrow::Type::LARGE_BINARY: {
+            auto b = std::static_pointer_cast<arrow::LargeBinaryScalar>(scalar);
+            return PyUnicode_FromStringAndSize(
+                reinterpret_cast<const char*>(b->value->data()),
+                static_cast<Py_ssize_t>(b->value->size()));
+        }
+        case arrow::Type::DECIMAL128:
+            return PyUnicode_FromString(scalar->ToString().c_str());
+        default:
+            throw std::runtime_error(
+                "PhysicalGPUWriteIceberg: unsupported "
+                "partition value type: " +
+                scalar->type->ToString() + " (name=" + scalar->type->name() +
+                ")");
+    }
+}
+
 void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
     cudf::table_view group_view,
     const std::vector<std::string>& output_col_names,
@@ -1290,8 +1246,9 @@ void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
     std::vector<size_t> bound_indices;
 
     for (size_t i = 0; i < output_col_names.size(); i++) {
-        if (!has_bounds[i])
+        if (!has_bounds[i]) {
             continue;
+        }
         min_cols.push_back(cudf::make_column_from_scalar(*min_scalars[i], 1));
         max_cols.push_back(cudf::make_column_from_scalar(*max_scalars[i], 1));
         auto field = iceberg_schema->GetFieldByName(output_col_names[i]);
