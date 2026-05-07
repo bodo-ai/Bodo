@@ -2012,6 +2012,7 @@ def test_mixed_nested_agg_keys(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_groupby_agg_on_key_col(spark_info, memory_leak_check):
     """
     Test Groupby cases where the key columns are also the data columns.

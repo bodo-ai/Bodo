@@ -436,6 +436,9 @@ def java_agg_to_python_agg(ctx, java_plan):
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
         if func_name == "size":
+            assert len(arg_cols) in [0, 1], (
+                "Only zero or single-argument size aggregations are supported"
+            )
             out_type = pa.int64()
         else:
             assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
@@ -477,7 +480,7 @@ def _agg_to_func_name(func):
     if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
 
-    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 0:
+    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) <= 1:
         return "size"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
