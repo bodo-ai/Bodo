@@ -568,15 +568,11 @@ int get_cluster_cuda_device_count() {
                 nvmlShutdown();
             }
             local_device_count = static_cast<int>(nvml_device_count);
-            std::cout << "todd get_cluster_cuda_device_count "
-                      << local_device_count << std::endl;
         }
 
         CHECK_MPI(MPI_Allreduce(&local_device_count, &device_count, 1, MPI_INT,
                                 MPI_SUM, MPI_COMM_WORLD),
                   "get_cluster_cuda_device_count: MPI error on MPI_Allreduce:");
-        std::cout << "todd get_cluster_cuda_device_count " << device_count
-                  << std::endl;
     });
 
     return device_count;
