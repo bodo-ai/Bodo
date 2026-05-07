@@ -67,15 +67,17 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
             std::vector<std::string>({}), std::vector<std::string>({}));
         arrow_output_schema = this->output_schema->ToArrowSchema();
 
-        expression = buildPhysicalGPUExprTree(exprs[0], col_ref_map);
-        for (size_t i = 1; i < exprs.size(); ++i) {
-            std::shared_ptr<PhysicalGPUExpression> subExprTree =
-                buildPhysicalGPUExprTree(exprs[i], col_ref_map);
-            expression = std::static_pointer_cast<PhysicalGPUExpression>(
-                std::make_shared<PhysicalGPUConjunctionExpression>(
-                    expression, subExprTree,
-                    duckdb::ExpressionType::CONJUNCTION_AND,
-                    exprs[i]->return_type));
+        if (is_gpu_rank()) {
+            expression = buildPhysicalGPUExprTree(exprs[0], col_ref_map);
+            for (size_t i = 1; i < exprs.size(); ++i) {
+                std::shared_ptr<PhysicalGPUExpression> subExprTree =
+                    buildPhysicalGPUExprTree(exprs[i], col_ref_map);
+                expression = std::static_pointer_cast<PhysicalGPUExpression>(
+                    std::make_shared<PhysicalGPUConjunctionExpression>(
+                        expression, subExprTree,
+                        duckdb::ExpressionType::CONJUNCTION_AND,
+                        exprs[i]->return_type));
+            }
         }
     }
 
