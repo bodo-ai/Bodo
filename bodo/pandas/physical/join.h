@@ -624,9 +624,10 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
         out_table->column_names = this->output_schema->column_names;
         return {out_table,
-                is_last ? OperatorResult::FINISHED
-                        : (request_input ? OperatorResult::NEED_MORE_INPUT
-                                         : OperatorResult::HAVE_MORE_OUTPUT)};
+                out_is_last
+                    ? OperatorResult::FINISHED
+                    : (request_input ? OperatorResult::NEED_MORE_INPUT
+                                     : OperatorResult::HAVE_MORE_OUTPUT)};
     }
 
     /**
