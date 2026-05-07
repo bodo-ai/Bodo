@@ -830,8 +830,171 @@ def test_write_multi_sort_transform():
         _check_write_read(df, PartitionSpec(), sort_order, tmp)
 
 
+# ---------------------------------------------------------------------------
+# Sort-specific tests: each transform on its native column type, with
+# varying parameters, direction/null combos, and multi-column mixes.
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.gpu
-def test_read_s3_tables_location():
+@pytest.mark.parametrize("width", [1, 3, 10])
+def test_write_sort_truncate_string(width):
+    """Sort by truncate transform on a string column at different widths."""
+    df = _make_transform_write_df(30)
+    sort_order = SortOrder(
+        SortField(
+            source_id=2,
+            transform=TruncateTransform(width),
+            direction=SortDirection.ASC,
+            null_order=NullOrder.NULLS_LAST,
+        )
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        _check_write_read(df, PartitionSpec(), sort_order, tmp)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("width", [1, 5, 100])
+def test_write_sort_truncate_int(width):
+    """Sort by truncate transform on an int column at different widths."""
+    df = _make_transform_write_df(30)
+    sort_order = SortOrder(
+        SortField(
+            source_id=1,
+            transform=TruncateTransform(width),
+            direction=SortDirection.ASC,
+            null_order=NullOrder.NULLS_LAST,
+        )
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        _check_write_read(df, PartitionSpec(), sort_order, tmp)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("n_buckets", [2, 8, 16])
+def test_write_sort_bucket(n_buckets):
+    """Sort by bucket transform with different bucket counts."""
+    df = _make_transform_write_df(30)
+    sort_order = SortOrder(
+        SortField(
+            source_id=1,
+            transform=BucketTransform(n_buckets),
+            direction=SortDirection.ASC,
+            null_order=NullOrder.NULLS_LAST,
+        )
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        _check_write_read(df, PartitionSpec(), sort_order, tmp)
+
+
+@pytest.mark.gpu
+def test_write_sort_identity_date():
+    """Sort by identity on a date column (date sorting, not epoch-derived)."""
+    df = _make_transform_write_df(20)
+    sort_order = SortOrder(
+        SortField(
+            source_id=3,
+            transform=IdentityTransform(),
+            direction=SortDirection.ASC,
+            null_order=NullOrder.NULLS_LAST,
+        )
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        _check_write_read(df, PartitionSpec(), sort_order, tmp)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "sort_dir, null_order",
+    [
+        (SortDirection.ASC, NullOrder.NULLS_LAST),
+        (SortDirection.ASC, NullOrder.NULLS_FIRST),
+        (SortDirection.DESC, NullOrder.NULLS_LAST),
+        (SortDirection.DESC, NullOrder.NULLS_FIRST),
+    ],
+)
+def test_write_sort_void(sort_dir, null_order):
+    """Sort by void transform — column is all-null, sort is a no-op."""
+    df = _make_transform_write_df(20)
+    sort_order = SortOrder(
+        SortField(
+            source_id=1,
+            transform=VoidTransform(),
+            direction=sort_dir,
+            null_order=null_order,
+        )
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        _check_write_read(df, PartitionSpec(), sort_order, tmp)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "sort_dir, null_order",
+    [
+        (SortDirection.ASC, NullOrder.NULLS_LAST),
+        (SortDirection.DESC, NullOrder.NULLS_LAST),
+    ],
+)
+@pytest.mark.parametrize(
+    "temporal_xfrm", [YearTransform(), MonthTransform(), DayTransform()]
+)
+def test_write_sort_temporal_dirs(sort_dir, null_order, temporal_xfrm):
+    """Sort by year/month/day transforms with direction combos on native
+    date column."""
+    df = _make_transform_write_df(30)
+    sort_order = SortOrder(
+        SortField(
+            source_id=3,
+            transform=temporal_xfrm,
+            direction=sort_dir,
+            null_order=null_order,
+        )
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        _check_write_read(df, PartitionSpec(), sort_order, tmp)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "sort_dir, null_order",
+    [
+        pytest.param(
+            SortDirection.ASC,
+            NullOrder.NULLS_LAST,
+        ),
+        pytest.param(
+            SortDirection.DESC,
+            NullOrder.NULLS_FIRST,
+        ),
+    ],
+)
+def test_write_sort_multi_type(sort_dir, null_order):
+    """Multiple sort transforms on different column types: bucket on int,
+    year on date, truncate on string."""
+    df = _make_transform_write_df(20)
+    sort_order = SortOrder(
+        SortField(
+            source_id=1,
+            transform=BucketTransform(4),
+            direction=SortDirection.ASC,
+            null_order=NullOrder.NULLS_LAST,
+        ),
+        SortField(
+            source_id=3,
+            transform=YearTransform(),
+            direction=sort_dir,
+            null_order=null_order,
+        ),
+        SortField(
+            source_id=2,
+            transform=TruncateTransform(2),
+            direction=SortDirection.ASC,
+            null_order=NullOrder.NULLS_LAST,
+        ),
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        _check_write_read(df, PartitionSpec(), sort_order, tmp)
     from bodo.io.iceberg.catalog.s3_tables import (
         S3TABLES_REGION,
         S3TABLES_TABLE_BUCKET_ARN,
