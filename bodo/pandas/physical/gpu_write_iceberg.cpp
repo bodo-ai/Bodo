@@ -274,15 +274,15 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
             prepended_cols.push_back(std::move(xfrm_col));
         }
 
-        // Build new table: prepended columns + original columns
+        // Build new table: prepended columns + original columns.
+        // Release columns from the working table to avoid copies.
+        auto released_cols = working_table->release();
         std::vector<std::unique_ptr<cudf::column>> all_cols;
-        all_cols.reserve(num_prepended + working_table->num_columns());
+        all_cols.reserve(num_prepended + released_cols.size());
         for (auto& pc : prepended_cols) {
             all_cols.push_back(std::move(pc));
         }
-        for (cudf::size_type ci = 0; ci < working_table->num_columns(); ci++) {
-            auto col = std::make_unique<cudf::column>(
-                working_table->view().column(ci));
+        for (auto& col : released_cols) {
             all_cols.push_back(std::move(col));
         }
         working_table = std::make_unique<cudf::table>(std::move(all_cols));
@@ -290,32 +290,41 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
 
     // Build sort keys from the prepended columns (all of them).
     // Sort by sort-transform keys first, then partition-transform keys.
-    if (num_prepended > 0) {
+    // Build sort keys from the prepended columns.
+    // Sort by sort-transform keys first, then partition-transform keys.
+    // Exclude void transform columns (all-null) from sort keys — they
+    // don't affect ordering and may trigger cudf edge cases.
+    {
+        std::vector<cudf::size_type> sort_key_indices;
         std::vector<cudf::order> column_order;
         std::vector<cudf::null_order> null_precedence;
-        column_order.reserve(num_prepended);
-        null_precedence.reserve(num_prepended);
 
-        // Sort transform keys: per-field direction and null placement
-        for (const auto& sf : sort_fields) {
-            column_order.push_back(sf.is_asc ? cudf::order::ASCENDING
-                                             : cudf::order::DESCENDING);
-            null_precedence.push_back(sf.nulls_last ? cudf::null_order::AFTER
-                                                    : cudf::null_order::BEFORE);
+        for (cudf::size_type si = 0; si < n_sort; si++) {
+            sort_key_indices.push_back(si);
+            column_order.push_back(sort_fields[si].is_asc
+                                       ? cudf::order::ASCENDING
+                                       : cudf::order::DESCENDING);
+            null_precedence.push_back(sort_fields[si].nulls_last
+                                          ? cudf::null_order::AFTER
+                                          : cudf::null_order::BEFORE);
         }
-        // Partition transform keys: ascending, nulls last
-        for (cudf::size_type i = 0; i < n_part; i++) {
+        for (cudf::size_type pi = 0; pi < n_part; pi++) {
+            if (partition_fields[pi].transform == "void") {
+                continue;  // all-null, skip
+            }
+            sort_key_indices.push_back(n_sort + pi);
             column_order.push_back(cudf::order::ASCENDING);
             null_precedence.push_back(cudf::null_order::AFTER);
         }
 
-        cudf::table_view key_tv =
-            working_table->view().select(std::vector<cudf::size_type>{
-                0, static_cast<cudf::size_type>(num_prepended)});
-        std::unique_ptr<cudf::table> sorted =
-            cudf::sort_by_key(working_table->view(), key_tv, column_order,
-                              null_precedence, se->stream);
-        working_table = std::move(sorted);
+        if (!sort_key_indices.empty()) {
+            cudf::table_view key_tv =
+                working_table->view().select(sort_key_indices);
+            std::unique_ptr<cudf::table> sorted =
+                cudf::sort_by_key(working_table->view(), key_tv, column_order,
+                                  null_precedence, se->stream);
+            working_table = std::move(sorted);
+        }
     }
 
     metrics.sort_time += end_timer(start_sort);
@@ -885,9 +894,9 @@ PhysicalGPUWriteIceberg::apply_iceberg_transform_gpu(
             auto us_i64 = cudf::binary_operation(
                 ts_i64->view(), col_1000->view(), cudf::binary_operator::DIV,
                 cudf::data_type{cudf::type_id::INT64}, stream);
-            return cudf::cast(
-                us_i64->view(),
-                cudf::data_type{cudf::type_id::TIMESTAMP_MICROSECONDS}, stream);
+            // Keep as INT64 (µs since epoch), matching CPU writer's
+            // convert_datetime_ns_to_us output type.
+            return us_i64;
         }
         return std::make_unique<cudf::column>(col);
     }
@@ -962,8 +971,12 @@ PhysicalGPUWriteIceberg::apply_iceberg_transform_gpu(
     if (transform_name == "day") {
         cudf::type_id tid = col.type().id();
         if (tid == cudf::type_id::TIMESTAMP_DAYS) {
-            return cudf::cast(col, cudf::data_type{cudf::type_id::INT64},
-                              stream);
+            // cudf blocks timestamp→int cast, but allows
+            // timestamp→duration and duration→int.
+            auto dur = cudf::cast(
+                col, cudf::data_type{cudf::type_id::DURATION_DAYS}, stream);
+            return cudf::cast(dur->view(),
+                              cudf::data_type{cudf::type_id::INT64}, stream);
         }
         if (tid == cudf::type_id::TIMESTAMP_NANOSECONDS) {
             constexpr int64_t ns_per_day =
