@@ -62,8 +62,6 @@
  * The constructor of `PhysicalGPUWriteIceberg` parses these into
  * `PartitionField` structs.
  *
- * TODO: Support all transforms
- * Supported transforms (initial scope): `identity`, `void`.
  */
 struct PartitionField {
     cudf::size_type col_idx;     ///< Index of this column in the input table.
@@ -214,10 +212,6 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      * Column names are resolved against `schema` to produce column indices.
      * Sort direction, null ordering, and transform info are stored in each
      * `SortField`.
-     *
-     * Currently only `identity` and `void` transforms are supported on GPU;
-     * non-trivial transforms (bucket, truncate, year, month, day, hour)
-     * raise `std::runtime_error`.
      *
      * @param schema Arrow schema providing column names.
      * @param sort_tuples_py Python list of sort spec tuples.
@@ -397,7 +391,7 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
     const std::shared_ptr<arrow::Schema> iceberg_schema;  ///< Expected Iceberg
                                                           ///< table schema.
     std::shared_ptr<arrow::fs::FileSystem> fs;  ///< Arrow filesystem for
-                                                ///< writing (local or S3).
+                                                ///< writing (e.g. local or S3).
 
     // ---- Partition and sort specs ----
 

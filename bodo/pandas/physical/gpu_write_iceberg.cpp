@@ -166,14 +166,14 @@ cudf::io::compression_type PhysicalGPUWriteIceberg::pq_compression_from_string(
 OperatorResult PhysicalGPUWriteIceberg::ConsumeBatchGPU(
     GPU_DATA input_batch, OperatorResult prev_op_result,
     std::shared_ptr<StreamAndEvent> se) {
-    // All ranks must participate in sync_is_last_non_blocking (it uses
-    // MPI_Ibarrier on MPI_COMM_WORLD).  Do this before the GPU rank
-    // check so non-GPU ranks don't skip the barrier and deadlock.
     if (this->finished) {
         return OperatorResult::FINISHED;
     }
 
     bool is_last = (prev_op_result == OperatorResult::FINISHED);
+    // All ranks must participate in sync_is_last_non_blocking (it uses
+    // MPI_Ibarrier on MPI_COMM_WORLD).  Do this before the GPU rank
+    // check so non-GPU ranks don't skip the barrier and deadlock.
     is_last = static_cast<bool>(sync_is_last_non_blocking(
         is_last_state.get(), static_cast<int32_t>(is_last)));
 
@@ -184,7 +184,6 @@ OperatorResult PhysicalGPUWriteIceberg::ConsumeBatchGPU(
         return finished ? OperatorResult::FINISHED
                         : OperatorResult::NEED_MORE_INPUT;
     }
-    // ---- GPU rank only below ----
 
     if (prev_batch_se) {
         prev_batch_se->event.wait(se->stream);
@@ -237,6 +236,7 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         }
         working_table = cudf::concatenate(views, se->stream);
     }
+    accumulated_tables.clear();
 
     // Apply Iceberg transforms to create transformed sort and partition
     // columns. The transformed columns are prepended to the table:
@@ -288,43 +288,38 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
         working_table = std::make_unique<cudf::table>(std::move(all_cols));
     }
 
-    // Build sort keys from the prepended columns (all of them).
-    // Sort by sort-transform keys first, then partition-transform keys.
-    // Build sort keys from the prepended columns.
     // Sort by sort-transform keys first, then partition-transform keys.
     // Exclude void transform columns (all-null) from sort keys — they
-    // don't affect ordering and may trigger cudf edge cases.
-    {
-        std::vector<cudf::size_type> sort_key_indices;
-        std::vector<cudf::order> column_order;
-        std::vector<cudf::null_order> null_precedence;
+    // don't affect ordering
+    std::vector<cudf::size_type> sort_key_indices;
+    std::vector<cudf::order> column_order;
+    std::vector<cudf::null_order> null_precedence;
 
-        for (cudf::size_type si = 0; si < n_sort; si++) {
-            sort_key_indices.push_back(si);
-            column_order.push_back(sort_fields[si].is_asc
-                                       ? cudf::order::ASCENDING
-                                       : cudf::order::DESCENDING);
-            null_precedence.push_back(sort_fields[si].nulls_last
-                                          ? cudf::null_order::AFTER
-                                          : cudf::null_order::BEFORE);
+    for (cudf::size_type si = 0; si < n_sort; si++) {
+        sort_key_indices.push_back(si);
+        column_order.push_back(sort_fields[si].is_asc
+                                   ? cudf::order::ASCENDING
+                                   : cudf::order::DESCENDING);
+        null_precedence.push_back(sort_fields[si].nulls_last
+                                      ? cudf::null_order::AFTER
+                                      : cudf::null_order::BEFORE);
+    }
+    for (cudf::size_type pi = 0; pi < n_part; pi++) {
+        if (partition_fields[pi].transform == "void") {
+            continue;  // all-null, skip
         }
-        for (cudf::size_type pi = 0; pi < n_part; pi++) {
-            if (partition_fields[pi].transform == "void") {
-                continue;  // all-null, skip
-            }
-            sort_key_indices.push_back(n_sort + pi);
-            column_order.push_back(cudf::order::ASCENDING);
-            null_precedence.push_back(cudf::null_order::AFTER);
-        }
+        sort_key_indices.push_back(n_sort + pi);
+        column_order.push_back(cudf::order::ASCENDING);
+        null_precedence.push_back(cudf::null_order::AFTER);
+    }
 
-        if (!sort_key_indices.empty()) {
-            cudf::table_view key_tv =
-                working_table->view().select(sort_key_indices);
-            std::unique_ptr<cudf::table> sorted =
-                cudf::sort_by_key(working_table->view(), key_tv, column_order,
-                                  null_precedence, se->stream);
-            working_table = std::move(sorted);
-        }
+    if (!sort_key_indices.empty()) {
+        cudf::table_view key_tv =
+            working_table->view().select(sort_key_indices);
+        std::unique_ptr<cudf::table> sorted =
+            cudf::sort_by_key(working_table->view(), key_tv, column_order,
+                              null_precedence, se->stream);
+        working_table = std::move(sorted);
     }
 
     metrics.sort_time += end_timer(start_sort);
@@ -473,9 +468,6 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
 
     // Determine which columns to include in output.
-    // Note: void transform columns are NOT excluded — the transform
-    // creates an all-null column for partitioning, but the original
-    // column is still written, matching the CPU writer behavior.
     std::vector<cudf::size_type> output_col_indices;
     std::vector<std::string> output_col_names;
     for (int i = 0; i < in_schema->num_fields(); i++) {
@@ -758,7 +750,6 @@ void PhysicalGPUWriteIceberg::flush_buffer(std::shared_ptr<StreamAndEvent> se,
 
     metrics.file_write_time += end_timer(start_file_write);
 
-    accumulated_tables.clear();
     total_rows = 0;
     total_bytes = 0;
     iter++;
@@ -1160,10 +1151,6 @@ std::string PhysicalGPUWriteIceberg::render_partition_value(
     // Unknown transform: fallback to string representation
     return transformed_scalar->ToString();
 }
-
-// ========================================================================
-// Iceberg binary serialization and GPU-based field metrics
-// ========================================================================
 
 template <typename T>
 PyObject* PhysicalGPUWriteIceberg::buffer_to_little_endian_bytes(T value) {

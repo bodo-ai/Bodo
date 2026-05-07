@@ -830,12 +830,6 @@ def test_write_multi_sort_transform():
         _check_write_read(df, PartitionSpec(), sort_order, tmp)
 
 
-# ---------------------------------------------------------------------------
-# Sort-specific tests: each transform on its native column type, with
-# varying parameters, direction/null combos, and multi-column mixes.
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.gpu
 @pytest.mark.parametrize("width", [1, 3, 10])
 def test_write_sort_truncate_string(width):
