@@ -52,7 +52,7 @@ int get_gpu_streaming_batch_size() {
             int divisor = (env_str != nullptr) ? std::stoi(env_str) : 2000;
             default_result = total_bytes / divisor;
         } else {
-            default_result = 0;
+            default_result = 1000000;
         }
     });
 
