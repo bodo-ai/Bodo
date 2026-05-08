@@ -4,8 +4,10 @@ Tests dataframe library plan nodes.
 
 import operator
 
+import pandas as pd
 import pyarrow as pa
 
+import bodo.pandas as bd
 from bodo.ext import plan_optimizer
 
 
@@ -127,3 +129,20 @@ def test_parquet_projection_pushdown(datapath):
     assert plan_optimizer.get_pushed_down_columns(C) == [0, 2], (
         "Invalid projection pushdown"
     )
+
+
+def test_groupby_output_schema():
+    """Make sure groupby output schema has proper Arrow data types and not object dtype.
+    Tests BSE-5410.
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3],
+            "B": pd.date_range("2023-01-01", periods=3).date,
+            "C": [0.1, 0.2, 0.3],
+        }
+    )
+    bdf = bd.from_pandas(df)
+    out = bdf.groupby("B", as_index=False).sum()
+    assert pa.types.is_date32(out._plan.empty_data.dtypes["B"].pyarrow_dtype)
