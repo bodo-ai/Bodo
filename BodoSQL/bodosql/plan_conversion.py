@@ -195,6 +195,95 @@ def java_call_to_python_call(java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "notnull")
 
+    # Add this block inside java_call_to_python_call, after SqlCastFunction handling
+    if operator_class_name == "SqlBasicFunction":
+        # Map Calcite basic functions to Bodo expressions
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
+        # function name as string (e.g., "POWER", "SQRT")
+        func_name = op.getName().toUpperCase()
+
+        # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
+        if func_name == "POWER" and len(op_exprs) == 2:
+            left = op_exprs[0]
+            right = op_exprs[1]
+            out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
+            return ArithOpExpression(out_empty, left, right, "__pow__")
+
+        # SQRT(x) -> unary sqrt
+        if func_name == "SQRT" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data.iloc[:, 0] ** 0.5
+            return UnaryOpExpression(out_empty, inp, "sqrt")
+
+        # ABS(x)
+        if func_name == "ABS" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data.iloc[:, 0].abs()
+            return UnaryOpExpression(out_empty, inp, "abs")
+
+        # CEIL(x) / CEILING(x)
+        if func_name in ("CEIL", "CEILING") and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data.iloc[:, 0].apply(
+                lambda v: int(pd.NA)
+                if pd.isna(v)
+                else int(
+                    pd.Series([v]).apply(
+                        lambda x: int(x) if x == int(x) else int(x) + 1
+                    )[0]
+                )
+            )
+            # simpler: use numpy ceil if numeric; here we use pandas Series method
+            return UnaryOpExpression(out_empty, inp, "ceil")
+
+        # FLOOR(x)
+        if func_name == "FLOOR" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data.iloc[:, 0].apply(
+                lambda v: v if pd.isna(v) else int(v) // 1
+            )
+            return UnaryOpExpression(out_empty, inp, "floor")
+
+        # EXP(x)
+        if func_name == "EXP" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data.iloc[:, 0].apply(
+                lambda v: float("nan") if pd.isna(v) else float(pa.scalar(v).as_py())
+            )  # placeholder numeric mapping
+            out_empty = out_empty.astype("float64")
+            return UnaryOpExpression(out_empty, inp, "exp")
+
+        # LN(x) or LOG(x) -> natural log
+        if func_name in ("LN", "LOG") and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data.iloc[:, 0].apply(
+                lambda v: float("nan") if pd.isna(v) else float(pa.scalar(v).as_py())
+            )
+            out_empty = out_empty.astype("float64")
+            return UnaryOpExpression(out_empty, inp, "log")
+
+        # ROUND(x, d) or ROUND(x) -> map to a unary/binary op if supported
+        if func_name == "ROUND" and len(op_exprs) in (1, 2):
+            inp = op_exprs[0]
+            if len(op_exprs) == 1:
+                out_empty = inp.empty_data.iloc[:, 0].round()
+            else:
+                # second operand is digits; try to apply if it's a constant
+                digits_expr = op_exprs[1]
+                try:
+                    # attempt to extract integer from empty_data if available
+                    digits_val = int(digits_expr.empty_data.iloc[0, 0])
+                    out_empty = inp.empty_data.iloc[:, 0].round(digits_val)
+                except Exception:
+                    out_empty = inp.empty_data.iloc[:, 0].round()
+            return UnaryOpExpression(out_empty, inp, "round")
+
+        # If we didn't match a supported basic function, fall through to NotImplemented
+        raise NotImplementedError(
+            f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
+        )
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
@@ -229,6 +318,11 @@ def java_binop_to_python_expr(kind, op_exprs):
     if kind.equals(SqlKind.TIMES):
         out_empty = left.empty_data.iloc[:, 0] * right.empty_data.iloc[:, 0]
         expr = ArithOpExpression(out_empty, left, right, "__mul__")
+        return expr
+
+    if kind.equals(SqlKind.DIVIDE):
+        out_empty = left.empty_data.iloc[:, 0] / right.empty_data.iloc[:, 0]
+        expr = ArithOpExpression(out_empty, left, right, "__truediv__")
         return expr
 
     # Comparison operators
@@ -440,12 +534,14 @@ def java_agg_to_python_agg(ctx, java_plan):
                 "Only zero or single-argument size aggregations are supported"
             )
             out_type = pa.int64()
-        else:
+        elif func_name in ["sum", "max", "min", "std", "mean"]:
             assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
             in_type = input_plan.pa_schema.field(arg_cols[0]).type
             out_type = _get_agg_output_type(
                 GroupbyAggFunc("dummy", func_name), in_type, "dummy"
             )
+        else:
+            raise NotImplementedError(f"Aggregation {func_name} not supported yet")
         out_types.append(out_type)
         exprs.append(
             AggregateExpression(
@@ -482,6 +578,18 @@ def _agg_to_func_name(func):
 
     if kind.equals(SqlKind.COUNT) and len(func.getArgList()) <= 1:
         return "size"
+
+    if kind.equals(SqlKind.MAX) and len(func.getArgList()) == 1:
+        return "max"
+
+    if kind.equals(SqlKind.MIN) and len(func.getArgList()) == 1:
+        return "min"
+
+    if kind.equals(SqlKind.AVG) and len(func.getArgList()) == 1:
+        return "mean"
+
+    if kind.equals(SqlKind.STDDEV_SAMP) and len(func.getArgList()) == 1:
+        return "std"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 
@@ -699,7 +807,7 @@ def java_call_to_pyiceberg_call(java_call, field_names):
             return pie.NotNull(input)
 
     raise NotImplementedError(
-        f"Call operator {operator_class_name} not supported yet: "
+        f"Call operator {operator_class_name} for pyiceberg not supported yet: "
         + java_call.toString()
     )
 
