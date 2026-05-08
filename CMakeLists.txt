@@ -905,11 +905,25 @@ if(USE_CUDF)
   set_target_properties(libcudart PROPERTIES IMPORTED_LOCATION "${LIBCUDART_LIB}")
 
   # nvidia-ml
-  find_library(LIBNVML_LIB NAMES libnvidia-ml.so.13)
-  get_filename_component(LIBNVML_LIBDIR "${LIBNVML_LIB}" DIRECTORY)
-  message(STATUS "libnvidia-ml lib: ${LIBNVML_LIB} libdir: ${LIBNVML_LIBDIR}")
-  add_library(libnvml SHARED IMPORTED)
-  set_target_properties(libnvml PROPERTIES IMPORTED_LOCATION "${LIBNVML_LIB}")
+  find_library(NVML_LIB
+    NAMES nvidia-ml
+    PATHS
+        /usr/lib
+        /usr/lib64
+        /usr/lib/x86_64-linux-gnu
+        /usr/local/lib
+    NO_DEFAULT_PATH
+  )
+
+  # Fallback: also search default system paths
+  if(NOT NVML_LIB)
+      find_library(NVML_LIB NAMES nvidia-ml)
+  endif()
+
+  if(NOT NVML_LIB)
+      message(FATAL_ERROR "Could not find libnvidia-ml.so (NVML). Install NVIDIA driver.")
+  endif()
+  message(STATUS "libnvidia-ml lib: ${NVML_LIB}")
 
   message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
   message(STATUS "Using LIBCUDF base dir : ${LIBCUDF_INCLUDE_DIR}")
