@@ -9,8 +9,6 @@ To run the benchmark with Bodo, you will need to create a development environmen
 pixi shell -e default-cuda
 pixi run build-bodo-cudf
 ```
-You will also need to set the environment variable: `OMPI_MCA_pml="ucx"` prior to running anything.
-
 To run the benchmark on other libraries including Dask and Polars, a conda environment is provided in `env.yml`:
 ``` shell
 conda env create -f env.yml
