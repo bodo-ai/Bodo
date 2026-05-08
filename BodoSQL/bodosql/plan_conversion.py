@@ -195,7 +195,6 @@ def java_call_to_python_call(java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "notnull")
 
-    # Add this block inside java_call_to_python_call, after SqlCastFunction handling
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
         operands = java_call.getOperands()

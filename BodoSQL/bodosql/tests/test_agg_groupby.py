@@ -50,7 +50,7 @@ def test_agg_numeric(
         "MIN",
         "AVG",
     ]:
-        pytest.skip("Only SUM is supported in C++ backend for now")
+        pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -68,11 +68,20 @@ def test_agg_numeric(
     )
 
 
-# @pytest.mark.bodosql_cpp   # failing for variance, stddev w/ unimplemented CASE
+@pytest.mark.bodosql_cpp  # failing for variance, stddev w/ unimplemented CASE
 def test_agg_numeric_larger_group(
     grouped_dfs, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aggregation calls in queries on DataFrames with a larger data in each group."""
+
+    if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
+        "SUM",
+        "COUNT",
+        "MAX",
+        "MIN",
+        "AVG",
+    ]:
+        pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -92,10 +101,20 @@ def test_agg_numeric_larger_group(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp  # failing for variance, stddev w/ unimplemented CASE
 def test_aliasing_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aliasing of aggregations in queries"""
+
+    if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
+        "SUM",
+        "COUNT",
+        "MAX",
+        "MIN",
+        "AVG",
+    ]:
+        pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
