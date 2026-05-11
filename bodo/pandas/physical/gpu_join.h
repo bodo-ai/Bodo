@@ -91,9 +91,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             return static_cast<int>(build_total) < std::stoi(bcast_threshold);
         }
 
-        size_t free_bytes = 0;
-        size_t total_bytes = 0;
-        cudaMemGetInfo(&free_bytes, &total_bytes);
+        size_t total_bytes = get_smallest_gpu_mem_size();
         // Do broadcast join if probe table is order of magnitude smaller than
         // probe and it fits on GPU with room for the hash table.
         return (build_total < (probe_total * 0.1)) &&

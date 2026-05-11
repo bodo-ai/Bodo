@@ -6,8 +6,8 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
     std::shared_ptr<bodo::Schema> input_schema,
     std::vector<std::string>& col_names,
-    std::vector<std::shared_ptr<EXPR_TYPE>>& physical_exprs,
-    BUILD_EXPR builder) {
+    std::vector<std::shared_ptr<EXPR_TYPE>>& physical_exprs, BUILD_EXPR builder,
+    bool create_physical_exprs = true) {
     // Map of column bindings to column indices in physical input table
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
         getColRefMap(source_cols);
@@ -17,7 +17,9 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
         std::make_shared<bodo::Schema>();
     for (size_t expr_idx = 0; expr_idx < exprs.size(); ++expr_idx) {
         auto& expr = exprs[expr_idx];
-        physical_exprs.emplace_back(builder(expr, col_ref_map));
+        if (create_physical_exprs) {
+            physical_exprs.emplace_back(builder(expr, col_ref_map));
+        }
 
         if (expr->type == duckdb::ExpressionType::BOUND_COLUMN_REF) {
             auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();

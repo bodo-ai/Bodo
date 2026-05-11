@@ -905,6 +905,27 @@ if(USE_CUDF)
   add_library(libcudart SHARED IMPORTED)
   set_target_properties(libcudart PROPERTIES IMPORTED_LOCATION "${LIBCUDART_LIB}")
 
+  # nvidia-ml
+  find_library(NVML_LIB
+    NAMES nvidia-ml
+    PATHS
+        /usr/lib
+        /usr/lib64
+        /usr/lib/x86_64-linux-gnu
+        /usr/local/lib
+    NO_DEFAULT_PATH
+  )
+
+  # Fallback: also search default system paths
+  if(NOT NVML_LIB)
+      find_library(NVML_LIB NAMES nvidia-ml)
+  endif()
+
+  if(NOT NVML_LIB)
+      message(FATAL_ERROR "Could not find libnvidia-ml.so (NVML). Install NVIDIA driver.")
+  endif()
+  message(STATUS "libnvidia-ml lib: ${NVML_LIB}")
+
   message(STATUS "Using CUDA include dir: ${CUDA_INCLUDE_DIR}")
   message(STATUS "Using LIBCUDF base dir : ${LIBCUDF_INCLUDE_DIR}")
   message(STATUS "Using RMM base dir: ${RMM_BASE_DIR}")
@@ -938,7 +959,7 @@ if(USE_CUDF)
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1 CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart)
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart ${NVML_LIB})
 
   get_target_property(EXT_LINKER_LANG ext LINKER_LANGUAGE)
   message(STATUS "ext LINKER_LANGUAGE = ${EXT_LINKER_LANG}")

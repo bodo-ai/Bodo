@@ -7,7 +7,6 @@ export PYTHONFAULTHANDLER=1
 export BODO_NUM_WORKERS=3
 
 if [[ "$gpu" == "true" ]]; then
-    export OMPI_MCA_pml=ucx
     export BODO_GPU_DISABLE_CPU_FALLBACK=1
     python -c "import bodo.pandas as pd; print(pd.DataFrame({'a': [1, 2], 'b': [3, 4]})['a'])"
 elif [[ "$(uname)" == "Darwin" ]]; then

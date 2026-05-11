@@ -219,9 +219,6 @@ class RankBatchGenerator {
           selected_columns(_selected_columns),
           arrow_schema(std::move(_arrow_schema)),
           output_arrow_schema(std::move(_output_arrow_schema)) {
-        tableFilterSetToCudfAST(*filter_exprs, arrow_schema->field_names(),
-                                filter_ast_tree, filter_scalars);
-
         get_dataset();
 
         // Only assign parts to GPU-pinned ranks
@@ -230,6 +227,9 @@ class RankBatchGenerator {
             parts_ = {};
             return;
         }
+
+        tableFilterSetToCudfAST(*filter_exprs, arrow_schema->field_names(),
+                                filter_ast_tree, filter_scalars);
 
         MPI_Comm_rank(comm, &rank_);
         MPI_Comm_size(comm, &size_);
@@ -751,6 +751,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         this->comm = get_gpu_mpi_comm(get_gpu_id());
     }
+
     virtual ~PhysicalGPUReadParquet() {
         Py_XDECREF(this->storage_options);
         Py_XDECREF(this->schema_fields);
