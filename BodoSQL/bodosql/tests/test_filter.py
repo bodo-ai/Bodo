@@ -35,6 +35,7 @@ def test_filter_numeric(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_filter_null_numeric(bodosql_numeric_types, memory_leak_check):
     """test is null on numeric columns"""
     query1 = "select A,C from table1 where A is NULL"
