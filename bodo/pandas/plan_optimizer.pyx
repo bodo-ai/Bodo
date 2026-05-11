@@ -172,6 +172,8 @@ def str_to_expr_type(val):
         return CExpressionType.OPERATOR_NOT
     elif val == "notnull":
         return CExpressionType.OPERATOR_IS_NOT_NULL
+    elif val == "isnull":
+        return CExpressionType.OPERATOR_IS_NULL
     else:
         raise NotImplementedError(f"Unhandled case {str(val)} in str_to_expr_type")
 

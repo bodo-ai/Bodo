@@ -803,6 +803,9 @@ class PhysicalUnaryExpression : public PhysicalExpression {
             case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL:
                 comparator = "is_not_null";
                 break;
+            case duckdb::ExpressionType::OPERATOR_IS_NULL:
+                comparator = "is_null";
+                break;
             default:
                 throw std::runtime_error("Unhandled unary op expression type.");
         }
