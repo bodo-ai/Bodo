@@ -60,40 +60,48 @@ def test_filter_null_nullable_numeric(
     )
 
 
-def test_filter_null_string(bodosql_string_types, spark_info, memory_leak_check):
+@pytest.mark.slow
+@pytest.mark.bodosql_cpp
+def test_filter_null_string(bodosql_string_types, memory_leak_check):
     """test is null on Timestamp columns"""
     query1 = "select A,C from table1 where B is NULL"
     query2 = "select C from table1 where B is not null"
-    check_query(query1, bodosql_string_types, spark_info, check_dtype=False)
-    check_query(query2, bodosql_string_types, spark_info, check_dtype=False)
+    check_query(query1, bodosql_string_types, None, check_dtype=False, use_duckdb=True)
+    check_query(query2, bodosql_string_types, None, check_dtype=False, use_duckdb=True)
 
 
-def test_filter_null_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_filter_null_binary(bodosql_binary_types, memory_leak_check):
     """test is null on Timestamp columns"""
     query1 = "select A,C from table1 where B is NULL"
     query2 = "select C from table1 where B is not null"
     check_query(
         query1,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_dtype=False,
         convert_columns_bytearray=["A", "C"],
+        use_duckdb=True,
     )
     check_query(
         query2,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_dtype=False,
         convert_columns_bytearray=["C"],
+        use_duckdb=True,
     )
 
 
-def test_filter_null_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
+def test_filter_null_datetime(bodosql_datetime_types, memory_leak_check):
     """test is null on Timestamp columns"""
     query1 = "select A,C from table1 where B is NULL"
     query2 = "select C from table1 where B is not null"
-    check_query(query1, bodosql_datetime_types, spark_info, check_dtype=False)
-    check_query(query2, bodosql_datetime_types, spark_info, check_dtype=False)
+    check_query(
+        query1, bodosql_datetime_types, None, check_dtype=False, use_duckdb=True
+    )
+    check_query(
+        query2, bodosql_datetime_types, None, check_dtype=False, use_duckdb=True
+    )
 
 
 def test_filter_null_interval(bodosql_interval_types, memory_leak_check):

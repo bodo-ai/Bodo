@@ -586,6 +586,8 @@ def sql_type_to_pa_type(sql_type_name):
         return pa.float64()
     if sql_type_name.equals(SqlTypeName.VARCHAR):
         return pa.large_string()
+    if sql_type_name.equals(SqlTypeName.VARBINARY):
+        return pa.large_binary()
     if sql_type_name.equals(SqlTypeName.DATE):
         return pa.date32()
 
