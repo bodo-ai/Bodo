@@ -70,6 +70,8 @@ def test_filter_null_string(bodosql_string_types, memory_leak_check):
     check_query(query2, bodosql_string_types, None, check_dtype=False, use_duckdb=True)
 
 
+@pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_filter_null_binary(bodosql_binary_types, memory_leak_check):
     """test is null on Timestamp columns"""
     query1 = "select A,C from table1 where B is NULL"

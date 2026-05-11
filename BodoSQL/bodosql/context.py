@@ -1080,6 +1080,7 @@ def _is_nullable_dtype(dtype):
             np.issubdtype(dtype, np.floating)
             or np.issubdtype(dtype, np.datetime64)
             or np.issubdtype(dtype, np.timedelta64)
+            or dtype == np.object_
         )
     )
 
