@@ -5,6 +5,7 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/python/api.h>
 #include "../../io/iceberg_parquet_write.h"
+#include "../../libs/_utils.h"
 #include "../../libs/streaming/_shuffle.h"
 #include "_bodo_write_function.h"
 #include "physical/operator.h"
@@ -20,6 +21,58 @@ struct PhysicalWriteIcebergMetrics {
     time_t file_write_time = 0;
     time_t finalize_time = 0;
 };
+/**
+ * @brief Gather iceberg_files_info from all ranks using MPI.
+ * This is equivalent to `all_infos = comm.gather(iceberg_files_info_py)` in
+ * Python. Assumes that `iceberg_files_info_py` is a Python list of file info
+ * tuples on each rank. Steals a reference to `iceberg_files_info_py`.
+ * @return A Python list of file info tuples gathered from all ranks (list of
+ * lists).
+ * @throws std::runtime_error if any MPI operation fails.
+ */
+static PyObject* gather_iceberg_files_info(PyObject* iceberg_files_info_py) {
+    // Gather iceberg_files_info from all ranks using MPI
+    // Equivalent to MPI_COMM_WORLD.gather(iceberg_files_info_py)
+    PyObjectPtr mpi4py_module = PyImport_ImportModule("mpi4py");
+    if (!mpi4py_module || PyErr_Occurred()) {
+        throw std::runtime_error(
+            "PhysicalGPUWriteIceberg::Finalize: Failed to import "
+            "mpi4py");
+    }
+    PyObjectPtr mpi_module = PyObject_GetAttrString(mpi4py_module, "MPI");
+    if (!mpi_module || PyErr_Occurred()) {
+        throw std::runtime_error(
+            "PhysicalGPUWriteIceberg::Finalize: Failed to get MPI "
+            "module");
+    }
+
+    PyObjectPtr comm_world = PyObject_GetAttrString(mpi_module, "COMM_WORLD");
+    if (!comm_world || PyErr_Occurred()) {
+        throw std::runtime_error(
+            "PhysicalGPUWriteIceberg::Finalize: Failed to get "
+            "COMM_WORLD");
+    }
+
+    PyObjectPtr gather_method = PyObject_GetAttrString(comm_world, "gather");
+    if (!gather_method || PyErr_Occurred()) {
+        throw std::runtime_error(
+            "PhysicalGPUWriteIceberg::Finalize: Failed to get "
+            "gather method");
+    }
+
+    PyObjectPtr args = PyTuple_New(1);
+    PyTuple_SetItem(args, 0, iceberg_files_info_py);
+
+    PyObject* all_infos = PyObject_CallObject(gather_method, args);
+
+    if (!all_infos || PyErr_Occurred()) {
+        throw std::runtime_error(
+            "PhysicalGPUWriteIceberg::Finalize: Iceberg write: MPI "
+            "gather operation failed");
+    }
+
+    return all_infos;
+}
 
 class PhysicalWriteIceberg : public PhysicalSink {
    public:
@@ -111,54 +164,9 @@ class PhysicalWriteIceberg : public PhysicalSink {
         // Equivalent to all_infos = comm.gather(iceberg_files_info_py)
 
         time_pt start_finalize_time = start_timer();
-        PyObject* mpi4py_module = PyImport_ImportModule("mpi4py");
-        if (!mpi4py_module) {
-            throw std::runtime_error(
-                "PhysicalWriteIceberg::Finalize: Failed to import "
-                "mpi4py");
-        }
-        PyObject* mpi_module = PyObject_GetAttrString(mpi4py_module, "MPI");
-        if (!mpi_module) {
-            Py_DECREF(mpi4py_module);
-            throw std::runtime_error(
-                "PhysicalWriteIceberg::Finalize: Failed to get MPI module");
-        }
-
-        PyObject* comm_world = PyObject_GetAttrString(mpi_module, "COMM_WORLD");
-        if (!comm_world) {
-            Py_DECREF(mpi_module);
-            throw std::runtime_error(
-                "PhysicalWriteIceberg::Finalize: Failed to get COMM_WORLD");
-        }
-
-        PyObject* gather_method = PyObject_GetAttrString(comm_world, "gather");
-        if (!gather_method) {
-            Py_DECREF(comm_world);
-            Py_DECREF(mpi_module);
-            throw std::runtime_error(
-                "PhysicalWriteIceberg::Finalize: Failed to get gather method");
-        }
-
-        PyObject* args = PyTuple_New(1);
-        PyTuple_SetItem(args, 0, iceberg_files_info_py);
-
-        PyObject* all_infos = PyObject_CallObject(gather_method, args);
-
-        Py_DECREF(args);
-        Py_DECREF(gather_method);
-        Py_DECREF(comm_world);
-        Py_DECREF(mpi4py_module);
-        Py_DECREF(mpi_module);
-
-        if (!all_infos) {
-            throw std::runtime_error(
-                "PhysicalWriteIceberg::Finalize: Iceberg write: MPI gather "
-                "operation failed");
-        }
+        iceberg_files_info_py =
+            gather_iceberg_files_info(iceberg_files_info_py);
         this->metrics.finalize_time = end_timer(start_finalize_time);
-
-        // NOTE: PyTuple_SetItem stole the reference to iceberg_files_info_py
-        iceberg_files_info_py = all_infos;
 
         // Report metrics
         std::vector<MetricBase> metrics_out;
