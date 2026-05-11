@@ -122,6 +122,9 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalSort":
         return java_sort_to_python_sort(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalValues":
+        return java_values_to_python_values(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
@@ -514,6 +517,56 @@ def java_sort_to_python_sort(ctx, java_plan):
         input_plan.pa_schema,
     )
     return sorted_plan
+
+
+def java_values_to_python_values(ctx, java_plan):
+    """Convert a BodoSQL Java BodoPhysicalValues plan to a Python DataFrame read plan."""
+    rows = java_plan.getTuples()
+    row_type = java_plan.getRowType()
+
+    data = []
+    for row in rows:
+        data.append([java_literal_to_python_literal(e, None).value for e in row])
+
+    pa_schema = pa.schema([java_field_to_pa_field(f) for f in row_type.getFieldList()])
+
+    df = pd.DataFrame()
+    for i, name in enumerate(pa_schema.names):
+        df[name] = pd.Series(
+            [data[j][i] for j in range(len(data))],
+            dtype=pd.ArrowDtype(pa_schema.field(i).type),
+        )
+
+    return bd.from_pandas(df)._plan
+
+
+def java_field_to_pa_field(java_field):
+    """Convert a Calcite RelDataTypeField to a PyArrow field."""
+    name = java_field.getName()
+    java_type = java_field.getType()
+    type_name = java_type.getSqlTypeName()
+
+    return pa.field(name, sql_type_to_pa_type(type_name))
+
+
+def sql_type_to_pa_type(sql_type_name):
+    """Convert a Calcite SqlTypeName to a PyArrow data type."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+
+    if sql_type_name.equals(SqlTypeName.TINYINT):
+        return pa.int8()
+    if sql_type_name.equals(SqlTypeName.SMALLINT):
+        return pa.int16()
+    if sql_type_name.equals(SqlTypeName.INTEGER):
+        return pa.int32()
+    if sql_type_name.equals(SqlTypeName.BIGINT):
+        return pa.int64()
+    if sql_type_name.equals(SqlTypeName.VARCHAR):
+        return pa.large_string()
+    if sql_type_name.equals(SqlTypeName.DATE):
+        return pa.date32()
+
+    raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
 
 def visit_iceberg_node(java_plan, read_info):

@@ -35,12 +35,12 @@ def test_filter_numeric(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_filter_null_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_filter_null_numeric(bodosql_numeric_types, memory_leak_check):
     """test is null on numeric columns"""
     query1 = "select A,C from table1 where A is NULL"
     query2 = "select C from table1 where A is not null"
-    check_query(query1, bodosql_numeric_types, spark_info, check_dtype=False)
-    check_query(query2, bodosql_numeric_types, spark_info, check_dtype=False)
+    check_query(query1, bodosql_numeric_types, None, check_dtype=False, use_duckdb=True)
+    check_query(query2, bodosql_numeric_types, None, check_dtype=False, use_duckdb=True)
 
 
 def test_filter_null_nullable_numeric(
