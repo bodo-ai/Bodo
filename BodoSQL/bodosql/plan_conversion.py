@@ -224,58 +224,33 @@ def java_call_to_python_call(java_call, input_plan):
         # CEIL(x) / CEILING(x)
         if func_name in ("CEIL", "CEILING") and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data.iloc[:, 0].apply(
-                lambda v: int(pd.NA)
-                if pd.isna(v)
-                else int(
-                    pd.Series([v]).apply(
-                        lambda x: int(x) if x == int(x) else int(x) + 1
-                    )[0]
-                )
-            )
-            # simpler: use numpy ceil if numeric; here we use pandas Series method
+            out_empty = inp.empty_data
             return UnaryOpExpression(out_empty, inp, "ceil")
 
         # FLOOR(x)
         if func_name == "FLOOR" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data.iloc[:, 0].apply(
-                lambda v: v if pd.isna(v) else int(v) // 1
-            )
+            out_empty = inp.empty_data
             return UnaryOpExpression(out_empty, inp, "floor")
 
         # EXP(x)
         if func_name == "EXP" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data.iloc[:, 0].apply(
-                lambda v: float("nan") if pd.isna(v) else float(pa.scalar(v).as_py())
-            )  # placeholder numeric mapping
+            out_empty = inp.empty_data
             out_empty = out_empty.astype("float64")
             return UnaryOpExpression(out_empty, inp, "exp")
 
         # LN(x) or LOG(x) -> natural log
         if func_name in ("LN", "LOG") and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data.iloc[:, 0].apply(
-                lambda v: float("nan") if pd.isna(v) else float(pa.scalar(v).as_py())
-            )
+            out_empty = inp.empty_data
             out_empty = out_empty.astype("float64")
             return UnaryOpExpression(out_empty, inp, "log")
 
         # ROUND(x, d) or ROUND(x) -> map to a unary/binary op if supported
         if func_name == "ROUND" and len(op_exprs) in (1, 2):
             inp = op_exprs[0]
-            if len(op_exprs) == 1:
-                out_empty = inp.empty_data.iloc[:, 0].round()
-            else:
-                # second operand is digits; try to apply if it's a constant
-                digits_expr = op_exprs[1]
-                try:
-                    # attempt to extract integer from empty_data if available
-                    digits_val = int(digits_expr.empty_data.iloc[0, 0])
-                    out_empty = inp.empty_data.iloc[:, 0].round(digits_val)
-                except Exception:
-                    out_empty = inp.empty_data.iloc[:, 0].round()
+            out_empty = inp.empty_data
             return UnaryOpExpression(out_empty, inp, "round")
 
         # If we didn't match a supported basic function, fall through to NotImplemented
