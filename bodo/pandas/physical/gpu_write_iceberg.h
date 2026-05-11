@@ -517,10 +517,8 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
     std::vector<std::shared_ptr<cudf::table>>
         accumulated_tables;  ///< Pending tables not yet flushed.
     int64_t total_rows;      ///< Sum of rows across all pending tables.
-    int64_t total_bytes;     ///< Estimated sum of bytes across all pending
-                             ///< tables (approximate).
-    int64_t row_sz_est;  ///< Estimated average row size in bytes (for updating
-                         ///< total_bytes).
+    int64_t total_bytes;     ///< Sum of bytes across all pending
+                             ///< tables.
 
     // ---- Stream ordering ----
 

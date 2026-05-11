@@ -25,6 +25,7 @@
 #include "../io/iceberg_helpers.h"
 #include "../libs/_query_profile_collector.h"
 #include "physical/gpu_write_parquet.h"
+#include "physical/write_iceberg.h"
 
 PhysicalGPUWriteIceberg::PhysicalGPUWriteIceberg(
     std::shared_ptr<bodo::Schema> in_bodo_schema,
@@ -59,16 +60,6 @@ PhysicalGPUWriteIceberg::PhysicalGPUWriteIceberg(
     for (const auto& pf : partition_fields) {
         sort_cols.push_back(pf.col_idx);
         partition_col_idxs.push_back(pf.col_idx);
-    }
-    // Estimate row size based on the input schema
-    row_sz_est = 0;
-    for (const auto& field : in_schema->fields()) {
-        if (field->type()->byte_width() > 0) {
-            row_sz_est += field->type()->byte_width();
-        } else {
-            // For variable-length types, use an arbitrary average size
-            row_sz_est += 100;
-        }
     }
 }
 void PhysicalGPUWriteIceberg::parse_partition_spec(
@@ -197,9 +188,7 @@ OperatorResult PhysicalGPUWriteIceberg::ConsumeBatchGPU(
         accumulated_tables.push_back(incoming_table);
         total_rows += incoming_table->num_rows();
         cudf::table_view tv = incoming_table->view();
-        if (tv.num_rows() > 0 && tv.num_columns() > 0) {
-            total_bytes += tv.num_rows() * this->row_sz_est;
-        }
+        total_bytes += incoming_table->alloc_size();
     }
 
     metrics.accumulate_time += end_timer(start_accumulate);
@@ -567,7 +556,7 @@ void PhysicalGPUWriteIceberg::write_group(
     //        value_counts_dict, null_count_dict,
     //        lower_bound_dict,  upper_bound_dict,
     //        *partition_values
-    PyObject* file_info_tuple = PyTuple_New(7 + n_part_vals);
+    PyObjectPtr file_info_tuple = PyTuple_New(7 + n_part_vals);
     PyTuple_SetItem(file_info_tuple, 0, PyUnicode_FromString(rel_path.c_str()));
     PyTuple_SetItem(file_info_tuple, 1, PyLong_FromLongLong(record_count));
     PyTuple_SetItem(file_info_tuple, 2, PyLong_FromLongLong(file_size));
@@ -651,46 +640,7 @@ std::string PhysicalGPUWriteIceberg::build_partition_path(
 
 void PhysicalGPUWriteIceberg::FinalizeSink() {
     time_pt start_finalize = start_timer();
-
-    PyObjectPtr mpi4py_module = PyImport_ImportModule("mpi4py");
-    if (!mpi4py_module || PyErr_Occurred()) {
-        throw std::runtime_error(
-            "PhysicalGPUWriteIceberg::Finalize: Failed to import "
-            "mpi4py");
-    }
-    PyObjectPtr mpi_module = PyObject_GetAttrString(mpi4py_module, "MPI");
-    if (!mpi_module || PyErr_Occurred()) {
-        throw std::runtime_error(
-            "PhysicalGPUWriteIceberg::Finalize: Failed to get MPI "
-            "module");
-    }
-
-    PyObjectPtr comm_world = PyObject_GetAttrString(mpi_module, "COMM_WORLD");
-    if (!comm_world || PyErr_Occurred()) {
-        throw std::runtime_error(
-            "PhysicalGPUWriteIceberg::Finalize: Failed to get "
-            "COMM_WORLD");
-    }
-
-    PyObjectPtr gather_method = PyObject_GetAttrString(comm_world, "gather");
-    if (!gather_method || PyErr_Occurred()) {
-        throw std::runtime_error(
-            "PhysicalGPUWriteIceberg::Finalize: Failed to get "
-            "gather method");
-    }
-
-    PyObjectPtr args = PyTuple_New(1);
-    PyTuple_SetItem(args, 0, iceberg_files_info_py);
-
-    PyObject* all_infos = PyObject_CallObject(gather_method, args);
-
-    if (!all_infos || PyErr_Occurred()) {
-        throw std::runtime_error(
-            "PhysicalGPUWriteIceberg::Finalize: Iceberg write: MPI "
-            "gather operation failed");
-    }
-
-    iceberg_files_info_py = all_infos;
+    iceberg_files_info_py = gather_iceberg_files_info(iceberg_files_info_py);
     metrics.finalize_time = end_timer(start_finalize);
 
     std::vector<MetricBase> metrics_out;
