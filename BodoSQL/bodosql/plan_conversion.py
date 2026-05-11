@@ -198,6 +198,10 @@ def java_call_to_python_call(java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "notnull")
 
+        if kind.equals(SqlKind.IS_NULL):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "isnull")
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
@@ -747,6 +751,9 @@ def java_call_to_pyiceberg_call(java_call, field_names):
 
         if kind.equals(SqlKind.IS_NOT_NULL):
             return pie.NotNull(input)
+
+        if kind.equals(SqlKind.IS_NULL):
+            return pie.IsNull(input)
 
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
