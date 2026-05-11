@@ -1235,21 +1235,3 @@ void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
     // the CPU writer's behavior (generate_iceberg_field_metrics).
     // PyIceberg expects map values to be bytes, not None.
 }
-
-std::string PhysicalGPUWriteIceberg::generate_iceberg_file_name() {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    boost::uuids::uuid _uuid = boost::uuids::random_generator()();
-    std::string uuid = boost::uuids::to_string(_uuid);
-    // Format: {rank:05d}-{rank}-{uuid}.parquet
-    // (matches the CPU writer in bodo/io/iceberg_parquet_write.cpp)
-    std::vector<char> fname;
-    fname.resize(20 + uuid.length());
-    int check = snprintf(fname.data(), fname.size(), "%05d-%d-%s.parquet", rank,
-                         rank, uuid.c_str());
-    if (size_t(check + 1) > fname.size()) {
-        throw std::runtime_error(
-            "generate_iceberg_file_name: snprintf overflow");
-    }
-    return std::string(fname.data());
-}
