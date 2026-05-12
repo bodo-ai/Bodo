@@ -208,6 +208,17 @@ def java_call_to_python_call(java_call, input_plan):
         if kind.equals(SqlKind.IS_NULL):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "isnull")
+
+    if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
+        operands = java_call.getOperands()
+        input = java_expr_to_python_expr(operands[0], input_plan)
+        kind = op.getKind()
+        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+        if kind.equals(SqlKind.NOT):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "__invert__")
+
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
         operands = java_call.getOperands()
