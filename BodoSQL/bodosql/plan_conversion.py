@@ -17,6 +17,7 @@ from bodo.pandas.plan import (
     ConstantExpression,
     LogicalAggregate,
     LogicalComparisonJoin,
+    LogicalDistinct,
     LogicalFilter,
     LogicalJoinFilter,
     LogicalOrder,
@@ -498,14 +499,33 @@ def java_agg_to_python_agg(ctx, java_plan):
 
     exprs = []
     out_types = [input_plan.pa_schema.field(k).type for k in keys]
-    for func in java_plan.getAggCallList():
+    aggCallList = java_plan.getAggCallList()
+    if len(aggCallList) == 0:
+        # If no aggregation expressions then use distinct instead.
+
+        names = list(java_plan.getRowType().getFieldNames())
+        new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
+        empty_out_data = arrow_to_empty_df(new_schema)
+
+        exprs = make_col_ref_exprs(keys, input_plan)
+        plan = LogicalDistinct(
+            empty_out_data,
+            input_plan,
+            exprs,
+        )
+        return plan
+
+    for func in aggCallList:
         if func.hasFilter():
             raise NotImplementedError("Filtered aggregations are not supported yet")
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
-        if func_name == "size":
-            assert len(arg_cols) in [0, 1], (
-                "Only zero or single-argument size aggregations are supported"
+        if func_name in ["size"]:
+            assert len(arg_cols) == 0, "Only zero size aggregations are supported"
+            out_type = pa.int64()
+        elif func_name in ["nunique"]:
+            assert len(arg_cols) == 1, (
+                "Only single-argument nunique aggregations are supported"
             )
             out_type = pa.int64()
         elif func_name in ["sum", "max", "min", "std", "mean"]:
@@ -524,13 +544,14 @@ def java_agg_to_python_agg(ctx, java_plan):
                 func_name,
                 None,
                 arg_cols,
-                False,
+                True,
             )
         )
 
     names = list(java_plan.getRowType().getFieldNames())
     new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
     empty_out_data = arrow_to_empty_df(new_schema)
+
     plan = LogicalAggregate(
         empty_out_data,
         input_plan,
@@ -550,8 +571,11 @@ def _agg_to_func_name(func):
     if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
 
-    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) <= 1:
+    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 0:
         return "size"
+
+    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 1:
+        return "nunique"
 
     if kind.equals(SqlKind.MAX) and len(func.getArgList()) == 1:
         return "max"
