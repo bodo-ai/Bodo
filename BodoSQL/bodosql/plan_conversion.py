@@ -676,6 +676,8 @@ def sql_type_to_pa_type(sql_type_name):
         return pa.date32()
     if sql_type_name.equals(SqlTypeName.TIMESTAMP):
         return pa.timestamp("ns")
+    if sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
+        return pa.duration("ns")
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
