@@ -127,69 +127,76 @@ def test_filter_null_interval(bodosql_interval_types, memory_leak_check):
     )
 
 
-def test_filter_boolean_1(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_filter_boolean_1(bodosql_boolean_types, memory_leak_check):
     check_query(
         "select A,B from table1 where B = FALSE",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_filter_boolean_2(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_filter_boolean_2(bodosql_boolean_types, memory_leak_check):
     check_query(
         "select A,C from table1 where NOT B = TRUE",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_filter_boolean_3(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_filter_boolean_3(bodosql_boolean_types, memory_leak_check):
     check_query(
         "select A,C from table1 where A",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_filter_boolean_4(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_filter_boolean_4(bodosql_boolean_types, memory_leak_check):
     check_query(
         "select A,C from table1 where A = C",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_filter_boolean_5(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_filter_boolean_5(bodosql_boolean_types, memory_leak_check):
     check_query(
         "select B,A from table1 where A <> C",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_filter_boolean_6(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_filter_boolean_6(bodosql_boolean_types, memory_leak_check):
     check_query(
         "select A,C from table1 where NOT A and B = TRUE or C <> FALSE",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
-def test_filter_boolean_7(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_filter_boolean_7(bodosql_boolean_types, memory_leak_check):
     check_query(
         "select A,C from table1 where A or B = FALSE and Not FALSE",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
