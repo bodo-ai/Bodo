@@ -678,6 +678,8 @@ def sql_type_to_pa_type(sql_type_name):
         return pa.timestamp("ns")
     if sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
         return pa.duration("ns")
+    if sql_type_name.equals(SqlTypeName.BOOLEAN):
+        return pa.bool_()
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
