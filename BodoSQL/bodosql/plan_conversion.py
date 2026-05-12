@@ -674,6 +674,8 @@ def sql_type_to_pa_type(sql_type_name):
         return pa.large_binary()
     if sql_type_name.equals(SqlTypeName.DATE):
         return pa.date32()
+    if sql_type_name.equals(SqlTypeName.TIMESTAMP):
+        return pa.timestamp("ns")
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
