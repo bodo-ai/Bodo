@@ -655,10 +655,13 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         children.push_back(right);
         switch (etype) {
             case duckdb::ExpressionType::CONJUNCTION_AND:
-                comparator = "and";
+                // We use the Kleene logic versions to match null behavior of
+                // pandas and SQL. See
+                // https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/arrow/array.py#L110
+                comparator = "and_kleene";
                 break;
             case duckdb::ExpressionType::CONJUNCTION_OR:
-                comparator = "or";
+                comparator = "or_kleene";
                 break;
             default:
                 throw std::runtime_error(
