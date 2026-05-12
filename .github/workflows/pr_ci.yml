@@ -113,13 +113,6 @@ jobs:
         uses: ./.github/actions/build-source
         with:
           build-all: false
-      - name: Load and Save Hadoop to Cache
-        id: hadoop-cache
-        if: ${{ runner.os != 'Windows' }}
-        uses: actions/cache@v4
-        with:
-          path: hadoop.tar.gz
-          key: hadoop-3.3.2-${{ runner.os }}
 
   # 4) Actually run tests
   pr-ci:

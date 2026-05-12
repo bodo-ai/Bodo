@@ -55,12 +55,6 @@ jobs:
             environment: ${{ inputs.test-type == 'DF_LIB_GPU' && 'default-cuda' || 'default' }}
           env:
             SETUPTOOLS_SCM_PRETEND_VERSION: ${{ inputs.bodo-version }}
-        - name: Load Hadoop from Cache
-          if: runner.os != 'Windows'
-          uses: actions/cache/restore@v4
-          with:
-            path: hadoop.tar.gz
-            key: hadoop-3.3.2-${{ runner.os }}
         - name: Clean Cache
           run: |
             # Clean Maven and Spark Ivy Cache
