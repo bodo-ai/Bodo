@@ -687,6 +687,11 @@ def sql_type_to_pa_type(sql_type_name):
         return pa.date32()
     if sql_type_name.equals(SqlTypeName.TIMESTAMP):
         return pa.timestamp("ns")
+    if sql_type_name.equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE):
+        # BodoSQL doesn't preserve time zone info for TIMESTAMP_WITH_LOCAL_TIME_ZONE, so
+        # we treat it the same as TIMESTAMP in C++ backend and handle time zones using
+        # other information if needed.
+        return pa.timestamp("ns")
     if sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
         return pa.duration("ns")
     if sql_type_name.equals(SqlTypeName.BOOLEAN):
