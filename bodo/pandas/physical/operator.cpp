@@ -101,6 +101,10 @@ void GPUBatchGenerator::append_batch(GPU_DATA batch) {
 
 GPU_DATA GPUBatchGenerator::next(std::shared_ptr<StreamAndEvent> se,
                                  bool force_return) {
+    if (!is_gpu_rank()) {
+        return GPU_DATA(nullptr, dummy_gpu_data->schema, nullptr);
+    }
+
     if (collected_rows < out_batch_size && !force_return) {
         dummy_gpu_data->stream_event->event.wait(se->stream);
         return GPU_DATA(make_empty_like(dummy_gpu_data->table, se),
