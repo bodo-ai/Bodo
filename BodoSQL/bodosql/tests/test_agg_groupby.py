@@ -540,7 +540,7 @@ def test_having_numeric(
     )
 
 
-# @pytest.mark.bodosql_cpp   # SqlPrefixOperator not supported NOT
+@pytest.mark.bodosql_cpp
 def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Tests groupby + having with aggregation in the condition
@@ -564,7 +564,7 @@ def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_
     )
 
 
-# @pytest.mark.bodosql_cpp   # SqlPrefixOperator not supported NOT
+@pytest.mark.bodosql_cpp
 def test_having_boolean_groupby_cond(
     bodosql_boolean_types, spark_info, memory_leak_check
 ):
