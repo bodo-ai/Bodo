@@ -415,6 +415,7 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
             ret->children.push_back(std::move(lhs_duck));
             return ret;
         } break;
+        case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
                 etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
@@ -1269,10 +1270,6 @@ std::pair<int64_t, PyObject *> execute_plan(
     if (gpu_id.value() != -1) {
         // Set device (resets to previous device when device_guard goes out of
         // scope)
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        // std::cout << "Rank " << myrank << " using GPU " << gpu_id.value()
-        //           << std::endl;
         device_guard.emplace(gpu_id);
 
         mr = get_gpu_async_memory_resource();

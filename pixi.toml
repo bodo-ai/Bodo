@@ -110,7 +110,6 @@ SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-platform-mpich]
 cmd = "chmod +x $BUILDSCRIPT && $BUILDSCRIPT"
-outputs = ["/opt/mpich/lib/pkgconfig/mpich.pc"]
 [tasks.build-platform-mpich.env]
 BUILDSCRIPT="buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
 
