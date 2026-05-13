@@ -520,10 +520,10 @@ def java_agg_to_python_agg(ctx, java_plan):
             raise NotImplementedError("Filtered aggregations are not supported yet")
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
-        if func_name in ["size"]:
+        if func_name == "size":
             assert len(arg_cols) == 0, "Only zero size aggregations are supported"
             out_type = pa.int64()
-        elif func_name in ["nunique"]:
+        elif func_name == "nunique":
             assert len(arg_cols) == 1, (
                 "Only single-argument nunique aggregations are supported"
             )
