@@ -151,7 +151,10 @@ enum class ExpressionType : uint8_t {
 	LAMBDA = 231,
 	POSITIONAL_REFERENCE = 232,
 	BOUND_LAMBDA_REF = 233,
-	BOUND_EXPANDED = 234
+	BOUND_EXPANDED = 234,
+
+	// Bodo change: added new operator
+	OPERATOR_IS_TRUE = 235
 };
 
 //===--------------------------------------------------------------------===//

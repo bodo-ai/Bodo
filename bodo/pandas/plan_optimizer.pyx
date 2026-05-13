@@ -150,6 +150,7 @@ cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" no
         POSITIONAL_REFERENCE "duckdb::ExpressionType::POSITIONAL_REFERENCE"
         BOUND_LAMBDA_REF "duckdb::ExpressionType::BOUND_LAMBDA_REF"
         BOUND_EXPANDED "duckdb::ExpressionType::BOUND_EXPANDED"
+        OPERATOR_IS_TRUE "duckdb::ExpressionType::OPERATOR_IS_TRUE"
 
 def str_to_expr_type(val):
     if val is operator.eq:
@@ -174,6 +175,8 @@ def str_to_expr_type(val):
         return CExpressionType.OPERATOR_IS_NOT_NULL
     elif val == "isnull":
         return CExpressionType.OPERATOR_IS_NULL
+    elif val == "istrue":
+        return CExpressionType.OPERATOR_IS_TRUE
     else:
         raise NotImplementedError(f"Unhandled case {str(val)} in str_to_expr_type")
 

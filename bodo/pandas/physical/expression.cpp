@@ -291,6 +291,20 @@ arrow::Datum do_arrow_compute_unary(
         return invert_res.ValueOrDie();
     }
 
+    // Special handling for is_true since it is not supported directly
+    // by Arrow compute.
+    if (comparator == "is_true") {
+        auto arrow_false = arrow::MakeScalar(false);
+        arrow::Result<arrow::Datum> is_true_res = arrow::compute::CallFunction(
+            "coalesce", {src1, arrow_false}, func_options);
+        if (!is_true_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_unary: Error in Arrow compute: " +
+                is_true_res.status().message());
+        }
+        return is_true_res.ValueOrDie();
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {

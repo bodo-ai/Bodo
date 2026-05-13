@@ -409,12 +409,8 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     auto lhs_duck = to_duckdb(lhs);
 
     switch (etype) {
-        case duckdb::ExpressionType::OPERATOR_NOT: {
-            auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
-                etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
-            ret->children.push_back(std::move(lhs_duck));
-            return ret;
-        } break;
+        case duckdb::ExpressionType::OPERATOR_NOT:
+        case duckdb::ExpressionType::OPERATOR_IS_TRUE:
         case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(

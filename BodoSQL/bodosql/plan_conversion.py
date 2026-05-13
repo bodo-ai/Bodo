@@ -209,6 +209,10 @@ def java_call_to_python_call(java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "isnull")
 
+        if kind.equals(SqlKind.IS_TRUE):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "istrue")
+
     if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
         operands = java_call.getOperands()
         input = java_expr_to_python_expr(operands[0], input_plan)
