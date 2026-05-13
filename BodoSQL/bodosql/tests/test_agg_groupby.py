@@ -151,7 +151,7 @@ def test_count_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp   # nulls not handled correctly
+@pytest.mark.bodosql_cpp
 def test_count_nullable_numeric(
     bodosql_nullable_numeric_types, spark_info, memory_leak_check
 ):
@@ -1259,7 +1259,7 @@ def test_max_min_tz_aware(memory_leak_check):
 
 
 @pytest.mark.tz_aware
-# @pytest.mark.bodosql_cpp   # dataframes are different
+@pytest.mark.bodosql_cpp
 def test_count_tz_aware(memory_leak_check):
     """
     Test count and count(*) on a tz-aware timestamp column
