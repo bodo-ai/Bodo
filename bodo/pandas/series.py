@@ -1277,6 +1277,20 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         values = pa.array(values, type=self.head(0).dtype.pyarrow_dtype)
         return _get_series_func_plan(self._plan, new_metadata, "isin", (values,), {})
 
+    @check_args_fallback(supported=["value"])
+    def fillna(self, value, *, axis=None, inplace: bool = False, limit=None):
+        """
+        Fill missing values in Series with specified `value`.
+        """
+
+        index = self.head(0).index
+        new_metadata = pd.Series(
+            dtype=self.dtype,
+            name=self.name,
+            index=index,
+        )
+        return _get_series_func_plan(self._plan, new_metadata, "fillna", (value,), {})
+
     @check_args_fallback(supported=["drop", "name", "level"])
     def reset_index(
         self,
