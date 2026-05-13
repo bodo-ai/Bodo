@@ -204,7 +204,7 @@ class GPUtoCPUExchange : public RankDataExchange {
 
     std::unique_ptr<ChunkedTableBuilderState> ctb_state;
 };
-#else
+#else  // USE_CUDF
 
 struct GPU_DATA {};
 struct StreamAndEvent {};
@@ -213,7 +213,7 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
     return std::shared_ptr<StreamAndEvent>();
 }
 
-#endif
+#endif  // USE_CUDF
 
 /**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they

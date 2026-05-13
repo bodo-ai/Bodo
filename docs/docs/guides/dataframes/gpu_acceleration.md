@@ -28,12 +28,6 @@ If `BODO_GPU` is set to another value or not set, Bodo DataFrames will use avail
 
 ## Enabling GPU Hybrid Execution
 
-Bodo uses CUDA-aware MPI for GPU communication, which in the OpenMPI case requires setting OpenMPI's communication layer to UCX:
-
-```
-export OMPI_MCA_pml="ucx"
-```
-
 If spawn mode is used on a multi-node cluster with OpenMPI the mapping must be set to allow oversubscription due to the extra spawner rank.
 
 ```
@@ -115,6 +109,8 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 * Series reductions: sum, product, count, mean, min, max
 
 * drop_duplicates, concat, Series.isin
+
+* Iceberg read (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
 
 ## Unsupported Capabilities
 

@@ -512,6 +512,12 @@ rmm::cuda_device_id get_gpu_id();
 int get_cluster_cuda_device_count();
 
 /**
+ * @brief Get the smallest memory size of all the GPUs in the system.
+ * @return Smallest GPU memory size.
+ */
+size_t get_smallest_gpu_mem_size();
+
+/**
  * @brief Get the MPI communicator for ranks with GPUs assigned
  * @param gpu_id GPU device ID
  * @return MPI_Comm
