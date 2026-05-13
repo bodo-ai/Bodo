@@ -108,14 +108,33 @@ SCCACHE_REGION = "us-east-2"
 SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
-[tasks.build-platform-mpich-cudf]
+[tasks.build-platform-mpich]
 cmd = "chmod +x $BUILDSCRIPT && $BUILDSCRIPT"
 outputs = ["/opt/mpich/lib/pkgconfig/mpich.pc"]
-[tasks.build-platform-mpich-cudf.env]
+[tasks.build-platform-mpich.env]
 BUILDSCRIPT="buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
 
+[tasks.configure-bodo-platform-cudf]
+cmd = """
+pip install --no-deps --no-build-isolation -Cbuild-dir=build/platform-cudf \
+-Ccmake.define.USE_CUDF=ON \
+-Ccmake.define.MPI_ROOT=/opt/mpich \
+-Cinstall.strip=false -ve . \
+"""
+inputs = ["CMakeLists.txt", "pyproject.toml"]
+outputs = ["build/platform-cudf/CMakeCache.txt"]
+
+[tasks.build-bodo-platform-cudf]
+cmd = """
+cmake --build build/platform-cudf -j && \
+cmake --install build/platform-cudf --prefix "$(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")" && \
+cmake -E copy build/platform-cudf/compile_commands.json compile_commands.json
+"""
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.hpp", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+depends-on = ["configure-bodo-platform-cudf"]
+
 [tasks.build-platform-cudf]
-depends-on = ["build-platform-mpich-cudf", "build-bodo-cudf"]
+depends-on = ["build-platform-mpich", "build-bodo-platform-cudf"]
 
 [tasks.configure-bodo-cudf-debug]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/cudf-debug -Ccmake.define.USE_CUDF=ON -Ccmake.build-type='Debug' -Cinstall.strip=false"
