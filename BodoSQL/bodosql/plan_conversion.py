@@ -521,7 +521,14 @@ def java_agg_to_python_agg(ctx, java_plan):
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
         if func_name == "size":
-            assert len(arg_cols) == 0, "Only zero size aggregations are supported"
+            assert len(arg_cols) in [0, 1], (
+                "Size aggregations arg len not in [0,1] are not supported"
+            )
+            out_type = pa.int64()
+        elif func_name == "count":
+            assert len(arg_cols) == 1, (
+                "Only single-argument count aggregations are supported"
+            )
             out_type = pa.int64()
         elif func_name == "nunique":
             assert len(arg_cols) == 1, (
@@ -567,26 +574,28 @@ def _agg_to_func_name(func):
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
 
+    argList = func.getArgList()
+
     # TODO[BSE-5163]: support SUM0 initialization properly
     if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
 
-    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 0:
+    if kind.equals(SqlKind.COUNT) and len(argList) == 0:
         return "size"
 
-    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 1:
-        return "nunique"
+    if kind.equals(SqlKind.COUNT) and len(argList) == 1:
+        return "count"
 
-    if kind.equals(SqlKind.MAX) and len(func.getArgList()) == 1:
+    if kind.equals(SqlKind.MAX) and len(argList) == 1:
         return "max"
 
-    if kind.equals(SqlKind.MIN) and len(func.getArgList()) == 1:
+    if kind.equals(SqlKind.MIN) and len(argList) == 1:
         return "min"
 
-    if kind.equals(SqlKind.AVG) and len(func.getArgList()) == 1:
+    if kind.equals(SqlKind.AVG) and len(argList) == 1:
         return "mean"
 
-    if kind.equals(SqlKind.STDDEV_SAMP) and len(func.getArgList()) == 1:
+    if kind.equals(SqlKind.STDDEV_SAMP) and len(argList) == 1:
         return "std"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
