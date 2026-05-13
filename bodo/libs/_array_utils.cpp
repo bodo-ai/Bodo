@@ -1170,9 +1170,13 @@ std::shared_ptr<table_info> RetrieveTable(
         rows_to_keep[next_idx] = i_row;
         size_t delta =
             arrow::bit_util::GetBit(
-                row_bitmask
-                    ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>(),
-                i_row)
+                (uint8_t*)row_bitmask
+                    ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                i_row) &&
+                    arrow::bit_util::GetBit(
+                        row_bitmask->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                           uint8_t>(),
+                        i_row)
                 ? 1
                 : 0;
         next_idx += delta;
