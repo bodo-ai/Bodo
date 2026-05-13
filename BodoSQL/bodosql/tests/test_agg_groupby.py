@@ -310,7 +310,7 @@ def test_having_repeat_numeric(bodosql_numeric_types, spark_info, memory_leak_ch
     )
 
 
-# @pytest.mark.bodosql_cpp   # dataframe are different
+@pytest.mark.bodosql_cpp
 def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     """test having clause in datetime queries"""
     check_query(
@@ -323,7 +323,7 @@ def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_
 
 
 @pytest.mark.slow
-# @pytest.mark.bodosql_cpp   # dataframe are different
+@pytest.mark.bodosql_cpp
 def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
     """test having clause in datetime queries"""
     expected_output = bodosql_interval_types["TABLE1"].groupby("A")["B"].count()

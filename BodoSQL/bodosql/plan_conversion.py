@@ -551,7 +551,7 @@ def java_agg_to_python_agg(ctx, java_plan):
                 func_name,
                 None,
                 arg_cols,
-                True,
+                False,
             )
         )
 
