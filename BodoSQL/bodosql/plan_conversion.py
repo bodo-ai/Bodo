@@ -700,6 +700,8 @@ def sql_type_to_pa_type(sql_type_name):
         return pa.duration("ns")
     if sql_type_name.equals(SqlTypeName.BOOLEAN):
         return pa.bool_()
+    if sql_type_name.equals(SqlTypeName.CHAR):
+        return pa.large_string()
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
