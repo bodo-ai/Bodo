@@ -1719,6 +1719,9 @@ def groupby_agg_df(request):
         pytest.param(["sum", "count"], {}, id="func_list"),
         pytest.param("sum", {}, id="func_str"),
         pytest.param(
+            {"A": ["mean", "count"], "D": ["count", "sum"]}, {}, id="func_dict"
+        ),
+        pytest.param(
             None,
             {
                 "mean_A": pd.NamedAgg("A", "mean"),
