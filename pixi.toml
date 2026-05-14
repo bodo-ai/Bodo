@@ -24,10 +24,6 @@ CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
 [feature.mpich-build-vars.activation.env]
 LD_LIBRARY_PATH="/opt/mpich/lib:$LD_LIBRARY_PATH"
 PATH="/opt/mpich/bin:$PATH"
-LDFLAGS="$LDFLAGS -L/opt/mpich/lib"
-CXXFLAGS="$CXXFLAGS -I/opt/mpich/include"
-CPPFLAGS="$CPPFLAGS -I/opt/mpich/include"
-CFLAGS="$CFLAGS -I/opt/mpich/include"
 
 [tasks.configure-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve . -Cbuild-dir=build/standard"
@@ -106,9 +102,7 @@ SCCACHE_S3_USE_SSL = "true"
 SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
 
 [tasks.build-platform-mpich]
-cmd = "chmod +x $BUILDSCRIPT && $BUILDSCRIPT"
-[tasks.build-platform-mpich.env]
-BUILDSCRIPT="buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
+cmd = "buildscripts/build-bodo-from-source-platform/build_cuda_mpich.sh"
 
 [tasks.configure-bodo-platform-cudf]
 cmd = """
