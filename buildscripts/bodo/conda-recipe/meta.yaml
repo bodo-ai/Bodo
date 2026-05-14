@@ -95,6 +95,7 @@ requirements:
     - rmm =26.04                   # [gpu]
     - librmm =26.04                # [gpu]
     - cuda-version 13.*            # [gpu]
+    - cuda-nvml-dev                # [gpu]
 
     - {{ pin_compatible("cuda-version") }}  # [gpu]
 
