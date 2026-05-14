@@ -1112,7 +1112,7 @@ def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
 
 
 @pytest.mark.slow
-# @pytest.mark.bodosql_cpp   # aggregation OTHER not supported yet
+@pytest.mark.bodosql_cpp
 def test_booland_agg_having(memory_leak_check):
     """Test having with booland_agg aggregation in the condition"""
     query = (
