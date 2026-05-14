@@ -9,7 +9,7 @@ export BODO_NUM_WORKERS=3
 if [[ "$gpu" == "true" ]]; then
     export BODO_GPU_DISABLE_CPU_FALLBACK=1
     export LD_LIBRARY_PATH=/lib64:/usr/lib64:$LD_LIBRARY_PATH
-    python -c "import bodo.pandas as pd; print(pd.DataFrame({'a': [1, 2], 'b': [3, 4]})['a'])"
+    BODO_NUM_WORKERS=1 python -c "import bodo.pandas as pd; print(pd.DataFrame({'a': [1, 2], 'b': [3, 4]})['a'])"
 elif [[ "$(uname)" == "Darwin" ]]; then
     # OpenMPI requires mpiexec on macOS CI.
     mpiexec -n 1 python -u examples/Misc/misc_pi.py
