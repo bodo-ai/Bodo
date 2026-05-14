@@ -5,6 +5,7 @@
 #include <string>
 
 #ifdef USE_CUDF
+#include <cuda_runtime.h>
 #include <cudf/concatenate.hpp>
 #include <cudf/copying.hpp>
 #include <cudf/table/table.hpp>
@@ -24,10 +25,48 @@ int get_streaming_batch_size() {
     return (env_str != nullptr) ? std::stoi(env_str) : 32768;
 }
 
+#ifdef USE_CUDF
+
 int get_gpu_streaming_batch_size() {
+    static std::once_flag once_flag_;
+    static int default_result;
+
+    std::call_once(once_flag_, [&]() {
+        if (is_gpu_rank()) {
+            size_t free_bytes = 0;
+            size_t total_bytes = 0;
+            // Get total bytes available on the GPU.
+            cudaMemGetInfo(&free_bytes, &total_bytes);
+            // Use this environment variable to override the default divisor
+            // of 2000.
+            char *env_str =
+                std::getenv("BODO_GPU_STREAMING_BATCH_SIZE_DIVISOR");
+            // We have some data on a limited number of GPU types that allowing
+            // for 1000 bytes per row with all attendant overheads and temporary
+            // tables yields a good performance with low-risk of crashing or
+            // hanging due to memory related problems.  Allocating 500 bytes per
+            // row + overheads pretty consistently has problems particularly if
+            // there are CTEs involved.  Allocating 2000 per row + overheads is
+            // about 10% slower but with even less likelihood of memory
+            // problems.
+            int divisor = (env_str != nullptr) ? std::stoi(env_str) : 2000;
+            default_result = total_bytes / divisor;
+        } else {
+            default_result = 1000000;
+        }
+    });
+
     char *env_str = std::getenv("BODO_GPU_STREAMING_BATCH_SIZE");
-    return (env_str != nullptr) ? std::stoi(env_str) : 24.e6;
+    return (env_str != nullptr) ? std::stoi(env_str) : default_result;
 }
+
+#else  // USE_CUDF
+
+int get_gpu_streaming_batch_size() {
+    throw std::runtime_error("Code asked for GPU batch size in non-CUDF mode.");
+}
+
+#endif  // USE_CUDF
 
 // Maximum Parquet file size for streaming Parquet write
 int64_t get_parquet_chunk_size() {
@@ -162,55 +201,80 @@ PhysicalProcessBatch::ProcessBatch(GPU_DATA input_batch,
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUSource::ProduceBatch() {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    std::shared_ptr<StreamAndEvent> se;
+    if (is_gpu_rank()) {
+        se = make_stream_and_event(g_use_async);
+    }
     auto gpu_result = ProduceBatchGPU(se);
-    se->event.record(se->stream);
+    if (is_gpu_rank()) {
+        se->event.record(se->stream);
+    }
     return gpu_result;
 }
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(GPU_DATA input_batch,
                                              OperatorResult prev_op_result) {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
-    // Wait until previous GPU pipeline processing is done.
-    if (input_batch.stream_event) {
-        input_batch.stream_event->event.wait(se->stream);
+    std::shared_ptr<StreamAndEvent> se;
+    if (is_gpu_rank()) {
+        se = make_stream_and_event(g_use_async);
+        // Wait until previous GPU pipeline processing is done.
+        if (input_batch.stream_event) {
+            input_batch.stream_event->event.wait(se->stream);
+        }
     }
     auto gpu_result = ConsumeBatchGPU(input_batch, prev_op_result, se);
-    se->event.record(se->stream);
+    if (is_gpu_rank()) {
+        se->event.record(se->stream);
+    }
     return gpu_result;
 }
 
 OperatorResult PhysicalGPUSink::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    std::shared_ptr<StreamAndEvent> se;
+    if (is_gpu_rank()) {
+        se = make_stream_and_event(g_use_async);
+    }
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, se, prev_op_result);
 
     auto gpu_result = ConsumeBatchGPU(gpu_batch, exchange_result, se);
-    se->event.record(se->stream);
+    if (is_gpu_rank()) {
+        se->event.record(se->stream);
+    }
     return gpu_result;
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     GPU_DATA input_batch, OperatorResult prev_op_result) {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
-    // Wait until previous GPU pipeline processing is done.
-    if (input_batch.stream_event) {
-        input_batch.stream_event->event.wait(se->stream);
+    std::shared_ptr<StreamAndEvent> se;
+    if (is_gpu_rank()) {
+        se = make_stream_and_event(g_use_async);
+        // Wait until previous GPU pipeline processing is done.
+        if (input_batch.stream_event) {
+            input_batch.stream_event->event.wait(se->stream);
+        }
     }
     auto gpu_result = ProcessBatchGPU(input_batch, prev_op_result, se);
-    se->event.record(se->stream);
+    if (is_gpu_rank()) {
+        se->event.record(se->stream);
+    }
     return gpu_result;
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
-    std::shared_ptr<StreamAndEvent> se = make_stream_and_event(g_use_async);
+    std::shared_ptr<StreamAndEvent> se;
+    if (is_gpu_rank()) {
+        se = make_stream_and_event(g_use_async);
+    }
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, se, prev_op_result);
 
     auto gpu_result = ProcessBatchGPU(gpu_batch, exchange_result, se);
-    se->event.record(se->stream);
+    if (is_gpu_rank()) {
+        se->event.record(se->stream);
+    }
     return gpu_result;
 }
 

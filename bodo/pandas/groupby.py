@@ -553,13 +553,18 @@ def _groupby_agg_plan(
 ) -> BodoSeries | BodoDataFrame:
     """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
+    from bodo.pandas_compat import pandas_version
 
     grouped_selection = grouped.selection_for_plan
 
     zero_size_df = _empty_like(grouped._obj)
 
-    # Convert to Pandas types to avoid gaps in Arrow conversion
-    zero_size_df_pandas = convert_to_pandas_types(zero_size_df)
+    # Convert to Pandas types to avoid gaps in Arrow types of Pandas <3
+    zero_size_df_pandas = (
+        convert_to_pandas_types(zero_size_df)
+        if pandas_version < (3, 0)
+        else zero_size_df
+    )
     empty_data_pandas = zero_size_df_pandas.groupby(
         grouped._keys, as_index=grouped._as_index
     )[
@@ -579,7 +584,7 @@ def _groupby_agg_plan(
 
     n_key_cols = 0 if grouped._as_index else len(grouped._keys)
     empty_data = _cast_groupby_agg_columns(
-        normalized_func, zero_size_df, empty_data_pandas, n_key_cols
+        normalized_func, zero_size_df, empty_data_pandas, n_key_cols, grouped._keys
     )
 
     out_types = empty_data
@@ -900,7 +905,7 @@ def _get_agg_output_type(
         elif pa.types.is_decimal(pa_type):
             # TODO: Decimal sum
             fallback = True
-    elif func_name in ("mean", "std", "var", "skew"):
+    elif func_name in ("mean", "std", "var", "skew", "median"):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
@@ -982,6 +987,7 @@ def _cast_groupby_agg_columns(
     in_data: pd.DataFrame,
     out_data: pd.Series | pd.DataFrame,
     n_key_cols: int,
+    keys: list[str],
 ) -> pd.Series | pd.DataFrame:
     """
     Casts dtypes in the output of GroupBy.agg() to the correct type for aggregation.
@@ -994,6 +1000,7 @@ def _cast_groupby_agg_columns(
         in_data : An empty DataFrame with the same shape as the input to the
             aggregation.
         n_key_cols : Number of grouping keys in the output.
+        keys: column names of key columns
 
     Returns:
         pd.Series | pd.DataFrame: A DataFrame or Series with the dtypes casted depending
@@ -1030,5 +1037,11 @@ def _cast_groupby_agg_columns(
 
         out_col_name = out_data.columns[i + n_key_cols]
         out_data[out_col_name] = pd.Series([], dtype=pd.ArrowDtype(new_type))
+
+    # Set key dtypes as Arrow dtypes to avoid object dtype issues downstream
+    # TODO(ehsan): handle as_index=True case which generates MultiIndex
+    for i in range(n_key_cols):
+        key_col_name = keys[i]
+        out_data[key_col_name] = pd.Series([], dtype=in_data[key_col_name].dtype)
 
     return out_data

@@ -283,6 +283,8 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
+if gpu_enabled:
+    os.environ["OMPI_MCA_pml"] = "ucx"
 
 # NOTE: 'pandas_compat' has to be imported first in bodo package to make sure all Numba
 # patches are applied before Bodo's use.

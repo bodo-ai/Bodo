@@ -50,7 +50,8 @@ class PhysicalGPUProjection : public PhysicalGPUProcessBatch {
                std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
                    col_ref_map) {
                 return buildPhysicalGPUExprTree(expr, col_ref_map, true);
-            });
+            },
+            is_gpu_rank());
         this->metrics.init_time = end_timer(start_init_time);
         this->metrics.n_exprs = this->physical_exprs.size();
         arrow_output_schema = this->output_schema->ToArrowSchema();

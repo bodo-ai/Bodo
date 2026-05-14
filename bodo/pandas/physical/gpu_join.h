@@ -57,6 +57,7 @@ inline bool gpu_capable(duckdb::LogicalComparisonJoin& logical_join) {
 class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
    private:
     bool doBroadcastJoin(duckdb::LogicalComparisonJoin& join) {
+        time_pt start_init = start_timer();
         duckdb::LogicalOperator& buildSide = *join.children[1];
         duckdb::LogicalOperator& probeSide = *join.children[0];
 
@@ -88,12 +89,12 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
         char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");
         if (bcast_threshold) {
+            this->metrics.init_time += end_timer(start_init);
             return static_cast<int>(build_total) < std::stoi(bcast_threshold);
         }
 
-        size_t free_bytes = 0;
-        size_t total_bytes = 0;
-        cudaMemGetInfo(&free_bytes, &total_bytes);
+        size_t total_bytes = get_smallest_gpu_mem_size();
+        this->metrics.init_time += end_timer(start_init);
         // Do broadcast join if probe table is order of magnitude smaller than
         // probe and it fits on GPU with room for the hash table.
         return (build_total < (probe_total * 0.1)) &&
@@ -110,6 +111,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
                     const std::shared_ptr<bodo::Schema> build_table_schema,
                     const std::shared_ptr<bodo::Schema> probe_table_schema) {
+        time_pt start_init = start_timer();
         std::vector<int64_t> build_kept_cols;
         std::vector<int64_t> probe_kept_cols;
 
@@ -127,6 +129,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             build_table_schema, probe_table_schema, build_kept_cols,
             probe_kept_cols, output_schema, duckdb::JoinType::INVALID, nullptr,
             true);
+        this->metrics.init_time += end_timer(start_init);
     }
 
     /**
@@ -143,6 +146,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         duckdb::vector<duckdb::JoinCondition>& conditions,
         const std::shared_ptr<bodo::Schema> build_table_schema,
         const std::shared_ptr<bodo::Schema> probe_table_schema) {
+        time_pt start_init = start_timer();
         // Probe side
         duckdb::vector<duckdb::ColumnBinding> left_bindings =
             logical_join.children[0]->GetColumnBindings();
@@ -293,6 +297,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
                 "Output schema column count does not match logical join column "
                 "bindings count.");
         }
+        this->metrics.init_time += end_timer(start_init);
     }
 
     void initOutputSchema(
@@ -345,9 +350,28 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     virtual ~PhysicalGPUJoin() = default;
 
-    void FinalizeSink() override { cuda_join->FinalizeBuild(); }
+    void FinalizeSink() override {
+        time_pt start_consume = start_timer();
+        cuda_join->FinalizeBuild();
+        this->metrics.consume_time += end_timer(start_consume);
+    }
 
-    void FinalizeProcessBatch() override {}
+    void FinalizeProcessBatch() override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 0),
+            metrics.init_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
+            metrics.consume_time);
+        QueryProfileCollector::Default().SubmitOperatorStageTime(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
+            metrics.process_batch_time);
+        QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
+            this->metrics.output_row_count);
+    }
 
     /**
      * @brief process input tables to build side of join (populate the hash
@@ -358,11 +382,13 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+        time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
         bool global_is_last = cuda_join->BuildConsumeBatch(
             input_batch.table, input_batch.stream_event, local_is_last);
 
+        this->metrics.consume_time += end_timer(start_consume);
         return global_is_last ? OperatorResult::FINISHED
                               : (cuda_join->is_build_complete()
                                      ? OperatorResult::HAVE_MORE_OUTPUT
@@ -378,6 +404,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     std::pair<GPU_DATA, OperatorResult> ProcessBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
+        time_pt start_produce = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
 
         // TODO(ehsan): implement buffering output similar to CPU join
@@ -392,6 +419,9 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
             request_input = false;
         }
 
+        this->metrics.output_row_count +=
+            output_gpu_data.table ? output_gpu_data.table->num_rows() : 0;
+        this->metrics.process_batch_time += end_timer(start_produce);
         return {output_gpu_data,
                 global_is_last
                     ? OperatorResult::FINISHED

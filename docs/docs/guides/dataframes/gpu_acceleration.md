@@ -28,12 +28,6 @@ If `BODO_GPU` is set to another value or not set, Bodo DataFrames will use avail
 
 ## Enabling GPU Hybrid Execution
 
-Bodo uses CUDA-aware MPI for GPU communication, which in the OpenMPI case requires setting OpenMPI's communication layer to UCX:
-
-```
-export OMPI_MCA_pml="ucx"
-```
-
 If spawn mode is used on a multi-node cluster with OpenMPI the mapping must be set to allow oversubscription due to the extra spawner rank.
 
 ```
@@ -116,6 +110,8 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 * drop_duplicates, concat, Series.isin
 
+* Iceberg read (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
+
 ## Unsupported Capabilities
 
 No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
@@ -139,6 +135,7 @@ Column selection and built-in arithmetic/boolean expressions are supported on GP
 ### GroupBy
 
 The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nunique) are supported on GPU. Custom aggregations implemented as UDFs or Python callbacks will run on CPU.
+`sum` of an all-NA group produces NA output (libcudf behavior) instead of zero (Pandas behavior).
 
 ### Joins
 

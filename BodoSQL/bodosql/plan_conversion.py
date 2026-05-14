@@ -17,10 +17,12 @@ from bodo.pandas.plan import (
     ConstantExpression,
     LogicalAggregate,
     LogicalComparisonJoin,
+    LogicalDistinct,
     LogicalFilter,
     LogicalJoinFilter,
     LogicalOrder,
     LogicalProjection,
+    NullExpression,
     UnaryOpExpression,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -91,8 +93,12 @@ def java_plan_to_python_plan(ctx, java_plan):
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+        pa_schema = pa.schema(
+            [java_field_to_pa_field(f) for f in java_plan.getRowType().getFieldList()]
+        )
         exprs = [
-            java_expr_to_python_expr(e, input_plan) for e in java_plan.getProjects()
+            java_expr_to_python_expr(e, input_plan, f.type)
+            for e, f in zip(java_plan.getProjects(), pa_schema)
         ]
         names = list(java_plan.getRowType().getFieldNames())
         new_schema = pa.schema(
@@ -122,12 +128,17 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalSort":
         return java_sort_to_python_sort(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalValues":
+        return java_values_to_python_values(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
-def java_expr_to_python_expr(java_expr, input_plan):
+def java_expr_to_python_expr(java_expr, input_plan, out_pa_type=None):
     """Convert a BodoSQL Java expression to a DataFrame library expression
     (bodo.pandas.plan.Expression).
+    out_pa_type is only needed for NULL literals to determine their type since they
+    don't carry type info in Calcite.
     """
     java_class_name = java_expr.getClass().getSimpleName()
 
@@ -139,7 +150,7 @@ def java_expr_to_python_expr(java_expr, input_plan):
         return java_call_to_python_call(java_expr, input_plan)
 
     if java_class_name == "RexLiteral":
-        return java_literal_to_python_literal(java_expr, input_plan)
+        return java_literal_to_python_literal(java_expr, input_plan, out_pa_type)
 
     raise NotImplementedError(f"Expression {java_class_name} not supported yet")
 
@@ -195,6 +206,83 @@ def java_call_to_python_call(java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "notnull")
 
+        if kind.equals(SqlKind.IS_NULL):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "isnull")
+
+    if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
+        operands = java_call.getOperands()
+        input = java_expr_to_python_expr(operands[0], input_plan)
+        kind = op.getKind()
+        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+        if kind.equals(SqlKind.NOT):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "__invert__")
+
+    if operator_class_name == "SqlBasicFunction":
+        # Map Calcite basic functions to Bodo expressions
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
+        # function name as string (e.g., "POWER", "SQRT")
+        func_name = op.getName().toUpperCase()
+
+        # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
+        if func_name == "POWER" and len(op_exprs) == 2:
+            left = op_exprs[0]
+            right = op_exprs[1]
+            out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
+            return ArithOpExpression(out_empty, left, right, "__pow__")
+
+        # SQRT(x) -> unary sqrt
+        if func_name == "SQRT" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data.iloc[:, 0] ** 0.5
+            return UnaryOpExpression(out_empty, inp, "sqrt")
+
+        # ABS(x)
+        if func_name == "ABS" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data.iloc[:, 0].abs()
+            return UnaryOpExpression(out_empty, inp, "abs")
+
+        # CEIL(x) / CEILING(x)
+        if func_name in ("CEIL", "CEILING") and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data
+            return UnaryOpExpression(out_empty, inp, "ceil")
+
+        # FLOOR(x)
+        if func_name == "FLOOR" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data
+            return UnaryOpExpression(out_empty, inp, "floor")
+
+        # EXP(x)
+        if func_name == "EXP" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data
+            out_empty = out_empty.astype("float64")
+            return UnaryOpExpression(out_empty, inp, "exp")
+
+        # LN(x) or LOG(x) -> natural log
+        if func_name in ("LN", "LOG") and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data
+            out_empty = out_empty.astype("float64")
+            return UnaryOpExpression(out_empty, inp, "log")
+
+        # ROUND(x, d) or ROUND(x) -> map to a unary/binary op if supported
+        if func_name == "ROUND" and len(op_exprs) in (1, 2):
+            inp = op_exprs[0]
+            out_empty = inp.empty_data
+            return UnaryOpExpression(out_empty, inp, "round")
+
+        # If we didn't match a supported basic function, fall through to NotImplemented
+        raise NotImplementedError(
+            f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
+        )
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
@@ -229,6 +317,11 @@ def java_binop_to_python_expr(kind, op_exprs):
     if kind.equals(SqlKind.TIMES):
         out_empty = left.empty_data.iloc[:, 0] * right.empty_data.iloc[:, 0]
         expr = ArithOpExpression(out_empty, left, right, "__mul__")
+        return expr
+
+    if kind.equals(SqlKind.DIVIDE):
+        out_empty = left.empty_data.iloc[:, 0] / right.empty_data.iloc[:, 0]
+        expr = ArithOpExpression(out_empty, left, right, "__truediv__")
         return expr
 
     # Comparison operators
@@ -364,8 +457,11 @@ def java_filter_to_python_filter(ctx, java_filter):
     return LogicalFilter(input_plan.empty_data, input_plan, condition)
 
 
-def java_literal_to_python_literal(java_literal, input_plan):
-    """Convert a BodoSQL Java literal expression to a DataFrame library constant"""
+def java_literal_to_python_literal(java_literal, input_plan, out_pa_type=None):
+    """Convert a BodoSQL Java literal expression to a DataFrame library constant.
+    out_pa_type is only needed for NULL literals to determine their type since they
+    don't carry type info in Calcite.
+    """
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
@@ -400,6 +496,11 @@ def java_literal_to_python_literal(java_literal, input_plan):
         val = pa.scalar(java_literal.getValue2(), pa.date32())
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
+    if lit_type_name.equals(SqlTypeName.NULL):
+        assert out_pa_type is not None, "Output type must be provided for NULL literals"
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(out_pa_type))
+        return NullExpression(dummy_empty_data, input_plan, 0)
+
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
     )
@@ -430,19 +531,50 @@ def java_agg_to_python_agg(ctx, java_plan):
 
     exprs = []
     out_types = [input_plan.pa_schema.field(k).type for k in keys]
-    for func in java_plan.getAggCallList():
+    aggCallList = java_plan.getAggCallList()
+    if len(aggCallList) == 0:
+        # If no aggregation expressions then use distinct instead.
+
+        names = list(java_plan.getRowType().getFieldNames())
+        new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
+        empty_out_data = arrow_to_empty_df(new_schema)
+
+        exprs = make_col_ref_exprs(keys, input_plan)
+        plan = LogicalDistinct(
+            empty_out_data,
+            input_plan,
+            exprs,
+        )
+        return plan
+
+    for func in aggCallList:
         if func.hasFilter():
             raise NotImplementedError("Filtered aggregations are not supported yet")
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
         if func_name == "size":
+            assert len(arg_cols) in [0, 1], (
+                "Size aggregations arg len not in [0,1] are not supported"
+            )
             out_type = pa.int64()
-        else:
+        elif func_name == "count":
+            assert len(arg_cols) == 1, (
+                "Only single-argument count aggregations are supported"
+            )
+            out_type = pa.int64()
+        elif func_name == "nunique":
+            assert len(arg_cols) == 1, (
+                "Only single-argument nunique aggregations are supported"
+            )
+            out_type = pa.int64()
+        elif func_name in ["sum", "max", "min", "std", "mean"]:
             assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
             in_type = input_plan.pa_schema.field(arg_cols[0]).type
             out_type = _get_agg_output_type(
                 GroupbyAggFunc("dummy", func_name), in_type, "dummy"
             )
+        else:
+            raise NotImplementedError(f"Aggregation {func_name} not supported yet")
         out_types.append(out_type)
         exprs.append(
             AggregateExpression(
@@ -458,6 +590,7 @@ def java_agg_to_python_agg(ctx, java_plan):
     names = list(java_plan.getRowType().getFieldNames())
     new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
     empty_out_data = arrow_to_empty_df(new_schema)
+
     plan = LogicalAggregate(
         empty_out_data,
         input_plan,
@@ -473,12 +606,29 @@ def _agg_to_func_name(func):
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
 
+    argList = func.getArgList()
+
     # TODO[BSE-5163]: support SUM0 initialization properly
     if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
 
-    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) == 0:
+    if kind.equals(SqlKind.COUNT) and len(argList) == 0:
         return "size"
+
+    if kind.equals(SqlKind.COUNT) and len(argList) == 1:
+        return "count"
+
+    if kind.equals(SqlKind.MAX) and len(argList) == 1:
+        return "max"
+
+    if kind.equals(SqlKind.MIN) and len(argList) == 1:
+        return "min"
+
+    if kind.equals(SqlKind.AVG) and len(argList) == 1:
+        return "mean"
+
+    if kind.equals(SqlKind.STDDEV_SAMP) and len(argList) == 1:
+        return "std"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 
@@ -514,6 +664,73 @@ def java_sort_to_python_sort(ctx, java_plan):
         input_plan.pa_schema,
     )
     return sorted_plan
+
+
+def java_values_to_python_values(ctx, java_plan):
+    """Convert a BodoSQL Java BodoPhysicalValues plan to a Python DataFrame read plan."""
+    rows = java_plan.getTuples()
+    row_type = java_plan.getRowType()
+
+    data = []
+    for row in rows:
+        data.append([java_literal_to_python_literal(e, None).value for e in row])
+
+    pa_schema = pa.schema([java_field_to_pa_field(f) for f in row_type.getFieldList()])
+
+    df = pd.DataFrame()
+    for i, name in enumerate(pa_schema.names):
+        df[name] = pd.Series(
+            [data[j][i] for j in range(len(data))],
+            dtype=pd.ArrowDtype(pa_schema.field(i).type),
+        )
+
+    return bd.from_pandas(df)._plan
+
+
+def java_field_to_pa_field(java_field):
+    """Convert a Calcite RelDataTypeField to a PyArrow field."""
+    name = java_field.getName()
+    java_type = java_field.getType()
+    type_name = java_type.getSqlTypeName()
+
+    return pa.field(name, sql_type_to_pa_type(type_name))
+
+
+def sql_type_to_pa_type(sql_type_name):
+    """Convert a Calcite SqlTypeName to a PyArrow data type."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+
+    if sql_type_name.equals(SqlTypeName.TINYINT):
+        return pa.int8()
+    if sql_type_name.equals(SqlTypeName.SMALLINT):
+        return pa.int16()
+    if sql_type_name.equals(SqlTypeName.INTEGER):
+        return pa.int32()
+    if sql_type_name.equals(SqlTypeName.BIGINT):
+        return pa.int64()
+    if sql_type_name.equals(SqlTypeName.FLOAT):
+        return pa.float32()
+    if sql_type_name.equals(SqlTypeName.DOUBLE):
+        return pa.float64()
+    if sql_type_name.equals(SqlTypeName.VARCHAR):
+        return pa.large_string()
+    if sql_type_name.equals(SqlTypeName.VARBINARY):
+        return pa.large_binary()
+    if sql_type_name.equals(SqlTypeName.DATE):
+        return pa.date32()
+    if sql_type_name.equals(SqlTypeName.TIMESTAMP):
+        return pa.timestamp("ns")
+    if sql_type_name.equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE):
+        # BodoSQL doesn't preserve time zone info for TIMESTAMP_WITH_LOCAL_TIME_ZONE, so
+        # we treat it the same as TIMESTAMP in C++ backend and handle time zones using
+        # other information if needed.
+        return pa.timestamp("ns")
+    if sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
+        return pa.duration("ns")
+    if sql_type_name.equals(SqlTypeName.BOOLEAN):
+        return pa.bool_()
+
+    raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
 
 def visit_iceberg_node(java_plan, read_info):
@@ -695,8 +912,11 @@ def java_call_to_pyiceberg_call(java_call, field_names):
         if kind.equals(SqlKind.IS_NOT_NULL):
             return pie.NotNull(input)
 
+        if kind.equals(SqlKind.IS_NULL):
+            return pie.IsNull(input)
+
     raise NotImplementedError(
-        f"Call operator {operator_class_name} not supported yet: "
+        f"Call operator {operator_class_name} for pyiceberg not supported yet: "
         + java_call.toString()
     )
 

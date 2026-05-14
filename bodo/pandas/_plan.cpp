@@ -415,6 +415,7 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
             ret->children.push_back(std::move(lhs_duck));
             return ret;
         } break;
+        case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
                 etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
@@ -1315,7 +1316,7 @@ std::pair<int64_t, PyObject *> execute_plan(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows) {
+    int64_t num_rows, bool has_partitioning) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1323,7 +1324,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
         BodoParquetScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoParquetScanFunctionData>(
-            parquet_path, pyarrow_schema, storage_options);
+            parquet_path, pyarrow_schema, storage_options, has_partitioning);
 
     // Convert Arrow schema to DuckDB
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);

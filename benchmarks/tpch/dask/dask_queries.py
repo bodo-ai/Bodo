@@ -3,25 +3,32 @@ import argparse
 import os
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime
 
+import dask
 import dask.dataframe as dd
+import pandas as pd
 from dask.distributed import Client
 
 
-# Bodo Change: make all column names lower case, add extension parameter
 def _load_dataset(dataset_path, table_name, ext=".parquet"):
-    df = dd.read_parquet(os.path.join(dataset_path, f"{table_name}{ext}")).rename(
+    return dd.read_parquet(os.path.join(dataset_path, f"{table_name}{ext}")).rename(
         columns=str.lower
     )
-    for c in df.columns:
-        if c.endswith("date"):
-            df[c] = df[c].astype("date32[day][pyarrow]")
-    return df
+
+
+def datetime_or_date_value(value):
+    ts = datetime.strptime(value, "%Y-%m-%d")
+    if dask.config.get("dataframe.backend") == "pandas":
+        return ts.date()
+    # Dask-cuDF does not support date32[day][pyarrow]
+    return ts
 
 
 def query_01(dataset_path, scale, ext=".parquet"):
-    VAR1 = datetime(1998, 9, 2)
+    VAR1 = datetime_or_date_value(
+        "1998-09-02",
+    )
     lineitem_ds = _load_dataset(dataset_path, "lineitem", ext)
 
     lineitem_filtered = lineitem_ds[lineitem_ds.l_shipdate <= VAR1]
@@ -126,7 +133,7 @@ def query_02(dataset_path, scale, ext=".parquet"):
 
 
 def query_03(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-03-15", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-03-15")
     var2 = "BUILDING"
 
     lineitem_ds = _load_dataset(dataset_path, "lineitem", ext)
@@ -155,8 +162,8 @@ def query_03(dataset_path, scale, ext=".parquet"):
 
 
 def query_04(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1993-10-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1993-07-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1993-11-01")
+    date2 = datetime_or_date_value("1993-08-01")
 
     line_item_ds = _load_dataset(dataset_path, "lineitem", ext)
     orders_ds = _load_dataset(dataset_path, "orders", ext)
@@ -179,8 +186,8 @@ def query_04(dataset_path, scale, ext=".parquet"):
 
 
 def query_05(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1996-01-01")
+    date2 = datetime_or_date_value("1997-01-01")
 
     region_ds = _load_dataset(dataset_path, "region", ext)
     nation_ds = _load_dataset(dataset_path, "nation", ext)
@@ -207,8 +214,8 @@ def query_05(dataset_path, scale, ext=".parquet"):
 
 
 def query_06(dataset_path, scale, ext=".parquet"):
-    date1 = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    date2 = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    date1 = datetime_or_date_value("1996-01-01")
+    date2 = datetime_or_date_value("1997-01-01")
     var3 = 24
 
     line_item_ds = _load_dataset(dataset_path, "lineitem", ext)
@@ -216,8 +223,8 @@ def query_06(dataset_path, scale, ext=".parquet"):
     sel = (
         (line_item_ds.l_shipdate >= date1)
         & (line_item_ds.l_shipdate < date2)
-        & (line_item_ds.l_discount >= 0.05)
-        & (line_item_ds.l_discount <= 0.07)
+        & (line_item_ds.l_discount >= 0.08)
+        & (line_item_ds.l_discount <= 0.1)
         & (line_item_ds.l_quantity < var3)
     )
 
@@ -227,8 +234,8 @@ def query_06(dataset_path, scale, ext=".parquet"):
 
 
 def query_07(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-01-01", "%Y-%m-%d")
-    var2 = datetime.strptime("1997-01-01", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-01-01")
+    var2 = datetime_or_date_value("1997-01-01")
 
     nation_ds = _load_dataset(dataset_path, "nation", ext)
     customer_ds = _load_dataset(dataset_path, "customer", ext)
@@ -321,8 +328,8 @@ def query_07(dataset_path, scale, ext=".parquet"):
 
 
 def query_08(dataset_path, scale, ext=".parquet"):
-    var1 = datetime.strptime("1995-01-01", "%Y-%m-%d")
-    var2 = datetime.strptime("1997-01-01", "%Y-%m-%d")
+    var1 = datetime_or_date_value("1995-01-01")
+    var2 = datetime_or_date_value("1997-01-01")
 
     supplier = _load_dataset(dataset_path, "supplier", ext)
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
@@ -404,7 +411,7 @@ def query_09(dataset_path, scale, ext=".parquet"):
                 and p_partkey = l_partkey
                 and o_orderkey = l_orderkey
                 and s_nationkey = n_nationkey
-                and p_name like '%green%'
+                and p_name like '%ghost%'
         ) as profit
     group by
         nation,
@@ -420,7 +427,7 @@ def query_09(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     orders = _load_dataset(dataset_path, "orders", ext)
     nation = _load_dataset(dataset_path, "nation", ext)
-    part = part[part.p_name.str.contains("green")]
+    part = part[part.p_name.str.contains("ghost")]
 
     subquery = (
         part.merge(partsupp, left_on="p_partkey", right_on="ps_partkey", how="inner")
@@ -472,7 +479,7 @@ def query_10(dataset_path, scale, ext=".parquet"):
         c_custkey = o_custkey
         and l_orderkey = o_orderkey
         and o_orderdate >= date '1993-10-01'
-        and o_orderdate < date '1993-10-01' + interval '3' month
+        and o_orderdate < date '1994-01-01'
         and l_returnflag = 'R'
         and c_nationkey = n_nationkey
     group by
@@ -492,8 +499,8 @@ def query_10(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     nation = _load_dataset(dataset_path, "nation", ext)
 
-    orderdate_from = datetime.strptime("1993-10-01", "%Y-%m-%d")
-    orderdate_to = datetime.strptime("1994-01-01", "%Y-%m-%d")
+    orderdate_from = datetime_or_date_value("1993-10-01")
+    orderdate_to = datetime_or_date_value("1994-01-01")
 
     orders = orders[
         (orders.o_orderdate >= orderdate_from) & (orders.o_orderdate < orderdate_to)
@@ -635,8 +642,8 @@ def query_12(dataset_path, scale, ext=".parquet"):
     orders = _load_dataset(dataset_path, "orders", ext)
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
 
-    receiptdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    receiptdate_to = receiptdate_from + timedelta(days=365)
+    receiptdate_from = datetime_or_date_value("1994-01-01")
+    receiptdate_to = datetime_or_date_value("1995-01-01")
 
     table = orders.merge(lineitem, left_on="o_orderkey", right_on="l_orderkey")
     table = table[
@@ -653,12 +660,17 @@ def query_12(dataset_path, scale, ext=".parquet"):
     table["low_line_count"] = 0
     table["low_line_count"] = table.low_line_count.where(mask, 1)
 
-    return (
-        table.groupby("l_shipmode")
-        .agg({"high_line_count": "sum", "low_line_count": "sum"})
+    res = (
+        table.groupby("l_shipmode")["high_line_count", "low_line_count"]
+        .sum()
         .reset_index()
         .sort_values(by="l_shipmode")
     )
+    if dask.config.get("dataframe.backend") == "cudf":
+        # Workaround extra column added at runtime in dask-cudf 26.04
+        res = res.compute()[["l_shipmode", "high_line_count", "low_line_count"]]
+
+    return res
 
 
 def query_13(dataset_path, scale, ext=".parquet"):
@@ -718,14 +730,14 @@ def query_14(dataset_path, scale, ext=".parquet"):
         part
     where
         l_partkey = p_partkey
-        and l_shipdate >= date '1995-09-01'
-        and l_shipdate < date '1995-09-01' + interval '1' month
+        and l_shipdate >= date '1994-03-01'
+        and l_shipdate < date '1994-04-01'
     """
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     part = _load_dataset(dataset_path, "part", ext)
 
-    shipdate_from = datetime.strptime("1995-09-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1995-10-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1994-03-01")
+    shipdate_to = datetime_or_date_value("1994-04-01")
 
     table = lineitem.merge(part, left_on="l_partkey", right_on="p_partkey", how="inner")
     table = table[
@@ -791,8 +803,8 @@ def query_15(dataset_path, scale, ext=".parquet"):
     lineitem = _load_dataset(dataset_path, "lineitem", ext)
     supplier = _load_dataset(dataset_path, "supplier", ext)
 
-    shipdate_from = datetime.strptime("1996-01-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1996-04-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1996-01-01")
+    shipdate_to = datetime_or_date_value("1996-04-01")
 
     # Create revenue view
     lineitem = lineitem[
@@ -1086,7 +1098,7 @@ def query_20(dataset_path, scale, ext=".parquet"):
                     from
                         part
                     where
-                        p_name like 'forest%'
+                        p_name like 'azure%'
                 )
                 and ps_availqty > (
                     select
@@ -1096,12 +1108,12 @@ def query_20(dataset_path, scale, ext=".parquet"):
                     where
                         l_partkey = ps_partkey
                         and l_suppkey = ps_suppkey
-                        and l_shipdate >= date '1994-01-01'
-                        and l_shipdate < date '1994-01-01' + interval '1' year
+                        and l_shipdate >= date '1996-01-01'
+                        and l_shipdate < date '1997-01-01'
                 )
         )
         and s_nationkey = n_nationkey
-        and n_name = 'CANADA'
+        and n_name = 'JORDAN'
     order by
         s_name
     """
@@ -1110,8 +1122,8 @@ def query_20(dataset_path, scale, ext=".parquet"):
     nation = _load_dataset(dataset_path, "nation", ext)
     part = _load_dataset(dataset_path, "part", ext)
     partsupp = _load_dataset(dataset_path, "partsupp", ext)
-    shipdate_from = datetime.strptime("1994-01-01", "%Y-%m-%d")
-    shipdate_to = datetime.strptime("1995-01-01", "%Y-%m-%d")
+    shipdate_from = datetime_or_date_value("1996-01-01")
+    shipdate_to = datetime_or_date_value("1997-01-01")
 
     res_1 = lineitem[
         (lineitem["l_shipdate"] >= shipdate_from)
@@ -1124,9 +1136,9 @@ def query_20(dataset_path, scale, ext=".parquet"):
         .reset_index()
     )
     res_1["sum_quantity"] = res_1["sum_quantity"] * 0.5
-    res_2 = nation[nation["n_name"] == "CANADA"]
+    res_2 = nation[nation["n_name"] == "JORDAN"]
     res_3 = supplier.merge(res_2, left_on="s_nationkey", right_on="n_nationkey")
-    res_4 = part[part["p_name"].str.strip().str.startswith("forest")]
+    res_4 = part[part["p_name"].str.strip().str.startswith("azure")]
 
     q_final = partsupp.merge(
         res_4, how="leftsemi", left_on="ps_partkey", right_on="p_partkey"
@@ -1136,10 +1148,10 @@ def query_20(dataset_path, scale, ext=".parquet"):
         right_on=["l_suppkey", "l_partkey"],
     )
     q_final = q_final[q_final["ps_availqty"] > q_final["sum_quantity"]]
+    q_final = q_final.drop_duplicates(subset=["ps_suppkey"])
     q_final = res_3.merge(
         q_final, how="leftsemi", left_on="s_suppkey", right_on="ps_suppkey"
     )
-    q_final["s_address"] = q_final["s_address"].str.strip()
     return q_final[["s_name", "s_address"]].sort_values("s_name", ascending=True)
 
 
@@ -1299,24 +1311,46 @@ def get_query_func(q_num: int) -> Callable:
     return globals()[f"query_{q_num:02d}"]
 
 
-def run_single_query(query_func, dataset_path, scale_factor) -> float:
+def is_eager_type(result):
+    eager_types = [pd.DataFrame]
+    if dask.config.get("dataframe.backend") == "cudf":
+        import cudf
+
+        eager_types.append(cudf.DataFrame)
+
+    return isinstance(result, tuple(eager_types))
+
+
+def run_single_query(
+    query_num,
+    dataset_path,
+    scale_factor,
+    log_file=None,
+    output_path=None,
+    show_output=False,
+) -> float:
     """Run a single Dask TPC-H query and return the exectution time in seconds."""
+    query_func = get_query_func(query_num)
+
     start = time.time()
-    query_func(dataset_path, scale_factor, ext=".pq").compute()
-    return time.time() - start
+    res = query_func(dataset_path, scale_factor, ext=".pq")
+    if not is_eager_type(res):
+        res = res.compute()
+    total_time = time.time() - start
 
+    if show_output:
+        print(res)
 
-def run_queries(query_nums, dataset_path, scale_factor) -> None:
-    with Client():  # Use default LocalCluster settings
-        total_start = time.time()
+    if output_path:
+        res.to_parquet(f"{output_path}/q{query_num:02}.pq")
 
-        for i in query_nums:
-            query_func = get_query_func(i)
-            query_time = run_single_query(query_func, dataset_path, scale_factor)
-            print(f"Query {i} execution time: {query_time:.2f} seconds")
-
-        total_time = time.time() - total_start
-        print(f"Total execution time: {total_time:.4f} seconds")
+    if log_file:
+        with open(log_file, "a") as f:
+            f.write(
+                f"dask[{dask.config.get('dataframe.backend')}],{query_num},-,{total_time:f}\n"
+            )
+    print(f"Query {query_num} execution time: {total_time:.2f} seconds")
+    return total_time
 
 
 def main():
@@ -1346,6 +1380,41 @@ def main():
         required=False,
         help="Space separated TPC-H queries to run.",
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["pandas", "cudf"],
+        default="pandas",
+    )
+    parser.add_argument(
+        "--instance_profile_name",
+        type=str,
+        default=None,
+        help="IAM instance profile name (e.g. dask-benchmark) for EC2 instances for accessing S3",
+    )
+    parser.add_argument(
+        "--subnet_id",
+        type=str,
+        default=None,
+        help="Subnet ID for EC2 instances (within us-east-2)",
+    )
+    parser.add_argument(
+        "--log_timings",
+        type=str,
+        default=None,
+        help="Path to log timings.",
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default=None,
+        help="Path to save query outputs.",
+    )
+    parser.add_argument(
+        "--show_output",
+        action="store_true",
+        help="Whether to print query outputs.",
+    )
 
     args = parser.parse_args()
     dataset_path = args.folder
@@ -1356,44 +1425,93 @@ def main():
     if args.queries is not None:
         queries = args.queries
 
+    if args.log_timings is not None:
+        if not os.path.exists(args.log_timings):
+            with open(args.log_timings, "w") as f:
+                f.write("implementation,query,n_gpus,execution_time\n")
+
+    dask.config.set({"dataframe.backend": args.backend})
+    dask.config.set({"distributed.comm.timeouts.tcp": "900s"})
+    dask.config.set({"distributed.comm.timeouts.connect": "600s"})
+
     if use_cloudprovider:
         from dask_cloudprovider.aws import EC2Cluster
 
-        env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2025.10.0"}
-        ec2_config = {
-            # NOTE: Setting security = False to avoid large config size
-            # https://github.com/dask/dask-cloudprovider/issues/249
-            "security": False,
-            "n_workers": 4,
-            "scheduler_instance_type": "c6i.xlarge",
-            "worker_instance_type": "r6i.16xlarge",
-            "docker_image": "daskdev/dask:2025.12.0-py3.10",
-            # Region for accessing bodo-example-data
-            "region": "us-east-2",
-            "filesystem_size": 1000,
-            # Profile with AmazonS3FullAccess
-            "iam_instance_profile": {"Name": "dask-benchmark"},
-            "env_vars": env_vars,
-            "debug": True,
-        }
+        # Instance profile with permissions for reading from S3 (if not passing default credentials).
+        instance_profile = (
+            None
+            if args.instance_profile_name is None
+            else {"Name": args.instance_profile_name}
+        )
+
+        if args.backend == "cudf":
+            # Use GPU AMI with Nvidia drivers pre-installed to speed up cluster startup time.
+            # The specific AMI below was obtained from the following command:
+            # aws ssm get-parameter \
+            #     --region us-east-2 \
+            #     --name /aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-22.04/latest/ami-id \
+            #     --query 'Parameter.Value' \
+            #     --output text
+            ami = "ami-0600d0aaccc95db72"
+            ec2_config = {
+                "instance_type": "g7e.12xlarge",
+                "docker_image": "nvcr.io/nvidia/rapidsai/base:26.04-cuda13-py3.14",
+                "worker_class": "dask_cuda.CUDAWorker",
+                "worker_options": {"rmm_managed_memory": True},
+                "docker_args": "--shm-size=256m -e EXTRA_CONDA_PACKAGES=s3fs",
+                "n_workers": 4,
+                "filesystem_size": 1000,  # GB
+                "region": "us-east-2",
+                "subnet_id": args.subnet_id,
+                "ami": ami,
+                "iam_instance_profile": instance_profile,
+                "bootstrap": False,
+                "security": False,
+            }
+        else:
+            env_vars = {"EXTRA_CONDA_PACKAGES": "s3fs==2025.10.0"}
+            ec2_config = {
+                # NOTE: Setting security = False to avoid large config size
+                # https://github.com/dask/dask-cloudprovider/issues/249
+                "security": False,
+                "n_workers": 4,
+                "scheduler_instance_type": "c6i.xlarge",
+                "worker_instance_type": "r6i.16xlarge",
+                "docker_image": "daskdev/dask:2025.12.0-py3.10",
+                # Region for accessing bodo-example-data
+                "region": "us-east-2",
+                "filesystem_size": 1000,
+                # Profile with AmazonS3FullAccess
+                "iam_instance_profile": instance_profile,
+                "env_vars": env_vars,
+                "debug": True,
+            }
 
         with EC2Cluster(**ec2_config) as cluster:
             with cluster.get_client() as client:
                 print("DASHBOARD LINK: ", client.dashboard_link)
 
-                # Running dummy job to warm-up cluster
-                client.submit(lambda: 1).result()
-
                 start = time.time()
-                for query in queries:
-                    query_func = get_query_func(query)
 
+                print(f"Warmup cluster with query {queries[0]} at {datetime.now()}")
+                run_single_query(
+                    queries[0],
+                    dataset_path,
+                    scale_factor,
+                    log_file=args.log_timings,
+                    show_output=args.show_output,
+                )
+                for query in queries:
                     try:
                         print(f"Submitting query {query} at {datetime.now()}")
-                        query_time = client.submit(
-                            run_single_query, query_func, dataset_path, scale_factor
-                        ).result()
-                        print(f"Query {query} execution time: {query_time:.2f} seconds")
+                        run_single_query(
+                            query,
+                            dataset_path,
+                            scale_factor,
+                            log_file=args.log_timings,
+                            output_path=args.output_path,
+                            show_output=args.show_output,
+                        )
                     except Exception as e:
                         print(f"Query {query} failed with an exception: {e}")
                         client.restart()
@@ -1402,7 +1520,29 @@ def main():
                 print(f"Total execution time: {total_time:.4f} seconds")
 
     else:
-        run_queries(queries, dataset_path, scale_factor)
+        if args.backend == "cudf":
+            from dask_cuda import LocalCUDACluster
+
+            client = Client(
+                LocalCUDACluster(rmm_pool_size="0.9", enable_cudf_spill=True)
+            )
+        else:
+            client = Client()
+
+        total_start = time.time()
+
+        for query in queries:
+            run_single_query(
+                query,
+                dataset_path,
+                scale_factor,
+                log_file=args.log_timings,
+                output_path=args.output_path,
+                show_output=args.show_output,
+            )
+
+        total_time = time.time() - total_start
+        print(f"Total execution time: {total_time:.4f} seconds")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 #include "_executor.h"
 #include "_bodo_scan_function.h"
+#include "_bodo_write_function.h"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_set_operation.hpp"
@@ -19,7 +20,6 @@
 #include <rmm/device_buffer.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <vector>
 
@@ -28,7 +28,6 @@
 #include "physical/gpu_join.h"
 #include "physical/gpu_limit.h"
 #include "physical/gpu_project.h"
-#include "physical/gpu_reduce.h"
 #include "physical/gpu_sort.h"
 #include "physical/gpu_union_all.h"
 #endif
@@ -103,6 +102,14 @@ std::map<duckdb::LogicalOperatorType, uint64_t> GPU_MIN_SIZE{
 
 #ifdef USE_CUDF
 
+bool is_supported_cudf_type(const duckdb::LogicalType &type) {
+    if (type.id() == duckdb::LogicalTypeId::TIMESTAMP_TZ) {
+        return false;
+    }
+    // TODO(ehsan): add other unsupported types.
+    return true;
+}
+
 class DevicePlanNode {
    private:
     duckdb::LogicalOperator &op;
@@ -126,6 +133,13 @@ class DevicePlanNode {
      * in the physical GPU node file so things stay colocated.
      */
     bool determineGPUCapable(duckdb::LogicalOperator &op) {
+        // Make sure the data types are supported in libcudf.
+        op.ResolveOperatorTypes();
+        for (duckdb::LogicalType &type : op.types) {
+            if (!is_supported_cudf_type(type)) {
+                return false;
+            }
+        }
         switch (op.type) {
             case duckdb::LogicalOperatorType::LOGICAL_GET: {
                 duckdb::LogicalGet &lget = op.Cast<duckdb::LogicalGet>();
@@ -136,8 +150,13 @@ class DevicePlanNode {
                     (bool)lget.extra_info.limit_val);
             }
 
-            case duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE:
-                return true;
+            case duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE: {
+                duckdb::LogicalCopyToFile &copy_to_file =
+                    op.Cast<duckdb::LogicalCopyToFile>();
+                BodoWriteFunctionData &write_data =
+                    copy_to_file.bind_data->Cast<BodoWriteFunctionData>();
+                return write_data.canRunOnGPU();
+            }
 
             case duckdb::LogicalOperatorType::LOGICAL_PROJECTION:
                 return ::gpu_capable(op.Cast<duckdb::LogicalProjection>());

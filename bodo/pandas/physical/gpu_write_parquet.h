@@ -120,6 +120,18 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         return names;
     }
 
+    // Extract pandas metadata from the arrow schema to include in the output
+    // parquet metadata. See
+    // https://github.com/rapidsai/cudf/blob/cb6fe6d8727f789e74951423964f0e92daffb8cb/python/cudf/cudf/io/parquet.py#L189
+    std::vector<std::map<std::string, std::string>> get_pq_pandas_metadata() {
+        std::vector<std::map<std::string, std::string>> metadata_vector;
+        metadata_vector.emplace_back(std::map<std::string, std::string>{
+            {"pandas", arrow_schema->metadata()
+                           ? arrow_schema->metadata()->Get("pandas").ValueOr("")
+                           : ""}});
+        return metadata_vector;
+    }
+
     std::shared_ptr<StreamAndEvent> prev_batch_se;
 
    public:
@@ -315,7 +327,8 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             // build writer options (row_group_size, compression, etc.)
             auto sink = cudf::io::sink_info(&bodo_data_sink);
             auto builder = cudf::io::parquet_writer_options::builder(sink, bttv)
-                               .metadata(meta);
+                               .metadata(meta)
+                               .key_value_metadata(get_pq_pandas_metadata());
             if (row_group_size > 0) {
                 builder = builder.row_group_size_rows(row_group_size);
             }
