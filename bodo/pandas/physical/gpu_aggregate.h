@@ -126,8 +126,9 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
             // Check if the aggregate function is supported
             if (function_to_ftype.find(agg_expr.function.name) ==
                 function_to_ftype.end()) {
-                throw std::runtime_error("Unsupported aggregate function: " +
-                                         agg_expr.function.name);
+                throw std::runtime_error(
+                    "PhysicalGPUAggregate Unsupported aggregate function: " +
+                    agg_expr.function.name);
             }
 
             if (agg_expr.children.size() != 1) {
