@@ -12,6 +12,7 @@ import bodosql
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
+    CaseExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
@@ -213,6 +214,16 @@ def java_call_to_python_call(java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "istrue")
 
+    if operator_class_name == "SqlCaseOperator":
+        operands = java_call.getOperands()
+        kind = op.getKind()
+        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+        assert kind.equals(SqlKind.CASE), (
+            "Expected CASE operator, got " + kind.toString()
+        )
+
+        return java_case_to_python_case(operands, input_plan)
+
     if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
         operands = java_call.getOperands()
         input = java_expr_to_python_expr(operands[0], input_plan)
@@ -354,6 +365,22 @@ def java_binop_to_python_expr(kind, op_exprs):
         return ConjunctionOpExpression(bool_empty_data, left, right, "__or__")
 
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
+
+
+def java_case_to_python_case(operands, input_plan):
+    """Convert a BodoSQL Java CASE operator call to a DataFrame library CaseExpression.
+    operands has the form [when1, then1, when2, then2, ..., else].
+    """
+    assert len(operands) >= 3, "CASE operator should have at least 3 operands"
+    when_expr = java_expr_to_python_expr(operands[0], input_plan)
+    then_expr = java_expr_to_python_expr(operands[1], input_plan)
+
+    if len(operands) > 3:
+        else_expr = java_case_to_python_case(operands[2:], input_plan)
+    else:
+        else_expr = java_expr_to_python_expr(operands[2], input_plan)
+
+    return CaseExpression(then_expr.empty_data, when_expr, then_expr, else_expr)
 
 
 def java_join_to_python_join(ctx, java_join):
