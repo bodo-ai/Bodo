@@ -26,8 +26,6 @@ source ~/.bashrc
 
 # Install development deps
 cd ~/Bodo
-# TODO: Remove before merging
-psh git checkout scott/platform_gpu_debug
 psh pixi install -e $PIXI_ENV
 # Remove conda install mpi to prefer intel MPI on the platform
 build_task=build

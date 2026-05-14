@@ -14,17 +14,14 @@ platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],    
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
-default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "cudf", "ompi-vars"],          solve-group = "gpu" }
-platform-cuda =      { features = ["py314", "rcpp", "dev", "platform-cuda-mpi", "cudf", "aws-build-vars"],          solve-group = "platform-gpu" }
+default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
+platform-cuda =      { features = ["py314", "rcpp", "dev", "platform-cuda-mpi", "cudf", "mpich-build-vars"],          solve-group = "platform-gpu" }
 
 [activation.env]
 # Avoid using system cmake during build-config step
 CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
 
-[feature.ompi-vars.activation.env]
-OMPI_MCA_pml = "ucx"
-
-[feature.aws-build-vars.activation.env]
+[feature.mpich-build-vars.activation.env]
 LD_LIBRARY_PATH="/opt/mpich/lib:$LD_LIBRARY_PATH"
 PATH="/opt/mpich/bin:$PATH"
 LDFLAGS="$LDFLAGS -L/opt/mpich/lib"
@@ -217,6 +214,7 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 macos = "12.0"
 
 [feature.cpu.pypi-dependencies]
+pyiceberg = ">=0.11"
 # Use PyIceberg from pip to prevent segfaults in Mac dev environment.
 # Snowflake (Added to PyPi to ignore Pandas <3 constraint)
 snowflake-connector-python = "*"
