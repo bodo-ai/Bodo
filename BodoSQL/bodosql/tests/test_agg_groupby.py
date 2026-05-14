@@ -151,7 +151,7 @@ def test_count_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp   # nulls not handled correctly
+@pytest.mark.bodosql_cpp
 def test_count_nullable_numeric(
     bodosql_nullable_numeric_types, spark_info, memory_leak_check
 ):
@@ -191,7 +191,7 @@ def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp   # dataframe shape mismatch
+@pytest.mark.bodosql_cpp
 def test_count_interval(bodosql_interval_types, memory_leak_check):
     """test various count queries on Timedelta data."""
     check_query(
@@ -310,7 +310,7 @@ def test_having_repeat_numeric(bodosql_numeric_types, spark_info, memory_leak_ch
     )
 
 
-# @pytest.mark.bodosql_cpp   # dataframe are different
+@pytest.mark.bodosql_cpp
 def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     """test having clause in datetime queries"""
     check_query(
@@ -323,7 +323,7 @@ def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_
 
 
 @pytest.mark.slow
-# @pytest.mark.bodosql_cpp   # dataframe are different
+@pytest.mark.bodosql_cpp
 def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
     """test having clause in datetime queries"""
     expected_output = bodosql_interval_types["TABLE1"].groupby("A")["B"].count()
@@ -540,7 +540,7 @@ def test_having_numeric(
     )
 
 
-# @pytest.mark.bodosql_cpp   # SqlPrefixOperator not supported NOT
+@pytest.mark.bodosql_cpp
 def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Tests groupby + having with aggregation in the condition
@@ -564,7 +564,7 @@ def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_
     )
 
 
-# @pytest.mark.bodosql_cpp   # SqlPrefixOperator not supported NOT
+@pytest.mark.bodosql_cpp
 def test_having_boolean_groupby_cond(
     bodosql_boolean_types, spark_info, memory_leak_check
 ):
@@ -1259,7 +1259,7 @@ def test_max_min_tz_aware(memory_leak_check):
 
 
 @pytest.mark.tz_aware
-# @pytest.mark.bodosql_cpp   # dataframes are different
+@pytest.mark.bodosql_cpp
 def test_count_tz_aware(memory_leak_check):
     """
     Test count and count(*) on a tz-aware timestamp column

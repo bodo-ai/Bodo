@@ -18,6 +18,7 @@ from bodo.pandas.plan import (
     ConstantExpression,
     LogicalAggregate,
     LogicalComparisonJoin,
+    LogicalDistinct,
     LogicalFilter,
     LogicalJoinFilter,
     LogicalOrder,
@@ -561,14 +562,40 @@ def java_agg_to_python_agg(ctx, java_plan):
 
     exprs = []
     out_types = [input_plan.pa_schema.field(k).type for k in keys]
-    for func in java_plan.getAggCallList():
+    aggCallList = java_plan.getAggCallList()
+    if len(aggCallList) == 0:
+        # If no aggregation expressions then use distinct instead.
+
+        names = list(java_plan.getRowType().getFieldNames())
+        new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
+        empty_out_data = arrow_to_empty_df(new_schema)
+
+        exprs = make_col_ref_exprs(keys, input_plan)
+        plan = LogicalDistinct(
+            empty_out_data,
+            input_plan,
+            exprs,
+        )
+        return plan
+
+    for func in aggCallList:
         if func.hasFilter():
             raise NotImplementedError("Filtered aggregations are not supported yet")
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
         if func_name == "size":
             assert len(arg_cols) in [0, 1], (
-                "Only zero or single-argument size aggregations are supported"
+                "Size aggregations arg len not in [0,1] are not supported"
+            )
+            out_type = pa.int64()
+        elif func_name == "count":
+            assert len(arg_cols) == 1, (
+                "Only single-argument count aggregations are supported"
+            )
+            out_type = pa.int64()
+        elif func_name == "nunique":
+            assert len(arg_cols) == 1, (
+                "Only single-argument nunique aggregations are supported"
             )
             out_type = pa.int64()
         elif func_name in ["sum", "max", "min", "std", "mean"]:
@@ -594,6 +621,7 @@ def java_agg_to_python_agg(ctx, java_plan):
     names = list(java_plan.getRowType().getFieldNames())
     new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
     empty_out_data = arrow_to_empty_df(new_schema)
+
     plan = LogicalAggregate(
         empty_out_data,
         input_plan,
@@ -609,23 +637,28 @@ def _agg_to_func_name(func):
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
 
+    argList = func.getArgList()
+
     # TODO[BSE-5163]: support SUM0 initialization properly
     if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
 
-    if kind.equals(SqlKind.COUNT) and len(func.getArgList()) <= 1:
+    if kind.equals(SqlKind.COUNT) and len(argList) == 0:
         return "size"
 
-    if kind.equals(SqlKind.MAX) and len(func.getArgList()) == 1:
+    if kind.equals(SqlKind.COUNT) and len(argList) == 1:
+        return "count"
+
+    if kind.equals(SqlKind.MAX) and len(argList) == 1:
         return "max"
 
-    if kind.equals(SqlKind.MIN) and len(func.getArgList()) == 1:
+    if kind.equals(SqlKind.MIN) and len(argList) == 1:
         return "min"
 
-    if kind.equals(SqlKind.AVG) and len(func.getArgList()) == 1:
+    if kind.equals(SqlKind.AVG) and len(argList) == 1:
         return "mean"
 
-    if kind.equals(SqlKind.STDDEV_SAMP) and len(func.getArgList()) == 1:
+    if kind.equals(SqlKind.STDDEV_SAMP) and len(argList) == 1:
         return "std"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
