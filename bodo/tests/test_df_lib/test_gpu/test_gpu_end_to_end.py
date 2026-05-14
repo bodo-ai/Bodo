@@ -122,11 +122,10 @@ def test_cpu_to_gpu_exchange(datapath):
     assert count_gpu_plan_nodes(bdf3._plan) == 4, (
         "Expected 4 GPU nodes (ReadParquet, JoinFilter, Join, Project)"
     )
-    bdf3 = bdf3.sort_values(bdf3.columns.to_list())
 
     pdf2 = pd.read_parquet(path)
     pdf3 = pdf1.merge(pdf2, how="inner", on="A")
-    _test_equal(pdf3, bdf3)
+    _test_equal(bdf3, pdf3)
 
     # Case 2: CPU (read pandas) -> GPU sink (write parquet)
     with tempfile.TemporaryDirectory() as tmp:
@@ -137,7 +136,7 @@ def test_cpu_to_gpu_exchange(datapath):
 
         out_df = pd.read_parquet(out_path)
         # [BSE-5322] Sorting data because CPU -> GPU affects the order.
-        _test_equal(pdf, out_df, sort_output=True, reset_index=True)
+        _test_equal(out_df, pdf, sort_output=True, reset_index=True)
 
         # Check the write parquet is happening on GPU:
         write_plan = LogicalParquetWrite(
@@ -165,7 +164,7 @@ def test_gpu_to_cpu_exchange(datapath):
 
     pdf = pd.read_parquet(path)
     pdf["F"] = pdf["F"].map(lambda x: str(x))
-    _test_equal(pdf, bdf)
+    _test_equal(bdf, pdf)
 
     # Case 2: GPU (join) -> CPU sink (result collector)
     bdf = bd.read_parquet(path)
@@ -174,7 +173,7 @@ def test_gpu_to_cpu_exchange(datapath):
     bdf.execute_plan()
 
     pdf = pd.read_parquet(path)
-    _test_equal(pdf, bdf)
+    _test_equal(bdf, pdf)
 
 
 @pytest.mark.parametrize("broadcast", [True, False])

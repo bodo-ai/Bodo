@@ -567,7 +567,6 @@ GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
                 "GPUtoCPUExchange::operator(): Received non-empty batch after "
                 "exchange was marked finished");
         }
-        // Return empty batch with same schema as ctb_state
         auto [output_batch, _] = ctb_state->builder->PopChunk(true);
         return std::make_tuple(output_batch, OperatorResult::FINISHED);
     }
@@ -634,9 +633,8 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
                 "CPUtoGPUExchange::operator(): Received non-empty batch after "
                 "exchange was marked finished");
         }
-        // Return empty batch same schema as gpu_batch_generator
-        auto output_batch = gpu_batch_generator->next(se, true);
-        return std::make_tuple(output_batch, OperatorResult::FINISHED);
+        return std::make_tuple(convertTableToGPU(input_batch, se),
+                               OperatorResult::FINISHED);
     }
 
     if (!this->shuffle_state) {

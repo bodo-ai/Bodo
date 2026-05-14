@@ -131,8 +131,7 @@ void run_cuda_sort_test(
     sort_state.FinalizeSort();
 
     bool out_is_last = false;
-    auto output =
-        sort_state.GetOutputBatch(out_is_last, cudf::get_default_stream());
+    auto output = sort_state.GetOutputBatch(out_is_last, se);
 
     bodo::tests::check(out_is_last == true);
 

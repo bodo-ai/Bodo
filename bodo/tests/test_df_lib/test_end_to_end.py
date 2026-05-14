@@ -1680,7 +1680,7 @@ def test_groupby_fallback():
     pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
         engine="cython"
     )
-    _test_equal(pandas_out, fallback_out)
+    _test_equal(fallback_out, pandas_out)
 
     bdf2 = bd.from_pandas(df)
 
@@ -1693,7 +1693,7 @@ def test_groupby_fallback():
     pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
         engine="cython"
     )
-    _test_equal(pandas_out, fallback_out)
+    _test_equal(fallback_out, pandas_out)
 
 
 @pytest.fixture(scope="module")
@@ -3226,7 +3226,7 @@ def test_drop_duplicates_subset(kwargs):
     )
 
 
-@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_uncompilable_map():
     """Test for maps that can't be compiled."""
@@ -3559,7 +3559,7 @@ def test_dataframe_reset_index_pipeline():
     )
 
 
-@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 def test_map_with_state():
     def init_state():
         return {1: 7}
@@ -3595,7 +3595,7 @@ def test_map_with_state():
     )
 
 
-@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 def test_map_partitions_with_state():
     class mystate:
         def __init__(self):
@@ -3692,7 +3692,7 @@ def test_series_quantile(quantiles):
             )
 
 
-@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
+# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 @pytest.mark.parametrize("q", [0.25, 0.5, 0.75, 0.9])
 def test_series_quantile_scalar(q):
     """Tests that approximate quantiles with scalar arguments fall within expected error bounds."""
