@@ -183,7 +183,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         time_pt start_produce = start_timer();
         bool out_is_last = false;
         std::unique_ptr<cudf::table> sorted_table =
-            cuda_sort_state->GetOutputBatch(out_is_last, se->stream);
+            cuda_sort_state->GetOutputBatch(out_is_last, se);
 
         if (sorted_table == nullptr) {
             this->metrics.produce_time += end_timer(start_produce);
