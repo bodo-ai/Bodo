@@ -581,9 +581,8 @@ def test_between_int(bodosql_numeric_types, between_clause, memory_leak_check):
     )
 
 
-def test_between_str(
-    bodosql_string_types, between_clause, spark_info, memory_leak_check
-):
+@pytest.mark.bodosql_cpp
+def test_between_str(bodosql_string_types, between_clause, memory_leak_check):
     """
     tests that between works for string values
     """
@@ -596,7 +595,7 @@ def test_between_str(
             table1.A {between_clause} 'a' AND 'z'
     """
 
-    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
+    check_query(query, bodosql_string_types, None, check_dtype=False, use_duckdb=True)
 
 
 @pytest.fixture
