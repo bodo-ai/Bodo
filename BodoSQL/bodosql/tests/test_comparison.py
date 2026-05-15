@@ -239,11 +239,11 @@ def time_comparison_args(comparison_query_args):
         Time(22, 14, 20, nanosecond=67, precision=9),
         Time(22, 14, 20, precision=9),
     ]
-    A = pd.Series(data * 9)
+    A = pd.Series(data * 9, dtype=pd.ArrowDtype(pa.time64("ns")))
     b = []
     for elem in data:
         b += [elem] * 9
-    B = pd.Series(b)
+    B = pd.Series(b, dtype=pd.ArrowDtype(pa.time64("ns")))
     ctx = {"TABLE1": pd.DataFrame({"A": A, "B": B})}
     row_funcs = {
         "=": lambda x: None
