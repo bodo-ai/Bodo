@@ -347,7 +347,7 @@ def test_comparison_operators_interval_within_table(
 
 
 def test_comparison_operators_between_tables(
-    bodosql_numeric_types, comparison_ops, spark_info, memory_leak_check
+    bodosql_numeric_types, comparison_ops, memory_leak_check
 ):
     """
     Tests that the basic comparison operators work when comparing data between two numeric tables of the same type
@@ -367,7 +367,7 @@ def test_comparison_operators_between_tables(
         "TABLE1": bodosql_numeric_types["TABLE1"],
         "TABLE2": bodosql_numeric_types["TABLE1"],
     }
-    check_query(query, new_context, spark_info, check_dtype=False)
+    check_query(query, new_context, None, check_dtype=False, use_duckdb=True)
 
 
 def test_comparison_operators_decimal(comparison_ops, spark_info, memory_leak_check):
