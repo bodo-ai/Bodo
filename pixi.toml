@@ -420,7 +420,7 @@ openmpi = { version = "*" }
 [feature.local-mpi.target.linux.dependencies]
 mpich = { version = "*" }
 [feature.local-mpi.target.win.dependencies]
-impi-devel = "*,!=2021.17.2" # Exclude version that segfaults on spawn in Windows
+impi-devel = "<2021.18" # Exclude version that segfaults on spawn in Windows
 
 [feature.platform-mpi]
 channels = ["conda-forge", "conda-forge/label/broken"]

@@ -50,7 +50,7 @@ dependencies = [
     "mpi4py>=4.1",
     # Linux uses MPICH, which is vendored as part of the bodo package
     "openmpi; sys_platform == 'darwin'",
-    "impi-rt; sys_platform == 'win32'",
+    "impi-rt<2021.18; sys_platform == 'win32'", # needs to match the version for impi-devel in pixi.toml that we build with
 ]
 
 [project.urls]
