@@ -221,18 +221,18 @@ class CudaGroupbyState {
                     aggregation_requests, aggregation_fns, post_agg_fns,
                     pre_aggregation_table_fns);
                 break;
-            // case Bodo_FTypes::boolor_agg:
-            //     add_agg_entry(
-            //         cudf::make_any_aggregation<cudf::groupby_aggregation>(),
-            //         aggregation_requests, aggregation_fns, post_agg_fns,
-            //         pre_aggregation_table_fns);
-            //     break;
-            // case Bodo_FTypes::booland_agg:
-            //     add_agg_entry(
-            //         cudf::make_all_aggregation<cudf::groupby_aggregation>(),
-            //         aggregation_requests, aggregation_fns, post_agg_fns,
-            //         pre_aggregation_table_fns);
-            //     break;
+            case Bodo_FTypes::boolor_agg:
+                add_agg_entry(
+                    cudf::make_max_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    pre_aggregation_table_fns);
+                break;
+            case Bodo_FTypes::booland_agg:
+                add_agg_entry(
+                    cudf::make_min_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    pre_aggregation_table_fns);
+                break;
             default:
                 throw std::runtime_error(
                     "Cannot convert Bodo agg type to cudf in "
@@ -331,18 +331,18 @@ class CudaGroupbyState {
                     pre_aggregation_table_fns, nullptr, nullptr,
                     nunique_pre_agg);
                 break;
-            // case Bodo_FTypes::boolor_agg:
-            //     add_agg_entry(
-            //         cudf::make_any_aggregation<cudf::groupby_aggregation>(),
-            //         aggregation_requests, aggregation_fns, post_agg_fns,
-            //         pre_aggregation_table_fns);
-            //     break;
-            // case Bodo_FTypes::booland_agg:
-            //     add_agg_entry(
-            //         cudf::make_all_aggregation<cudf::groupby_aggregation>(),
-            //         aggregation_requests, aggregation_fns, post_agg_fns,
-            //         pre_aggregation_table_fns);
-            //     break;
+            case Bodo_FTypes::boolor_agg:
+                add_agg_entry(
+                    cudf::make_max_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    pre_aggregation_table_fns);
+                break;
+            case Bodo_FTypes::booland_agg:
+                add_agg_entry(
+                    cudf::make_min_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    pre_aggregation_table_fns);
+                break;
             default:
                 throw std::runtime_error(
                     "Cannot convert Bodo agg type to cudf in "

@@ -1856,6 +1856,7 @@ def test_groupby_agg_ordered(func):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func",
     [
