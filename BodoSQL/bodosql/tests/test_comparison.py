@@ -652,6 +652,7 @@ def date_datetime64_comparison_args(comparison_query_args):
     return cmp_op, use_case, ctx, answer
 
 
+@pytest.mark.bodosql_cpp
 def test_date_compare_datetime64(date_datetime64_comparison_args, memory_leak_check):
     """
     Checks that comparison operator works correctly between datetime.date
