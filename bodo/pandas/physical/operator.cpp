@@ -559,6 +559,18 @@ RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
 RankDataExchange::~RankDataExchange() {
     if (this->shuffle_state) {
         // Finalize the shuffle state to ensure all communication is complete
+        bool shuffle_finished = this->shuffle_state->SendRecvEmpty();
+        bool global_shuffle_finished = false;
+        MPI_Allreduce(&shuffle_finished, &global_shuffle_finished, 1,
+                      MPI_C_BOOL, MPI_LAND, this->shuffle_comm);
+        while (!global_shuffle_finished) {
+            // Wait for all ranks to finish the shuffle
+            shuffle_state->ShuffleIfRequired(true);
+            shuffle_finished = this->shuffle_state->SendRecvEmpty();
+            MPI_Allreduce(&shuffle_finished, &global_shuffle_finished, 1,
+                          MPI_C_BOOL, MPI_LAND, this->shuffle_comm);
+        }
+
         this->shuffle_state->Finalize();
     }
 
