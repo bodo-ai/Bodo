@@ -306,14 +306,15 @@ void CudaSortState::FinalizeSort() {
 }
 
 std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
-    bool& out_is_last, rmm::cuda_stream_view stream) {
+    bool& out_is_last, std::shared_ptr<StreamAndEvent> se) {
     if (state != State::MERGING) {
         out_is_last = false;
         return empty_table_from_arrow_schema(schema->ToArrowSchema());
     }
 
     if (final_result == nullptr) {
-        if (received_tables.empty() || local_slice_start == local_slice_end) {
+        if (!is_gpu_rank() || received_tables.empty() ||
+            local_slice_start == local_slice_end) {
             final_result =
                 empty_table_from_arrow_schema(schema->ToArrowSchema());
         } else {
@@ -323,7 +324,7 @@ std::unique_ptr<cudf::table> CudaSortState::GetOutputBatch(
             }
             // Multi-way Merge
             auto merged = cudf::merge(views, key_indices, column_order,
-                                      null_precedence, stream);
+                                      null_precedence, se->stream);
 
             if (local_slice_start == 0 &&
                 local_slice_end == merged->num_rows()) {
