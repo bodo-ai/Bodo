@@ -1680,7 +1680,7 @@ def test_groupby_fallback():
     pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
         engine="cython"
     )
-    _test_equal(pandas_out, fallback_out)
+    _test_equal(fallback_out, pandas_out)
 
     bdf2 = bd.from_pandas(df)
 
@@ -1693,7 +1693,7 @@ def test_groupby_fallback():
     pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
         engine="cython"
     )
-    _test_equal(pandas_out, fallback_out)
+    _test_equal(fallback_out, pandas_out)
 
 
 @pytest.fixture(scope="module")
