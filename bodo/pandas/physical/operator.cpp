@@ -1,6 +1,7 @@
 #include "operator.h"
 #include <arrow/array/builder_base.h>
 #include <arrow/util/endian.h>
+#include <mpi.h>
 #include <memory>
 #include <string>
 
@@ -555,7 +556,19 @@ RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
     }
 }
 
-RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
+RankDataExchange::~RankDataExchange() {
+    if (this->shuffle_state) {
+        // Finalize the shuffle state to ensure all communication is complete
+        this->shuffle_state->Finalize();
+    }
+
+    if (!finished) {
+        while (!sync_is_last_non_blocking(is_last_state.get(), 1)) {
+            // Wait for all ranks to finish before freeing the communicator
+        };
+    }
+    MPI_Comm_free(&this->shuffle_comm);
+}
 
 std::tuple<std::shared_ptr<table_info>, OperatorResult>
 GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
