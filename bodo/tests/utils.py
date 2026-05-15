@@ -38,7 +38,7 @@ from numba.core.ir_utils import build_definitions, find_callname, guard  # noqa 
 import bodo
 import bodo.pandas as bodo_pd
 from bodo import BodoWarning
-from bodo.spawn.spawner import SpawnDispatcher
+from bodo.spawn.spawner import SpawnDispatcher, get_num_workers
 from bodo.utils.arrow_conversion import convert_arrow_arr_to_dict
 
 test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
@@ -1329,6 +1329,17 @@ def _test_equal(
         from scipy.sparse import csr_matrix
     except ImportError:
         csr_matrix = type(None)
+
+    if bodo.gpu_enabled:
+        import cupy as cp
+
+        num_devices = cp.cuda.runtime.getDeviceCount()
+        num_workers = get_num_workers()
+        # Automatically sort output if we have multiple workers per GPU
+        # TODO(BSE-5322): remove after CPU-GPU exchange doesn't change the order of data.
+        if num_workers > num_devices:
+            sort_output = True
+            reset_index = True
 
     # Bodo converts lists to array in array(item) array cases
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):

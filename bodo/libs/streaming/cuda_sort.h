@@ -47,11 +47,11 @@ class CudaSortState {
     /**
      * @brief Get the sorted output batch.
      * @param[out] out_is_last Whether this is the last output batch.
-     * @param stream CUDA stream for execution.
+     * @param se Stream and event for execution (nullptr on non GPU ranks).
      * @return Unique pointer to the sorted cudf table.
      */
-    std::unique_ptr<cudf::table> GetOutputBatch(bool& out_is_last,
-                                                rmm::cuda_stream_view stream);
+    std::unique_ptr<cudf::table> GetOutputBatch(
+        bool& out_is_last, std::shared_ptr<StreamAndEvent> se);
 
     /**
      * @brief Get the underlying MPI communicator.
