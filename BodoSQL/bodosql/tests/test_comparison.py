@@ -202,6 +202,7 @@ def comparison_query_args(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_comparison_operators_within_table(
     comparison_df,
     comparison_query_args,
@@ -280,6 +281,7 @@ def time_comparison_args(comparison_query_args):
     return cmp_op, use_case, ctx, answer
 
 
+@pytest.mark.bodosql_cpp
 def test_time_comparison_operators_within_table(
     time_comparison_args, memory_leak_check
 ):
@@ -313,6 +315,7 @@ def test_time_comparison_operators_within_table(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_comparison_operators_interval_within_table(
     bodosql_interval_types, comparison_ops, memory_leak_check
 ):
@@ -346,6 +349,7 @@ def test_comparison_operators_interval_within_table(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_comparison_operators_between_tables(
     bodosql_numeric_types, comparison_ops, memory_leak_check
 ):
@@ -370,6 +374,7 @@ def test_comparison_operators_between_tables(
     check_query(query, new_context, None, check_dtype=False, use_duckdb=True)
 
 
+@pytest.mark.bodosql_cpp
 def test_comparison_operators_decimal(comparison_ops, memory_leak_check):
     """Test comparison for decimal values"""
 
@@ -415,6 +420,7 @@ def test_comparison_operators_decimal(comparison_ops, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_where_and(join_dataframes, memory_leak_check):
     """
     Tests an and expression within a where clause.
@@ -452,6 +458,7 @@ def test_where_and(join_dataframes, memory_leak_check):
     )
 
 
+# @pytest.mark.bodosql_cpp TODO: enable when we support non-equi joins
 def test_where_or(join_dataframes, memory_leak_check):
     """
     Tests an or expression within a where clause.
