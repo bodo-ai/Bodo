@@ -907,12 +907,13 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             scalar_func_data.arrow_func_name != "year" &&
             scalar_func_data.arrow_func_name != "round" &&
             scalar_func_data.arrow_func_name != "is_null" &&
+            scalar_func_data.arrow_func_name != "is_not_null" &&
             scalar_func_data.arrow_func_name != "is_in") {
             throw std::runtime_error(
                 "PhysicalGPUArrowExpression only supports ends_with, "
                 "starts_with, match_substring_regex, "
                 "match_substring_regex_first, "
-                "year, round, is_null and is_in for now.");
+                "year, round, is_null, is_not_null and is_in for now.");
         }
         if (scalar_func_data.arrow_func_name == "ends_with" ||
             scalar_func_data.arrow_func_name == "starts_with" ||
@@ -987,6 +988,9 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
 #pragma GCC diagnostic pop
         } else if (scalar_func_data.arrow_func_name == "is_null") {
             result = cudf::is_null(in_as_array->result->view(), se->stream);
+        } else if (scalar_func_data.arrow_func_name == "is_not_null") {
+            result = cudf::is_valid(in_as_array->result->view(), se->stream);
+
         } else if (scalar_func_data.arrow_func_name == "is_in") {
             result = cudf::contains(isin_data->get_column(0).view(),
                                     in_as_array->result->view(), se->stream);

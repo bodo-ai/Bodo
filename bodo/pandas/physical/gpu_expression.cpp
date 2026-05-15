@@ -512,7 +512,8 @@ bool gpu_capable(duckdb::Expression& expr) {
                            scalar_func_data.arrow_func_name == "year" ||
                            scalar_func_data.arrow_func_name == "round" ||
                            scalar_func_data.arrow_func_name == "is_in" ||
-                           scalar_func_data.arrow_func_name == "is_null";
+                           scalar_func_data.arrow_func_name == "is_null" ||
+                           scalar_func_data.arrow_func_name == "is_not_null";
                 } else if (scalar_func_data.args) {
                     return false;
                 }

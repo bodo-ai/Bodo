@@ -85,6 +85,8 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
             agg_expr.function.name != "nunique" &&
             agg_expr.function.name != "skew" &&
             agg_expr.function.name != "std" &&
+            agg_expr.function.name != "boolor_agg" &&
+            agg_expr.function.name != "booland_agg" &&
             agg_expr.function.name != "var") {
             return false;
         }
