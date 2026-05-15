@@ -2923,6 +2923,39 @@ def test_series_describe_empty():
     _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize("data", [[None, np.nan, 1] * 10])
+def test_series_null(data):
+    """Basic test for Series isnull."""
+
+    pds = pd.Series(data, dtype="float64[pyarrow]")
+    bds = bd.Series(data, dtype="float64[pyarrow]")
+    print(bds)
+
+    pds_null = pds.isnull()
+    bds_null = bds.isnull()
+    _test_equal(bds_null, pds_null, check_pandas_types=False)
+    pds_notnull = pds.notnull()
+    bds_notnull = bds.notnull()
+    _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("data", [[None, np.nan, 1] * 10])
+def test_series_na(data):
+    """Basic test for Series isna."""
+
+    pds = pd.Series(data, dtype="float64[pyarrow]")
+    bds = bd.Series(data, dtype="float64[pyarrow]")
+
+    pds_null = pds.isna()
+    bds_null = bds.isna()
+    _test_equal(bds_null, pds_null, check_pandas_types=False)
+    pds_notnull = pds.notna()
+    bds_notnull = bds.notna()
+    _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
+
+
 def test_groupby_getattr_fallback_behavior():
     import warnings
 

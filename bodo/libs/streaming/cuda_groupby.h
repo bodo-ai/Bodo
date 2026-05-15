@@ -223,13 +223,13 @@ class CudaGroupbyState {
                 break;
             case Bodo_FTypes::boolor_agg:
                 add_agg_entry(
-                    cudf::make_any_aggregation<cudf::groupby_aggregation>(),
+                    cudf::make_max_aggregation<cudf::groupby_aggregation>(),
                     aggregation_requests, aggregation_fns, post_agg_fns,
                     pre_aggregation_table_fns);
                 break;
             case Bodo_FTypes::booland_agg:
                 add_agg_entry(
-                    cudf::make_all_aggregation<cudf::groupby_aggregation>(),
+                    cudf::make_min_aggregation<cudf::groupby_aggregation>(),
                     aggregation_requests, aggregation_fns, post_agg_fns,
                     pre_aggregation_table_fns);
                 break;
@@ -333,13 +333,13 @@ class CudaGroupbyState {
                 break;
             case Bodo_FTypes::boolor_agg:
                 add_agg_entry(
-                    cudf::make_any_aggregation<cudf::groupby_aggregation>(),
+                    cudf::make_max_aggregation<cudf::groupby_aggregation>(),
                     aggregation_requests, aggregation_fns, post_agg_fns,
                     pre_aggregation_table_fns);
                 break;
             case Bodo_FTypes::booland_agg:
                 add_agg_entry(
-                    cudf::make_all_aggregation<cudf::groupby_aggregation>(),
+                    cudf::make_min_aggregation<cudf::groupby_aggregation>(),
                     aggregation_requests, aggregation_fns, post_agg_fns,
                     pre_aggregation_table_fns);
                 break;
