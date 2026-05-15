@@ -1565,11 +1565,33 @@ void registerFloor(duckdb::shared_ptr<duckdb::DuckDB> db) {
     system_catalog.CreateFunction(data, floor_info);
 }
 
+void registerPower(duckdb::shared_ptr<duckdb::DuckDB> db) {
+    duckdb::LogicalType double_type(duckdb::LogicalType::DOUBLE);
+    duckdb::LogicalType float_type(duckdb::LogicalType::FLOAT);
+    duckdb::vector<duckdb::LogicalType> double_arguments = {double_type,
+                                                            double_type};
+    duckdb::vector<duckdb::LogicalType> float_arguments = {float_type,
+                                                           float_type};
+    duckdb::ScalarFunction power_fun_double("POWER", double_arguments,
+                                            double_type, nullptr);
+    duckdb::ScalarFunction power_fun_float("POWER", float_arguments, float_type,
+                                           nullptr);
+    duckdb::ScalarFunctionSet power_set("POWER");
+    power_set.AddFunction(power_fun_double);
+    power_set.AddFunction(power_fun_float);
+    duckdb::CreateScalarFunctionInfo power_info(power_set);
+    auto &system_catalog = duckdb::Catalog::GetSystemCatalog(*(db->instance));
+    auto data =
+        duckdb::CatalogTransaction::GetSystemTransaction(*(db->instance));
+    system_catalog.CreateFunction(data, power_info);
+}
+
 duckdb::shared_ptr<duckdb::DuckDB> get_duckdb() {
     static duckdb::shared_ptr<duckdb::DuckDB> db =
         duckdb::make_shared_ptr<duckdb::DuckDB>(nullptr);
     static bool floor_registered = []() {
         registerFloor(db);
+        registerPower(db);
         return true;
     }();
     // Prevent unused variable error.

@@ -904,6 +904,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         } else if (opstr == "%") {
             EnsureModRegistered();
             comparator = "bodo_mod";
+        } else if (opstr == "POWER") {
+            comparator = "power";
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
                                      opstr);
