@@ -415,7 +415,7 @@ def test_comparison_operators_decimal(comparison_ops, memory_leak_check):
     )
 
 
-def test_where_and(join_dataframes, spark_info, memory_leak_check):
+def test_where_and(join_dataframes, memory_leak_check):
     """
     Tests an and expression within a where clause.
     """
@@ -446,8 +446,9 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
