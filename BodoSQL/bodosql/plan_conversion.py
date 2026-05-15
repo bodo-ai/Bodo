@@ -568,13 +568,23 @@ def java_agg_to_python_agg(ctx, java_plan):
             )
             out_type = pa.int64()
         elif func_name in ["sum", "max", "min", "std", "mean"]:
-            assert len(arg_cols) == 1, "Only single-argument aggregations are supported"
+            assert len(arg_cols) == 1, (
+                f"Only single-argument {func_name} aggregations are supported"
+            )
             in_type = input_plan.pa_schema.field(arg_cols[0]).type
             out_type = _get_agg_output_type(
                 GroupbyAggFunc("dummy", func_name), in_type, "dummy"
             )
+        elif func_name in ["boolor_agg", "booland_agg", "boolxor_agg"]:
+            assert len(arg_cols) == 1, (
+                f"Only single-argument {func_name} aggregations are supported"
+            )
+            out_type = pa.bool_()
         else:
-            raise NotImplementedError(f"Aggregation {func_name} not supported yet")
+            raise NotImplementedError(
+                f"java_agg_to_python_agg: aggregation {func_name} not supported yet"
+            )
+
         out_types.append(out_type)
         exprs.append(
             AggregateExpression(
@@ -605,6 +615,9 @@ def _agg_to_func_name(func):
     agg = func.getAggregation()
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
+    agg_name = agg.getName()
+
+    argList = func.getArgList()
 
     argList = func.getArgList()
 
@@ -629,6 +642,15 @@ def _agg_to_func_name(func):
 
     if kind.equals(SqlKind.STDDEV_SAMP) and len(argList) == 1:
         return "std"
+
+    if kind.equals(SqlKind.OTHER):
+        if agg_name == "BOOLOR_AGG":
+            return "boolor_agg"
+        if agg_name == "BOOLAND_AGG":
+            return "booland_agg"
+        if agg_name == "BOOLXOR_AGG":
+            return "boolxor_agg"
+        raise NotImplementedError(f"Aggregation {agg_name} not supported yet")
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 
