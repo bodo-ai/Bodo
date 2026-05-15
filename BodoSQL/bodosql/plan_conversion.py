@@ -94,12 +94,8 @@ def java_plan_to_python_plan(ctx, java_plan):
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
-        pa_schema = pa.schema(
-            [java_field_to_pa_field(f) for f in java_plan.getRowType().getFieldList()]
-        )
         exprs = [
-            java_expr_to_python_expr(e, input_plan, f.type)
-            for e, f in zip(java_plan.getProjects(), pa_schema)
+            java_expr_to_python_expr(e, input_plan) for e in java_plan.getProjects()
         ]
         names = list(java_plan.getRowType().getFieldNames())
         new_schema = pa.schema(
@@ -135,11 +131,9 @@ def java_plan_to_python_plan(ctx, java_plan):
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
-def java_expr_to_python_expr(java_expr, input_plan, out_pa_type=None):
+def java_expr_to_python_expr(java_expr, input_plan):
     """Convert a BodoSQL Java expression to a DataFrame library expression
     (bodo.pandas.plan.Expression).
-    out_pa_type is only needed for NULL literals to determine their type since they
-    don't carry type info in Calcite.
     """
     java_class_name = java_expr.getClass().getSimpleName()
 
@@ -151,7 +145,7 @@ def java_expr_to_python_expr(java_expr, input_plan, out_pa_type=None):
         return java_call_to_python_call(java_expr, input_plan)
 
     if java_class_name == "RexLiteral":
-        return java_literal_to_python_literal(java_expr, input_plan, out_pa_type)
+        return java_literal_to_python_literal(java_expr, input_plan)
 
     raise NotImplementedError(f"Expression {java_class_name} not supported yet")
 
@@ -192,6 +186,12 @@ def java_call_to_python_call(java_call, input_plan):
         ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
             # No-op cast of VARCHAR (could be different lengths but sometimes equal
             # which seems like a Calcite gap)
+            return java_expr_to_python_expr(operand, input_plan)
+
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.DATE
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+            # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
             return java_expr_to_python_expr(operand, input_plan)
 
     if (
@@ -487,11 +487,8 @@ def java_filter_to_python_filter(ctx, java_filter):
     return LogicalFilter(input_plan.empty_data, input_plan, condition)
 
 
-def java_literal_to_python_literal(java_literal, input_plan, out_pa_type=None):
-    """Convert a BodoSQL Java literal expression to a DataFrame library constant.
-    out_pa_type is only needed for NULL literals to determine their type since they
-    don't carry type info in Calcite.
-    """
+def java_literal_to_python_literal(java_literal, input_plan):
+    """Convert a BodoSQL Java literal expression to a DataFrame library constant."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
@@ -539,8 +536,9 @@ def java_literal_to_python_literal(java_literal, input_plan, out_pa_type=None):
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
     if lit_type_name.equals(SqlTypeName.NULL):
-        assert out_pa_type is not None, "Output type must be provided for NULL literals"
-        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(out_pa_type))
+        dummy_empty_data = pd.Series(
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type.getSqlTypeName()))
+        )
         return NullExpression(dummy_empty_data, input_plan, 0)
 
     raise NotImplementedError(
