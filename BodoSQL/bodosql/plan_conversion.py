@@ -526,6 +526,12 @@ def java_literal_to_python_literal(java_literal, input_plan, out_pa_type=None):
         val = pa.scalar(java_literal.getValue2(), pa.date32())
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
+    if lit_type_name.equals(SqlTypeName.TIMESTAMP):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+        # getValue2() returns an integer representing milliseconds since epoch
+        val = pd.Timestamp(java_literal.getValue2(), unit="ms")
+        return ConstantExpression(dummy_empty_data, input_plan, val)
+
     if lit_type_name.equals(SqlTypeName.NULL):
         assert out_pa_type is not None, "Output type must be provided for NULL literals"
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(out_pa_type))
