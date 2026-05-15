@@ -370,7 +370,7 @@ def test_comparison_operators_between_tables(
     check_query(query, new_context, None, check_dtype=False, use_duckdb=True)
 
 
-def test_comparison_operators_decimal(comparison_ops, spark_info, memory_leak_check):
+def test_comparison_operators_decimal(comparison_ops, memory_leak_check):
     """Test comparison for decimal values"""
 
     query = f"""
@@ -396,17 +396,23 @@ def test_comparison_operators_decimal(comparison_ops, spark_info, memory_leak_ch
             }
         ),
     }
-    check_query(query, context, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query, context, None, check_dtype=False, check_names=False, use_duckdb=True
+    )
     query = f"""
         SELECT
             B {comparison_ops} A
         FROM
             table1
         """
-    check_query(query, context, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query, context, None, check_dtype=False, check_names=False, use_duckdb=True
+    )
     query = f"""SELECT CASE WHEN A {comparison_ops} B THEN 1 ELSE 0 END FROM table1
     """
-    check_query(query, context, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query, context, None, check_dtype=False, check_names=False, use_duckdb=True
+    )
 
 
 def test_where_and(join_dataframes, spark_info, memory_leak_check):
