@@ -728,6 +728,7 @@ def tz_aware_tz_naive_comparison_args(comparison_query_args):
     return cmp_op, use_case, ctx, answer, "US/Pacific"
 
 
+# @pytest.mark.bodosql_cpp TODO: enable when we support timezone-aware/naive comparisons in C++ backend
 def test_tz_aware_compare_tz_naive(
     tz_aware_tz_naive_comparison_args, memory_leak_check
 ):
