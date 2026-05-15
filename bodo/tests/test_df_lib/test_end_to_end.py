@@ -694,7 +694,7 @@ def test_projection_head_pushdown(datapath):
     assert len(bodo_df3) == 3
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, count-star
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, count-star
 def test_series_head(datapath):
     """Test for Series.head() reading from Pandas."""
     # Make sure bodo_df3 is unevaluated in the process.
@@ -708,7 +708,7 @@ def test_series_head(datapath):
     assert len(bodo_df3) == 3
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, count-star
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, count-star
 def test_head(datapath):
     """Test for head pushed down to read parquet."""
 
@@ -774,7 +774,7 @@ def test_apply_str(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_apply_non_jit(datapath, index_val):
     """Test unsupported UDFs fallback to Pandas execution."""
@@ -851,7 +851,7 @@ def test_series_map(datapath, index_val, na_action):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, UDF
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, UDF
 @pytest.mark.jit_dependency
 def test_series_map_non_jit(index_val):
     """Test non-jittable UDFs in ser.map still work."""
@@ -2089,7 +2089,7 @@ def test_scalar_arith_binops(datapath, index_val):
     )
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
@@ -2125,7 +2125,7 @@ def test_map_partitions_df():
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_map_partitions_series():
     """Simple tests for map_partition on lazy Series."""
@@ -3226,7 +3226,7 @@ def test_drop_duplicates_subset(kwargs):
     )
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_uncompilable_map():
     """Test for maps that can't be compiled."""
@@ -3559,7 +3559,7 @@ def test_dataframe_reset_index_pipeline():
     )
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 def test_map_with_state():
     def init_state():
         return {1: 7}
@@ -3595,7 +3595,7 @@ def test_map_with_state():
     )
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 def test_map_partitions_with_state():
     class mystate:
         def __init__(self):
@@ -3692,7 +3692,7 @@ def test_series_quantile(quantiles):
             )
 
 
-# @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 @pytest.mark.parametrize("q", [0.25, 0.5, 0.75, 0.9])
 def test_series_quantile_scalar(q):
     """Tests that approximate quantiles with scalar arguments fall within expected error bounds."""
