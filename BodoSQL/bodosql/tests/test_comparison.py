@@ -236,7 +236,7 @@ def time_comparison_args(comparison_query_args):
         Time(5, 58, 1, microsecond=999, precision=9),
         Time(5, 58, 30, precision=9),
         Time(5, 58, 1, millisecond=1, precision=9),
-        Time(22, 14, 20, nanosecond=67, precision=9),
+        Time(22, 14, 21, nanosecond=67, precision=9),
         Time(22, 14, 20, precision=9),
     ]
     A = pd.Series(data * 9, dtype=pd.ArrowDtype(pa.time64("ns")))
