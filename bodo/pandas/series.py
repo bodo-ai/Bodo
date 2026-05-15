@@ -3064,7 +3064,9 @@ def _get_series_func_plan(
         "match_substring_regex",
         "round",
         "isna",
+        "notna",
         "isnull",
+        "notnull",
         "isin",
         "utf8_trim_whitespace",
         "utf8_trim",
@@ -3096,6 +3098,8 @@ def _get_series_func_plan(
             return "round"
         if name in ("isna", "isnull"):
             return "is_null"
+        if name in ("notna", "notnull"):
+            return "is_not_null"
         if name == "isin":
             return "is_in"
         if name in ("utf8_trim_whitespace", "utf8_trim"):

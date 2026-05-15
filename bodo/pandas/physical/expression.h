@@ -1292,6 +1292,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::NullOptions opts(true);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "is_not_null") {
+            // Set nan_is_null option to match Pandas isna behavior
+            arrow::compute::NullOptions opts(true);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
             auto [start, stop, step] = get_py_slice_args(scalar_func_data.args);
 
