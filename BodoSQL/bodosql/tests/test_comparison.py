@@ -559,9 +559,8 @@ def test_between_interval(bodosql_interval_types, between_clause, memory_leak_ch
     )
 
 
-def test_between_int(
-    bodosql_numeric_types, between_clause, spark_info, memory_leak_check
-):
+@pytest.mark.bodosql_cpp
+def test_between_int(bodosql_numeric_types, between_clause, memory_leak_check):
     """
     tests that between works for integer values
     """
@@ -576,8 +575,9 @@ def test_between_int(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
