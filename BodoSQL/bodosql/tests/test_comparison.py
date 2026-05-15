@@ -452,7 +452,7 @@ def test_where_and(join_dataframes, memory_leak_check):
     )
 
 
-def test_where_or(join_dataframes, spark_info, memory_leak_check):
+def test_where_or(join_dataframes, memory_leak_check):
     """
     Tests an or expression within a where clause.
     """
@@ -486,7 +486,12 @@ def test_where_or(join_dataframes, spark_info, memory_leak_check):
                   or t2.A = {scalar_val2})
     """
     check_query(
-        query, join_dataframes, spark_info, check_names=False, check_dtype=check_dtype
+        query,
+        join_dataframes,
+        None,
+        check_names=False,
+        check_dtype=check_dtype,
+        use_duckdb=True,
     )
 
 
