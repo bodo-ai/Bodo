@@ -50,6 +50,9 @@ BUILTIN_AGG_FUNCS = {
     "nunique",
     "first",
     "last",
+    "boolor_agg",
+    "booland_agg",
+    "boolxor_agg",
 }
 
 
@@ -300,6 +303,20 @@ class DataFrameGroupBy:
         """
         return _groupby_agg_plan(self, "last")
 
+    @check_args_fallback(supported="none")
+    def any(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "boolor_agg", pandas_name="any")
+
+    @check_args_fallback(supported="none")
+    def all(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "booland_agg", pandas_name="all")
+
 
 class SeriesGroupBy:
     """
@@ -462,6 +479,20 @@ class SeriesGroupBy:
         """
         return _groupby_agg_plan(self, "var")
 
+    @check_args_fallback(supported="none")
+    def any(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "boolor_agg", pandas_name="any")
+
+    @check_args_fallback(supported="none")
+    def all(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "booland_agg", pandas_name="all")
+
 
 def _groupby_apply_plan(
     grouped: SeriesGroupBy | DataFrameGroupBy, func, *args, **kwargs
@@ -555,6 +586,7 @@ def _groupby_agg_plan(
     from bodo.pandas.base import _empty_like
     from bodo.pandas_compat import pandas_version
 
+    pandas_name = kwargs.pop("pandas_name", func)
     grouped_selection = grouped.selection_for_plan
 
     zero_size_df = _empty_like(grouped._obj)
@@ -571,7 +603,7 @@ def _groupby_agg_plan(
         grouped_selection[0]
         if isinstance(grouped, SeriesGroupBy)
         else grouped_selection
-    ].agg(func, *args, **kwargs)
+    ].agg(pandas_name, *args, **kwargs)
 
     normalized_func = grouped._normalize_agg_func(func, grouped_selection, kwargs)
 
@@ -940,6 +972,8 @@ def _get_agg_output_type(
             fallback = True
     elif func_name in ("first", "last"):
         new_type = pa_type
+    elif func_name in ("boolor_agg", "booland_agg"):
+        new_type = pa.bool_()
     elif callable(func.func):
         # Import compiler
         import bodo.decorators  # isort:skip # noqa
@@ -965,7 +999,9 @@ def _get_agg_output_type(
         fallback = True
         new_type = _numba_type_to_pyarrow_type(out_numba_type)
     else:
-        raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
+        raise BodoLibNotImplementedException(
+            "_get_agg_output_type Unsupported aggregate function: ", func
+        )
 
     if new_type is not None:
         return new_type

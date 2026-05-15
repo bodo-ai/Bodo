@@ -1680,7 +1680,7 @@ def test_groupby_fallback():
     pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
         engine="cython"
     )
-    _test_equal(pandas_out, fallback_out)
+    _test_equal(fallback_out, pandas_out)
 
     bdf2 = bd.from_pandas(df)
 
@@ -1693,7 +1693,7 @@ def test_groupby_fallback():
     pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
         engine="cython"
     )
-    _test_equal(pandas_out, fallback_out)
+    _test_equal(fallback_out, pandas_out)
 
 
 @pytest.fixture(scope="module")
@@ -1852,6 +1852,34 @@ def test_groupby_agg_ordered(func):
 
         bdf2 = getattr(bdf1.groupby("K"), func)()
         df2 = getattr(df.groupby("K"), func)()
+
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "func",
+    [
+        "any",
+        "all",
+    ],
+)
+def test_groupby_agg_bool(func):
+    """Tests supported boolean aggfuncs."""
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array(
+                    [True, True, True, False, False, False, True, pd.NA, False, pd.NA]
+                ),
+                "B": ["A", "A", "B", "B", "C", "C", "D", "D", "E", "E"],
+            }
+        )
+
+        bdf1 = bd.from_pandas(df)
+
+        bdf2 = getattr(bdf1.groupby("B"), func)()
+        df2 = getattr(df.groupby("B"), func)()
 
     _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
