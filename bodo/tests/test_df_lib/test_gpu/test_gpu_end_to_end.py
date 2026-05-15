@@ -122,6 +122,7 @@ def test_cpu_to_gpu_exchange(datapath):
     assert count_gpu_plan_nodes(bdf3._plan) == 4, (
         "Expected 4 GPU nodes (ReadParquet, JoinFilter, Join, Project)"
     )
+    bdf3 = bdf3.sort_values(bdf3.columns.to_list())
 
     pdf2 = pd.read_parquet(path)
     pdf3 = pdf1.merge(pdf2, how="inner", on="A")
