@@ -32,6 +32,8 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 - [`DataFrameGroupBy.size`][frame-agg-size]
 - [`DataFrameGroupBy.first`][frame-agg-first]
 - [`DataFrameGroupBy.last`][frame-agg-last]
+- [`DataFrameGroupBy.any`][frame-agg-any]
+- [`DataFrameGroupBy.all`][frame-agg-all]
 
 ## SeriesGroupby Computations / Descriptive Stats
 
@@ -48,32 +50,38 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 - [`SeriesGroupBy.size`][series-agg-size]
 - [`SeriesGroupBy.first`][series-agg-first]
 - [`SeriesGroupBy.last`][series-agg-last]
+- [`SeriesGroupBy.any`][series-agg-any]
+- [`SeriesGroupBy.all`][series-agg-all]
 
 
-[frame-agg-sum]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.sum.html
-[frame-agg-count]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.count.html
-[frame-agg-min]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.min.html
-[frame-agg-max]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.max.html
-[frame-agg-median]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.median.html
-[frame-agg-mean]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.mean.html
-[frame-agg-std]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.std.html
-[frame-agg-var]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.var.html
-[frame-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.skew.html
-[frame-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.nunique.html
-[frame-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.size.html
-[frame-agg-first]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.first.html
-[frame-agg-last]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.DataFrameGroupBy.last.html
+[frame-agg-sum]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.sum.html
+[frame-agg-count]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.count.html
+[frame-agg-min]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.min.html
+[frame-agg-max]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.max.html
+[frame-agg-median]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.median.html
+[frame-agg-mean]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.mean.html
+[frame-agg-std]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.std.html
+[frame-agg-var]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.var.html
+[frame-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.skew.html
+[frame-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.nunique.html
+[frame-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.size.html
+[frame-agg-first]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.first.html
+[frame-agg-last]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.last.html
+[frame-agg-any]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.any.html
+[frame-agg-all]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.all.html
 
-[series-agg-sum]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.sum.html
-[series-agg-count]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.count.html
-[series-agg-min]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.min.html
-[series-agg-max]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.max.html
-[series-agg-median]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.median.html
-[series-agg-mean]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.mean.html
-[series-agg-std]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.std.html
-[series-agg-var]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.var.html
-[series-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.skew.html
-[series-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.nunique.html
-[series-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.size.html
-[series-agg-first]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.first.html
-[series-agg-last]: https://pandas.pydata.org/docs/reference/api/pandas.core.groupby.SeriesGroupBy.last.html
+[series-agg-sum]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.sum.html
+[series-agg-count]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.count.html
+[series-agg-min]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.min.html
+[series-agg-max]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.max.html
+[series-agg-median]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.median.html
+[series-agg-mean]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.mean.html
+[series-agg-std]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.std.html
+[series-agg-var]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.var.html
+[series-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.skew.html
+[series-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.nunique.html
+[series-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.size.html
+[series-agg-first]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.first.html
+[series-agg-last]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.last.html
+[series-agg-any]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.any.html
+[series-agg-all]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.all.html
