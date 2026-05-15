@@ -347,6 +347,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
+    cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_date32_expr(int32_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
@@ -724,6 +725,8 @@ cdef unique_ptr[CExpression] make_const_expr(val):
         # NOTE: Timestamp.value always converts to nanoseconds
         # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242
         return move(make_const_timestamp_ns_expr(val.value))
+    elif isinstance(val, pd.Timedelta):
+        return move(make_const_timedelta_ns_expr(val.value))
     elif isinstance(val, (datetime.datetime, datetime.date)):
         return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):

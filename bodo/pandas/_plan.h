@@ -329,6 +329,15 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
     int64_t val);
 
 /**
+ * @brief Create an expression from a constant timedelta with ns resolution.
+ *
+ * @param val - the constant timedelta for the expression in ns
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const timedelta expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
+    int64_t val);
+
+/**
  * @brief Create an expression from a constant date32.
  *
  * @param val - the constant date for the expression in days since epoch

@@ -141,6 +141,18 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
         duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
+    int64_t val) {
+    if (val % 1000 != 0) {
+        throw std::runtime_error(
+            "make_const_timedelta_ns_expr only supports values with "
+            "microsecond precision since duckdb::Value::INTERVAL only supports "
+            "microsecond precision");
+    }
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(val / 1000)));
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::DATE(duckdb::date_t(val)));
