@@ -502,7 +502,8 @@ def test_where_or(join_dataframes, memory_leak_check):
     )
 
 
-def test_between_date(spark_info, between_clause, memory_leak_check):
+@pytest.mark.bodosql_cpp
+def test_between_date(between_clause, memory_leak_check):
     query = f"""SELECT A {between_clause} DATE '1995-01-01'
                  AND DATE '1996-12-31' FROM table1"""
     ctx = {
@@ -521,9 +522,10 @@ def test_between_date(spark_info, between_clause, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
