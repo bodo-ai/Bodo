@@ -529,6 +529,7 @@ def test_between_date(between_clause, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_between_interval(bodosql_interval_types, between_clause, memory_leak_check):
     """
     tests that between works for interval values
