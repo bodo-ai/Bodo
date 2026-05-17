@@ -78,6 +78,27 @@ def test_series_where(index_val):
     _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
 
 
+@pytest.mark.parametrize(
+    "S, value",
+    [
+        (pd.Series([1.445, 2.12, None, -4.133], dtype="Float64"), 1.1),
+        (pd.Series([1, None, 3, 4], dtype="Int64"), 2),
+    ],
+)
+def test_series_fillna(S, value, index_val):
+    """Tests Series.fillna()"""
+    S.index = index_val[: len(S)]
+    S.name = "A"
+
+    py_out = S.fillna(value)
+    bdf = bd.from_pandas(pd.DataFrame({"A": S}))
+
+    with assert_executed_plan_count(0):
+        bd_out = bdf["A"].fillna(value)
+
+    _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
+
+
 def _install_series_direct_tests():
     """Installs tests for direct Series.<method> methods."""
     for method_name, arg_sets in test_map_arg_direct.items():

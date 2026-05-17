@@ -2,6 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <cstddef>
+#include <cstdlib>
 #include <utility>
 
 #include <arrow/api.h>
@@ -139,6 +140,19 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
     int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
+    int64_t val) {
+    std::lldiv_t div_res = std::div((long long)val, 1000LL);
+    if (div_res.rem != 0) {
+        throw std::runtime_error(
+            "make_const_timedelta_ns_expr only supports values with "
+            "microsecond precision since duckdb::Value::INTERVAL only supports "
+            "microsecond precision");
+    }
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(div_res.quot)));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
@@ -409,12 +423,8 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     auto lhs_duck = to_duckdb(lhs);
 
     switch (etype) {
-        case duckdb::ExpressionType::OPERATOR_NOT: {
-            auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
-                etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
-            ret->children.push_back(std::move(lhs_duck));
-            return ret;
-        } break;
+        case duckdb::ExpressionType::OPERATOR_NOT:
+        case duckdb::ExpressionType::OPERATOR_IS_TRUE:
         case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
