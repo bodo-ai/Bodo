@@ -240,7 +240,7 @@ def java_call_to_python_call(java_call, input_plan):
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
         # function name as string (e.g., "POWER", "SQRT")
-        func_name = op.getName().toUpperCase()
+        func_name = op.getName().upper()
 
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
@@ -372,7 +372,6 @@ def java_case_to_python_case(operands, input_plan):
     """Convert a BodoSQL Java CASE operator call to a DataFrame library CaseExpression.
     operands has the form [when1, then1, when2, then2, ..., else].
     """
-    assert len(operands) >= 3, "CASE operator should have at least 3 operands"
     assert len(operands) % 2 == 1, "CASE operator should have an odd number of operands"
     when_expr = java_expr_to_python_expr(operands[0], input_plan)
     then_expr = java_expr_to_python_expr(operands[1], input_plan)
