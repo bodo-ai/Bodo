@@ -154,7 +154,7 @@ enum class ExpressionType : uint8_t {
 	BOUND_EXPANDED = 234,
 
 	// Bodo change: added new operator
-	OPERATOR_IS_TRUE = 235
+	OPERATOR_IS_TRUE = 250
 };
 
 //===--------------------------------------------------------------------===//
