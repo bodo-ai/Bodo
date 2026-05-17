@@ -373,6 +373,7 @@ def java_case_to_python_case(operands, input_plan):
     operands has the form [when1, then1, when2, then2, ..., else].
     """
     assert len(operands) >= 3, "CASE operator should have at least 3 operands"
+    assert len(operands) % 2 == 1, "CASE operator should have an odd number of operands"
     when_expr = java_expr_to_python_expr(operands[0], input_plan)
     then_expr = java_expr_to_python_expr(operands[1], input_plan)
 
