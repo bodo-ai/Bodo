@@ -119,6 +119,7 @@ Bodo DataFrames supports Pandas Series methods and accessors that are listed bel
 ---
 
 ## Missing data handling
+- [`bodo.pandas.BodoSeries.fillna`][bodoseriesfillna]
 - [`bodo.pandas.BodoSeries.isna`][bodoseriesisna]
 - [`bodo.pandas.BodoSeries.isnull`][bodoseriesisnull]
 - [`bodo.pandas.BodoSeries.notna`][bodoseriesnotna]
@@ -317,6 +318,7 @@ Bodo DataFrames supports Pandas Series methods and accessors that are listed bel
 [bodoseriesstrextract]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.extract.html
 [bodoseriesstrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.split.html
 [bodoseriesstrrsplit]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.rsplit.html
+[bodoseriesfillna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.fillna.html
 [bodoseriesisna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.isna.html
 [bodoseriesnotna]: https://pandas.pydata.org/docs/reference/api/pandas.Series.notna.html
 [bodoseriesdttotal_seconds]: https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.total_seconds.html

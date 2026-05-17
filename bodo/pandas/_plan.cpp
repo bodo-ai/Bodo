@@ -2,6 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <cstddef>
+#include <cstdlib>
 #include <utility>
 
 #include <arrow/api.h>
@@ -143,14 +144,15 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
     int64_t val) {
-    if (val % 1000 != 0) {
+    std::lldiv_t div_res = std::div((long long)val, 1000LL);
+    if (div_res.rem != 0) {
         throw std::runtime_error(
             "make_const_timedelta_ns_expr only supports values with "
             "microsecond precision since duckdb::Value::INTERVAL only supports "
             "microsecond precision");
     }
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
-        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(val / 1000)));
+        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(div_res.quot)));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
