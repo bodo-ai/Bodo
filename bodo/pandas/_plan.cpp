@@ -144,7 +144,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
     int64_t val) {
-    std::lldiv_t div_res = std::div(val, 1000LL);
+    std::lldiv_t div_res = std::div((long long)val, 1000LL);
     if (div_res.rem != 0) {
         throw std::runtime_error(
             "make_const_timedelta_ns_expr only supports values with "
