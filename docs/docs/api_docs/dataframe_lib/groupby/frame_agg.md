@@ -16,6 +16,7 @@ Apply one or more aggregate functions to groups of data in a BodoDataFrame. This
     * The name of a supported aggregation function e.g. `"sum"`
     * A list of functions, which will be applied to each selected column e.g. `["sum"`, `"count"]`
     * A dictionary mapping column name to aggregate function e.g. `{"col_1": "sum", "col_2": "mean"}`
+    * A dictionary mapping column name to list of aggregate functions e.g. `{"col_1": ["sum", "count"], "col_2": ["count", "mean"]}`
     * None along with key word arguments specifying Named Aggregates.
 
     [Refer to our documentation][df-lib-groupby] for aggregate functions that are currently supported in addition to most user defined functions.
