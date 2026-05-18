@@ -1198,7 +1198,10 @@ def sort_dataframe_values_index(df):
         c
         for i, c in enumerate(df.columns)
         # Avoid sorting nested dtypes since not supported in Pandas yet
-        if not _is_nested_arrow_dtype(df.dtypes.iloc[i])
+        if not (
+            _is_nested_arrow_dtype(df.dtypes.iloc[i])
+            or (len(df) > 0 and isinstance(df.iloc[0, i], dict))
+        )
     ] + [eName]
     if None in list_col_names:
         raise RuntimeError(

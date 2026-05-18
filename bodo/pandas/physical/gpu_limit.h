@@ -100,7 +100,9 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                              arrow_output_schema, se));
                 local_remaining -= select_local;
             }
-            local_is_last = (local_remaining == 0 || local_is_last);
+            local_is_last = local_remaining == 0 || local_is_last;
+        } else {
+            local_is_last = true;
         }
         bool global_is_last = static_cast<bool>(sync_is_last_non_blocking(
             &is_last_state, static_cast<int32_t>(local_is_last)));
