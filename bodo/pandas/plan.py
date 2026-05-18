@@ -752,7 +752,12 @@ class PythonScalarFuncExpression(Expression):
             return self
 
     def with_new_source(self, new_source):
-        out = PythonScalarFuncExpression(self.empty_data, new_source, *self.args[1:])
+        new_input_exprs = [
+            expr.with_new_source(new_source) for expr in self.input_exprs
+        ]
+        out = PythonScalarFuncExpression(
+            self.empty_data, new_input_exprs, *self.args[1:]
+        )
         out.is_series = self.is_series
         return out
 
@@ -828,7 +833,12 @@ class ArrowScalarFuncExpression(Expression):
             return self
 
     def with_new_source(self, new_source):
-        out = ArrowScalarFuncExpression(self.empty_data, new_source, *self.args[1:])
+        new_input_exprs = [
+            expr.with_new_source(new_source) for expr in self.input_exprs
+        ]
+        out = ArrowScalarFuncExpression(
+            self.empty_data, new_input_exprs, *self.args[1:]
+        )
         out.is_series = self.is_series
         return out
 
