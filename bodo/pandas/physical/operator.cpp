@@ -1,8 +1,6 @@
 #include "operator.h"
 #include <arrow/array/builder_base.h>
 #include <arrow/util/endian.h>
-#include <mpi.h>
-#include <algorithm>
 #include <memory>
 #include <string>
 

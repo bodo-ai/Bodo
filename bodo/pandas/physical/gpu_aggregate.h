@@ -248,9 +248,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        std::cout << "Consuming batch in GPU Aggregate. Batch has "
-                  << (input_batch.table ? input_batch.table->num_rows() : 0)
-                  << " rows." << std::endl;
         time_pt start_consume = start_timer();
         bool local_is_last = prev_op_result == OperatorResult::FINISHED;
         bool global_is_last = groupby_state->build_consume_batch(

@@ -170,9 +170,7 @@ bool CudaGroupbyState::build_consume_batch(
 
     // If we have already accumulated on this node then add the result
     // of that to the new shuffled tables to merge.
-    std::cout << " hello " << std::endl;
     if (accumulation) {
-        std::cout << "adding accumulated table " << std::endl;
         views.emplace_back(accumulation->view());
     }
 
