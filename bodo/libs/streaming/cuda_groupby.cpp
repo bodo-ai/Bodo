@@ -371,7 +371,7 @@ std::unique_ptr<cudf::column> var_pop_final_merge(
                                             cudf::binary_operator::SUB,
                                             out_type, output_stream);
 
-    auto variance = cudf::binary_operation(numerator->view(), count_col->view(),
+    auto variance = cudf::binary_operation(numerator->view(), count_col,
                                            cudf::binary_operator::DIV, out_type,
                                            output_stream);
 
