@@ -261,11 +261,9 @@ std::vector<int> get_projection_pushed_down_columns(
 /**
  * @brief Creates an Expression node with a UDF inside.
  *
- * @param source input table plan
  * @param out_schema_py output data type (single column for df.apply)
+ * @param in_exprs input expressions for the function
  * @param args arguments to the UDF
- * @param selected_columns column indices for input table columns to pass to the
- * UDF
  * @param is_cfunc Whether to compile and run func as a cfunc
  * @param has_state Whether the UDF requires separate initialization state
  * @param func_name Name of Arrow Compute function, empty string for Python
@@ -273,9 +271,9 @@ std::vector<int> get_projection_pushed_down_columns(
  * @return duckdb::unique_ptr<duckdb::Expression> Expression node for UDF
  */
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
-    bool has_state, const std::string arrow_compute_func);
+    PyObject *out_schema_py,
+    std::vector<std::unique_ptr<duckdb::Expression>> &in_exprs, PyObject *args,
+    bool is_cfunc, bool has_state, const std::string arrow_compute_func);
 
 /**
  * @brief Create an expression for a NULL value of given type.
