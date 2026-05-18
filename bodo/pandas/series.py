@@ -2874,8 +2874,11 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return ColRefExpression(empty_data, plan, idx)
     elif is_python_scalar_func(expr):
-        idx = expr.input_column_indices[0]
-        idx = get_new_idx(idx, first, side)
+        first_input = expr.input_exprs[0]
+        assert is_col_ref(first_input), (
+            "make_expr: expected first input of PythonScalarFuncExpression to be a column reference."
+        )
+        idx = get_new_idx(first_input.col_index, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return PythonScalarFuncExpression(
             empty_data,
@@ -2885,8 +2888,11 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
             False,
         )
     elif is_arrow_scalar_func(expr):
-        idx = expr.input_column_indices[0]
-        idx = get_new_idx(idx, first, side)
+        first_input = expr.input_exprs[0]
+        assert is_col_ref(first_input), (
+            "make_expr: expected first input of ArrowScalarFuncExpression to be a column reference."
+        )
+        idx = get_new_idx(first_input.col_index, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return ArrowScalarFuncExpression(
             empty_data,
