@@ -83,26 +83,30 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) override {
-        if (!is_gpu_rank()) {
-            return OperatorResult::FINISHED;
+        bool local_is_last = prev_op_result == OperatorResult::FINISHED;
+
+        if (is_gpu_rank()) {
+            // Every rank will collect n rows.  We remove extras in Finalize.
+            uint64_t select_local =
+                std::min(local_remaining,
+                         static_cast<uint64_t>(input_batch.table->num_rows()));
+            if (select_local > 0) {
+                std::unique_ptr<cudf::table> first_select_local_rows =
+                    std::make_unique<cudf::table>(
+                        cudf::slice(input_batch.table->view(),
+                                    {0, (int)select_local}, se->stream)[0]);
+                collected_rows.append_batch(
+                    GPU_DATA(std::move(first_select_local_rows),
+                             arrow_output_schema, se));
+                local_remaining -= select_local;
+            }
+            local_is_last = (local_remaining == 0 || local_is_last);
         }
-        // Every rank will collect n rows.  We remove extras in Finalize.
-        uint64_t select_local =
-            std::min(local_remaining,
-                     static_cast<uint64_t>(input_batch.table->num_rows()));
-        if (select_local > 0) {
-            std::unique_ptr<cudf::table> first_select_local_rows =
-                std::make_unique<cudf::table>(
-                    cudf::slice(input_batch.table->view(),
-                                {0, (int)select_local}, se->stream)[0]);
-            collected_rows.append_batch(GPU_DATA(
-                std::move(first_select_local_rows), arrow_output_schema, se));
-            local_remaining -= select_local;
-        }
-        return (local_remaining == 0 ||
-                prev_op_result == OperatorResult::FINISHED)
-                   ? OperatorResult::FINISHED
-                   : OperatorResult::NEED_MORE_INPUT;
+        bool global_is_last = static_cast<bool>(sync_is_last_non_blocking(
+            &is_last_state, static_cast<int32_t>(local_is_last)));
+
+        return global_is_last ? OperatorResult::FINISHED
+                              : OperatorResult::NEED_MORE_INPUT;
     }
 
     /**
@@ -159,4 +163,5 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
     GPUBatchGenerator collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
     std::shared_ptr<arrow::Schema> arrow_output_schema;
+    IsLastState is_last_state;
 };
