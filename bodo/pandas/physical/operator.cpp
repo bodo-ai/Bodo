@@ -277,14 +277,6 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, se, prev_op_result);
 
-    if (is_gpu_rank() && gpu_batch.table && gpu_batch.table->num_rows() > 0) {
-        int rank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        auto table = convertGPUToTable(gpu_batch);
-        std::cout << rank << ": Calling GPU Process batch with table";
-        DEBUG_PrintTable(std::cout, table);
-    }
-
     auto gpu_result = ProcessBatchGPU(gpu_batch, exchange_result, se);
     if (is_gpu_rank()) {
         se->event.record(se->stream);
