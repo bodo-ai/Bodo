@@ -240,7 +240,7 @@ def java_call_to_python_call(java_call, input_plan):
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
         # function name as string (e.g., "POWER", "SQRT")
-        func_name = op.getName().toUpperCase()
+        func_name = op.getName().upper()
 
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
