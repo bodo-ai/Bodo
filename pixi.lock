@@ -4702,6 +4702,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numba-0.64.0-py314h8169c2f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numba-cuda-0.28.2-py314h118ebf0_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-2.4.3-py314h2b28147_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/nvidia-ml-py-13.595.45-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nvtx-0.2.15-py314h5bd0f2a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/oauthlib-3.3.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/ocl-icd-2.3.3-hb9d3cd8_0.conda
@@ -6310,6 +6311,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numba-0.64.0-py314h8169c2f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numba-cuda-0.28.2-py314h118ebf0_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/numpy-2.4.4-py314h2b28147_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/nvidia-ml-py-13.595.45-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/nvtx-0.2.15-py314h5bd0f2a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/oauthlib-3.3.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/ocl-icd-2.3.3-hb9d3cd8_0.conda
@@ -23000,6 +23002,20 @@ packages:
   - pkg:pypi/numpy?source=hash-mapping
   size: 7311362
   timestamp: 1773839141373
+- conda: https://conda.anaconda.org/conda-forge/noarch/nvidia-ml-py-13.595.45-pyhd8ed1ab_1.conda
+  sha256: fb46556c423311638fbb26ed4b2a67cf598044919e42ab7571365a5b4ae3b663
+  md5: dc8587ae654e96031728802016e8258c
+  depends:
+  - python >=3.10
+  constrains:
+  - pynvml ~=13.0
+  - nvidia-ml ==9999999999
+  license: BSD-3-Clause
+  license_family: BSD
+  purls:
+  - pkg:pypi/nvidia-ml-py?source=hash-mapping
+  size: 48878
+  timestamp: 1775592349734
 - conda: https://conda.anaconda.org/conda-forge/linux-64/nvtx-0.2.15-py314h5bd0f2a_0.conda
   sha256: 02e18855f0c7373c0604e511e76bdc23a93c9e859c5aa351a2efd514b82554e4
   md5: f845b14e1b68ec2f66f59153b2bedf00

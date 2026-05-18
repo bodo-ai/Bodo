@@ -22,7 +22,12 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     JITFallback,
 )
-from bodo.tests.utils import _test_equal, set_broadcast_join, temp_config_override
+from bodo.tests.utils import (
+    _test_equal,
+    is_multi_worker_per_gpu_test,
+    set_broadcast_join,
+    temp_config_override,
+)
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -4119,6 +4124,12 @@ def test_series_to_list():
     bs2 = bs1 + 1
     l1 = s2.to_list()
     bl1 = bs2.to_list()
+
+    if is_multi_worker_per_gpu_test():
+        # Automatically sort output if we have multiple workers per GPU
+        # TODO(BSE-5322): remove after CPU-GPU exchange doesn't change the order of data.
+        bl1.sort()
+
     assert l1 == bl1
 
 

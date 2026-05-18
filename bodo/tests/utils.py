@@ -1316,6 +1316,23 @@ def _pd_fillna_value(series: pd.Series, value) -> pd.Series:
     return series.fillna(value=value)
 
 
+def get_num_gpus() -> int:
+    """Get the number of GPUs available. Returns 0 if GPU is not enabled."""
+    if not bodo.gpu_enabled:
+        return 0
+    else:
+        import pynvml
+
+        pynvml.nvmlInit()
+        num_devices = pynvml.nvmlDeviceGetCount()
+        return num_devices
+
+
+def is_multi_worker_per_gpu_test():
+    """Return True if the test is running with multiple workers per GPU."""
+    return bodo.gpu_enabled and get_num_workers() > get_num_gpus()
+
+
 def _test_equal(
     bodo_out,
     py_out,
@@ -1333,16 +1350,11 @@ def _test_equal(
     except ImportError:
         csr_matrix = type(None)
 
-    if bodo.gpu_enabled:
-        import cupy as cp
-
-        num_devices = cp.cuda.runtime.getDeviceCount()
-        num_workers = get_num_workers()
+    if is_multi_worker_per_gpu_test():
         # Automatically sort output if we have multiple workers per GPU
         # TODO(BSE-5322): remove after CPU-GPU exchange doesn't change the order of data.
-        if num_workers > num_devices:
-            sort_output = True
-            reset_index = True
+        sort_output = True
+        reset_index = True
 
     # Bodo converts lists to array in array(item) array cases
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
