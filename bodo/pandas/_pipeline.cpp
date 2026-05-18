@@ -265,9 +265,6 @@ bool Pipeline::midPipelineExecute(
                 sink);
             DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result, out);
             if (consume_result == OperatorResult::FINISHED) {
-                // std::cout << "Rank " << rank
-                //           << " midPipelineExecute finished at sink "
-                //           << getNodeString(sink) << std::endl;
                 return true;
             }
             if (consume_result == OperatorResult::NEED_MORE_INPUT) {

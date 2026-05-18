@@ -277,6 +277,14 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
     auto [gpu_batch, exchange_result] =
         cpu_to_gpu_exchange(input_batch, se, prev_op_result);
 
+    if (is_gpu_rank() && gpu_batch.table && gpu_batch.table->num_rows() > 0) {
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        auto table = convertGPUToTable(gpu_batch);
+        std::cout << rank << ": Calling GPU Process batch with table";
+        DEBUG_PrintTable(std::cout, table);
+    }
+
     auto gpu_result = ProcessBatchGPU(gpu_batch, exchange_result, se);
     if (is_gpu_rank()) {
         se->event.record(se->stream);
@@ -685,28 +693,12 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
         Initialize(input_batch, se);
     }
 
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    // if (input_batch && input_batch->nrows() > 0) {
-    //     std::cout << "Rank " << rank << " received a table with "
-    //               << input_batch->nrows() << " rows and "
-    //               << input_batch->ncols() << " cols for CPU to GPU exchange"
-    //               << std::endl;
-    // }
-
     // Shuffle data to destination GPU ranks and append result to output builder
     std::vector<bool> append_rows(input_batch->nrows(), true);
     this->shuffle_state->AppendBatch(input_batch, append_rows);
     auto result = this->shuffle_state->ShuffleIfRequired(true);
 
     if (result.has_value()) {
-        // if (result.value()->nrows() > 0) {
-        //     std::cout << "Rank " << rank << " shuffled table with "
-        //               << result.value()->nrows() << " rows and "
-        //               << result.value()->ncols()
-        //               << " cols for CPU to GPU exchange" << std::endl;
-        // }
         gpu_batch_generator->append_batch(
             convertTableToGPU(result.value(), se));
     }
