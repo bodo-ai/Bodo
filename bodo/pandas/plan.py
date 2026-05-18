@@ -698,6 +698,19 @@ class PythonScalarFuncExpression(Expression):
         """Returns whether the scalar function has separate init state."""
         return self.args[3]
 
+    @property
+    def source(self):
+        """Return the source of the function expression assuming all input expressions share the same source."""
+        assert len(self.input_exprs) != 0, (
+            "PythonScalarFuncExpression::source: expected at least one input expression"
+        )
+
+        source = self.input_exprs[0].source
+        for expr in self.input_exprs[1:]:
+            if expr.source != source:
+                return None
+        return source
+
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
         if self.source != new_source_plan:
@@ -757,6 +770,19 @@ class ArrowScalarFuncExpression(Expression):
     def function_args(self):
         """Return the function args."""
         return self.args[2]
+
+    @property
+    def source(self):
+        """Return the source of the function expression assuming all input expressions share the same source."""
+        assert len(self.input_exprs) != 0, (
+            "ArrowScalarFuncExpression::source: expected at least one input expression"
+        )
+
+        source = self.input_exprs[0].source
+        for expr in self.input_exprs[1:]:
+            if expr.source != source:
+                return None
+        return source
 
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
