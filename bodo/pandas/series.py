@@ -3032,7 +3032,7 @@ def _get_series_func_plan(
         input_exprs = [series_proj.args[1][0]]
     else:
         source_data = series_proj
-        input_exprs = [make_col_ref_exprs(0, series_proj)]
+        input_exprs = make_col_ref_exprs([0], series_proj)
 
     n_cols = len(source_data.empty_data.columns)
     index_cols = range(
