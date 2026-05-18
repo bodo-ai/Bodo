@@ -719,8 +719,11 @@ class PythonScalarFuncExpression(Expression):
             ), (
                 "PythonScalarFuncExpression::update_func_expr_source: expected single input column"
             )
+            assert is_col_ref(self.input_exprs[0]), (
+                "PythonScalarFuncExpression::update_func_expr_source: expected input expression to be a column reference"
+            )
             # Previous input data column index
-            in_col_ind = self.input_column_indices[0]
+            in_col_ind = self.input_exprs[0].col_index
             n_source_cols = len(new_source_plan.empty_data.columns)
             # Add Index columns of the new source plan as input
             index_cols = tuple(
@@ -732,9 +735,10 @@ class PythonScalarFuncExpression(Expression):
             )
             expr = PythonScalarFuncExpression(
                 self.empty_data,
-                new_source_plan,
+                make_col_ref_exprs(
+                    (in_col_ind + col_index_offset,) + index_cols, new_source_plan
+                ),
                 self.func_args,
-                (in_col_ind + col_index_offset,) + index_cols,
                 self.is_cfunc,
                 self.has_state,
             )
@@ -792,8 +796,11 @@ class ArrowScalarFuncExpression(Expression):
             ), (
                 "ArrowScalarFuncExpression::update_func_expr_source: expected single input column"
             )
+            assert is_col_ref(self.input_exprs[0]), (
+                "ArrowScalarFuncExpression::update_func_expr_source: expected input expression to be a column reference"
+            )
             # Previous input data column index
-            in_col_ind = self.input_column_indices[0]
+            in_col_ind = self.input_exprs[0].col_index
             n_source_cols = len(new_source_plan.empty_data.columns)
             # Add Index columns of the new source plan as input
             index_cols = tuple(
@@ -805,8 +812,9 @@ class ArrowScalarFuncExpression(Expression):
             )
             expr = ArrowScalarFuncExpression(
                 self.empty_data,
-                new_source_plan,
-                (in_col_ind + col_index_offset,) + index_cols,
+                make_col_ref_exprs(
+                    (in_col_ind + col_index_offset,) + index_cols, new_source_plan
+                ),
                 self.function_name,
                 self.function_args,
             )
