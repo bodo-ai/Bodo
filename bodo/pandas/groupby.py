@@ -45,6 +45,7 @@ BUILTIN_AGG_FUNCS = {
     "std",
     "var",
     "skew",
+    "kurtosis",
     "count",
     "size",
     "nunique",
@@ -276,6 +277,20 @@ class DataFrameGroupBy:
         return _groupby_agg_plan(self, "skew")
 
     @check_args_fallback(supported="none")
+    def kurt(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
+        """
+        Compute the kurtosis of each group.
+        """
+        return _groupby_agg_plan(self, "kurtosis")
+
+    @check_args_fallback(supported="none")
+    def kurtosis(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
+        """
+        Compute the kurtosis of each group.
+        """
+        return _groupby_agg_plan(self, "kurtosis")
+
+    @check_args_fallback(supported="none")
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the std of each group.
@@ -464,6 +479,20 @@ class SeriesGroupBy:
         Compute the skew of each group.
         """
         return _groupby_agg_plan(self, "skew")
+
+    @check_args_fallback(supported="none")
+    def kurt(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
+        """
+        Compute the kurtosis of each group.
+        """
+        return _groupby_agg_plan(self, "kurtosis")
+
+    @check_args_fallback(supported="none")
+    def kurtosis(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
+        """
+        Compute the kurtosis of each group.
+        """
+        return _groupby_agg_plan(self, "kurtosis")
 
     @check_args_fallback(supported="none")
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
@@ -937,7 +966,16 @@ def _get_agg_output_type(
         elif pa.types.is_decimal(pa_type):
             # TODO: Decimal sum
             fallback = True
-    elif func_name in ("mean", "std", "var", "skew", "median"):
+    elif func_name in (
+        "mean",
+        "std",
+        "var",
+        "std_pop",
+        "var_pop",
+        "skew",
+        "kurtosis",
+        "median",
+    ):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):

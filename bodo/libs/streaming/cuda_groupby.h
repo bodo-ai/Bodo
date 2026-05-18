@@ -30,6 +30,12 @@ std::unique_ptr<cudf::column> var_final_merge(
 std::unique_ptr<cudf::column> std_final_merge(
     const std::vector<cudf::column_view> &input_cols,
     rmm::cuda_stream_view &output_stream);
+std::unique_ptr<cudf::column> var_pop_final_merge(
+    const std::vector<cudf::column_view> &input_cols,
+    rmm::cuda_stream_view &output_stream);
+std::unique_ptr<cudf::column> std_pop_final_merge(
+    const std::vector<cudf::column_view> &input_cols,
+    rmm::cuda_stream_view &output_stream);
 std::unique_ptr<cudf::column> skew_final_merge(
     const std::vector<cudf::column_view> &input_cols,
     rmm::cuda_stream_view &output_stream);
@@ -170,6 +176,8 @@ class CudaGroupbyState {
                 break;
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
+            case Bodo_FTypes::var_pop:
+            case Bodo_FTypes::std_pop:
                 // For sum of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
@@ -285,6 +293,8 @@ class CudaGroupbyState {
                 break;
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
+            case Bodo_FTypes::var_pop:
+            case Bodo_FTypes::std_pop:
                 // For sum of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
@@ -374,6 +384,16 @@ class CudaGroupbyState {
                 final_merges.push_back(
                     {{cur_col_size - 3, cur_col_size - 2, cur_col_size - 1},
                      std_final_merge});
+                break;
+            case Bodo_FTypes::var_pop:
+                final_merges.push_back(
+                    {{cur_col_size - 3, cur_col_size - 2, cur_col_size - 1},
+                     var_pop_final_merge});
+                break;
+            case Bodo_FTypes::std_pop:
+                final_merges.push_back(
+                    {{cur_col_size - 3, cur_col_size - 2, cur_col_size - 1},
+                     std_pop_final_merge});
                 break;
             case Bodo_FTypes::skew:
                 final_merges.push_back({{cur_col_size - 4, cur_col_size - 3,
