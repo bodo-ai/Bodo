@@ -94,8 +94,9 @@ class RankDataExchange {
     ~RankDataExchange() = default;
 
     /**
-     * @brief Cleanup rank exchange barrier if ranks finish early due to
-     * upstream operator finishing.
+     * @brief Finalize the exchange state. This includes clearing the exchange
+     * barrier if the exchange could not finish due to an upstream operator
+     * finishing early and freeing the shuffle communicator.
      *
      */
     void Finalize();
