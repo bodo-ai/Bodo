@@ -708,7 +708,9 @@ class PythonScalarFuncExpression(Expression):
         source = self.input_exprs[0].source
         for expr in self.input_exprs[1:]:
             if expr.source != source:
-                return None
+                raise ValueError(
+                    "PythonScalarFuncExpression::source: input expressions have different sources"
+                )
         return source
 
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
@@ -790,7 +792,9 @@ class ArrowScalarFuncExpression(Expression):
         source = self.input_exprs[0].source
         for expr in self.input_exprs[1:]:
             if expr.source != source:
-                return None
+                raise ValueError(
+                    "ArrowScalarFuncExpression::source: input expressions have different sources"
+                )
         return source
 
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
