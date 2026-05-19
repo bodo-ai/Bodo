@@ -334,7 +334,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalDistinct] make_distinct(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CExpression] make_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices, c_bool is_cfunc, c_bool has_state, c_string arrow_compute_func) except +
+    cdef unique_ptr[CExpression] make_scalar_func_expr(object out_schema, vector[unique_ptr[CExpression]] in_exprs, object args, c_bool is_cfunc, c_bool has_state, c_string arrow_compute_func) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
@@ -664,22 +664,26 @@ cdef class AggregateExpression(Expression):
     def __str__(self):
         return f"AggregateExpression({self.function_name})"
 
+
 cdef class PythonScalarFuncExpression(Expression):
     """Wrapper around DuckDB's BoundFunctionExpression for running Python/Arrow functions.
     """
 
     def __cinit__(self,
         object out_schema,
-        LogicalOperator source,
+        list in_exprs,
         object args,
-        vector[int] input_column_indices,
         c_bool is_cfunc,
         c_bool has_state):
+        cdef vector[unique_ptr[CExpression]] in_c_exprs
+
+        for in_expr in in_exprs:
+            in_c_exprs.push_back(move((<Expression>in_expr).c_expression))
 
         self.out_schema = out_schema
         empty_str = ""
         self.c_expression = make_scalar_func_expr(
-            source.c_logical_operator, out_schema, args, input_column_indices, is_cfunc, has_state, empty_str.encode())
+            out_schema, in_c_exprs, args, is_cfunc, has_state, empty_str.encode())
 
     def __str__(self):
         return f"PythonScalarFuncExpression()"
@@ -691,14 +695,17 @@ cdef class ArrowScalarFuncExpression(Expression):
 
     def __cinit__(self,
         object out_schema,
-        LogicalOperator source,
-        vector[int] input_column_indices,
+        list in_exprs,
         str function_name,
         object args):
+        cdef vector[unique_ptr[CExpression]] in_c_exprs
+
+        for in_expr in in_exprs:
+            in_c_exprs.push_back(move((<Expression>in_expr).c_expression))
 
         self.out_schema = out_schema
         self.c_expression = make_scalar_func_expr(
-            source.c_logical_operator, out_schema, args, input_column_indices, False, False, function_name.encode())
+            out_schema, in_c_exprs, args, False, False, function_name.encode())
 
     def __str__(self):
         return f"ArrowScalarFuncExpression({self.function_name})"
