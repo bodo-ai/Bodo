@@ -366,7 +366,7 @@ def test_series_udf(dropna, as_index, impl):
 @pytest.mark.gpu
 @pytest.mark.skipif(
     is_multi_worker_per_gpu_test(),
-    reason="TODO: Fix groupby fallback test on multi-worker per GPU tests",
+    reason="[BSE-5430] Fix wrong result in multi-worker GPU test",
 )
 def test_apply_fallback(groupby_df: pd.DataFrame, as_index):
     # DataFrame return value
