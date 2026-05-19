@@ -555,16 +555,12 @@ RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
     }
 }
 
-RankDataExchange::~RankDataExchange() {
+void RankDataExchange::Finalize() {
     if (!finished) {
         while (!sync_is_last_non_blocking(is_last_state.get(), 1)) {
             // Wait for all ranks to get to global is_last barrier before
             // finalizing shuffle state
         };
-    }
-
-    if (this->shuffle_state) {
-        this->shuffle_state->CancelShuffle();
     }
 
     MPI_Comm_free(&this->shuffle_comm);
