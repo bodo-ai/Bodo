@@ -793,6 +793,8 @@ def python_arith_dunder_to_duckdb(str opstr):
     elif opstr == "__floordiv__" or opstr == "__rfloordiv__":
         # NOTE: only used for integers since "//" is integer division in duckdb
         return "//"
+    elif opstr == "__pow__":
+        return "POWER"
     else:
         raise NotImplementedError("Unknown Python arith dunder method name")
 

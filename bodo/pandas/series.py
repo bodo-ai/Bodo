@@ -468,6 +468,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return self._arith_binop(other, "__rmod__", True)
 
     @check_args_fallback("all")
+    def __pow__(self, other):
+        return self._arith_binop(other, "__pow__", False)
+
+    @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when series[key] is used."""
         from bodo.ext import plan_optimizer
