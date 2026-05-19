@@ -1358,9 +1358,6 @@ def test_merge_switch_side():
 
 
 @pytest.mark.gpu
-@pytest.mark.skipif(
-    os.environ.get("BODO_GPU") != "1", reason="Broken on CPU, changes in separate PR"
-)
 @pytest.mark.parametrize("broadcast", [True, False])
 def test_merge_non_equi_cond(broadcast):
     """Simple test for non-equi join conditions."""
@@ -1832,13 +1829,7 @@ def test_size_no_val(groupby_agg_df, as_index):
         "count",
         "max",
         "min",
-        pytest.param(
-            "nunique",
-            marks=pytest.mark.skipif(
-                is_multi_worker_per_gpu_test(),
-                reason="[BSE-5428] Fix wrong result in multi-worker GPU test",
-            ),
-        ),
+        "nunique",
         "size",
     ],
 )
