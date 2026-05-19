@@ -46,6 +46,7 @@ BUILTIN_AGG_FUNCS = {
     "var",
     "skew",
     "kurt",
+    "kurtosis",
     "count",
     "size",
     "nunique",
@@ -966,6 +967,7 @@ def _get_agg_output_type(
         "var_pop",
         "skew",
         "kurt",
+        "kurtosis",
         "median",
     ):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
