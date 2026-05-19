@@ -1928,6 +1928,27 @@ def test_projection_expression_floordiv(datapath):
 
 
 @pytest.mark.gpu
+def test_projection_expression_pow(datapath):
+    """Test for power."""
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df2 = bodo_df1[bodo_df1.A**2 > 15]
+
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
+        py_df2 = py_df1[py_df1.A**2 > 15]
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.gpu
 def test_projection_expression_mod(datapath):
     """Test for mod."""
     with assert_executed_plan_count(0):
@@ -2921,6 +2942,39 @@ def test_series_describe_empty():
         describe_pd = pds.describe()
         describe_bodo = bds.describe()
     _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("data", [[None, np.nan, 1] * 10])
+def test_series_null(data):
+    """Basic test for Series isnull."""
+
+    pds = pd.Series(data, dtype="float64[pyarrow]")
+    bds = bd.Series(data, dtype="float64[pyarrow]")
+    print(bds)
+
+    pds_null = pds.isnull()
+    bds_null = bds.isnull()
+    _test_equal(bds_null, pds_null, check_pandas_types=False)
+    pds_notnull = pds.notnull()
+    bds_notnull = bds.notnull()
+    _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("data", [[None, np.nan, 1] * 10])
+def test_series_na(data):
+    """Basic test for Series isna."""
+
+    pds = pd.Series(data, dtype="float64[pyarrow]")
+    bds = bd.Series(data, dtype="float64[pyarrow]")
+
+    pds_null = pds.isna()
+    bds_null = bds.isna()
+    _test_equal(bds_null, pds_null, check_pandas_types=False)
+    pds_notnull = pds.notna()
+    bds_notnull = bds.notna()
+    _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
 
 
 def test_groupby_getattr_fallback_behavior():

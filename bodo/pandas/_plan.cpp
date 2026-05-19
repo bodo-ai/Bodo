@@ -2,6 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <cstddef>
+#include <cstdlib>
 #include <utility>
 
 #include <arrow/api.h>
@@ -139,6 +140,19 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
     int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
+    int64_t val) {
+    std::lldiv_t div_res = std::div((long long)val, 1000LL);
+    if (div_res.rem != 0) {
+        throw std::runtime_error(
+            "make_const_timedelta_ns_expr only supports values with "
+            "microsecond precision since duckdb::Value::INTERVAL only supports "
+            "microsecond precision");
+    }
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(div_res.quot)));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
@@ -409,12 +423,8 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     auto lhs_duck = to_duckdb(lhs);
 
     switch (etype) {
-        case duckdb::ExpressionType::OPERATOR_NOT: {
-            auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
-                etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
-            ret->children.push_back(std::move(lhs_duck));
-            return ret;
-        } break;
+        case duckdb::ExpressionType::OPERATOR_NOT:
+        case duckdb::ExpressionType::OPERATOR_IS_TRUE:
         case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
@@ -1557,11 +1567,33 @@ void registerFloor(duckdb::shared_ptr<duckdb::DuckDB> db) {
     system_catalog.CreateFunction(data, floor_info);
 }
 
+void registerPower(duckdb::shared_ptr<duckdb::DuckDB> db) {
+    duckdb::LogicalType double_type(duckdb::LogicalType::DOUBLE);
+    duckdb::LogicalType float_type(duckdb::LogicalType::FLOAT);
+    duckdb::vector<duckdb::LogicalType> double_arguments = {double_type,
+                                                            double_type};
+    duckdb::vector<duckdb::LogicalType> float_arguments = {float_type,
+                                                           float_type};
+    duckdb::ScalarFunction power_fun_double("POWER", double_arguments,
+                                            double_type, nullptr);
+    duckdb::ScalarFunction power_fun_float("POWER", float_arguments, float_type,
+                                           nullptr);
+    duckdb::ScalarFunctionSet power_set("POWER");
+    power_set.AddFunction(power_fun_double);
+    power_set.AddFunction(power_fun_float);
+    duckdb::CreateScalarFunctionInfo power_info(power_set);
+    auto &system_catalog = duckdb::Catalog::GetSystemCatalog(*(db->instance));
+    auto data =
+        duckdb::CatalogTransaction::GetSystemTransaction(*(db->instance));
+    system_catalog.CreateFunction(data, power_info);
+}
+
 duckdb::shared_ptr<duckdb::DuckDB> get_duckdb() {
     static duckdb::shared_ptr<duckdb::DuckDB> db =
         duckdb::make_shared_ptr<duckdb::DuckDB>(nullptr);
     static bool floor_registered = []() {
         registerFloor(db);
+        registerPower(db);
         return true;
     }();
     // Prevent unused variable error.

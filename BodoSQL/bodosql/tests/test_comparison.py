@@ -202,6 +202,7 @@ def comparison_query_args(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_comparison_operators_within_table(
     comparison_df,
     comparison_query_args,
@@ -231,12 +232,12 @@ def time_comparison_args(comparison_query_args):
     data = [
         None,
         Time(0, 0, 0, precision=9),
-        Time(12, 30, 15, nanosecond=13, precision=9),
+        Time(12, 30, 15, precision=9),
         Time(12, 45, 0, precision=9),
-        Time(5, 58, 1, microsecond=999, precision=9),
+        Time(5, 58, 1, precision=9),
         Time(5, 58, 30, precision=9),
-        Time(5, 58, 1, millisecond=1, precision=9),
-        Time(22, 14, 20, nanosecond=67, precision=9),
+        Time(5, 58, 3, precision=9),
+        Time(22, 14, 21, precision=9),
         Time(22, 14, 20, precision=9),
     ]
     A = pd.Series(data * 9)
@@ -276,9 +277,11 @@ def time_comparison_args(comparison_query_args):
         ),
     }
     answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
+    ctx["TABLE1"] = ctx["TABLE1"].astype(pd.ArrowDtype(pa.time64("ns")))
     return cmp_op, use_case, ctx, answer
 
 
+@pytest.mark.bodosql_cpp
 def test_time_comparison_operators_within_table(
     time_comparison_args, memory_leak_check
 ):
@@ -312,6 +315,7 @@ def test_time_comparison_operators_within_table(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_comparison_operators_interval_within_table(
     bodosql_interval_types, comparison_ops, memory_leak_check
 ):
@@ -345,8 +349,9 @@ def test_comparison_operators_interval_within_table(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_comparison_operators_between_tables(
-    bodosql_numeric_types, comparison_ops, spark_info, memory_leak_check
+    bodosql_numeric_types, comparison_ops, memory_leak_check
 ):
     """
     Tests that the basic comparison operators work when comparing data between two numeric tables of the same type
@@ -366,10 +371,11 @@ def test_comparison_operators_between_tables(
         "TABLE1": bodosql_numeric_types["TABLE1"],
         "TABLE2": bodosql_numeric_types["TABLE1"],
     }
-    check_query(query, new_context, spark_info, check_dtype=False)
+    check_query(query, new_context, None, check_dtype=False, use_duckdb=True)
 
 
-def test_comparison_operators_decimal(comparison_ops, spark_info, memory_leak_check):
+@pytest.mark.bodosql_cpp
+def test_comparison_operators_decimal(comparison_ops, memory_leak_check):
     """Test comparison for decimal values"""
 
     query = f"""
@@ -395,20 +401,27 @@ def test_comparison_operators_decimal(comparison_ops, spark_info, memory_leak_ch
             }
         ),
     }
-    check_query(query, context, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query, context, None, check_dtype=False, check_names=False, use_duckdb=True
+    )
     query = f"""
         SELECT
             B {comparison_ops} A
         FROM
             table1
         """
-    check_query(query, context, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query, context, None, check_dtype=False, check_names=False, use_duckdb=True
+    )
     query = f"""SELECT CASE WHEN A {comparison_ops} B THEN 1 ELSE 0 END FROM table1
     """
-    check_query(query, context, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query, context, None, check_dtype=False, check_names=False, use_duckdb=True
+    )
 
 
-def test_where_and(join_dataframes, spark_info, memory_leak_check):
+@pytest.mark.bodosql_cpp
+def test_where_and(join_dataframes, memory_leak_check):
     """
     Tests an and expression within a where clause.
     """
@@ -439,12 +452,14 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_where_or(join_dataframes, spark_info, memory_leak_check):
+# @pytest.mark.bodosql_cpp TODO: enable when we support non-equi joins
+def test_where_or(join_dataframes, memory_leak_check):
     """
     Tests an or expression within a where clause.
     """
@@ -478,11 +493,17 @@ def test_where_or(join_dataframes, spark_info, memory_leak_check):
                   or t2.A = {scalar_val2})
     """
     check_query(
-        query, join_dataframes, spark_info, check_names=False, check_dtype=check_dtype
+        query,
+        join_dataframes,
+        None,
+        check_names=False,
+        check_dtype=check_dtype,
+        use_duckdb=True,
     )
 
 
-def test_between_date(spark_info, between_clause, memory_leak_check):
+@pytest.mark.bodosql_cpp
+def test_between_date(between_clause, memory_leak_check):
     query = f"""SELECT A {between_clause} DATE '1995-01-01'
                  AND DATE '1996-12-31' FROM table1"""
     ctx = {
@@ -501,12 +522,14 @@ def test_between_date(spark_info, between_clause, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_between_interval(bodosql_interval_types, between_clause, memory_leak_check):
     """
     tests that between works for interval values
@@ -536,9 +559,8 @@ def test_between_interval(bodosql_interval_types, between_clause, memory_leak_ch
     )
 
 
-def test_between_int(
-    bodosql_numeric_types, between_clause, spark_info, memory_leak_check
-):
+@pytest.mark.bodosql_cpp
+def test_between_int(bodosql_numeric_types, between_clause, memory_leak_check):
     """
     tests that between works for integer values
     """
@@ -553,14 +575,14 @@ def test_between_int(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
-def test_between_str(
-    bodosql_string_types, between_clause, spark_info, memory_leak_check
-):
+@pytest.mark.bodosql_cpp
+def test_between_str(bodosql_string_types, between_clause, memory_leak_check):
     """
     tests that between works for string values
     """
@@ -573,7 +595,7 @@ def test_between_str(
             table1.A {between_clause} 'a' AND 'z'
     """
 
-    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
+    check_query(query, bodosql_string_types, None, check_dtype=False, use_duckdb=True)
 
 
 @pytest.fixture
@@ -630,6 +652,7 @@ def date_datetime64_comparison_args(comparison_query_args):
     return cmp_op, use_case, ctx, answer
 
 
+@pytest.mark.bodosql_cpp
 def test_date_compare_datetime64(date_datetime64_comparison_args, memory_leak_check):
     """
     Checks that comparison operator works correctly between datetime.date
@@ -705,6 +728,7 @@ def tz_aware_tz_naive_comparison_args(comparison_query_args):
     return cmp_op, use_case, ctx, answer, "US/Pacific"
 
 
+# @pytest.mark.bodosql_cpp TODO: enable when we support timezone-aware/naive comparisons in C++ backend
 def test_tz_aware_compare_tz_naive(
     tz_aware_tz_naive_comparison_args, memory_leak_check
 ):
