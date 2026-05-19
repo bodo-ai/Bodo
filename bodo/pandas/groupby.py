@@ -45,7 +45,7 @@ BUILTIN_AGG_FUNCS = {
     "std",
     "var",
     "skew",
-    "kurtosis",
+    "kurt",
     "count",
     "size",
     "nunique",
@@ -276,20 +276,6 @@ class DataFrameGroupBy:
         """
         return _groupby_agg_plan(self, "skew")
 
-    @check_args_fallback(supported="none")
-    def kurt(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
-        """
-        Compute the kurtosis of each group.
-        """
-        return _groupby_agg_plan(self, "kurtosis")
-
-    @check_args_fallback(supported="none")
-    def kurtosis(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
-        """
-        Compute the kurtosis of each group.
-        """
-        return _groupby_agg_plan(self, "kurtosis")
-
     @check_args_fallback(supported=["ddof"])
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
@@ -299,10 +285,7 @@ class DataFrameGroupBy:
             raise BodoLibNotImplementedException(
                 "DataFrameGroupby only supports ddof of 0 or 1"
             )
-        if ddof == 0:
-            return _groupby_agg_plan(self, "std_pop")
-        else:
-            return _groupby_agg_plan(self, "std")
+        return _groupby_agg_plan(self, "std", ddof=ddof)
 
     @check_args_fallback(supported=["ddof"])
     def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
@@ -313,10 +296,7 @@ class DataFrameGroupBy:
             raise BodoLibNotImplementedException(
                 "DataFrameGroupby only supports ddof of 0 or 1"
             )
-        if ddof == 0:
-            return _groupby_agg_plan(self, "var_pop")
-        else:
-            return _groupby_agg_plan(self, "var")
+        return _groupby_agg_plan(self, "var", ddof=ddof)
 
     @check_args_fallback(supported="none")
     def first(self):
@@ -494,20 +474,6 @@ class SeriesGroupBy:
         """
         return _groupby_agg_plan(self, "skew")
 
-    @check_args_fallback(supported="none")
-    def kurt(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
-        """
-        Compute the kurtosis of each group.
-        """
-        return _groupby_agg_plan(self, "kurtosis")
-
-    @check_args_fallback(supported="none")
-    def kurtosis(self, axis=lib.no_default, skipna=True, numeric_only=False, **kwargs):
-        """
-        Compute the kurtosis of each group.
-        """
-        return _groupby_agg_plan(self, "kurtosis")
-
     @check_args_fallback(supported=["ddof"])
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
@@ -517,10 +483,7 @@ class SeriesGroupBy:
             raise BodoLibNotImplementedException(
                 "SeriesGroupby only supports ddof of 0 or 1"
             )
-        if ddof == 0:
-            return _groupby_agg_plan(self, "std_pop")
-        else:
-            return _groupby_agg_plan(self, "std")
+        return _groupby_agg_plan(self, "std", ddof=ddof)
 
     @check_args_fallback(supported=["ddof"])
     def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
@@ -531,11 +494,7 @@ class SeriesGroupBy:
             raise BodoLibNotImplementedException(
                 "SeriesGroupby only supports ddof of 0 or 1"
             )
-        if ddof == 0:
-            return _groupby_agg_plan(self, "var_pop")
-        else:
-            return _groupby_agg_plan(self, "var")
-        return _groupby_agg_plan(self, "var")
+        return _groupby_agg_plan(self, "var", ddof=ddof)
 
     @check_args_fallback(supported="none")
     def any(self):
@@ -687,6 +646,10 @@ def _groupby_agg_plan(
             out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types
         )
         func_name = f"udf_{i}" if func.is_custom_aggfunc else func.func_name
+        if func_name == "std" and kwargs.get("ddof", 1) == 0:
+            func_name = "std_pop"
+        elif func_name == "var" and kwargs.get("ddof", 1) == 0:
+            func_name = "var_pop"
         cfunc_wrapper = (
             _get_cfunc_wrapper(func.func, zero_size_df[func.in_col], out_type)
             if func.is_custom_aggfunc
@@ -1002,7 +965,7 @@ def _get_agg_output_type(
         "std_pop",
         "var_pop",
         "skew",
-        "kurtosis",
+        "kurt",
         "median",
     ):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):

@@ -1784,7 +1784,6 @@ def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
         pytest.param("var", {"ddof": 0}, marks=pytest.mark.gpu),
         pytest.param("std", {"ddof": 0}, marks=pytest.mark.gpu),
         pytest.param("skew", {}, marks=pytest.mark.gpu),
-        pytest.param("kurtosis", {}),  # kurtosis not supported on GPU yet
     ],
 )
 def test_groupby_agg_numeric(groupby_agg_df, func, kwargs):
