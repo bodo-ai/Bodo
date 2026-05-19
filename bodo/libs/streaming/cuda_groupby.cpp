@@ -59,10 +59,25 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
     // so the final groupby can skip them.
     std::vector<bool> column_already_handled(column_indices.size(), false);
 
+    // Helper to clone an aggregation request (unique_ptrs aren't copyable).
+    auto clone_agg_req =
+        [&](size_t idx,
+            cudf::column_view values) -> cudf::groupby::aggregation_request {
+        cudf::groupby::aggregation_request req;
+        req.values = values;
+        req.aggregations.push_back(
+            std::unique_ptr<cudf::groupby_aggregation>(
+                dynamic_cast<cudf::groupby_aggregation*>(
+                    aggregation_requests[idx].aggregations[0]
+                        ->clone()
+                        .release())));
+        return req;
+    };
+
     for (size_t i = 0; i < pre_agg_table_fns.size(); ++i) {
         if (pre_agg_table_fns[i] != nullptr) {
-            // Use _input (original merge input) to get all original collect_set
-            // columns, so each column can be deduplicated independently.
+            // Use _input (original merge input) so each column is exploded and
+            // deduplicated independently without Cartesian product.
             hold_updated_table =
                 pre_agg_table_fns[i](_input, key_indices.size() + i, stream);
             cudf::table_view exploded_view = hold_updated_table->view();
@@ -77,21 +92,12 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
                 keys, drop_na_keys ? cudf::null_policy::EXCLUDE
                                    : cudf::null_policy::INCLUDE);
 
-            // Set up aggregation for just this column.  Build a fresh
-            // request because aggregation_requests[i] contains unique_ptrs
-            // that can't be copied.
-            cudf::groupby::aggregation_request single_req;
             cudf::column_view col_to_use =
                 exploded_view.column(column_indices[i]);
             if (aggregation_fns[i] != nullptr) {
                 col_to_use = aggregation_fns[i](col_to_use, stream)->view();
             }
-            single_req.values = col_to_use;
-            auto& src_agg = aggregation_requests[i].aggregations[0];
-            single_req.aggregations.push_back(
-                std::unique_ptr<cudf::groupby_aggregation>(
-                    dynamic_cast<cudf::groupby_aggregation*>(
-                        src_agg->clone().release())));
+            auto single_req = clone_agg_req(i, col_to_use);
 
             std::vector<cudf::groupby::aggregation_request> single_req_vec;
             single_req_vec.push_back(std::move(single_req));
@@ -117,10 +123,8 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
         }
     }
 
-    // If any pre_agg_table_fns were processed, the final groupby below
-    // only needs to handle remaining (non-pre-agg) columns.  We still run
-    // the groupby to process those columns, then merge with deduped_cols.
-    // If NO pre_agg_table_fns ran, the normal path applies unchanged.
+    // If any pre_agg_table_fns ran, handle remaining (non-pre-agg) columns
+    // via the original _input, then stitch with deduped_cols.
     if (std::ranges::any_of(column_already_handled,
                     [](bool v) { return v; })) {
         // Gather non-handled column info
@@ -132,7 +136,6 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
                 remaining_orig_indices.push_back(i);
             }
         }
-        // If there are remaining columns, run groupby on them
         std::vector<std::unique_ptr<cudf::column>> remaining_cols;
         if (!remaining_col_indices.empty()) {
             std::vector<cudf::column_view> key_columns;
@@ -144,27 +147,17 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
                 keys, drop_na_keys ? cudf::null_policy::EXCLUDE
                                    : cudf::null_policy::INCLUDE);
 
-            // Build fresh aggregation requests (can't copy unique_ptrs)
             std::vector<cudf::groupby::aggregation_request> remaining_reqs;
             for (size_t i = 0; i < remaining_col_indices.size(); ++i) {
-                cudf::groupby::aggregation_request req;
+                size_t orig_i = remaining_orig_indices[i];
                 cudf::column_view col_to_use =
                     _input.column(remaining_col_indices[i]);
-                size_t orig_i = remaining_orig_indices[i];
                 if (orig_i < aggregation_fns.size() &&
                     aggregation_fns[orig_i] != nullptr) {
                     col_to_use =
                         aggregation_fns[orig_i](col_to_use, stream)->view();
                 }
-                req.values = col_to_use;
-                // Copy the aggregation (clone)
-                auto& src_agg = aggregation_requests[orig_i]
-                                    .aggregations[0];
-                req.aggregations.push_back(
-                    std::unique_ptr<cudf::groupby_aggregation>(
-                        dynamic_cast<cudf::groupby_aggregation*>(
-                            src_agg->clone().release())));
-                remaining_reqs.push_back(std::move(req));
+                remaining_reqs.push_back(clone_agg_req(orig_i, col_to_use));
             }
 
             auto result = gb_obj.aggregate(remaining_reqs, stream);
