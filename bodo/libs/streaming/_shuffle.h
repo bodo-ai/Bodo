@@ -192,23 +192,6 @@ class AsyncShuffleSendState {
         return total_size;
     }
 
-    /**
-     * @brief Cancel and cleanup inflight send requests.
-     *
-     */
-    void CancelSends() {
-        for (MPI_Request& req : send_requests) {
-            CHECK_MPI(MPI_Cancel(&req),
-                      "AsyncShuffleSendState::CancelSends: MPI error on "
-                      "MPI_Cancel: ");
-        }
-
-        CHECK_MPI(
-            MPI_Waitall(send_requests.size(), send_requests.data(),
-                        MPI_STATUSES_IGNORE),
-            "AsyncShuffleSendState::CancelSends: MPI error on MPI_Waitall: ");
-    }
-
    private:
     using comm_infos_t =
         std::tuple<std::vector<mpi_comm_info>, std::vector<mpi_str_comm_info>>;
@@ -757,23 +740,6 @@ class AsyncShuffleRecvState {
         return total_size;
     }
 
-    /**
-     * @brief Cancel and cleanup inflight recv requests.
-     *
-     */
-    void CancelRecvs() {
-        for (MPI_Request& req : recv_requests) {
-            CHECK_MPI(MPI_Cancel(&req),
-                      "AsyncShuffleRecvState::CancelRecvs: MPI error on "
-                      "MPI_Cancel: ");
-        }
-
-        CHECK_MPI(
-            MPI_Waitall(recv_requests.size(), recv_requests.data(),
-                        MPI_STATUSES_IGNORE),
-            "AsyncShuffleRecvState::CancelRecvs: MPI error on MPI_Waitall: ");
-    }
-
    private:
     /**
      * @brief Return the metadata for the incoming arrays. The metadata consists
@@ -916,12 +882,6 @@ class IncrementalShuffleState {
      *
      */
     virtual void Finalize();
-
-    /**
-     * @brief Cleanup pending shuffle sends/recv states after shuffle terminates
-     * early.
-     */
-    void CancelShuffle();
 
     /**
      * @brief Export shuffle metrics into the provided vector.

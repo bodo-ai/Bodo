@@ -563,10 +563,6 @@ RankDataExchange::~RankDataExchange() {
         };
     }
 
-    if (this->shuffle_state) {
-        this->shuffle_state->CancelShuffle();
-    }
-
     MPI_Comm_free(&this->shuffle_comm);
 }
 

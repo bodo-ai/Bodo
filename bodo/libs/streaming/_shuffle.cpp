@@ -820,15 +820,6 @@ void IncrementalShuffleState::Finalize() {
     this->table_buffer.reset();
 }
 
-void IncrementalShuffleState::CancelShuffle() {
-    for (AsyncShuffleSendState& s : this->send_states) {
-        s.CancelSends();
-    }
-    for (AsyncShuffleRecvState& s : this->recv_states) {
-        s.CancelRecvs();
-    }
-}
-
 bool IncrementalShuffleState::SendRecvEmpty() {
     return (this->send_states.empty() && this->recv_states.empty());
 }
