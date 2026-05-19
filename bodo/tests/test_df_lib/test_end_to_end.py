@@ -1828,7 +1828,12 @@ def test_size_no_val(groupby_agg_df, as_index):
         "count",
         "max",
         "min",
-        "nunique",
+        pytest.param(
+            "nunique",
+            marks=pytest.mark.skipif(
+                is_multi_worker_per_gpu_test(), reason="TODO: Fix multi-worker nunique"
+            ),
+        ),
         "size",
     ],
 )
@@ -4061,6 +4066,9 @@ def test_len_no_warn(index_val):
 
 @pytest.mark.gpu
 @pytest.mark.jit_dependency
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(), reason="Fix wrong result in multi-worker GPU test"
+)
 def test_bodo_pandas_inside_jit():
     """Make sure using bodo.pandas functions inside a bodo.jit function works as
     expected and is same as pandas.

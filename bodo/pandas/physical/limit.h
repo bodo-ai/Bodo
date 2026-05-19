@@ -121,10 +121,14 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
             collected_rows->builder->FinalizeActiveChunk();
             local_remaining -= select_local;
         }
-        return (local_remaining == 0 ||
-                prev_op_result == OperatorResult::FINISHED)
-                   ? OperatorResult::FINISHED
-                   : OperatorResult::NEED_MORE_INPUT;
+
+        bool local_is_last =
+            local_remaining == 0 || prev_op_result == OperatorResult::FINISHED;
+        bool global_is_last = static_cast<bool>(sync_is_last_non_blocking(
+            &is_last_state, static_cast<int32_t>(local_is_last)));
+
+        return global_is_last ? OperatorResult::FINISHED
+                              : OperatorResult::NEED_MORE_INPUT;
     }
 
     /**
@@ -164,4 +168,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     uint64_t n, local_remaining;
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
+
+    // State for sync_is_last_non_blocking to determine when all ranks are done.
+    IsLastState is_last_state;
 };

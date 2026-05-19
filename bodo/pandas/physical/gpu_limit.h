@@ -165,5 +165,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
     GPUBatchGenerator collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
     std::shared_ptr<arrow::Schema> arrow_output_schema;
+
+    // State for sync_is_last_non_blocking to determine when all ranks are done.
     IsLastState is_last_state;
 };
