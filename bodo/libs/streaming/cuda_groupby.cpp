@@ -65,12 +65,9 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
             cudf::column_view values) -> cudf::groupby::aggregation_request {
         cudf::groupby::aggregation_request req;
         req.values = values;
-        req.aggregations.push_back(
-            std::unique_ptr<cudf::groupby_aggregation>(
-                dynamic_cast<cudf::groupby_aggregation*>(
-                    aggregation_requests[idx].aggregations[0]
-                        ->clone()
-                        .release())));
+        req.aggregations.push_back(std::unique_ptr<cudf::groupby_aggregation>(
+            dynamic_cast<cudf::groupby_aggregation*>(
+                aggregation_requests[idx].aggregations[0]->clone().release())));
         return req;
     };
 
@@ -125,8 +122,7 @@ std::unique_ptr<cudf::table> CudaGroupbyState::do_groupby(
 
     // If any pre_agg_table_fns ran, handle remaining (non-pre-agg) columns
     // via the original _input, then stitch with deduped_cols.
-    if (std::ranges::any_of(column_already_handled,
-                    [](bool v) { return v; })) {
+    if (std::ranges::any_of(column_already_handled, [](bool v) { return v; })) {
         // Gather non-handled column info
         std::vector<uint64_t> remaining_col_indices;
         std::vector<size_t> remaining_orig_indices;
