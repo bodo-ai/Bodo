@@ -291,6 +291,20 @@ arrow::Datum do_arrow_compute_unary(
         return invert_res.ValueOrDie();
     }
 
+    // Special handling for is_true since it is not supported directly
+    // by Arrow compute.
+    if (comparator == "is_true") {
+        auto arrow_false = arrow::MakeScalar(false);
+        arrow::Result<arrow::Datum> is_true_res = arrow::compute::CallFunction(
+            "coalesce", {src1, arrow_false}, func_options);
+        if (!is_true_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_unary: Error in Arrow compute: " +
+                is_true_res.status().message());
+        }
+        return is_true_res.ValueOrDie();
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
@@ -340,6 +354,13 @@ std::shared_ptr<array_info> do_arrow_compute_case(
         std::shared_ptr<arrow::Array> arr =
             prepare_arrow_compute(when_as_array->result);
 
+        // Wrap the boolean array into a struct array with one child,
+        // as required by Arrow's "case_when" kernel.
+        auto struct_type = arrow::struct_({arrow::field("cond", arr->type())});
+        arr = std::make_shared<arrow::StructArray>(
+            struct_type, arr->length(),
+            std::vector<std::shared_ptr<arrow::Array>>{arr});
+
         src1 = arrow::Datum(arr);
     } else if (when_as_scalar) {
         src1 = arrow::MakeScalar(prepare_arrow_compute(when_as_scalar->result)
@@ -374,8 +395,10 @@ std::shared_ptr<array_info> do_arrow_compute_case(
             "do_arrow_compute else is neither array nor scalar.");
     }
 
+    // NOTE: Arrow's "if_else" doesn't match our Python and SQL semantics since
+    // it propagates nulls in the condition.
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction("if_else", {src1, src2, src3});
+        arrow::compute::CallFunction("case_when", {src1, src2, src3});
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_array_compute_case: Error in Arrow compute: " +

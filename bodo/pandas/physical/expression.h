@@ -809,6 +809,9 @@ class PhysicalUnaryExpression : public PhysicalExpression {
             case duckdb::ExpressionType::OPERATOR_IS_NULL:
                 comparator = "is_null";
                 break;
+            case duckdb::ExpressionType::OPERATOR_IS_TRUE:
+                comparator = "is_true";
+                break;
             default:
                 throw std::runtime_error("Unhandled unary op expression type.");
         }
@@ -901,6 +904,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         } else if (opstr == "%") {
             EnsureModRegistered();
             comparator = "bodo_mod";
+        } else if (opstr == "POWER") {
+            comparator = "power";
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
                                      opstr);

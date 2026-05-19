@@ -1725,6 +1725,9 @@ def groupby_agg_df(request):
         pytest.param(["sum", "count"], {}, id="func_list"),
         pytest.param("sum", {}, id="func_str"),
         pytest.param(
+            {"A": ["mean", "count"], "D": ["count", "sum"]}, {}, id="func_dict"
+        ),
+        pytest.param(
             None,
             {
                 "mean_A": pd.NamedAgg("A", "mean"),
@@ -1829,7 +1832,13 @@ def test_size_no_val(groupby_agg_df, as_index):
         "count",
         "max",
         "min",
-        "nunique",
+        pytest.param(
+            "nunique",
+            marks=pytest.mark.skipif(
+                is_multi_worker_per_gpu_test(),
+                reason="[BSE-5428] Fix wrong result in multi-worker GPU test",
+            ),
+        ),
         "size",
     ],
 )
@@ -1923,6 +1932,27 @@ def test_projection_expression_floordiv(datapath):
             datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
         )
         py_df2 = py_df1[(py_df1.A // 3) * 7 > 15]
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.gpu
+def test_projection_expression_pow(datapath):
+    """Test for power."""
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df2 = bodo_df1[bodo_df1.A**2 > 15]
+
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
+        py_df2 = py_df1[py_df1.A**2 > 15]
 
     _test_equal(
         bodo_df2,
