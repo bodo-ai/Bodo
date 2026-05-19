@@ -181,9 +181,14 @@ class DataFrameGroupBy:
             ]
         elif is_dict_like(func):
             # Handle cases like {"A": "sum"} -> creates sum column over column A
-            normalized_func = [
-                GroupbyAggFunc(col, func_) for col, func_ in func.items()
-            ]
+            for col, func_ in func.items():
+                # Handle cases like {"A": ["sum", "count"]} -> creates sum
+                # and count column for the input column A
+                if is_list_like(func_):
+                    for lagg in func_:
+                        normalized_func.append(GroupbyAggFunc(col, lagg))
+                else:
+                    normalized_func.append(GroupbyAggFunc(col, func_))
         elif is_list_like(func):
             # Handle cases like ["sum", "count"] -> creates a sum and count column
             # for each input column (column names are a multi-index) i.e.:
