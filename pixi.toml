@@ -276,6 +276,7 @@ channel-priority = "disabled"
 [feature.cudf.dependencies]
 cuda-toolkit = "13.*"
 cuda-version = "13.*"
+cuda-nvml-dev = "*"
 cuda-nvcc = "13.*"
 rmm = ">=26.04"
 librmm = ">=26.04"
