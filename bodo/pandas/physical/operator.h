@@ -292,7 +292,7 @@ class PhysicalSink : public PhysicalOperator {
     virtual void FinalizeSink() = 0;
 
     /**
-     * @brief Call operator FinalizeSink in addition to common logic.
+     * @brief Execute common finalization logic and call operator FinalizeSink.
      *
      */
     void FinalizeSinkCommon() {
@@ -331,7 +331,8 @@ class PhysicalProcessBatch : public PhysicalOperator {
     virtual void FinalizeProcessBatch() = 0;
 
     /**
-     * @brief Call operator FinalizeProcessBatch in addition to common logic.
+     * @brief Execute common finalization logic and call operator
+     * FinalizeProcessBatch.
      *
      */
     void FinalizeProcessBatchCommon() {
@@ -442,7 +443,7 @@ class PhysicalGPUSink : public PhysicalOperator {
     virtual void FinalizeSink() = 0;
 
     /**
-     * @brief Call operator FinalizeSink in addition to common logic.
+     * @brief Execute common finalization logic and call operator FinalizeSink.
      *
      */
     void FinalizeSinkCommon() {
@@ -484,7 +485,8 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
     virtual void FinalizeProcessBatch() = 0;
 
     /**
-     * @brief Call operator FinalizeProcessBatch in addition to common logic.
+     * @brief Execute common finalization logic and call operator
+     * FinalizeProcessBatch.
      *
      */
     void FinalizeProcessBatchCommon() {

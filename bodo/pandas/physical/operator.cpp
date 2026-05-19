@@ -559,7 +559,7 @@ void RankDataExchange::Finalize() {
     if (!finished) {
         while (!sync_is_last_non_blocking(is_last_state.get(), 1)) {
             // Wait for all ranks to get to global is_last barrier before
-            // finalizing shuffle state
+            // freeing the shuffle comm.
         };
     }
 
