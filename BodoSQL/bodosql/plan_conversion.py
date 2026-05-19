@@ -498,10 +498,16 @@ def java_filter_to_python_filter(ctx, java_filter):
 def java_literal_to_python_literal(java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-    lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
+    lit_type_name = lit_type.getSqlTypeName()
 
     # TODO[BSE-5156]: support all Calcite literal types
+
+    if java_literal.getTypeName().equals(SqlTypeName.NULL):
+        dummy_empty_data = pd.Series(
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type_name))
+        )
+        return NullExpression(dummy_empty_data, input_plan, 0)
 
     if lit_type_name.equals(SqlTypeName.DECIMAL):
         lit_type_scale = lit_type.getScale()
@@ -543,11 +549,18 @@ def java_literal_to_python_literal(java_literal, input_plan):
         val = pd.to_timedelta(int(java_literal.getValue2()), unit="ms")
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
-    if lit_type_name.equals(SqlTypeName.NULL):
+    if (
+        lit_type_name.equals(SqlTypeName.TINYINT)
+        or lit_type_name.equals(SqlTypeName.SMALLINT)
+        or lit_type_name.equals(SqlTypeName.INTEGER)
+        or lit_type_name.equals(SqlTypeName.BIGINT)
+    ):
         dummy_empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type.getSqlTypeName()))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type_name))
         )
-        return NullExpression(dummy_empty_data, input_plan, 0)
+        return ConstantExpression(
+            dummy_empty_data, input_plan, java_literal.getValue2()
+        )
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
