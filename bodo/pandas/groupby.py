@@ -290,19 +290,33 @@ class DataFrameGroupBy:
         """
         return _groupby_agg_plan(self, "kurtosis")
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the std of each group.
         """
-        return _groupby_agg_plan(self, "std")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "DataFrameGroupby only supports ddof of 0 or 1"
+            )
+        if ddof == 0:
+            return _groupby_agg_plan(self, "std_pop")
+        else:
+            return _groupby_agg_plan(self, "std")
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the var of each group.
         """
-        return _groupby_agg_plan(self, "var")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "DataFrameGroupby only supports ddof of 0 or 1"
+            )
+        if ddof == 0:
+            return _groupby_agg_plan(self, "var_pop")
+        else:
+            return _groupby_agg_plan(self, "var")
 
     @check_args_fallback(supported="none")
     def first(self):
@@ -494,18 +508,33 @@ class SeriesGroupBy:
         """
         return _groupby_agg_plan(self, "kurtosis")
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the std of each group.
         """
-        return _groupby_agg_plan(self, "std")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "SeriesGroupby only supports ddof of 0 or 1"
+            )
+        if ddof == 0:
+            return _groupby_agg_plan(self, "std_pop")
+        else:
+            return _groupby_agg_plan(self, "std")
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the var of each group.
         """
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "SeriesGroupby only supports ddof of 0 or 1"
+            )
+        if ddof == 0:
+            return _groupby_agg_plan(self, "var_pop")
+        else:
+            return _groupby_agg_plan(self, "var")
         return _groupby_agg_plan(self, "var")
 
     @check_args_fallback(supported="none")
