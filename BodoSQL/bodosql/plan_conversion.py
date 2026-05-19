@@ -12,6 +12,7 @@ import bodosql
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
+    ArrowScalarFuncExpression,
     CaseExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
@@ -234,6 +235,12 @@ def java_call_to_python_call(java_call, input_plan):
         if kind.equals(SqlKind.NOT):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "__invert__")
+
+    if operator_class_name == "SqlCoalesceFunction":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
+        empty_data = op_exprs[0].empty_data
+        return ArrowScalarFuncExpression(empty_data, op_exprs, "coalesce", ())
 
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
