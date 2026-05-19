@@ -555,7 +555,16 @@ RankDataExchange::RankDataExchange(int64_t op_id_) : op_id(op_id_) {
     }
 }
 
-RankDataExchange::~RankDataExchange() { MPI_Comm_free(&this->shuffle_comm); }
+void RankDataExchange::Finalize() {
+    if (!finished) {
+        while (!sync_is_last_non_blocking(is_last_state.get(), 1)) {
+            // Wait for all ranks to get to global is_last barrier before
+            // freeing the shuffle comm.
+        };
+    }
+
+    MPI_Comm_free(&this->shuffle_comm);
+}
 
 std::tuple<std::shared_ptr<table_info>, OperatorResult>
 GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,

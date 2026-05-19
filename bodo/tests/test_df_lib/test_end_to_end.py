@@ -22,7 +22,12 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     JITFallback,
 )
-from bodo.tests.utils import _test_equal, set_broadcast_join, temp_config_override
+from bodo.tests.utils import (
+    _test_equal,
+    is_multi_worker_per_gpu_test,
+    set_broadcast_join,
+    temp_config_override,
+)
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -1662,6 +1667,10 @@ def test_dataframe_groupby(dropna, as_index, selection):
 
 
 @pytest.mark.gpu
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(),
+    reason="[BSE-5430] Fix wrong result in multi-worker GPU test",
+)
 def test_groupby_fallback():
     """Checks that fallback is properly supported for DataFrame and Series groupby
     when unsupported arguments are provided.
@@ -1826,7 +1835,13 @@ def test_size_no_val(groupby_agg_df, as_index):
         "count",
         "max",
         "min",
-        "nunique",
+        pytest.param(
+            "nunique",
+            marks=pytest.mark.skipif(
+                is_multi_worker_per_gpu_test(),
+                reason="[BSE-5428] Fix wrong result in multi-worker GPU test",
+            ),
+        ),
         "size",
     ],
 )
@@ -3005,6 +3020,9 @@ def test_groupby_getattr_fallback_behavior():
 
 
 @pytest.mark.gpu
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(), reason="[BSE-5432] Handle empty data in GPU reduce."
+)
 def test_series_agg():
     import pandas as pd
 
@@ -4080,6 +4098,10 @@ def test_len_no_warn(index_val):
 
 @pytest.mark.gpu
 @pytest.mark.jit_dependency
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(),
+    reason="[BSE-5431] Fix wrong result in multi-worker GPU test",
+)
 def test_bodo_pandas_inside_jit():
     """Make sure using bodo.pandas functions inside a bodo.jit function works as
     expected and is same as pandas.
@@ -4143,6 +4165,12 @@ def test_series_to_list():
     bs2 = bs1 + 1
     l1 = s2.to_list()
     bl1 = bs2.to_list()
+
+    if is_multi_worker_per_gpu_test():
+        # Automatically sort output if we have multiple workers per GPU
+        # TODO(BSE-5322): remove after CPU-GPU exchange doesn't change the order of data.
+        bl1.sort()
+
     assert l1 == bl1
 
 

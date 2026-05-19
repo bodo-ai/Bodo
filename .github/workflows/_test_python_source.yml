@@ -130,7 +130,7 @@ jobs:
                  --cov-report= --cov=bodo --cov-append \
                  --store-durations --clean-durations \
                  --durations-path=buildscripts/github/test_dur_bodo_multi_gpu_more_workers.json \
-                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests/test_df_lib/test_gpu
+                 -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests/
               python_multi_test_exit_code=$?
 
               # Merge Exit Codes

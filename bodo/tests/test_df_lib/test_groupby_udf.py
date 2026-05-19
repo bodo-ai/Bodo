@@ -5,7 +5,7 @@ import pytest
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.pandas.utils import BodoLibFallbackWarning, convert_to_pandas_types
-from bodo.tests.utils import _test_equal
+from bodo.tests.utils import _test_equal, is_multi_worker_per_gpu_test
 
 pytestmark = pytest.mark.jit_dependency
 
@@ -364,6 +364,10 @@ def test_series_udf(dropna, as_index, impl):
 
 
 @pytest.mark.gpu
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(),
+    reason="[BSE-5430] Fix wrong result in multi-worker GPU test",
+)
 def test_apply_fallback(groupby_df: pd.DataFrame, as_index):
     # DataFrame return value
     def udf1(x):
