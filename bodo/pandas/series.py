@@ -468,6 +468,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return self._arith_binop(other, "__rmod__", True)
 
     @check_args_fallback("all")
+    def __pow__(self, other):
+        return self._arith_binop(other, "__pow__", False)
+
+    @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when series[key] is used."""
         from bodo.ext import plan_optimizer
@@ -1276,6 +1280,20 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # prepare input for Arrow backend
         values = pa.array(values, type=self.head(0).dtype.pyarrow_dtype)
         return _get_series_func_plan(self._plan, new_metadata, "isin", (values,), {})
+
+    @check_args_fallback(supported=["value"])
+    def fillna(self, value, *, axis=None, inplace: bool = False, limit=None):
+        """
+        Fill missing values in Series with specified `value`.
+        """
+
+        index = self.head(0).index
+        new_metadata = pd.Series(
+            dtype=self.dtype,
+            name=self.name,
+            index=index,
+        )
+        return _get_series_func_plan(self._plan, new_metadata, "fillna", (value,), {})
 
     @check_args_fallback(supported=["drop", "name", "level"])
     def reset_index(
@@ -2860,23 +2878,31 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return ColRefExpression(empty_data, plan, idx)
     elif is_python_scalar_func(expr):
-        idx = expr.input_column_indices[0]
-        idx = get_new_idx(idx, first, side)
+        first_input = expr.input_exprs[0]
+        assert is_col_ref(first_input), (
+            "make_expr: expected first input of PythonScalarFuncExpression to be a column reference."
+        )
+        idx = get_new_idx(first_input.col_index, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return PythonScalarFuncExpression(
             empty_data,
-            plan,
+            make_col_ref_exprs((idx,) + tuple(index_cols), plan),
             expr.func_args,
-            (idx,) + tuple(index_cols),
             expr.is_cfunc,
             False,
         )
     elif is_arrow_scalar_func(expr):
-        idx = expr.input_column_indices[0]
-        idx = get_new_idx(idx, first, side)
+        first_input = expr.input_exprs[0]
+        assert is_col_ref(first_input), (
+            "make_expr: expected first input of ArrowScalarFuncExpression to be a column reference."
+        )
+        idx = get_new_idx(first_input.col_index, first, side)
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return ArrowScalarFuncExpression(
-            empty_data, plan, (idx,) + tuple(index_cols), expr.function_name, ()
+            empty_data,
+            make_col_ref_exprs((idx,) + tuple(index_cols), plan),
+            expr.function_name,
+            (),
         )
     elif is_arith_expr(expr):
         # TODO: recursively traverse arithmetic expr tree to update col idx.
@@ -2982,7 +3008,7 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
     """
     return PythonScalarFuncExpression(
         empty_data,
-        series_out._plan,
+        make_col_ref_exprs((0,) + index_cols, series_out._plan),
         (
             "bodo.pandas.series._get_col_as_series",
             True,  # is_series
@@ -2991,7 +3017,6 @@ def get_col_as_series_expr(idx, empty_data, series_out, index_cols):
             {},  # kwargs
             True,  # use_arrow_dtypes
         ),
-        (0,) + index_cols,
         False,  # is_cfunc
         False,  # has_state
     )
@@ -3014,16 +3039,16 @@ def _get_series_func_plan(
     # Optimize out trivial df["col"] projections to simplify plans
     if is_single_colref_projection(series_proj):
         source_data = series_proj.args[0]
-        input_expr = series_proj.args[1][0]
-        col_index = input_expr.args[1]
+        input_exprs = [series_proj.args[1][0]]
     else:
         source_data = series_proj
-        col_index = 0
+        input_exprs = make_col_ref_exprs([0], series_proj)
 
     n_cols = len(source_data.empty_data.columns)
     index_cols = range(
         n_cols, n_cols + get_n_index_arrays(source_data.empty_data.index)
     )
+    input_exprs += make_col_ref_exprs(index_cols, source_data)
 
     # List of Series methods to be routed to Arrow Compute
     arrow_compute_list = (
@@ -3113,8 +3138,7 @@ def _get_series_func_plan(
         has_state = False
         expr = ArrowScalarFuncExpression(
             empty_data,
-            source_data,
-            (col_index,) + tuple(index_cols),
+            input_exprs,
             func_name,
             func_args,
         )
@@ -3137,9 +3161,8 @@ def _get_series_func_plan(
 
         expr = PythonScalarFuncExpression(
             empty_data,
-            source_data,
+            input_exprs,
             func_args,
-            (col_index,) + tuple(index_cols),
             is_cfunc,
             has_state,
         )

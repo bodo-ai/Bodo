@@ -37,18 +37,26 @@ def grouped_dfs():
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp  # failing for variance, stddev w/ unimplemented CASE
+@pytest.mark.bodosql_cpp
 def test_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, memory_leak_check
 ):
     """test aggregation calls in queries"""
 
     if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
-        "SUM",
+        "AVG",
         "COUNT",
         "MAX",
         "MIN",
-        "AVG",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        # "VARIANCE_SAMP",  # Aggregation OTHER_FUNCTION not supported yet
+        "STDDEV_POP",
+        "VAR_POP",
+        # "VARIANCE_POP", # Aggregation OTHER_FUNCTION not supportet yet
     ]:
         pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
@@ -75,11 +83,19 @@ def test_agg_numeric_larger_group(
     """test aggregation calls in queries on DataFrames with a larger data in each group."""
 
     if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
-        "SUM",
+        "AVG",
         "COUNT",
         "MAX",
         "MIN",
-        "AVG",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        # "VARIANCE_SAMP",  # Aggregation OTHER_FUNCTION not supported yet
+        "STDDEV_POP",
+        "VAR_POP",
+        # "VARIANCE_POP", # Aggregation OTHER_FUNCTION not supportet yet
     ]:
         pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
@@ -108,11 +124,19 @@ def test_aliasing_agg_numeric(
     """test aliasing of aggregations in queries"""
 
     if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
-        "SUM",
+        "AVG",
         "COUNT",
         "MAX",
         "MIN",
-        "AVG",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        # "VARIANCE_SAMP",  # Aggregation OTHER_FUNCTION not supported yet
+        "STDDEV_POP",
+        "VAR_POP",
+        # "VARIANCE_POP", # Aggregation OTHER_FUNCTION not supportet yet
     ]:
         pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 

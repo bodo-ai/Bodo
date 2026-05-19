@@ -151,6 +151,9 @@ string ExpressionTypeToString(ExpressionType type) {
 		return "TYPE";
 	case ExpressionType::BOUND_EXPANDED:
 		return "BOUND_EXPANDED";
+	// Bodo change: added new operator
+	case ExpressionType::OPERATOR_IS_TRUE:
+		return "IS_TRUE";
 	case ExpressionType::INVALID:
 		break;
 	}
