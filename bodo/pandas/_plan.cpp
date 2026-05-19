@@ -1115,9 +1115,9 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
-    bool has_state, const std::string arrow_compute_func) {
+    PyObject *out_schema_py,
+    std::vector<std::unique_ptr<duckdb::Expression>> &in_exprs, PyObject *args,
+    bool is_cfunc, bool has_state, const std::string arrow_compute_func) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
@@ -1125,15 +1125,17 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     assert(out_types.size() > 0);
     duckdb::LogicalType out_type = out_types[0];
 
-    // Necessary before accessing source->types attribute
-    source->ResolveOperatorTypes();
-
     auto scalar_name =
         (arrow_compute_func == "") ? "bodo_udf" : arrow_compute_func;
 
+    duckdb::vector<duckdb::LogicalType> input_types;
+    for (auto &expr : in_exprs) {
+        input_types.push_back(expr->return_type);
+    }
+
     // Create ScalarFunction for Python UDF or Arrow Compute Function
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
-        scalar_name, source->types, out_type, RunFunction, nullptr, nullptr,
+        scalar_name, input_types, out_type, RunFunction, nullptr, nullptr,
         nullptr, nullptr, duckdb::LogicalTypeId::INVALID,
         duckdb::FunctionStability::CONSISTENT,
         duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
@@ -1142,15 +1144,12 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
         duckdb::make_uniq<BodoScalarFunctionData>(
             args, out_schema, is_cfunc, has_state, arrow_compute_func);
 
-    std::vector<duckdb::ColumnBinding> source_cols =
-        source->GetColumnBindings();
-
-    // Add UDF input expressions for selected columns
+    // Add UDF input expressions columns
     std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
-    for (int col_idx : selected_columns) {
-        auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            source->types[col_idx], source_cols[col_idx]);
-        udf_in_exprs.emplace_back(std::move(expr));
+    for (auto &expr : in_exprs) {
+        // Convert std::unique_ptr to duckdb::unique_ptr.
+        auto expr_duck = to_duckdb(expr);
+        udf_in_exprs.push_back(std::move(expr_duck));
     }
 
     // Create UDF expression
