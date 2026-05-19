@@ -91,7 +91,14 @@ class RankDataExchange {
    public:
     RankDataExchange(int64_t op_id_);
 
-    ~RankDataExchange();
+    ~RankDataExchange() = default;
+
+    /**
+     * @brief Cleanup rank exchange barrier if ranks finish early due to
+     * upstream operator finishing.
+     *
+     */
+    void Finalize();
 
    protected:
     int64_t op_id;
@@ -283,6 +290,17 @@ class PhysicalSink : public PhysicalOperator {
 
     virtual void FinalizeSink() = 0;
 
+    /**
+     * @brief Call operator FinalizeSink in addition to common logic.
+     *
+     */
+    void FinalizeSinkCommon() {
+#ifdef USE_CUDF
+        gpu_to_cpu_exchange.Finalize();
+#endif
+        FinalizeSink();
+    }
+
 #ifdef USE_CUDF
     PhysicalSink() : gpu_to_cpu_exchange(this->op_id) {}
 
@@ -310,6 +328,17 @@ class PhysicalProcessBatch : public PhysicalOperator {
         GPU_DATA input_batch, OperatorResult prev_op_result);
 
     virtual void FinalizeProcessBatch() = 0;
+
+    /**
+     * @brief Call operator FinalizeProcessBatch in addition to common logic.
+     *
+     */
+    void FinalizeProcessBatchCommon() {
+#ifdef USE_CUDF
+        gpu_to_cpu_exchange.Finalize();
+#endif
+        FinalizeProcessBatch();
+    }
 
     /**
      * @brief Get the physical schema of the output data
@@ -411,6 +440,17 @@ class PhysicalGPUSink : public PhysicalOperator {
 
     virtual void FinalizeSink() = 0;
 
+    /**
+     * @brief Call operator FinalizeSink in addition to common logic.
+     *
+     */
+    void FinalizeSinkCommon() {
+#ifdef USE_CUDF
+        cpu_to_gpu_exchange.Finalize();
+#endif
+        FinalizeSink();
+    }
+
 #ifdef USE_CUDF
     PhysicalGPUSink() : cpu_to_gpu_exchange(this->op_id) {}
 
@@ -441,6 +481,17 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
         std::shared_ptr<StreamAndEvent> se) = 0;
 
     virtual void FinalizeProcessBatch() = 0;
+
+    /**
+     * @brief Call operator FinalizeProcessBatch in addition to common logic.
+     *
+     */
+    void FinalizeProcessBatchCommon() {
+#ifdef USE_CUDF
+        cpu_to_gpu_exchange.Finalize();
+#endif
+        FinalizeProcessBatch();
+    }
 
     /**
      * @brief Get the physical schema of the output data

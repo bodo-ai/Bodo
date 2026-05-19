@@ -453,10 +453,10 @@ uint64_t Pipeline::Execute(int rank, std::ostream &out) {
 
     for (auto &op : between_ops) {
         DEBUG_PIPELINE_FINALIZE(rank, op, out);
-        std::visit([&](auto &vop) { vop->FinalizeProcessBatch(); }, op);
+        std::visit([&](auto &vop) { vop->FinalizeProcessBatchCommon(); }, op);
     }
     DEBUG_PIPELINE_FINALIZE(rank, sink, out);
-    std::visit([&](auto &vop) { vop->FinalizeSink(); }, sink);
+    std::visit([&](auto &vop) { vop->FinalizeSinkCommon(); }, sink);
 
     executed = true;
     return batches_processed;
