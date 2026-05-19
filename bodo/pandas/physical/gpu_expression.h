@@ -756,6 +756,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
             comparator = cudf::binary_operator::FLOOR_DIV;
         } else if (opstr == "%") {
             comparator = cudf::binary_operator::MOD;
+        } else if (opstr == "POWER") {
+            comparator = cudf::binary_operator::POW;
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
                                      opstr);

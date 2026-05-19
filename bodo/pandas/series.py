@@ -468,6 +468,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         return self._arith_binop(other, "__rmod__", True)
 
     @check_args_fallback("all")
+    def __pow__(self, other):
+        return self._arith_binop(other, "__pow__", False)
+
+    @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when series[key] is used."""
         from bodo.ext import plan_optimizer
@@ -1276,6 +1280,20 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         # prepare input for Arrow backend
         values = pa.array(values, type=self.head(0).dtype.pyarrow_dtype)
         return _get_series_func_plan(self._plan, new_metadata, "isin", (values,), {})
+
+    @check_args_fallback(supported=["value"])
+    def fillna(self, value, *, axis=None, inplace: bool = False, limit=None):
+        """
+        Fill missing values in Series with specified `value`.
+        """
+
+        index = self.head(0).index
+        new_metadata = pd.Series(
+            dtype=self.dtype,
+            name=self.name,
+            index=index,
+        )
+        return _get_series_func_plan(self._plan, new_metadata, "fillna", (value,), {})
 
     @check_args_fallback(supported=["drop", "name", "level"])
     def reset_index(
