@@ -465,7 +465,7 @@ def bodosql_datetime_types(request):
                     ]
                     * 4,
                 }
-            ),
+            ).astype(pd.ArrowDtype(pa.time64("ns"))),
         },
     ]
 )

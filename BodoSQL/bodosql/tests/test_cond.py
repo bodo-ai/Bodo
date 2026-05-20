@@ -625,7 +625,7 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
                     bodo.types.Time(1, 47, 59, 290, 574),
                 ]
                 * 4
-            )
+            ).astype(pd.ArrowDtype(pa.time64("ns")))
         }
     )
     check_query(
