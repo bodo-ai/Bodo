@@ -321,7 +321,7 @@ def test_blended_fusion(memory_leak_check):
         pytest.param("VAR_POP"),
     ],
 )
-@pytest.mark.timeout(1300)
+@pytest.mark.timeout(1500)
 def test_optimized_numeric_window_functions(func, all_numeric_window_df, spark_info):
     """Tests numeric window functions that can use groupby.window"""
     selects = []

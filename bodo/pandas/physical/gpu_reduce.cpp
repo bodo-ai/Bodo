@@ -107,12 +107,8 @@ void GPUReductionFunction::CombineResults(
         std::unique_ptr<cudf::scalar> cmp_scalar =
             cudf::reduce(combined->view(), *agg, out_dtype, output_stream);
 
-        if (reduction_type == GPUReductionType::COMPARISON) {
-            if (static_cast<cudf::numeric_scalar<bool>*>(cmp_scalar.get())
-                    ->value(output_stream)) {
-                result = std::move(other_result);
-            }
-        } else if (reduction_type == GPUReductionType::AGGREGATION) {
+        if (reduction_type == GPUReductionType::COMPARISON ||
+            reduction_type == GPUReductionType::AGGREGATION) {
             result = std::move(cmp_scalar);
         } else {
             throw std::runtime_error("Unsupported reduction function: " +
