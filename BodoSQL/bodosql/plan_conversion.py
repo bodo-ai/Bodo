@@ -250,6 +250,10 @@ def java_call_to_python_call(java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], "year", ())
 
+        if func_name == "HOUR":
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], "hour", ())
+
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]

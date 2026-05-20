@@ -1106,6 +1106,7 @@ def test_decode_time(bodosql_time_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nvl_ifnull_time_column_with_case(bodosql_time_types, memory_leak_check):
     """Test NVL and IFNULL with time columns and CASE statement"""
     query = (
