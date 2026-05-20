@@ -239,7 +239,16 @@ def java_call_to_python_call(java_call, input_plan):
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
-        empty_data = op_exprs[0].empty_data
+        # Unify data types to match output type of coalesce (e.g. int8 + int32 -> int32)
+        out_col_name = op_exprs[0].empty_data.columns[0]
+        out_schema = pa.unify_schemas(
+            [
+                pa.Schema.from_pandas(e.empty_data.set_axis([out_col_name], axis=1))
+                for e in op_exprs
+            ],
+            promote_options="permissive",
+        )
+        empty_data = arrow_to_empty_df(out_schema)
         return ArrowScalarFuncExpression(empty_data, op_exprs, "coalesce", ())
 
     if operator_class_name == "SqlBasicFunction":
