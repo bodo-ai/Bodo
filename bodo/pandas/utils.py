@@ -532,12 +532,16 @@ def check_args_fallback(
                             as_index=self._as_index,
                             dropna=self._dropna,
                         )
-                        self = grouped[self._selection] if self._selection else grouped
-                        base_class = self.__class__
+                        fallback_wrapper_obj = (
+                            grouped[self._selection] if self._selection else grouped
+                        )
+                        base_class = fallback_wrapper_obj.__class__
                     elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
                         # Workaround Pandas 3 bugs for concat with nulls for Arrow dtype
-                        self = pd.Series(self._series).astype(object).str
+                        fallback_wrapper_obj = (
+                            pd.Series(self._series).astype(object).str
+                        )
                     elif self.__class__ == bodo.pandas.series.BodoDatetimeProperties:
                         base_class = self._series.__class__.__bases__[0].dt
                     elif (
