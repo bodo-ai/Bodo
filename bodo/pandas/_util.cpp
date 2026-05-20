@@ -159,6 +159,10 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeNullScalar(date_type);
         } break;
+        case duckdb::LogicalTypeId::TIME: {
+            auto time_type = arrow::time64(arrow::TimeUnit::NANO);
+            return arrow::MakeNullScalar(time_type);
+        } break;
         default:
             throw std::runtime_error(
                 "getDefaultValueForDuckdbValueType unhandled type." +
