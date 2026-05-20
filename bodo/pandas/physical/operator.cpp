@@ -1,6 +1,7 @@
 #include "operator.h"
 #include <arrow/array/builder_base.h>
 #include <arrow/util/endian.h>
+#include <mpi.h>
 #include <memory>
 #include <string>
 
@@ -563,6 +564,20 @@ void RankDataExchange::Finalize() {
         };
     }
 
+    if (this->shuffle_state) {
+        // Ensure all requests are cleared before freeing the communicator
+        bool shuffle_finished = this->shuffle_state->SendRecvEmpty();
+        bool global_shuffle_finished = false;
+        MPI_Allreduce(&shuffle_finished, &global_shuffle_finished, 1,
+                      MPI_C_BOOL, MPI_LAND, this->shuffle_comm);
+        while (!global_shuffle_finished) {
+            shuffle_state->ShuffleIfRequired(true);
+            shuffle_finished = this->shuffle_state->SendRecvEmpty();
+            MPI_Allreduce(&shuffle_finished, &global_shuffle_finished, 1,
+                          MPI_C_BOOL, MPI_LAND, this->shuffle_comm);
+        }
+    }
+
     MPI_Comm_free(&this->shuffle_comm);
 }
 
@@ -611,7 +626,6 @@ GPUtoCPUExchange::operator()(std::shared_ptr<table_info> input_batch,
     finished = global_is_last && this->ctb_state->builder->total_remaining == 0;
 
     if (finished) {
-        this->shuffle_state->Finalize();
         this->ctb_state->builder->Finalize();
     }
     return std::make_tuple(
@@ -671,9 +685,6 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
                    is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
                gpu_batch_generator->collected_rows == 0;
 
-    if (finished) {
-        this->shuffle_state->Finalize();
-    }
     return std::make_tuple(
         output_batch, finished
                           ? OperatorResult::FINISHED
