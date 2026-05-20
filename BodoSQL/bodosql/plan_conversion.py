@@ -608,7 +608,17 @@ def java_agg_to_python_agg(ctx, java_plan):
                 "Only single-argument nunique aggregations are supported"
             )
             out_type = pa.int64()
-        elif func_name in ["sum", "max", "min", "std", "mean"]:
+        elif func_name in [
+            "sum",
+            "max",
+            "min",
+            "std",
+            "mean",
+            "var",
+            "var_pop",
+            "skew",
+            "kurtosis",
+        ]:
             assert len(arg_cols) == 1, (
                 f"Only single-argument {func_name} aggregations are supported"
             )
@@ -660,8 +670,6 @@ def _agg_to_func_name(func):
 
     argList = func.getArgList()
 
-    argList = func.getArgList()
-
     # TODO[BSE-5163]: support SUM0 initialization properly
     if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
         return "sum"
@@ -692,6 +700,69 @@ def _agg_to_func_name(func):
         if agg_name == "BOOLXOR_AGG":
             return "boolxor_agg"
         raise NotImplementedError(f"Aggregation {agg_name} not supported yet")
+
+    if kind.equals(SqlKind.OTHER_FUNCTION):
+        # Normalize name for matching
+        name = agg_name.upper() if agg_name is not None else ""
+
+        if name == "VARIANCE_SAMP":
+            return "var"
+        if name == "VARIANCE_POP":
+            return "var_pop"
+        if name == "SKEW":
+            return "skew"
+        if name == "KURTOSIS":
+            return "kurtosis"
+
+        details = ""
+
+        # If the agg object exposes more metadata, try to print it for debugging
+        try:
+            cls_name = agg.getClass().getName()
+        except Exception:
+            cls_name = "<unknown-class>"
+
+        # Try to extract an underlying function object or identifier if present
+        extra_info = {}
+        try:
+            # Many Calcite SqlAggFunction subclasses have methods like getFunction or getIdentifier
+            if hasattr(agg, "getFunction"):
+                try:
+                    func_obj = agg.getFunction()
+                    extra_info["function_class"] = (
+                        func_obj.getClass().getName()
+                        if func_obj is not None
+                        else "null"
+                    )
+                except Exception:
+                    extra_info["function_class"] = "<unreadable>"
+            if hasattr(agg, "getIdentifier"):
+                try:
+                    ident = agg.getIdentifier()
+                    extra_info["identifier"] = str(ident)
+                except Exception:
+                    extra_info["identifier"] = "<unreadable>"
+            if hasattr(agg, "getOperandTypes"):
+                try:
+                    extra_info["operand_types"] = str(agg.getOperandTypes())
+                except Exception:
+                    extra_info["operand_types"] = "<unreadable>"
+        except Exception:
+            # ignore reflection failures
+            pass
+
+        # Print a helpful debug dump to stderr so you can see what Calcite provided
+        details += "DEBUG: Unmapped aggregation encountered in _agg_to_func_name()\n"
+        details += f"  agg_name: {agg_name}\n"
+        details += f"  kind: {kind.toString() if kind is not None else 'null'}\n"
+        details += f"  agg_class: {cls_name}\n"
+        if extra_info:
+            for k, v in extra_info.items():
+                details += f"  {k}: {v}\n"
+
+        raise NotImplementedError(
+            f"Aggregation {agg_name} (class={cls_name}) not supported yet\n{details}"
+        )
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 
