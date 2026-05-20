@@ -287,18 +287,22 @@ duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
 /**
  * @brief Create an expression from a constant integer.
  *
+ * @param out_schema_py output data type (e.g. int8 vs int16 vs int32 vs int64)
  * @param val - the constant int for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the const int expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(int64_t val);
+duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(
+    PyObject *out_schema_py, int64_t val);
 
 /**
  * @brief Create an expression from a constant float.
  *
+ * @param out_schema_py output data type (e.g. float32 vs float64)
  * @param val - the constant float for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the const float expr
  */
-duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(double val);
+duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(
+    PyObject *out_schema_py, double val);
 
 /**
  * @brief Create an expression from a constant string.

@@ -344,8 +344,8 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_case_expr(unique_ptr[CExpression] when, unique_ptr[CExpression] then, unique_ptr[CExpression] else_) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
     cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
-    cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
-    cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
+    cdef unique_ptr[CExpression] make_const_int_expr(object arrow_schema, int64_t val) except +
+    cdef unique_ptr[CExpression] make_const_double_expr(object arrow_schema, double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_date32_expr(int32_t val) except +
@@ -633,8 +633,8 @@ cdef class NullExpression(Expression):
     """Wrapper around DuckDB's BoundConstantExpression to provide access in Python.
     """
 
-    def __cinit__(self, object dummy_schema, int64_t field_idx):
-        self.c_expression = make_const_null(dummy_schema, field_idx)
+    def __cinit__(self, object const_schema, int64_t field_idx):
+        self.c_expression = make_const_null(const_schema, field_idx)
 
     def __str__(self):
         return f"NullExpression()"
@@ -644,8 +644,8 @@ cdef class ConstantExpression(Expression):
     """Wrapper around DuckDB's BoundConstantExpression to provide access in Python.
     """
 
-    def __cinit__(self, object dummy_schema, object value):
-        self.c_expression = make_const_expr(value)
+    def __cinit__(self, object const_schema, object value):
+        self.c_expression = make_const_expr(const_schema, value)
 
     def __str__(self):
         return f"ConstantExpression()"
@@ -711,18 +711,23 @@ cdef class ArrowScalarFuncExpression(Expression):
         return f"ArrowScalarFuncExpression({self.function_name})"
 
 
-cdef unique_ptr[CExpression] make_const_expr(val):
-    """Convert a filter expression tree from Cython wrappers
-       to duckdb.
+cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
+    """Make a constant DuckDB expression from a Python scalar value.
+    const_schema specifies the exact data type of the constant expression and
+    is optional (inferred from constant value if None).
+    It can specify int8 vs int16 vs int32 vs int64, for example.
     """
     # TODO: support other scalar types
     # See pandas scalars in pd.api.types.is_scalar
     cdef c_string val_cstr
 
+    if const_schema is None:
+        const_schema = pa.schema([pa.field("dummy_scalar", pa.scalar(val).type)])
+
     if isinstance(val, (int, np.int64)):
-        return move(make_const_int_expr(val))
+        return move(make_const_int_expr(const_schema, val))
     elif isinstance(val, float):
-        return move(make_const_double_expr(val))
+        return move(make_const_double_expr(const_schema, val))
     elif isinstance(val, str):
         val_cstr = val.encode()
         return move(make_const_string_expr(val_cstr))
@@ -739,7 +744,7 @@ cdef unique_ptr[CExpression] make_const_expr(val):
     elif isinstance(val, pa.Date32Scalar):
         return move(make_const_date32_expr(val.value))
     elif isinstance(val, bodo.pandas.scalar.BodoScalar):
-        return move(make_const_expr(val.get_value()))
+        return move(make_const_expr(None, val.get_value()))
     else:
         raise NotImplementedError("Unknown expr type in make_const_expr " + str(type(val)))
 
@@ -763,8 +768,8 @@ cdef class ComparisonOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(None, lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(None, rhs))
 
         self.out_schema = out_schema
         self.c_expression = make_comparison_expr(
@@ -820,8 +825,8 @@ cdef class ArithOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(None, lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(None, rhs))
 
         self.out_schema = out_schema
         # The // operator in Python we have to implement as a truediv followed by a floor.
@@ -855,8 +860,8 @@ cdef class ConjunctionOpExpression(Expression):
         cdef unique_ptr[CExpression] lhs_expr
         cdef unique_ptr[CExpression] rhs_expr
 
-        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(lhs))
-        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(rhs))
+        lhs_expr = move((<Expression>lhs).c_expression) if isinstance(lhs, Expression) else move(make_const_expr(None, lhs))
+        rhs_expr = move((<Expression>rhs).c_expression) if isinstance(rhs, Expression) else move(make_const_expr(None, rhs))
 
         self.out_schema = out_schema
         self.c_expression = make_conjunction_expr(
@@ -872,7 +877,7 @@ cdef class UnaryOpExpression(Expression):
     def __cinit__(self, object out_schema, source, op):
         cdef unique_ptr[CExpression] source_expr
 
-        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_const_expr(source))
+        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_const_expr(None, source))
 
         self.out_schema = out_schema
         self.c_expression = make_unary_expr(
@@ -891,9 +896,9 @@ cdef class CaseExpression(Expression):
         cdef unique_ptr[CExpression] then_expr
         cdef unique_ptr[CExpression] else_expr
 
-        when_expr = move((<Expression>when).c_expression) if isinstance(when, Expression) else move(make_const_expr(when))
-        then_expr = move((<Expression>then).c_expression) if isinstance(then, Expression) else move(make_const_expr(then))
-        else_expr = move((<Expression>else_).c_expression) if isinstance(else_, Expression) else move(make_const_expr(else_))
+        when_expr = move((<Expression>when).c_expression) if isinstance(when, Expression) else move(make_const_expr(None, when))
+        then_expr = move((<Expression>then).c_expression) if isinstance(then, Expression) else move(make_const_expr(None, then))
+        else_expr = move((<Expression>else_).c_expression) if isinstance(else_, Expression) else move(make_const_expr(None, else_))
 
         self.out_schema = out_schema
         self.c_expression = make_case_expr(
