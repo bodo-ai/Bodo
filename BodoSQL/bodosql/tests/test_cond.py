@@ -28,6 +28,7 @@ def ifnull_equivalent_fn(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_coalesce_cols_basic(basic_df, memory_leak_check):
     """tests the coalesce function on column values"""
     query = "select COALESCE(A, B, C) from table1"
@@ -42,6 +43,7 @@ def test_coalesce_cols_basic(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.skip(
     "General support for DECIMAL numbers in BodoSQL, and in particular for COALESCE."
 )
@@ -80,6 +82,7 @@ def test_coalesce_128_int(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_coalesce_128_float(memory_leak_check):
     """tests the coalesce function with a NUMBER(38, 18) column and float
     scalars."""
@@ -118,6 +121,7 @@ def test_coalesce_128_float(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_coalesce_timestamp_date(memory_leak_check):
     """Tests the coalesce function on a timestamp column and the current date"""
     query = "select COALESCE(A, current_date()) from table1"
@@ -156,6 +160,7 @@ def test_coalesce_timestamp_date(memory_leak_check):
     check_query(query, ctx, None, expected_output=answer, check_names=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("use_case", [True, False])
 def test_coalesce_time(use_case, memory_leak_check):
     """Tests the coalesce function on time columns"""
@@ -247,6 +252,7 @@ def test_coalesce_time(use_case, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_coalesce_cols_adv(query, bodosql_string_fn_testing_df, memory_leak_check):
     """tests the coalesce function on more complex cases"""
 
@@ -260,6 +266,7 @@ def test_coalesce_cols_adv(query, bodosql_string_fn_testing_df, memory_leak_chec
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_coalesce_scalars(memory_leak_check):
     """tests the coalesce function on scalar values"""
     query = "select CASE WHEN ColD = 1 THEN COALESCE(ColA, ColB, ColC) ELSE ColA * 10 END from table1"
@@ -281,6 +288,7 @@ def test_coalesce_scalars(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_coalesce_nested_expressions(memory_leak_check):
     df = pd.DataFrame(
         {
@@ -304,6 +312,7 @@ def test_coalesce_nested_expressions(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.skip(
     "We're currently treating the behavior of coalesce on variable types as undefined behavior, see BS-435"
 )
@@ -338,6 +347,7 @@ def test_coalesce_variable_type_cols(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.skip(
     "We're currently treating the behavior of coalesce on variable types as undefined behavior, see BS-435"
 )
@@ -505,6 +515,7 @@ def test_regr_valx_regr_valy(args, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_if_columns(basic_df, memory_leak_check):
     """Checks if function with all column values"""
     query = "Select IF(B > C, A, C) from table1"
@@ -518,6 +529,7 @@ def test_if_columns(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_if_scalar(basic_df, memory_leak_check):
     """Checks if function with all scalar values"""
@@ -564,6 +576,7 @@ def test_if_dt(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_if_mixed(basic_df, memory_leak_check):
     """Checks if function with a mix of scalar and column values"""
@@ -580,6 +593,7 @@ def test_if_mixed(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_if_case(basic_df, memory_leak_check):
     """Checks if function inside a case statement"""
     query = "Select CASE WHEN A > B THEN IF(B > C, A, C) ELSE B END from table1"
@@ -593,6 +607,7 @@ def test_if_case(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_if_null_column(bodosql_nullable_numeric_types, memory_leak_check):
     """Checks if function with all nullable columns"""
     query = "Select IF(B < C, A, C) from table1"
@@ -606,6 +621,7 @@ def test_if_null_column(bodosql_nullable_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func_name",
     [
@@ -638,6 +654,7 @@ def test_if_time_column(bodosql_time_types, func_name, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_if_multi_table(join_dataframes, memory_leak_check):
     """Checks if function with columns from multiple tables"""
@@ -652,6 +669,7 @@ def test_if_multi_table(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_ifnull_columns(
     bodosql_nullable_numeric_types, ifnull_equivalent_fn, memory_leak_check
 ):
@@ -670,6 +688,7 @@ def test_ifnull_columns(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_ifnull_scalar(basic_df, ifnull_equivalent_fn, memory_leak_check):
     """Checks ifnull function with all scalar values"""
@@ -687,6 +706,7 @@ def test_ifnull_scalar(basic_df, ifnull_equivalent_fn, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_ifnull_mixed(
     bodosql_nullable_numeric_types, ifnull_equivalent_fn, memory_leak_check
@@ -708,6 +728,7 @@ def test_ifnull_mixed(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_ifnull_case(
     bodosql_nullable_numeric_types, ifnull_equivalent_fn, memory_leak_check
@@ -726,6 +747,7 @@ def test_ifnull_case(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_ifnull_multitable(
     join_dataframes, spark_info, ifnull_equivalent_fn, memory_leak_check
@@ -745,6 +767,7 @@ def test_ifnull_multitable(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nullif_columns(bodosql_nullable_numeric_types, memory_leak_check):
     """Checks nullif function with all column values"""
 
@@ -765,6 +788,7 @@ def test_nullif_columns(bodosql_nullable_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nullif_scalar(basic_df, memory_leak_check):
     """Checks nullif function with all scalar values"""
     query = "Select NULLIF(0, 0) from table1"
@@ -778,6 +802,7 @@ def test_nullif_scalar(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_nullif_mixed(bodosql_nullable_numeric_types, memory_leak_check):
     """Checks nullif function with a mix of scalar and column values"""
@@ -802,6 +827,7 @@ def test_nullif_mixed(bodosql_nullable_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nullif_time(memory_leak_check):
     """Checks nullif function with two time columns"""
     query = "Select NULLIF(A, B) from table1"
@@ -860,6 +886,7 @@ def test_nullif_time(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_nullif_case(bodosql_nullable_numeric_types, memory_leak_check):
     """Checks nullif function inside a case statement"""
@@ -882,6 +909,7 @@ def test_nullif_case(bodosql_nullable_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_nullif_multi_table(join_dataframes, memory_leak_check):
     """Checks nullif function with columns from multiple tables"""
@@ -903,6 +931,7 @@ def test_nullif_multi_table(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nullifzero_cols(memory_leak_check):
     """Tests NULLIFZERO (same as NULLIF(X, 0))"""
     query = "SELECT NULLIFZERO(A) from table1"
