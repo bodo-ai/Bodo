@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from numba.core.utils import PYVERSION
 
@@ -173,7 +174,7 @@ def test_coalesce_time(use_case, memory_leak_check):
                         None,
                         bodo.types.Time(12, 0, 31, 5, 92),
                     ]
-                ),
+                ).astype(pd.ArrowDtype(pa.time64("ns"))),
                 "B": pd.Series(
                     [
                         None,
@@ -182,7 +183,7 @@ def test_coalesce_time(use_case, memory_leak_check):
                         None,
                         bodo.types.Time(15, 26, 3, 44),
                     ]
-                ),
+                ).astype(pd.ArrowDtype(pa.time64("ns"))),
             }
         )
     }
@@ -196,7 +197,7 @@ def test_coalesce_time(use_case, memory_leak_check):
                     None,
                     bodo.types.Time(12, 0, 31, 5, 92),
                 ]
-            )
+            ).astype(pd.ArrowDtype(pa.time64("ns")))
         }
     )
 
