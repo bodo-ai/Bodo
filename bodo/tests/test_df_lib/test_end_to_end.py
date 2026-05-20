@@ -4478,3 +4478,24 @@ def test_join_filter_pushdown_aggregate_split_keys():
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest.mark.gpu
+def test_groupby_fallback_bse5430():
+    """Test that a groupby with fallback works."""
+    df = pd.DataFrame(
+        {"A": pd.array([pd.NA, 2, 1, 2] * 5, "Int32"), "B": [1, 2, 3, 4] * 5}
+    )
+    pd_fallback_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum()
+
+    with assert_executed_plan_count(1):
+        bdf = bd.from_pandas(df)
+        fallback_out = bdf.groupby("A", dropna=False, as_index=False, sort=True).sum()
+
+    _test_equal(
+        fallback_out,
+        pd_fallback_out,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
