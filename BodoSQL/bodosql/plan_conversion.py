@@ -243,13 +243,26 @@ def java_call_to_python_call(java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
         # Unify data types to match output type of coalesce (e.g. int8 + int32 -> int32)
         out_col_name = op_exprs[0].empty_data.columns[0]
-        out_schema = pa.unify_schemas(
-            [
-                pa.Schema.from_pandas(e.empty_data.set_axis([out_col_name], axis=1))
-                for e in op_exprs
-            ],
-            promote_options="permissive",
-        )
+        in_schemas = [
+            pa.Schema.from_pandas(e.empty_data.set_axis([out_col_name], axis=1))
+            for e in op_exprs
+        ]
+        # If some but not all inputs are timestamps, promote all to timestamps to
+        # avoid errors in C++ backend
+        if any(pa.types.is_timestamp(s.field(0).type) for s in in_schemas) and not all(
+            pa.types.is_timestamp(s.field(0).type) for s in in_schemas
+        ):
+            t = next(
+                s.field(0).type
+                for s in in_schemas
+                if pa.types.is_timestamp(s.field(0).type)
+            )
+            out_schema = pa.schema([pa.field(out_col_name, t)])
+        else:
+            out_schema = pa.unify_schemas(
+                in_schemas,
+                promote_options="permissive",
+            )
         empty_data = arrow_to_empty_df(out_schema)
         return ArrowScalarFuncExpression(empty_data, op_exprs, "coalesce", ())
 
