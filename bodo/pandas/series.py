@@ -3138,7 +3138,8 @@ def _get_series_func_plan(
         has_state = False
         expr = ArrowScalarFuncExpression(
             empty_data,
-            input_exprs,
+            # Arrow functions don't need index columns as input
+            [input_exprs[0]],
             func_name,
             func_args,
         )
