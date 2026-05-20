@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import operator
+import zoneinfo
 from dataclasses import dataclass
+from datetime import datetime
 
 import pandas as pd
 import pyarrow as pa
@@ -250,6 +252,17 @@ def java_call_to_python_call(java_call, input_plan):
         )
         empty_data = arrow_to_empty_df(out_schema)
         return ArrowScalarFuncExpression(empty_data, op_exprs, "coalesce", ())
+
+    if operator_class_name == "SqlCurrentDateFunction":
+        # Matching BodoSQL JIT backend which uses UTC by default
+        # https://github.com/bodo-ai/Bodo/blob/c151771c58a61753daba450901eb294a76b8ff58/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/BodoSQLCodeGen/DatetimeFnCodeGen.java#L260
+        # https://github.com/bodo-ai/Bodo/blob/c151771c58a61753daba450901eb294a76b8ff58/bodo/hiframes/datetime_date_ext.py#L1252
+        tz_info = zoneinfo.ZoneInfo("UTC")
+        curr_date = datetime.now(tz_info).date()
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+        # NOTE: this is assuming that plans are not cached so has to be changed if we
+        # add plan caching
+        return ConstantExpression(dummy_empty_data, input_plan, curr_date)
 
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
