@@ -1,4 +1,5 @@
 #include "expression.h"
+#include <arrow/type_fwd.h>
 #include "_util.h"
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
@@ -148,9 +149,46 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
         }
     }
 
-    // Call the Arrow function
-    arrow::Result<arrow::Datum> func_res =
-        arrow::compute::CallFunction(arrow_func_name, arg_datums);
+    arrow::Result<arrow::Datum> func_res;
+
+    if (arrow_func_name == "nullif") {
+        // SQL NULLIF(a, b): returns NULL when a == b, else a.
+        // Arrow has no direct nullif kernel, so implement as:
+        //   case_when(equal(a, b), null_scalar_of_a_type, a)
+        if (arg_datums.size() != 2) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: nullif expects exactly 2 "
+                "arguments.");
+        }
+        auto eq_res = arrow::compute::CallFunction("equal", arg_datums);
+        if (!eq_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: Error in Arrow compute "
+                "(nullif/equal): " +
+                eq_res.status().message());
+        }
+
+        // Build a null scalar with the same type as the first argument.
+        auto null_scalar_res = arrow::MakeNullScalar(arg_datums[0].type());
+        arrow::Datum null_datum(null_scalar_res);
+
+        auto cond = eq_res.ValueOrDie();
+        // Use struct array condition for case_when
+        if (!cond.is_scalar()) {
+            auto struct_type =
+                arrow::struct_({arrow::field("cond", arrow::boolean())});
+            auto cond_arr = std::make_shared<arrow::StructArray>(
+                struct_type, cond.length(),
+                std::vector<std::shared_ptr<arrow::Array>>{cond.make_array()});
+            cond = arrow::Datum(cond_arr);
+        }
+
+        func_res = arrow::compute::CallFunction(
+            "case_when", {cond, null_datum, arg_datums[0]});
+    } else {
+        func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums);
+    }
+
     if (!func_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_arrow_compute_multi_input: Error in Arrow compute: " +

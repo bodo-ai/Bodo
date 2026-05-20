@@ -339,6 +339,11 @@ def java_call_to_python_call(java_call, input_plan):
             # IFF is equivalent to CASE with single WHEN
             return java_case_to_python_case(operands, input_plan)
 
+        if func_name == "NULLIF" and len(op_exprs) == 2:
+            return ArrowScalarFuncExpression(
+                op_exprs[0].empty_data, op_exprs, "nullif", ()
+            )
+
         # If we didn't match a supported basic function, fall through to NotImplemented
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
