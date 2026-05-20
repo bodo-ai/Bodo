@@ -1667,6 +1667,10 @@ def test_dataframe_groupby(dropna, as_index, selection):
 
 
 @pytest.mark.gpu
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(),
+    reason="[BSE-5430] Fix wrong result in multi-worker GPU test",
+)
 def test_groupby_fallback():
     """Checks that fallback is properly supported for DataFrame and Series groupby
     when unsupported arguments are provided.
@@ -1724,6 +1728,9 @@ def groupby_agg_df(request):
         pytest.param(["sum", "count"], {}, id="func_list"),
         pytest.param("sum", {}, id="func_str"),
         pytest.param(
+            {"A": ["mean", "count"], "D": ["count", "sum"]}, {}, id="func_dict"
+        ),
+        pytest.param(
             None,
             {
                 "mean_A": pd.NamedAgg("A", "mean"),
@@ -1774,30 +1781,32 @@ def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
 
 
 @pytest.mark.parametrize(
-    "func",
+    "func, kwargs",
     [
-        pytest.param("sum", marks=pytest.mark.gpu),
-        pytest.param("mean", marks=pytest.mark.gpu),
-        pytest.param("count", marks=pytest.mark.gpu),
-        pytest.param("max", marks=pytest.mark.gpu),
-        pytest.param("min", marks=pytest.mark.gpu),
-        "median",  # median not supported on GPU yet
-        pytest.param("nunique", marks=pytest.mark.gpu),
-        pytest.param("size", marks=pytest.mark.gpu),
-        pytest.param("var", marks=pytest.mark.gpu),
-        pytest.param("std", marks=pytest.mark.gpu),
-        pytest.param("skew", marks=pytest.mark.gpu),
+        pytest.param("sum", {}, marks=pytest.mark.gpu),
+        pytest.param("mean", {}, marks=pytest.mark.gpu),
+        pytest.param("count", {}, marks=pytest.mark.gpu),
+        pytest.param("max", {}, marks=pytest.mark.gpu),
+        pytest.param("min", {}, marks=pytest.mark.gpu),
+        pytest.param("median", {}),  # median not supported on GPU yet
+        pytest.param("nunique", {}, marks=pytest.mark.gpu),
+        pytest.param("size", {}, marks=pytest.mark.gpu),
+        pytest.param("var", {}, marks=pytest.mark.gpu),
+        pytest.param("std", {}, marks=pytest.mark.gpu),
+        pytest.param("var", {"ddof": 0}, marks=pytest.mark.gpu),
+        pytest.param("std", {"ddof": 0}, marks=pytest.mark.gpu),
+        pytest.param("skew", {}, marks=pytest.mark.gpu),
     ],
 )
-def test_groupby_agg_numeric(groupby_agg_df, func):
+def test_groupby_agg_numeric(groupby_agg_df, func, kwargs):
     """Tests supported aggfuncs on simple numeric (floats and ints)."""
 
     bdf1 = bd.from_pandas(groupby_agg_df)
 
     cols = ["D", "A", "C"]
 
-    bdf2 = getattr(bdf1.groupby("B")[cols], func)()
-    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)()
+    bdf2 = getattr(bdf1.groupby("B")[cols], func)(**kwargs)
+    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)(**kwargs)
 
     assert bdf2.is_lazy_plan()
 
@@ -1831,7 +1840,8 @@ def test_size_no_val(groupby_agg_df, as_index):
         pytest.param(
             "nunique",
             marks=pytest.mark.skipif(
-                is_multi_worker_per_gpu_test(), reason="TODO: Fix multi-worker nunique"
+                is_multi_worker_per_gpu_test(),
+                reason="[BSE-5428] Fix wrong result in multi-worker GPU test",
             ),
         ),
         "size",
@@ -1927,6 +1937,27 @@ def test_projection_expression_floordiv(datapath):
             datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
         )
         py_df2 = py_df1[(py_df1.A // 3) * 7 > 15]
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.gpu
+def test_projection_expression_pow(datapath):
+    """Test for power."""
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df2 = bodo_df1[bodo_df1.A**2 > 15]
+
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
+        py_df2 = py_df1[py_df1.A**2 > 15]
 
     _test_equal(
         bodo_df2,
@@ -2991,6 +3022,9 @@ def test_groupby_getattr_fallback_behavior():
 
 
 @pytest.mark.gpu
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(), reason="[BSE-5432] Handle empty data in GPU reduce."
+)
 def test_series_agg():
     import pandas as pd
 
@@ -4067,7 +4101,8 @@ def test_len_no_warn(index_val):
 @pytest.mark.gpu
 @pytest.mark.jit_dependency
 @pytest.mark.skipif(
-    is_multi_worker_per_gpu_test(), reason="Fix wrong result in multi-worker GPU test"
+    is_multi_worker_per_gpu_test(),
+    reason="[BSE-5431] Fix wrong result in multi-worker GPU test",
 )
 def test_bodo_pandas_inside_jit():
     """Make sure using bodo.pandas functions inside a bodo.jit function works as

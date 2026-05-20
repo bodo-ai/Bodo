@@ -12,6 +12,7 @@
 #include "../libs/_utils.h"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
+#include "duckdb/common/types/value.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
@@ -101,6 +102,14 @@ extractValue(const duckdb::Value &value) {
             duckdb::date_t extracted = value.GetValue<duckdb::date_t>();
             // Create a DateScalar with the date value
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
+        } break;
+        case duckdb::LogicalTypeId::INTERVAL: {
+            auto interval_type = arrow::duration(arrow::TimeUnit::NANO);
+            duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
+            return arrow::MakeScalar(
+                       interval_type,
+                       duckdb::Interval::GetMicro(extracted) * 1000)
+                .ValueOrDie();
         } break;
         default:
             throw std::runtime_error("extractValue unhandled type." +

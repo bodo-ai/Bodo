@@ -91,7 +91,15 @@ class RankDataExchange {
    public:
     RankDataExchange(int64_t op_id_);
 
-    ~RankDataExchange();
+    ~RankDataExchange() = default;
+
+    /**
+     * @brief Finalize the exchange state. This includes clearing the exchange
+     * barrier if the exchange could not finish due to an upstream operator
+     * finishing early and freeing the shuffle communicator.
+     *
+     */
+    void Finalize();
 
    protected:
     int64_t op_id;
@@ -283,6 +291,17 @@ class PhysicalSink : public PhysicalOperator {
 
     virtual void FinalizeSink() = 0;
 
+    /**
+     * @brief Execute common finalization logic and call operator FinalizeSink.
+     *
+     */
+    void FinalizeSinkCommon() {
+#ifdef USE_CUDF
+        gpu_to_cpu_exchange.Finalize();
+#endif
+        FinalizeSink();
+    }
+
 #ifdef USE_CUDF
     PhysicalSink() : gpu_to_cpu_exchange(this->op_id) {}
 
@@ -310,6 +329,18 @@ class PhysicalProcessBatch : public PhysicalOperator {
         GPU_DATA input_batch, OperatorResult prev_op_result);
 
     virtual void FinalizeProcessBatch() = 0;
+
+    /**
+     * @brief Execute common finalization logic and call operator
+     * FinalizeProcessBatch.
+     *
+     */
+    void FinalizeProcessBatchCommon() {
+#ifdef USE_CUDF
+        gpu_to_cpu_exchange.Finalize();
+#endif
+        FinalizeProcessBatch();
+    }
 
     /**
      * @brief Get the physical schema of the output data
@@ -411,6 +442,17 @@ class PhysicalGPUSink : public PhysicalOperator {
 
     virtual void FinalizeSink() = 0;
 
+    /**
+     * @brief Execute common finalization logic and call operator FinalizeSink.
+     *
+     */
+    void FinalizeSinkCommon() {
+#ifdef USE_CUDF
+        cpu_to_gpu_exchange.Finalize();
+#endif
+        FinalizeSink();
+    }
+
 #ifdef USE_CUDF
     PhysicalGPUSink() : cpu_to_gpu_exchange(this->op_id) {}
 
@@ -441,6 +483,18 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
         std::shared_ptr<StreamAndEvent> se) = 0;
 
     virtual void FinalizeProcessBatch() = 0;
+
+    /**
+     * @brief Execute common finalization logic and call operator
+     * FinalizeProcessBatch.
+     *
+     */
+    void FinalizeProcessBatchCommon() {
+#ifdef USE_CUDF
+        cpu_to_gpu_exchange.Finalize();
+#endif
+        FinalizeProcessBatch();
+    }
 
     /**
      * @brief Get the physical schema of the output data

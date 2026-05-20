@@ -37,18 +37,26 @@ def grouped_dfs():
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp  # failing for variance, stddev w/ unimplemented CASE
+@pytest.mark.bodosql_cpp
 def test_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, memory_leak_check
 ):
     """test aggregation calls in queries"""
 
     if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
-        "SUM",
+        "AVG",
         "COUNT",
         "MAX",
         "MIN",
-        "AVG",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        "VARIANCE_SAMP",
+        "STDDEV_POP",
+        "VAR_POP",
+        "VARIANCE_POP",
     ]:
         pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
@@ -75,11 +83,19 @@ def test_agg_numeric_larger_group(
     """test aggregation calls in queries on DataFrames with a larger data in each group."""
 
     if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
-        "SUM",
+        "AVG",
         "COUNT",
         "MAX",
         "MIN",
-        "AVG",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        "VARIANCE_SAMP",
+        "STDDEV_POP",
+        "VAR_POP",
+        "VARIANCE_POP",
     ]:
         pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
@@ -108,11 +124,19 @@ def test_aliasing_agg_numeric(
     """test aliasing of aggregations in queries"""
 
     if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
-        "SUM",
+        "AVG",
         "COUNT",
         "MAX",
         "MIN",
-        "AVG",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        "VARIANCE_SAMP",
+        "STDDEV_POP",
+        "VAR_POP",
+        "VARIANCE_POP",
     ]:
         pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
@@ -1528,7 +1552,7 @@ def test_all_nulls_2(memory_leak_check):
         pytest.param("HIJ", id="slow_tests_b", marks=pytest.mark.slow),
     ],
 )
-# @pytest.mark.bodosql_cpp   # Aggregation OTHER_FUNCTIOn not supported yet
+@pytest.mark.bodosql_cpp
 def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
     """Tests the Kurtosis and Skew functions"""
     query = (
@@ -1896,7 +1920,7 @@ def test_array_agg_distinct(call, answer, memory_leak_check):
         ),
     ],
 )
-# @pytest.mark.bodosql_cpp   # from_pandas(): Could not convert DataFrame to Bodo: Unsupported datatype encountered in one or more columns: Could not convert Time(hour=0, minute=0, second=10, millisecond=648, microsecond=0, nanosecond=0, precision=9) with type Time: did not recognize Python value type when inferring an Arrow data type.  Aggregation OTHER_FUNCTION not supported yet
+# @pytest.mark.bodosql_cpp   # from_pandas(): Could not convert DataFrame to Bodo: Unsupported datatype encountered in one or more columns: Could not convert Time(hour=0, minute=0, second=10, millisecond=648, microsecond=0, nanosecond=0, precision=9) with type Time: did not recognize Python value type when inferring an Arrow data type.  Aggregation OTHER_FUNCTION/OBJECT_AGG not supported yet
 def test_object_agg(value_pool, dtype, val_arrow_type, nullable, memory_leak_check):
     """Tests OBJECT_AGG with GROUP BY"""
     query = "SELECT G AS G, OBJECT_AGG(K, V) AS J FROM table1 GROUP BY G"
@@ -1963,7 +1987,7 @@ def test_object_agg(value_pool, dtype, val_arrow_type, nullable, memory_leak_che
         ),
     ],
 )
-# @pytest.mark.bodosql_cpp   # Aggregation OTHER_FUNCTION not supported yet
+# @pytest.mark.bodosql_cpp   # Aggregation OTHER_FUNCTION/ARRAY_UNIQUE_AGG not supported yet
 def test_array_unique_agg(call, expected, memory_leak_check):
     """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
     a single ordering term, with DISTINCT, and accompanied by a GROUP BY.
