@@ -522,6 +522,7 @@ def check_args_fallback(
                             # Fall back to Pandas below
                             except_msg = str(e)
 
+                    fallback_wrapper_obj = self
                     # Fallback to Python. Call the same method in the base class.
                     if self.__class__.__name__ in ("DataFrameGroupBy", "SeriesGroupBy"):
                         obj_base_class = self._obj.__class__.__bases__[0]
@@ -539,6 +540,13 @@ def check_args_fallback(
                         self = pd.Series(self._series).astype(object).str
                     elif self.__class__ == bodo.pandas.series.BodoDatetimeProperties:
                         base_class = self._series.__class__.__bases__[0].dt
+                    elif (
+                        self.__class__ == bodo.pandas.frame.BodoDataFrame
+                        and func.__name__ == "groupby"
+                    ):
+                        # For groupby fallback, convert to Pandas first and then run groupby.
+                        fallback_wrapper_obj = pd.DataFrame(self)
+                        base_class = pd.DataFrame
                     else:
                         base_class = self.__class__.__bases__[0]
                     msg = (
@@ -549,8 +557,11 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     py_res = fallback_wrapper(
-                        self, getattr(base_class, func.__name__), func.__name__, msg
-                    )(self, *args, **kwargs)
+                        fallback_wrapper_obj,
+                        getattr(base_class, func.__name__),
+                        func.__name__,
+                        msg,
+                    )(fallback_wrapper_obj, *args, **kwargs)
                     return py_res
 
         return wrapper

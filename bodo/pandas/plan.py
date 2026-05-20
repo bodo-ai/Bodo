@@ -1082,6 +1082,10 @@ def execute_plan(plan: LazyPlan, optimize=True):
         if bodo.dataframe_library_profile:
             print("profile_time total_execute_plan", exec_time)
         return ret
+    else:
+        if bodo.dataframe_library_dump_plans:
+            traceback.print_stack(file=sys.stdout)
+            print("")  # Print on new line during tests.
 
     return _exec_plan(plan, optimize)
 
