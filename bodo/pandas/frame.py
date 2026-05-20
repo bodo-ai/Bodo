@@ -78,6 +78,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     _fix_multi_index_names,
     _get_empty_series_arrow,
+    arrow_to_empty_df,
     check_args_fallback,
     fallback_warn,
     fallback_wrapper,
@@ -1247,9 +1248,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 ikey = None
                 is_replace = False
 
+            const_empty_data = arrow_to_empty_df(
+                pa.schema([pa.field(key, pa.scalar(value).type)])
+            )
             const_expr = ConstantExpression(
-                # Dummy empty data for LazyPlan
-                empty_data,
+                const_empty_data,
                 self._plan,
                 value,
             )
