@@ -335,6 +335,10 @@ def java_call_to_python_call(java_call, input_plan):
             out_empty = inp.empty_data
             return UnaryOpExpression(out_empty, inp, "round")
 
+        if func_name == "IFF" and len(op_exprs) == 3:
+            # IFF is equivalent to CASE with single WHEN
+            return java_case_to_python_case(operands, input_plan)
+
         # If we didn't match a supported basic function, fall through to NotImplemented
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
