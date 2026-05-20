@@ -238,6 +238,18 @@ def java_call_to_python_call(java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "__invert__")
 
+    if (
+        operator_class_name == "SqlDatePartFunction"
+        and len(java_call.getOperands()) == 1
+    ):
+        operands = java_call.getOperands()
+        input = java_expr_to_python_expr(operands[0], input_plan)
+        func_name = op.getName().upper()
+
+        if func_name == "YEAR":
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], "year", ())
+
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
