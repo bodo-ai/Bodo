@@ -2851,6 +2851,32 @@ def test_loc(datapath):
     )
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "key, default",
+    [
+        pytest.param("A", None),
+        pytest.param(["A", "B"], "fail"),
+        pytest.param("D", "not found"),
+    ],
+)
+def test_get(key, default):
+    """Basic test for DataFrame get."""
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": [1, 2, 3, 4, 5],
+                "B": [10, 9, 8, 7, 6],
+                "C": [8.2, 1.43, 7.3, 9.7, 8.21],
+            }
+        )
+        bdf = bd.from_pandas(df)
+
+        pd_out = df.get(key, default)
+        bd_out = bdf.get(key, default)
+    _test_equal(pd_out, bd_out, check_pandas_types=False, reset_index=True)
+
+
 @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 @pytest.mark.parametrize(
     "percentiles",
@@ -2991,6 +3017,33 @@ def test_series_na(data):
     pds_notnull = pds.notna()
     bds_notnull = bds.notna()
     _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "key, default, epc",
+    [
+        pytest.param(3, None, 1),
+        pytest.param(6, None, 1),
+        pytest.param(6, 10, 1),
+        pytest.param([True, False, False, True, True], None, 1),
+        pytest.param(
+            bd.Series([True, False, False, True, True]),
+            None,
+            0,
+            marks=pytest.mark.skip(reason="Currently crashes"),
+        ),
+    ],
+)
+def test_series_get(key, default, epc):
+    """Basic test for Series get."""
+    with assert_executed_plan_count(epc):
+        pds = pd.Series([1, 3, 4, 5, 2])
+        bds = bd.Series(pds)
+
+        pds_out = pds.get(key, default)
+        bds_out = bds.get(key, default)
+    _test_equal(pds_out, bds_out, check_pandas_types=False, reset_index=True)
 
 
 def test_groupby_getattr_fallback_behavior():

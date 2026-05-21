@@ -1118,6 +1118,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             )
         return self.__getitem__(columns_to_use)
 
+    @check_args_fallback("none")
+    def get(self, key, default=None):
+        return pd.DataFrame.get(self, key, default)
+
     @check_args_fallback("all")
     def __getitem__(self, key):
         """Called when df[key] is used."""
