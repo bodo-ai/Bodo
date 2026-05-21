@@ -595,6 +595,12 @@ def java_literal_to_python_literal(java_literal, input_plan):
             dummy_empty_data, input_plan, java_literal.getValue2()
         )
 
+    if lit_type_name.equals(SqlTypeName.VARCHAR):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.large_string()))
+        return ConstantExpression(
+            dummy_empty_data, input_plan, java_literal.getValue2()
+        )
+
     if lit_type_name.equals(SqlTypeName.DATE):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
         # getValue2() returns an integer representing days since epoch
