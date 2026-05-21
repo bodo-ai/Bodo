@@ -525,12 +525,11 @@ def check_args_fallback(
                     fallback_wrapper_obj = self
                     # Fallback to Python. Call the same method in the base class.
                     if self.__class__.__name__ in ("DataFrameGroupBy", "SeriesGroupBy"):
-                        obj_base_class = self._obj.__class__.__bases__[0]
-                        grouped = getattr(obj_base_class, "groupby")(
-                            self._obj,
-                            self._keys,
-                            as_index=self._as_index,
-                            dropna=self._dropna,
+                        assert isinstance(self._obj, bodo.pandas.frame.BodoDataFrame)
+                        pd_df = pd.DataFrame(self._obj)
+
+                        grouped = pd_df.groupby(
+                            self._keys, as_index=self._as_index, dropna=self._dropna
                         )
                         fallback_wrapper_obj = (
                             grouped[self._selection] if self._selection else grouped
