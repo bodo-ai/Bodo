@@ -522,23 +522,34 @@ def check_args_fallback(
                             # Fall back to Pandas below
                             except_msg = str(e)
 
+                    fallback_wrapper_obj = self
                     # Fallback to Python. Call the same method in the base class.
                     if self.__class__.__name__ in ("DataFrameGroupBy", "SeriesGroupBy"):
-                        obj_base_class = self._obj.__class__.__bases__[0]
-                        grouped = getattr(obj_base_class, "groupby")(
-                            self._obj,
-                            self._keys,
-                            as_index=self._as_index,
-                            dropna=self._dropna,
+                        assert isinstance(self._obj, bodo.pandas.frame.BodoDataFrame)
+                        pd_df = pd.DataFrame(self._obj)
+
+                        grouped = pd_df.groupby(
+                            self._keys, as_index=self._as_index, dropna=self._dropna
                         )
-                        self = grouped[self._selection] if self._selection else grouped
-                        base_class = self.__class__
+                        fallback_wrapper_obj = (
+                            grouped[self._selection] if self._selection else grouped
+                        )
+                        base_class = fallback_wrapper_obj.__class__
                     elif self.__class__ == bodo.pandas.series.BodoStringMethods:
                         base_class = self._series.__class__.__bases__[0].str
                         # Workaround Pandas 3 bugs for concat with nulls for Arrow dtype
-                        self = pd.Series(self._series).astype(object).str
+                        fallback_wrapper_obj = (
+                            pd.Series(self._series).astype(object).str
+                        )
                     elif self.__class__ == bodo.pandas.series.BodoDatetimeProperties:
                         base_class = self._series.__class__.__bases__[0].dt
+                    elif (
+                        self.__class__ == bodo.pandas.frame.BodoDataFrame
+                        and func.__name__ == "groupby"
+                    ):
+                        # For groupby fallback, convert to Pandas first and then run groupby.
+                        fallback_wrapper_obj = pd.DataFrame(self)
+                        base_class = pd.DataFrame
                     else:
                         base_class = self.__class__.__bases__[0]
                     msg = (
@@ -549,8 +560,11 @@ def check_args_fallback(
                     if except_msg:
                         msg += f"\nException: {except_msg}"
                     py_res = fallback_wrapper(
-                        self, getattr(base_class, func.__name__), func.__name__, msg
-                    )(self, *args, **kwargs)
+                        fallback_wrapper_obj,
+                        getattr(base_class, func.__name__),
+                        func.__name__,
+                        msg,
+                    )(fallback_wrapper_obj, *args, **kwargs)
                     return py_res
 
         return wrapper

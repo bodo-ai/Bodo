@@ -16,6 +16,9 @@ using hrclock = std::chrono::high_resolution_clock;
 
 std::string getGPUStats() {
 #ifdef USE_CUDF
+    if (!is_gpu_rank()) {
+        return std::string();
+    }
     size_t free_bytes = 0;
     size_t total_bytes = 0;
     cudaMemGetInfo(&free_bytes, &total_bytes);

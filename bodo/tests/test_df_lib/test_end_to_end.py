@@ -1667,10 +1667,6 @@ def test_dataframe_groupby(dropna, as_index, selection):
 
 
 @pytest.mark.gpu
-@pytest.mark.skipif(
-    is_multi_worker_per_gpu_test(),
-    reason="[BSE-5430] Fix wrong result in multi-worker GPU test",
-)
 def test_groupby_fallback():
     """Checks that fallback is properly supported for DataFrame and Series groupby
     when unsupported arguments are provided.

@@ -51,10 +51,14 @@ void printBatchTypes(std::ostream &out, T &t) {
                 DEBUG_PrintTable(out, x.first, true, true);
 #ifdef USE_CUDF
             } else if constexpr (std::is_same_v<U, GPU_DATA>) {
-                dumpTableTypes(out, x.table->view());
+                if (x.table != nullptr) {
+                    dumpTableTypes(out, x.table->view());
+                }
             } else if constexpr (std::is_same_v<
                                      U, std::pair<GPU_DATA, OperatorResult>>) {
-                dumpTableTypes(out, x.first.table->view());
+                if (x.first.table != nullptr) {
+                    dumpTableTypes(out, x.first.table->view());
+                }
 #endif  // USE_CUDF
             }
         },
