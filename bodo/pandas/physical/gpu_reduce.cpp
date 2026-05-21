@@ -152,26 +152,34 @@ void GPUReductionFunction::Finalize(MPI_Comm comm) {
         // TODO(ehsan): handle empty and all null cases
         std::unique_ptr<cudf::scalar>& result = this->results[i];
 
-        cudf::data_type result_dtype = result->type();
-        std::shared_ptr<arrow::Table> arrow_table =
-            cudf_scalar_to_arrow_table(result);
+        MPI_Comm has_data_comm;
+        MPI_Comm_split(comm, result != nullptr ? 1 : MPI_UNDEFINED, 0,
+                       &has_data_comm);
+        if (result != nullptr) {
+            cudf::data_type result_dtype = result->type();
+            std::shared_ptr<arrow::Table> arrow_table =
+                cudf_scalar_to_arrow_table(result);
 
-        // Extract the pointer to the scalar value from the Arrow table
-        // All Arrow primitive types store data in the second buffer
-        void* result_ptr = reinterpret_cast<void*>(
-            arrow_table->column(0)->chunk(0)->data()->buffers[1]->address());
+            // Extract the pointer to the scalar value from the Arrow table
+            // All Arrow primitive types store data in the second buffer
+            void* result_ptr = reinterpret_cast<void*>(arrow_table->column(0)
+                                                           ->chunk(0)
+                                                           ->data()
+                                                           ->buffers[1]
+                                                           ->address());
 
-        MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(result_dtype);
-        // NOTE: OpenMPI collectives are not CUDA-aware
-        CHECK_MPI(
-            MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
-                          this->mpi_reduce_op, comm),
-            "GPUReductionFunction::Finalize: MPI error on MPI_Allreduce:");
+            MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(result_dtype);
+            // NOTE: OpenMPI collectives are not CUDA-aware
+            CHECK_MPI(
+                MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
+                              this->mpi_reduce_op, has_data_comm),
+                "GPUReductionFunction::Finalize: MPI error on MPI_Allreduce:");
 
-        // Copy the reduced CPU result back to cudf scalar
-        std::shared_ptr<arrow::Scalar> arrow_scalar =
-            arrow_table->column(0)->GetScalar(0).ValueOrDie();
-        this->results[i] = arrow_scalar_to_cudf(arrow_scalar);
+            // Copy the reduced CPU result back to cudf scalar
+            std::shared_ptr<arrow::Scalar> arrow_scalar =
+                arrow_table->column(0)->GetScalar(0).ValueOrDie();
+            this->results[i] = arrow_scalar_to_cudf(arrow_scalar);
+        }
     }
 }
 
