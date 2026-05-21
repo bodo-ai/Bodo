@@ -33,7 +33,7 @@ requirements:
     - {{ compiler('cuda') }}  # [gpu]
 
   host:
-    - python {{ PY_VER }} *_cp{{ PY_VER|replace('.', '') }}
+    - python {{ PY_VER }}
     - python_abi {{ PY_VER }} *_cp{{ PY_VER|replace('.', '') }}
     - pip
 
