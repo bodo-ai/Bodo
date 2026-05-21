@@ -4,6 +4,7 @@ Test correctness of SQL conditional functions on BodoSQL
 
 import copy
 import datetime
+import zoneinfo
 from decimal import Decimal
 
 import numpy as np
@@ -141,7 +142,8 @@ def test_coalesce_timestamp_date(memory_leak_check):
             }
         )
     }
-    current_date = datetime.date.today()
+    tz_info = zoneinfo.ZoneInfo("UTC")
+    current_date = datetime.datetime.now(tz_info).date()
     answer = pd.DataFrame(
         {
             "A": pd.Series(
