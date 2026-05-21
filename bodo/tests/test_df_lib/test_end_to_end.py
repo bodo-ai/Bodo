@@ -1778,30 +1778,32 @@ def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
 
 
 @pytest.mark.parametrize(
-    "func",
+    "func, kwargs",
     [
-        pytest.param("sum", marks=pytest.mark.gpu),
-        pytest.param("mean", marks=pytest.mark.gpu),
-        pytest.param("count", marks=pytest.mark.gpu),
-        pytest.param("max", marks=pytest.mark.gpu),
-        pytest.param("min", marks=pytest.mark.gpu),
-        "median",  # median not supported on GPU yet
-        pytest.param("nunique", marks=pytest.mark.gpu),
-        pytest.param("size", marks=pytest.mark.gpu),
-        pytest.param("var", marks=pytest.mark.gpu),
-        pytest.param("std", marks=pytest.mark.gpu),
-        pytest.param("skew", marks=pytest.mark.gpu),
+        pytest.param("sum", {}, marks=pytest.mark.gpu),
+        pytest.param("mean", {}, marks=pytest.mark.gpu),
+        pytest.param("count", {}, marks=pytest.mark.gpu),
+        pytest.param("max", {}, marks=pytest.mark.gpu),
+        pytest.param("min", {}, marks=pytest.mark.gpu),
+        pytest.param("median", {}),  # median not supported on GPU yet
+        pytest.param("nunique", {}, marks=pytest.mark.gpu),
+        pytest.param("size", {}, marks=pytest.mark.gpu),
+        pytest.param("var", {}, marks=pytest.mark.gpu),
+        pytest.param("std", {}, marks=pytest.mark.gpu),
+        pytest.param("var", {"ddof": 0}, marks=pytest.mark.gpu),
+        pytest.param("std", {"ddof": 0}, marks=pytest.mark.gpu),
+        pytest.param("skew", {}, marks=pytest.mark.gpu),
     ],
 )
-def test_groupby_agg_numeric(groupby_agg_df, func):
+def test_groupby_agg_numeric(groupby_agg_df, func, kwargs):
     """Tests supported aggfuncs on simple numeric (floats and ints)."""
 
     bdf1 = bd.from_pandas(groupby_agg_df)
 
     cols = ["D", "A", "C"]
 
-    bdf2 = getattr(bdf1.groupby("B")[cols], func)()
-    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)()
+    bdf2 = getattr(bdf1.groupby("B")[cols], func)(**kwargs)
+    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)(**kwargs)
 
     assert bdf2.is_lazy_plan()
 

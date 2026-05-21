@@ -28,6 +28,8 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 - [`DataFrameGroupBy.std`][frame-agg-std]
 - [`DataFrameGroupBy.var`][frame-agg-var]
 - [`DataFrameGroupBy.skew`][frame-agg-skew]
+- [`DataFrameGroupBy.kurtosis`][frame-agg-kurtosis]
+- [`DataFrameGroupBy.kurt`][frame-agg-kurtosis]
 - [`DataFrameGroupBy.nunique`][frame-agg-nunique]
 - [`DataFrameGroupBy.size`][frame-agg-size]
 - [`DataFrameGroupBy.first`][frame-agg-first]
@@ -46,6 +48,8 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 - [`SeriesGroupBy.std`][series-agg-std]
 - [`SeriesGroupBy.var`][series-agg-var]
 - [`SeriesGroupBy.skew`][series-agg-skew]
+- [`SeriesGroupBy.kurtosis`][series-agg-kurtosis]
+- [`SeriesGroupBy.kurt`][series-agg-kurtosis]
 - [`SeriesGroupBy.nunique`][series-agg-nunique]
 - [`SeriesGroupBy.size`][series-agg-size]
 - [`SeriesGroupBy.first`][series-agg-first]
@@ -63,6 +67,7 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 [frame-agg-std]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.std.html
 [frame-agg-var]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.var.html
 [frame-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.skew.html
+[frame-agg-kurtosis]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.kurt.html
 [frame-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.nunique.html
 [frame-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.size.html
 [frame-agg-first]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.DataFrameGroupBy.first.html
@@ -79,6 +84,7 @@ An instance of one of these classes will be returned when using the [`BodoDataFr
 [series-agg-std]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.std.html
 [series-agg-var]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.var.html
 [series-agg-skew]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.skew.html
+[series-agg-kurtosis]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.kurt.html
 [series-agg-nunique]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.nunique.html
 [series-agg-size]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.size.html
 [series-agg-first]: https://pandas.pydata.org/docs/reference/api/pandas.api.typing.SeriesGroupBy.first.html

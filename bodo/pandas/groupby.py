@@ -45,6 +45,8 @@ BUILTIN_AGG_FUNCS = {
     "std",
     "var",
     "skew",
+    "kurt",
+    "kurtosis",
     "count",
     "size",
     "nunique",
@@ -280,19 +282,27 @@ class DataFrameGroupBy:
         """
         return _groupby_agg_plan(self, "skew")
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the std of each group.
         """
-        return _groupby_agg_plan(self, "std")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "DataFrameGroupby only supports ddof of 0 or 1"
+            )
+        return _groupby_agg_plan(self, "std", ddof=ddof)
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the var of each group.
         """
-        return _groupby_agg_plan(self, "var")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "DataFrameGroupby only supports ddof of 0 or 1"
+            )
+        return _groupby_agg_plan(self, "var", ddof=ddof)
 
     @check_args_fallback(supported="none")
     def first(self):
@@ -470,19 +480,27 @@ class SeriesGroupBy:
         """
         return _groupby_agg_plan(self, "skew")
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the std of each group.
         """
-        return _groupby_agg_plan(self, "std")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "SeriesGroupby only supports ddof of 0 or 1"
+            )
+        return _groupby_agg_plan(self, "std", ddof=ddof)
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the var of each group.
         """
-        return _groupby_agg_plan(self, "var")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "SeriesGroupby only supports ddof of 0 or 1"
+            )
+        return _groupby_agg_plan(self, "var", ddof=ddof)
 
     @check_args_fallback(supported="none")
     def any(self):
@@ -634,6 +652,10 @@ def _groupby_agg_plan(
             out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types
         )
         func_name = f"udf_{i}" if func.is_custom_aggfunc else func.func_name
+        if func_name == "std" and kwargs.get("ddof", 1) == 0:
+            func_name = "std_pop"
+        elif func_name == "var" and kwargs.get("ddof", 1) == 0:
+            func_name = "var_pop"
         cfunc_wrapper = (
             _get_cfunc_wrapper(func.func, zero_size_df[func.in_col], out_type)
             if func.is_custom_aggfunc
@@ -942,7 +964,17 @@ def _get_agg_output_type(
         elif pa.types.is_decimal(pa_type):
             # TODO: Decimal sum
             fallback = True
-    elif func_name in ("mean", "std", "var", "skew", "median"):
+    elif func_name in (
+        "mean",
+        "std",
+        "var",
+        "std_pop",
+        "var_pop",
+        "skew",
+        "kurt",
+        "kurtosis",
+        "median",
+    ):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):

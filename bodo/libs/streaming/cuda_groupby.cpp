@@ -476,6 +476,54 @@ std::unique_ptr<cudf::column> std_final_merge(
     return stddev;
 }
 
+std::unique_ptr<cudf::column> var_pop_final_merge(
+    const std::vector<cudf::column_view>& input_cols,
+    rmm::cuda_stream_view& output_stream) {
+    if (input_cols.size() != 3) {
+        throw std::runtime_error("var_final_merge didn't get 3 columns.");
+    }
+
+    auto const& sum_col = input_cols[0];
+    auto const& sumsq_col = input_cols[1];
+    auto const& count_col = input_cols[2];
+
+    cudf::data_type out_type{cudf::type_id::FLOAT64};
+
+    auto sum_sq =
+        cudf::binary_operation(sum_col, sum_col, cudf::binary_operator::MUL,
+                               sum_col.type(),  // preserve dtype of sum_col
+                               output_stream);
+
+    auto sum_sq_div_n = cudf::binary_operation(sum_sq->view(), count_col,
+                                               cudf::binary_operator::DIV,
+                                               out_type, output_stream);
+
+    auto numerator = cudf::binary_operation(sumsq_col, sum_sq_div_n->view(),
+                                            cudf::binary_operator::SUB,
+                                            out_type, output_stream);
+
+    auto variance = cudf::binary_operation(numerator->view(), count_col,
+                                           cudf::binary_operator::DIV, out_type,
+                                           output_stream);
+
+    return variance;
+}
+
+std::unique_ptr<cudf::column> std_pop_final_merge(
+    const std::vector<cudf::column_view>& input_cols,
+    rmm::cuda_stream_view& output_stream) {
+    if (input_cols.size() != 3) {
+        throw std::runtime_error("std_final_merge didn't get 3 columns.");
+    }
+
+    auto variance = var_pop_final_merge(input_cols, output_stream);
+
+    auto stddev = cudf::unary_operation(
+        variance->view(), cudf::unary_operator::SQRT, output_stream);
+
+    return stddev;
+}
+
 std::unique_ptr<cudf::column> skew_final_merge(
     const std::vector<cudf::column_view>& input_cols,
     rmm::cuda_stream_view& output_stream) {
