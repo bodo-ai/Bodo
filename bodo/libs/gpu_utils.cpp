@@ -3,6 +3,7 @@
 bool g_use_async = false;
 
 #ifdef USE_CUDF
+#include <nvml.h>
 #include <thrust/execution_policy.h>
 #include <thrust/transform.h>
 #include <cassert>
@@ -15,6 +16,7 @@ bool g_use_async = false;
 #include <cudf/table/table_view.hpp>
 #include <cudf/utilities/bit.hpp>
 #include <cudf/utilities/default_stream.hpp>
+#include <limits>
 #include <rmm/cuda_device.hpp>
 #include <rmm/device_uvector.hpp>
 #include <rmm/mr/cuda_async_memory_resource.hpp>
@@ -77,6 +79,20 @@ void GpuTableBroadcastManager::broadcast_table(
     this->tables_to_broadcast.emplace_back(table, se->event);
 }
 
+void GpuRangeShuffleManager::append_batch(
+    std::shared_ptr<cudf::table> table,
+    std::vector<cudf::size_type> split_indices,
+    std::shared_ptr<StreamAndEvent> se) {
+    if (mpi_comm == MPI_COMM_NULL) {
+        return;
+    }
+    if (table->num_rows() == 0) {
+        return;
+    }
+    this->tables_to_shuffle.emplace_back(std::move(table),
+                                         std::move(split_indices), se->event);
+}
+
 std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables(
     bool& do_broadcast) {
     do_broadcast = false;
@@ -93,14 +109,16 @@ std::vector<cudf::packed_table> GpuShuffleManager::getNextPerRankTables(
         shuffle_table_info.table, shuffle_table_info.partition_indices, n_ranks,
         this->stream);
 
-    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks));
+    assert(partition_start_rows.size() == static_cast<size_t>(n_ranks) + 1);
     // Contiguous splits requires the split indices excluding the first 0
-    // So we create a new vector from partition_start_rows[1..end]
+    // and last index (row count). So we create a new vector from
+    // partition_start_rows[1..end-1]
     std::vector<cudf::size_type> splits = std::vector<cudf::size_type>(
-        partition_start_rows.begin() + 1, partition_start_rows.end());
+        partition_start_rows.begin() + 1, partition_start_rows.end() - 1);
     // Pack the tables for sending
     packed_tables =
-        cudf::contiguous_split(partitioned_table->view(), splits, stream);
+        cudf::contiguous_split(partitioned_table->view(), splits, stream,
+                               get_cuda_memory_resource_ref());
     return packed_tables;
 }
 
@@ -118,7 +136,24 @@ std::vector<cudf::packed_table> GpuTableBroadcastManager::getNextPerRankTables(
 
     cudf::table_view tv = broadcast_table_info.table->view();
     // By doing only one return value signifies a broadcast.
-    packed_tables.emplace_back(tv, cudf::pack(tv, stream));
+    packed_tables.emplace_back(
+        tv, cudf::pack(tv, stream, get_cuda_memory_resource_ref()));
+    return packed_tables;
+}
+
+std::vector<cudf::packed_table> GpuRangeShuffleManager::getNextPerRankTables(
+    bool& do_broadcast) {
+    do_broadcast = false;
+    if (!tableReadyToSend()) {
+        throw std::runtime_error("getNextPerRankTables has no data");
+    }
+
+    RangeShuffleTableInfo info = std::move(this->tables_to_shuffle.back());
+    this->tables_to_shuffle.pop_back();
+
+    auto packed_tables =
+        cudf::contiguous_split(info.table->view(), info.split_indices, stream,
+                               get_cuda_memory_resource_ref());
     return packed_tables;
 }
 
@@ -137,7 +172,7 @@ void GpuTableManager::do_shuffle() {
             "available MPI tag for shuffle send. All tags are inflight.");
     }
 
-    this->send_states.emplace_back(std::move(packed_tables), start_tag,
+    this->send_states.emplace_back(std::move(packed_tables), stream, start_tag,
                                    mpi_comm, static_cast<size_t>(n_ranks),
                                    do_broadcast);
     this->inflight_tags.insert(start_tag);
@@ -264,8 +299,9 @@ GpuTableManager::consume_completed_recvs() {
 }
 
 GpuShuffleSendState::GpuShuffleSendState(
-    std::vector<cudf::packed_table> packed_tables, int starting_msg_tag_,
-    MPI_Comm shuffle_comm, size_t n_ranks, bool broadcast)
+    std::vector<cudf::packed_table> packed_tables, cudaStream_t stream,
+    int starting_msg_tag_, MPI_Comm shuffle_comm, size_t n_ranks,
+    bool broadcast)
     : starting_msg_tag(starting_msg_tag_),
       metadata_send_buffers(n_ranks),
       packed_send_buffers(n_ranks),
@@ -335,6 +371,10 @@ GpuShuffleSendState::GpuShuffleSendState(
         this->send_requests.push_back(req);
     }
 
+    // Make sure GPU buffers are ready before passing to MPI
+    // TODO(BSE-5359): Make this check async
+    CHECK_CUDA(cudaStreamSynchronize(stream));
+
     // Send data
     for (size_t dest_rank = 0; dest_rank < packed_send_buffers.size();
          dest_rank++) {
@@ -402,8 +442,8 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
 
     this->recv_metadata_buffer =
         std::make_unique<std::vector<uint8_t>>(metadata_size);
-    this->packed_recv_buffer =
-        std::make_unique<rmm::device_buffer>(data_size, stream);
+    this->packed_recv_buffer = std::make_unique<rmm::device_buffer>(
+        data_size, stream, get_cuda_memory_resource_ref());
 
     // recv metadata
     MPI_Request recv_req;
@@ -412,6 +452,10 @@ void GpuShuffleRecvState::TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm) {
                         curr_tag, shuffle_comm, &recv_req),
               "GpuShuffle::recv_metadata: MPI_Irecv failed:");
     this->recv_requests.push_back(recv_req);
+
+    // Make sure GPU buffers are ready before passing to MPI
+    // TODO(BSE-5359): Make this check async
+    CHECK_CUDA(cudaStreamSynchronize(stream));
 
     // recv data
     MPI_Request data_recv_req;
@@ -481,33 +525,77 @@ hash_partition_table(std::shared_ptr<cudf::table> table,
 }
 
 rmm::cuda_device_id get_gpu_id() {
-    auto [n_ranks, rank_on_node] = dist_get_ranks_on_node();
+    static std::once_flag once_flag_;
+    static rmm::cuda_device_id device_id;
 
-    int device_count;
-    cudaGetDeviceCount(&device_count);
+    std::call_once(once_flag_, [&]() {
+        auto [n_ranks, rank_on_node] = dist_get_ranks_on_node();
 
-    rmm::cuda_device_id device_id(rank_on_node < device_count ? rank_on_node
-                                                              : -1);
+        unsigned device_count = 0;
+        nvmlReturn_t nvml_result = nvmlInit();
+        if (nvml_result != NVML_SUCCESS) {
+            throw std::runtime_error("nvmlInit error");
+        }
+        nvml_result = nvmlDeviceGetCount(&device_count);
+        if (nvml_result != NVML_SUCCESS) {
+            throw std::runtime_error("nvmlDeviceGetCount error");
+        }
+        nvmlShutdown();
+
+        device_id = rmm::cuda_device_id(
+            rank_on_node < static_cast<int>(device_count) ? rank_on_node : -1);
+    });
 
     return device_id;
 }
 
 int get_cluster_cuda_device_count() {
-    auto [n_ranks, rank_on_node] = dist_get_ranks_on_node();
+    static std::once_flag once_flag_;
+    static int device_count;
 
-    int local_device_count = 0;
+    std::call_once(once_flag_, [&]() {
+        auto [n_ranks, rank_on_node] = dist_get_ranks_on_node();
 
-    if (rank_on_node == 0) {
-        // Note: We ignore the return code here to default to 0 if no driver
-        // exists
-        cudaGetDeviceCount(&local_device_count);
-    }
+        int local_device_count = 0;
 
-    int device_count;
-    CHECK_MPI(MPI_Allreduce(&local_device_count, &device_count, 1, MPI_INT,
-                            MPI_SUM, MPI_COMM_WORLD),
-              "get_cluster_cuda_device_count: MPI error on MPI_Allreduce:");
+        if (rank_on_node == 0) {
+            // Note: We ignore the return code here to default to 0 if no driver
+            // exists
+            unsigned nvml_device_count = 0;
+            nvmlReturn_t nvml_result = nvmlInit();
+            if (nvml_result == NVML_SUCCESS) {
+                nvmlDeviceGetCount(&nvml_device_count);
+                nvmlShutdown();
+            }
+            local_device_count = static_cast<int>(nvml_device_count);
+        }
+
+        CHECK_MPI(MPI_Allreduce(&local_device_count, &device_count, 1, MPI_INT,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "get_cluster_cuda_device_count: MPI error on MPI_Allreduce:");
+    });
+
     return device_count;
+}
+
+size_t get_smallest_gpu_mem_size() {
+    static std::once_flag once_flag_;
+    static size_t min_size;
+
+    std::call_once(once_flag_, [&]() {
+        size_t local_size = std::numeric_limits<size_t>::max();
+
+        if (is_gpu_rank()) {
+            size_t free_bytes = 0;
+            cudaMemGetInfo(&free_bytes, &local_size);
+        }
+
+        CHECK_MPI(MPI_Allreduce(&local_size, &min_size, 1, MPI_INT, MPI_MIN,
+                                MPI_COMM_WORLD),
+                  "get_cluster_cuda_device_count: MPI error on MPI_Allreduce:");
+    });
+
+    return min_size;
 }
 
 MPI_Comm get_gpu_mpi_comm(rmm::cuda_device_id gpu_id) {
@@ -543,8 +631,8 @@ GpuMpiManager::all_gather_device_buffers(rmm::device_buffer const& local_buf,
             recv_buffers.push_back(nullptr);
         } else {
             // allocate device buffer on the provided stream
-            recv_buffers.push_back(
-                std::make_unique<rmm::device_buffer>(sz, stream));
+            recv_buffers.push_back(std::make_unique<rmm::device_buffer>(
+                sz, stream, get_cuda_memory_resource_ref()));
         }
     }
 
@@ -626,6 +714,12 @@ bool is_gpu_rank() {
 std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource() {
     return std::make_shared<rmm::mr::cuda_async_memory_resource>();
+}
+
+rmm::device_async_resource_ref get_cuda_memory_resource_ref() {
+    static rmm::mr::cuda_memory_resource mr;
+    static rmm::device_async_resource_ref mr_ref{&mr};
+    return mr_ref;
 }
 
 #endif  // USE_CUDF

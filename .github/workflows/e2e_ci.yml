@@ -123,12 +123,6 @@ jobs:
           role-skip-session-tagging: true
           role-duration-seconds: 7200
 
-      - name: Load and Save Hadoop to Cache
-        uses: actions/cache@v4
-        with:
-          path: hadoop.tar.gz
-          key: hadoop-3.3.2-${{ runner.os }}
-
       - name: Convert Notebooks scripts to Python
         run: |
           pip install nbconvert ipython

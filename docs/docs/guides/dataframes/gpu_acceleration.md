@@ -9,21 +9,39 @@ This page describes Bodo’s CPU–GPU hybrid execution within [Bodo DataFrames]
 
 Bodo DataFrames provides hybrid CPU-GPU execution.  It can execute anywhere from 0 to 100% of the nodes of a DataFrame plan on the GPUs available within the machine or a Bodo cluster.  Bodo DataFrames incorporates a cost model that analyzes the plan to determine which nodes should run on CPU or GPU.  When neighboring pipeline nodes run on different device types, Bodo automatically inserts and performs the necessary data transfers.
 
+## Installation
+
+To use Bodo's GPU support, install the GPU-enabled conda package available on the `bodo.ai` channel:
+
+```
+conda install -c bodo.ai -c rapidsai -c nvidia "bodo=*=*cuda" --no-channel-priority
+```
+
+This version of the Bodo package includes the dependencies necessary for running Bodo on GPUs, including CUDA, and is pre-configured to use GPUs by default.
+To disable GPU usage by Bodo DataFrames, set:
+
+```
+export BODO_GPU=0
+```
+
+If `BODO_GPU` is set to another value or not set, Bodo DataFrames will use available GPUs when possible.
+
 ## Enabling GPU Hybrid Execution
 
-GPU execution is opt-in. To enable GPU usage by the DataFrame system set:
+If spawn mode is used on a multi-node cluster with OpenMPI the mapping must be set to allow oversubscription due to the extra spawner rank.
 
 ```
-export BODO_GPU=1
+export PRTE_MCA_rmaps_default_mapping_policy=:OVERSUBSCRIBE
 ```
 
-If BODO_GPU is not set (or set to 0), Bodo runs DataFrame execution on CPU only even if GPUs are present.
-
-Bodo uses CUDA-aware MPI for GPU communication, which in the OpenMPI case requires setting OpenMPI's communication layer to UCX:
+A [hostfile](https://www.open-mpi.org/doc/v3.0/man1/orterun.1.php#sect6) must also be provided, e.g.
 
 ```
-export OMPI_MCA_pml="ucx"
+mpiexec -n 1 --hostfile hostfile python bodo_dataframe_script.py
 ```
+
+Note, there is an [outstanding bug](https://github.com/open-mpi/ompi/issues/13521) in OpenMPI when using multiple nodes and UCX that can cause hangs/segfaults.
+Until this is resolved we recommend you build MPICH from source and use MPICH for multi-node GPU execution.
 
 ## How Placement is Decided
 
@@ -67,21 +85,10 @@ The following is an example output when this environment variable is enabled.
 GPUs generally prefer to work on larger chunks of data compared to CPU.  As such, Bodo has a separate GPU batch size that controls the size of batches flowing through the GPU with Bodo pipelines.  To set this batch size, use the following environment variable.
 
 ```
-export BODO_GPU_STREAMING_BATCH_SIZE=320000   # default: 320K
+export BODO_GPU_STREAMING_BATCH_SIZE=24000000   # default: 24M
 ```
 
 Tune this value for your workload: larger batches increase GPU utilization but require more device memory.
-
-### Memory Allocator
-
-Because Bodo pipelines data in fixed-sized batches through the GPU, lots of room exists to improve performance by re-using memory allocations.  Therefore, we suggest that users enable the RMM pooling (or arena) allocator.  For example:
-
-```
-export RMM_ALLOCATOR="pool"
-export RMM_POOL_INIT_SIZE="2GB"
-```
-
-Adjust RMM_POOL_INIT_SIZE to match your workload and available GPU memory.
 
 ## Supported Capabilities and Caveats
 
@@ -95,17 +102,21 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 * Column selection and vectorized arithmetic / boolean ops — UDFs excluded
 
+* Most kinds of joins
+
 * GroupBy aggregations: sum, count, mean, min, max, var, std, size, skew, nunique
 
-* Inner joins with equality conditions.
+* Series reductions: sum, product, count, mean, min, max
 
-* drop_duplicates
+* drop_duplicates, concat, Series.isin
+
+* Iceberg read (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
 
 ## Unsupported Capabilities
 
 No other input types (Pandas dataframe, CSV, remote Iceberg reads, etc.) are currently supported on GPU. Those reads run on CPU.
 
-Limit, sampling, CTEs, sorting, quantiles, and union are not currently supported.
+Sampling, CTEs, and quantiles are not currently supported.
 
 ## Important Per-Feature Caveats
 
@@ -124,18 +135,22 @@ Column selection and built-in arithmetic/boolean expressions are supported on GP
 ### GroupBy
 
 The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nunique) are supported on GPU. Custom aggregations implemented as UDFs or Python callbacks will run on CPU.
+`sum` of an all-NA group produces NA output (libcudf behavior) instead of zero (Pandas behavior).
 
 ### Joins
 
-Inner equi-joins are supported on GPU. Joins with non-equality predicates (range joins, inequality joins, or arbitrary expressions) are not supported on GPU and will run on CPU.
+Supported join types include inner, left, right, outer, anti, anti-right and mark joins (i.e. `Series.isin`),
+though these joins may still fall back to CPU if they contain unsupported expressions in the join condition.
+
+### Sorting
+
+Sorting is supported on the GPU, including top-k sorts and offsets into the sorted output.
 
 ## Troubleshooting
 
 If execution is slower than expected, confirm the operators in your plan are supported on GPU (see supported list).
 
-If GPU profiling shows high allocation overhead, ensure RMM pooling is enabled and tuned to an appropriate value.
-
-If out of memory is reported on GPU, reduce BODO_GPU_STREAMING_BATCH_SIZE or increase RMM_POOL_INIT_SIZE if memory is available.
+If out of memory is reported on GPU, reduce BODO_GPU_STREAMING_BATCH_SIZE.
 
 ### Unexpected CPU fallback
 

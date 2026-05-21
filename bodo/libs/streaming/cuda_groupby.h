@@ -30,6 +30,12 @@ std::unique_ptr<cudf::column> var_final_merge(
 std::unique_ptr<cudf::column> std_final_merge(
     const std::vector<cudf::column_view> &input_cols,
     rmm::cuda_stream_view &output_stream);
+std::unique_ptr<cudf::column> var_pop_final_merge(
+    const std::vector<cudf::column_view> &input_cols,
+    rmm::cuda_stream_view &output_stream);
+std::unique_ptr<cudf::column> std_pop_final_merge(
+    const std::vector<cudf::column_view> &input_cols,
+    rmm::cuda_stream_view &output_stream);
 std::unique_ptr<cudf::column> skew_final_merge(
     const std::vector<cudf::column_view> &input_cols,
     rmm::cuda_stream_view &output_stream);
@@ -94,9 +100,11 @@ class CudaGroupbyState {
     std::unique_ptr<cudf::table> accumulation;
     std::vector<FinalMerge> final_merges;
 
+    bool drop_na_keys = true;
+
     static std::unique_ptr<cudf::table> do_groupby(
         cudf::table_view const &input, std::vector<uint64_t> &key_indices,
-        std::vector<uint64_t> &column_indices,
+        bool drop_na_keys, std::vector<uint64_t> &column_indices,
         std::vector<cudf::groupby::aggregation_request> &aggregation_requests,
         col_to_col_fn_vec &aggregation_fns, col_to_col_fn_vec &post_agg_fns,
         tbl_to_tbl_fn_vec &pre_agg_table_fns, rmm::cuda_stream_view &stream);
@@ -168,6 +176,8 @@ class CudaGroupbyState {
                 break;
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
+            case Bodo_FTypes::var_pop:
+            case Bodo_FTypes::std_pop:
                 // For sum of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
@@ -208,10 +218,26 @@ class CudaGroupbyState {
                 break;
             case Bodo_FTypes::nunique:
                 add_agg_entry(
+                    // Nulls have to be included to avoid droping non-null
+                    // values from other data columns during cudf::explode().
+                    // The cudf::lists::count_elements() call at the end skips
+                    // nulls.
                     cudf::make_collect_set_aggregation<
-                        cudf::groupby_aggregation>(cudf::null_policy::EXCLUDE,
+                        cudf::groupby_aggregation>(cudf::null_policy::INCLUDE,
                                                    cudf::null_equality::UNEQUAL,
                                                    cudf::nan_equality::UNEQUAL),
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    pre_aggregation_table_fns);
+                break;
+            case Bodo_FTypes::boolor_agg:
+                add_agg_entry(
+                    cudf::make_max_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    pre_aggregation_table_fns);
+                break;
+            case Bodo_FTypes::booland_agg:
+                add_agg_entry(
+                    cudf::make_min_aggregation<cudf::groupby_aggregation>(),
                     aggregation_requests, aggregation_fns, post_agg_fns,
                     pre_aggregation_table_fns);
                 break;
@@ -267,6 +293,8 @@ class CudaGroupbyState {
                 break;
             case Bodo_FTypes::var:
             case Bodo_FTypes::std:
+            case Bodo_FTypes::var_pop:
+            case Bodo_FTypes::std_pop:
                 // For sum of the column.
                 add_agg_entry(
                     cudf::make_sum_aggregation<cudf::groupby_aggregation>(),
@@ -313,6 +341,18 @@ class CudaGroupbyState {
                     pre_aggregation_table_fns, nullptr, nullptr,
                     nunique_pre_agg);
                 break;
+            case Bodo_FTypes::boolor_agg:
+                add_agg_entry(
+                    cudf::make_max_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    pre_aggregation_table_fns);
+                break;
+            case Bodo_FTypes::booland_agg:
+                add_agg_entry(
+                    cudf::make_min_aggregation<cudf::groupby_aggregation>(),
+                    aggregation_requests, aggregation_fns, post_agg_fns,
+                    pre_aggregation_table_fns);
+                break;
             default:
                 throw std::runtime_error(
                     "Cannot convert Bodo agg type to cudf in "
@@ -328,6 +368,8 @@ class CudaGroupbyState {
             case Bodo_FTypes::max:
             case Bodo_FTypes::count:
             case Bodo_FTypes::size:
+            case Bodo_FTypes::boolor_agg:
+            case Bodo_FTypes::booland_agg:
                 break;
             case Bodo_FTypes::mean:
                 final_merges.push_back(
@@ -342,6 +384,16 @@ class CudaGroupbyState {
                 final_merges.push_back(
                     {{cur_col_size - 3, cur_col_size - 2, cur_col_size - 1},
                      std_final_merge});
+                break;
+            case Bodo_FTypes::var_pop:
+                final_merges.push_back(
+                    {{cur_col_size - 3, cur_col_size - 2, cur_col_size - 1},
+                     var_pop_final_merge});
+                break;
+            case Bodo_FTypes::std_pop:
+                final_merges.push_back(
+                    {{cur_col_size - 3, cur_col_size - 2, cur_col_size - 1},
+                     std_pop_final_merge});
                 break;
             case Bodo_FTypes::skew:
                 final_merges.push_back({{cur_col_size - 4, cur_col_size - 3,
@@ -365,8 +417,10 @@ class CudaGroupbyState {
     CudaGroupbyState(
         const std::vector<uint64_t> &_key_indices,
         const std::vector<std::pair<uint64_t, int32_t>> &column_agg_funcs,
-        std::shared_ptr<arrow::Schema> _output_schema)
-        : output_schema(_output_schema), key_indices(_key_indices) {
+        std::shared_ptr<arrow::Schema> _output_schema, bool drop_na_keys = true)
+        : output_schema(_output_schema),
+          key_indices(_key_indices),
+          drop_na_keys(drop_na_keys) {
         unsigned num_keys = key_indices.size();
 
         if (column_agg_funcs.size() == 0) {

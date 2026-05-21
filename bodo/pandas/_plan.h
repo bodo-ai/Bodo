@@ -261,11 +261,9 @@ std::vector<int> get_projection_pushed_down_columns(
 /**
  * @brief Creates an Expression node with a UDF inside.
  *
- * @param source input table plan
  * @param out_schema_py output data type (single column for df.apply)
+ * @param in_exprs input expressions for the function
  * @param args arguments to the UDF
- * @param selected_columns column indices for input table columns to pass to the
- * UDF
  * @param is_cfunc Whether to compile and run func as a cfunc
  * @param has_state Whether the UDF requires separate initialization state
  * @param func_name Name of Arrow Compute function, empty string for Python
@@ -273,9 +271,9 @@ std::vector<int> get_projection_pushed_down_columns(
  * @return duckdb::unique_ptr<duckdb::Expression> Expression node for UDF
  */
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
-    bool has_state, const std::string arrow_compute_func);
+    PyObject *out_schema_py,
+    std::vector<std::unique_ptr<duckdb::Expression>> &in_exprs, PyObject *args,
+    bool is_cfunc, bool has_state, const std::string arrow_compute_func);
 
 /**
  * @brief Create an expression for a NULL value of given type.
@@ -326,6 +324,15 @@ duckdb::unique_ptr<duckdb::Expression> make_const_bool_expr(bool val);
  * @return duckdb::unique_ptr<duckdb::Expression> - the const timestamp expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
+    int64_t val);
+
+/**
+ * @brief Create an expression from a constant timedelta with ns resolution.
+ *
+ * @param val - the constant timedelta for the expression in ns
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const timedelta expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
     int64_t val);
 
 /**
@@ -500,7 +507,7 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows);
+    int64_t num_rows, bool has_partitioning);
 
 /**
  * @brief Create a LogicalCopyToFile node for writing a Parquet dataset.

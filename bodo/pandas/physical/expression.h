@@ -3,6 +3,7 @@
 #include <arrow/api.h>
 #include <arrow/chunked_array.h>
 #include <arrow/compute/api.h>
+#include <arrow/compute/api_scalar.h>
 #include <arrow/compute/function.h>
 #include <arrow/compute/kernel.h>
 #include <arrow/result.h>
@@ -97,6 +98,8 @@ enum class PhysicalExpressionType {
     ARROW
 };
 
+arrow::Datum fill_null(arrow::Datum &src, const arrow::Datum &val);
+
 /**
  * @brief Superclass for Bodo Physical expression tree nodes. Like duckdb
  *        it is convenient to store child nodes here because many expr
@@ -128,6 +131,7 @@ class PhysicalExpression {
                           void **left_data, void **right_data,
                           void **left_null_bitmap, void **right_null_bitmap,
                           int64_t left_index, int64_t right_index);
+
     static void join_expr_batch(
         array_info **left_table, array_info **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
@@ -651,10 +655,13 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         children.push_back(right);
         switch (etype) {
             case duckdb::ExpressionType::CONJUNCTION_AND:
-                comparator = "and";
+                // We use the Kleene logic versions to match null behavior of
+                // pandas and SQL. See
+                // https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/arrow/array.py#L110
+                comparator = "and_kleene";
                 break;
             case duckdb::ExpressionType::CONJUNCTION_OR:
-                comparator = "or";
+                comparator = "or_kleene";
                 break;
             default:
                 throw std::runtime_error(
@@ -673,6 +680,18 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         // We know we have two children so process them first.
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
+        std::shared_ptr<ScalarExprResult> left_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        // Implement short-circuit for scalars.
+        if (left_as_scalar) {
+            bool left_bool = left_as_scalar->result->at<bool>(0);
+            if (comparator == "and" && !left_bool) {
+                return left_res;
+            }
+            if (comparator == "or" && left_bool) {
+                return left_res;
+            }
+        }
         std::shared_ptr<ExprResult> right_res =
             children[1]->ProcessBatch(input_batch);
 
@@ -688,6 +707,31 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
         arrow::Datum left_datum = children[0]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
+        // Implement short-circuit for scalars.
+        if (left_datum.is_scalar()) {
+            auto left_scalar = left_datum.scalar();
+            if (left_scalar->type->id() == arrow::Type::BOOL) {
+                auto bool_sc =
+                    std::static_pointer_cast<arrow::BooleanScalar>(left_scalar);
+                if (bool_sc->is_valid) {
+                    bool left_bool = bool_sc->value;
+                    if (comparator == "and" && !left_bool) {
+                        return left_datum;
+                    }
+                    if (comparator == "or" && left_bool) {
+                        return left_datum;
+                    }
+                } else {
+                    throw std::runtime_error(
+                        "join_expr_internal for conjunction left_datum was "
+                        "null bool.");
+                }
+            } else {
+                throw std::runtime_error(
+                    "join_expr_internal for conjunction left_datum wasn't "
+                    "bool.");
+            }
+        }
         arrow::Datum right_datum = children[1]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
@@ -761,6 +805,12 @@ class PhysicalUnaryExpression : public PhysicalExpression {
                 break;
             case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL:
                 comparator = "is_not_null";
+                break;
+            case duckdb::ExpressionType::OPERATOR_IS_NULL:
+                comparator = "is_null";
+                break;
+            case duckdb::ExpressionType::OPERATOR_IS_TRUE:
+                comparator = "is_true";
                 break;
             default:
                 throw std::runtime_error("Unhandled unary op expression type.");
@@ -854,6 +904,8 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         } else if (opstr == "%") {
             EnsureModRegistered();
             comparator = "bodo_mod";
+        } else if (opstr == "POWER") {
+            comparator = "power";
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
                                      opstr);
@@ -1132,10 +1184,8 @@ class PhysicalUDFExpression : public PhysicalExpression {
         }
 
         return res_scalar.ValueOrDie();
-
-        throw std::runtime_error(
-            "PhysicalUDFExpression::join_expr_internal unimplemented ");
     }
+
     void ReportMetrics(std::vector<MetricBase> &metrics_out) override {
         metrics_out.push_back(
             TimerMetric("run_func_cpp_to_py_time", metrics.cpp_to_py_time));
@@ -1215,35 +1265,60 @@ class PhysicalArrowExpression : public PhysicalExpression {
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
+                   scalar_func_data.arrow_func_name ==
+                       "match_substring_regex_first" ||
                    scalar_func_data.arrow_func_name == "starts_with" ||
                    scalar_func_data.arrow_func_name == "ends_with") {
-            if (!PyTuple_Check(scalar_func_data.args) ||
-                PyTuple_Size(scalar_func_data.args) != 1) {
-                throw std::runtime_error(
-                    fmt::format("{} args not a 1-element tuple.",
-                                scalar_func_data.arrow_func_name));
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+
+            std::string func_name = scalar_func_data.arrow_func_name;
+            std::string pattern(c_str);
+            if (func_name == "match_substring_regex_first") {
+                // match_substring_regex in Arrow matches anywhere in the string
+                // but Series.str.match() matches from the start. Add ^ to the
+                // pattern to match from the start same as Pandas:
+                // https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/_arrow_string_mixins.py#L378
+                func_name = "match_substring_regex";
+                pattern = "^(" + pattern + ")";
             }
 
-            // Get the first element (borrowed reference)
-            PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
+            arrow::compute::MatchSubstringOptions opts(pattern);
+            result = do_arrow_compute_unary(res, func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "round") {
+            int64_t digits = get_py_round_arg(scalar_func_data.args);
 
-            if (!PyUnicode_Check(py_str)) {
-                throw std::runtime_error(
-                    fmt::format("{} args element is not a Python string.",
-                                scalar_func_data.arrow_func_name));
-            }
-
-            // Convert to UTF‑8 C string
-            const char *c_str = PyUnicode_AsUTF8(py_str);
-            if (!c_str) {
-                throw std::runtime_error(
-                    fmt::format("{} error extracting Python string.",
-                                scalar_func_data.arrow_func_name));
-            }
-
-            arrow::compute::MatchSubstringOptions opts(c_str);
+            arrow::compute::RoundOptions opts(digits);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "is_null") {
+            // Set nan_is_null option to match Pandas isna behavior
+            arrow::compute::NullOptions opts(true);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "is_not_null") {
+            // Set nan_is_null option to match Pandas isna behavior
+            arrow::compute::NullOptions opts(true);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            auto [start, stop, step] = get_py_slice_args(scalar_func_data.args);
+
+            arrow::compute::SliceOptions opts(start, stop, step);
+            result = do_arrow_compute_unary(res, "utf8_slice_codeunits", &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_trim") {
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+
+            arrow::compute::TrimOptions opts(c_str);
+            result = do_arrow_compute_unary(res, "utf8_trim", &opts);
+        } else if (scalar_func_data.arrow_func_name == "is_in") {
+            std::shared_ptr<arrow::Array> values_array =
+                get_py_isin_arg_as_arrow_array(scalar_func_data.args);
+            arrow::compute::SetLookupOptions opts(values_array);
+            result = do_arrow_compute_unary(res, "is_in", &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);

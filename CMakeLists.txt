@@ -340,8 +340,11 @@ if(DEFINED ENV{BODO_VENDOR_MPICH})
   set(MPI_INCLUDE_DIR "${SKBUILD_DATA_DIR}/include")
   set(MPI_LIB_DIR "${SKBUILD_DATA_DIR}/lib")
 else()
-  set(MPI_INCLUDE_DIR "${CONDA_INCLUDE_DIR}")
-  set(MPI_LIB_DIR "${CONDA_LIB_DIR}")
+  if(NOT DEFINED MPI_ROOT)
+    set(MPI_ROOT "$ENV{CONDA_PREFIX}")
+  endif()
+  set(MPI_INCLUDE_DIR "${MPI_ROOT}/include")
+  set(MPI_LIB_DIR "${MPI_ROOT}/lib")
 endif()
 
 # MPI implementation (Intel or MPICH)
@@ -706,6 +709,8 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
         "bodo/tests/test_streaming/test_gpu_shuffle.cpp"
         "bodo/tests/test_streaming/test_gpu_batch_gen.cpp"
         "bodo/tests/test_streaming/test_gpu_bloom_filter.cpp"
+        "bodo/tests/test_streaming/test_cuda_sort.cpp"
+
         )
   endif()
   list(APPEND sources_list "${test_list}")
@@ -727,10 +732,14 @@ if (USE_CUDF)
     list(APPEND sources_list
     "bodo/pandas/physical/gpu_expression.cpp"
     "bodo/pandas/physical/gpu_aggregate.cpp"
+    "bodo/pandas/physical/gpu_reduce.cpp"
     "bodo/libs/streaming/cuda_join.cpp"
     "bodo/libs/streaming/cuda_groupby.cpp"
+    "bodo/libs/streaming/cuda_sort.cpp"
     "bodo/libs/gpu_bloom_filter.cu"
     "bodo/libs/gpu_utils.cu"
+    "bodo/pandas/physical/gpu_read_iceberg.cpp"
+    "bodo/pandas/physical/gpu_write_iceberg.cpp"
     )
 
     list(APPEND allow_implicit_fallthrough_list
@@ -932,7 +941,7 @@ if(USE_CUDF)
   target_compile_definitions(ext PRIVATE LIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE=1 CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER=1)
   message(STATUS "cudf include dirs: ${cudf_INCLUDE_DIRS}")
   target_include_directories(ext BEFORE PRIVATE ${RAPIDS_INCLUDE_DIR} ${cudf_INCLUDE_DIRS} ${RMM_INCLUDE_DIR} ${RAPIDS_LOGGER_INCLUDE_DIR} ${LIBCUDF_INCLUDE_DIR} )
-  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart)
+  target_link_libraries(ext PRIVATE rmm rapids_logger libcudf libcudart CUDA::nvml)
 
   get_target_property(EXT_LINKER_LANG ext LINKER_LANGUAGE)
   message(STATUS "ext LINKER_LANGUAGE = ${EXT_LINKER_LANG}")

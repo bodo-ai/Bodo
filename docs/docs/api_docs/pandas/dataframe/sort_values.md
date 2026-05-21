@@ -1,6 +1,7 @@
 # `pd.DataFrame.sort_values`
 
 `pandas.DataFrame.sort_values(by, axis=0, ascending=True, inplace=False, kind='quicksort', na_position='last', ignore_index=False, key=None)`
+**GPU:** ✔ Supported
 
 ### Supported Arguments
 

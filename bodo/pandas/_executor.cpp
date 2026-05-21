@@ -1,9 +1,9 @@
 #include "_executor.h"
-#include <limits.h>
-#include <fstream>
 #include "_bodo_scan_function.h"
+#include "_bodo_write_function.h"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_set_operation.hpp"
 
 #ifdef USE_CUDF
 #include <cuda_runtime.h>
@@ -20,14 +20,16 @@
 #include <rmm/device_buffer.hpp>
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <vector>
 
 #include "physical/gpu_aggregate.h"
 #include "physical/gpu_filter.h"
 #include "physical/gpu_join.h"
+#include "physical/gpu_limit.h"
 #include "physical/gpu_project.h"
+#include "physical/gpu_sort.h"
+#include "physical/gpu_union_all.h"
 #endif
 
 // enable and build to print debug info on the pipeline
@@ -100,6 +102,14 @@ std::map<duckdb::LogicalOperatorType, uint64_t> GPU_MIN_SIZE{
 
 #ifdef USE_CUDF
 
+bool is_supported_cudf_type(const duckdb::LogicalType &type) {
+    if (type.id() == duckdb::LogicalTypeId::TIMESTAMP_TZ) {
+        return false;
+    }
+    // TODO(ehsan): add other unsupported types.
+    return true;
+}
+
 class DevicePlanNode {
    private:
     duckdb::LogicalOperator &op;
@@ -123,6 +133,13 @@ class DevicePlanNode {
      * in the physical GPU node file so things stay colocated.
      */
     bool determineGPUCapable(duckdb::LogicalOperator &op) {
+        // Make sure the data types are supported in libcudf.
+        op.ResolveOperatorTypes();
+        for (duckdb::LogicalType &type : op.types) {
+            if (!is_supported_cudf_type(type)) {
+                return false;
+            }
+        }
         switch (op.type) {
             case duckdb::LogicalOperatorType::LOGICAL_GET: {
                 duckdb::LogicalGet &lget = op.Cast<duckdb::LogicalGet>();
@@ -133,8 +150,13 @@ class DevicePlanNode {
                     (bool)lget.extra_info.limit_val);
             }
 
-            case duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE:
-                return true;
+            case duckdb::LogicalOperatorType::LOGICAL_COPY_TO_FILE: {
+                duckdb::LogicalCopyToFile &copy_to_file =
+                    op.Cast<duckdb::LogicalCopyToFile>();
+                BodoWriteFunctionData &write_data =
+                    copy_to_file.bind_data->Cast<BodoWriteFunctionData>();
+                return write_data.canRunOnGPU();
+            }
 
             case duckdb::LogicalOperatorType::LOGICAL_PROJECTION:
                 return ::gpu_capable(op.Cast<duckdb::LogicalProjection>());
@@ -155,22 +177,22 @@ class DevicePlanNode {
                 return ::gpu_capable(op.Cast<duckdb::LogicalComparisonJoin>());
 
             case duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
-                return false;
+                return true;
 
             case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalOrder>());
 
             case duckdb::LogicalOperatorType::LOGICAL_LIMIT:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalLimit>());
 
             case duckdb::LogicalOperatorType::LOGICAL_TOP_N:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalTopN>());
 
             case duckdb::LogicalOperatorType::LOGICAL_SAMPLE:
                 return false;
 
             case duckdb::LogicalOperatorType::LOGICAL_UNION:
-                return false;
+                return ::gpu_capable(op.Cast<duckdb::LogicalSetOperation>());
 
             case duckdb::LogicalOperatorType::LOGICAL_DISTINCT:
                 return ::gpu_capable(op.Cast<duckdb::LogicalDistinct>());
@@ -227,6 +249,21 @@ class DevicePlanNode {
                 op.has_estimated_cardinality = true;
                 // 90% retention is an AI estimate of average row retention.
                 op.estimated_cardinality = (uint64_t)(rows_in * 0.9);
+            } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_LIMIT) {
+                op.has_estimated_cardinality = true;
+                duckdb::LogicalLimit &limit = op.Cast<duckdb::LogicalLimit>();
+                if (limit.offset_val.Type() !=
+                        duckdb::LimitNodeType::CONSTANT_VALUE ||
+                    limit.offset_val.GetConstantValue() != 0) {
+                    throw std::runtime_error("LogicalLimit unsupported offset");
+                }
+                if (limit.limit_val.Type() !=
+                    duckdb::LimitNodeType::CONSTANT_VALUE) {
+                    throw std::runtime_error(
+                        "LogicalLimit unsupported limit type");
+                }
+                op.estimated_cardinality =
+                    (uint64_t)(limit.limit_val.GetConstantValue());
             } else {
 #ifdef DEBUG_GPU_SELECTOR
                 std::cout
@@ -234,7 +271,8 @@ class DevicePlanNode {
                     << op.ToString() << std::endl;
 #endif
                 throw std::runtime_error(
-                    "DevicePlanNode operator didn't have cardinality.");
+                    "DevicePlanNode operator didn't have cardinality.\n" +
+                    op.ToString());
             }
         }
         rows_out = op.estimated_cardinality;
@@ -979,14 +1017,14 @@ bool cpu_fallback_disabled() {
  *
  */
 bool ignore_cpu_fallback(duckdb::LogicalOperator const &op) {
-    // Only explicitly allow fallback for DataFrame source and sort.
+    // Only explicitly allow fallback for DataFrame source.
     if (op.type == duckdb::LogicalOperatorType::LOGICAL_GET) {
         duckdb::LogicalGet const &get_op = op.Cast<duckdb::LogicalGet>();
         return get_op.bind_data->Cast<BodoScanFunctionData>()
                    .getScanFunctionType() ==
                BodoScanFunctionType::DATAFRAME_SCAN;
     }
-    return op.type == duckdb::LogicalOperatorType::LOGICAL_ORDER_BY;
+    return false;
 }
 
 #endif  // USE_CUDF

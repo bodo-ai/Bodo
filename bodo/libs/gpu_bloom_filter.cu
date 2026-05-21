@@ -99,7 +99,7 @@ std::shared_ptr<CudfBloomFilter> build_empty_bloom_filter(
 
     // allocate bitset words
     std::size_t words = (bf->m_bits + 63) / 64;
-    bf->bitset = rmm::device_buffer(words * sizeof(uint64_t), stream);
+    bf->bitset = rmm::device_buffer(words * sizeof(uint64_t), stream, get_cuda_memory_resource_ref());
     // zero initialize
     CUDA_TRY(cudaMemsetAsync(bf->bitset.data(), 0, words * sizeof(uint64_t), stream.value()));
     return bf;
@@ -118,7 +118,7 @@ std::shared_ptr<CudfBloomFilter> build_bloom_filter_from_table(
 
     // allocate bitset words
     std::size_t words = (bf->m_bits + 63) / 64;
-    bf->bitset = rmm::device_buffer(words * sizeof(uint64_t), stream);
+    bf->bitset = rmm::device_buffer(words * sizeof(uint64_t), stream, get_cuda_memory_resource_ref());
     // zero initialize
     CUDA_TRY(cudaMemsetAsync(bf->bitset.data(), 0, words * sizeof(uint64_t), stream.value()));
 
@@ -176,10 +176,10 @@ __global__ void test_bits_kernel_doublehash(
     // Which input key to test bits for.
     std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= n) return;
-  
+
     uint64_t h1 = low_buf[idx];
     uint64_t h2 = high_buf[idx];
-  
+
     bool maybe_in = true;
     for (std::size_t j = 0; j < k_hashes; ++j) {
         uint64_t combined = h1 + j * h2; // double hashing
@@ -187,7 +187,7 @@ __global__ void test_bits_kernel_doublehash(
         uint64_t word_idx = bit >> 6;
         uint64_t bit_in_word = bit & 63;
         uint64_t mask = uint64_t(1) << bit_in_word;
-    
+
         uint64_t word = bitset[word_idx];
         // If any hash is not in bloom filter then we know the key isn't.
         if ((word & mask) == 0) {
@@ -195,7 +195,7 @@ __global__ void test_bits_kernel_doublehash(
             break;
         }
     }
-  
+
     // Set the mask to say if the key is in the bloom filter.
     mask_out[idx] = maybe_in ? uint8_t{1} : uint8_t{0};
 }
@@ -209,11 +209,11 @@ void filter_table_with_bloom(
 
     // select key columns from probe_table
     cudf::table_view probe_keys = probe_table.select(probe_key_indices);
-  
+
     // compute 128-bit murmur3 hashes -> returns unique_ptr<cudf::table> with 2 uint64 columns
     auto probe_hash_table = cudf::hashing::murmurhash3_x64_128(probe_keys, 0, stream);
     auto hash_table_view = probe_hash_table->view();
-  
+
     if (hash_table_view.num_columns() != 2) {
         throw std::runtime_error("murmurhash3_x64_128 did not return 2 columns");
     }
@@ -223,16 +223,16 @@ void filter_table_with_bloom(
         high_col.type().id() != cudf::type_id::UINT64) {
         throw std::runtime_error("murmurhash3_x64_128 returned unexpected column types");
     }
-  
+
     std::size_t n = static_cast<std::size_t>(low_col.size());
     if (n == 0) {
         return;
     }
-  
+
     // copy device->device: low -> dst[0..n-1], high -> dst[n..2n-1]
     const uint64_t* low_dev_ptr  = low_col.data<uint64_t>();
     const uint64_t* high_dev_ptr = high_col.data<uint64_t>();
-  
+
     auto mask_column = cudf::make_numeric_column(
         cudf::data_type{cudf::type_id::UINT8}, n,
         cudf::mask_state::UNALLOCATED, stream);
@@ -245,7 +245,7 @@ void filter_table_with_bloom(
         bf.m_bits, bf.k_hashes,
         mask_mut_view.data<uint8_t>());
     CUDA_TRY(cudaGetLastError());
-  
+
     // convert uint8 mask to bool column (0/1 -> false/true)
     std::unique_ptr<cudf::column> bool_mask = cudf::cast(mask_mut_view, cudf::data_type{cudf::type_id::BOOL8}, stream);
     if (prev_mask) {

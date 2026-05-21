@@ -22,7 +22,12 @@ from bodo.pandas.utils import (
     BodoLibFallbackWarning,
     JITFallback,
 )
-from bodo.tests.utils import _test_equal, set_broadcast_join, temp_config_override
+from bodo.tests.utils import (
+    _test_equal,
+    is_multi_worker_per_gpu_test,
+    set_broadcast_join,
+    temp_config_override,
+)
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
 MAX_DATA_SIZE = 100
@@ -42,6 +47,7 @@ def index_val(request):
     return request.param
 
 
+@pytest.mark.gpu
 def test_from_pandas(datapath, index_val):
     """Very simple test to scan a dataframe passed into from_pandas."""
 
@@ -90,6 +96,7 @@ def test_from_pandas(datapath, index_val):
     )
 
 
+@pytest.mark.gpu
 def test_read_parquet(datapath):
     """Very simple test to read a parquet file for sanity checking."""
     with assert_executed_plan_count(0):
@@ -104,6 +111,7 @@ def test_read_parquet(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -126,6 +134,7 @@ def test_read_parquet_projection_pushdown(datapath, file_path):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "df",
     [
@@ -195,6 +204,7 @@ def test_read_parquet_series_len_shape(datapath):
         assert bodo_out.shape == py_out.shape
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback to_datetime UDF
 @pytest.mark.jit_dependency
 def test_read_parquet_filter_projection(datapath):
     """Test TPC-H Q6 bug where filter and projection pushed down to read parquet
@@ -226,6 +236,7 @@ def test_read_parquet_filter_projection(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 def test_write_parquet(index_val):
     """Test writing a DataFrame to parquet."""
@@ -279,6 +290,7 @@ def test_write_parquet(index_val):
         )
 
 
+@pytest.mark.gpu
 def test_projection(datapath):
     """Very simple test for projection for sanity checking."""
     bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -299,6 +311,7 @@ def test_projection(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -338,6 +351,7 @@ def test_filter_pushdown(datapath, file_path, op):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
@@ -378,6 +392,7 @@ def test_filter_distributed(datapath, file_path, op):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
 )
@@ -413,6 +428,7 @@ def test_filter(datapath, op):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
@@ -456,6 +472,7 @@ def test_filter_bound_between(datapath, file_path, mode):
     )
 
 
+@pytest.mark.gpu
 def test_filter_multiple1_pushdown(datapath):
     """Test for multiple filter expression."""
 
@@ -479,6 +496,7 @@ def test_filter_multiple1_pushdown(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_filter_multiple1(datapath):
     """Test for multiple filter expression."""
     with assert_executed_plan_count(0):
@@ -511,6 +529,7 @@ def test_filter_multiple1(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_filter_string_pushdown(datapath):
     """Test for filtering based on a string pushed down to read parquet."""
 
@@ -538,6 +557,7 @@ def test_filter_string_pushdown(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_filter_string(datapath):
     """Test for standalone string filter."""
 
@@ -571,6 +591,7 @@ def test_filter_string(datapath):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
@@ -605,6 +626,7 @@ def test_filter_datetime_pushdown(datapath, op):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "op", [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le]
@@ -645,6 +667,7 @@ def test_filter_datetime(datapath, op):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback count-star
 def test_head_pushdown(datapath):
     """Test for head pushed down to read parquet."""
 
@@ -662,6 +685,7 @@ def test_head_pushdown(datapath):
     assert len(bodo_df2) == 3
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback count-star
 def test_projection_head_pushdown(datapath):
     """Test for projection and head pushed down to read parquet."""
 
@@ -675,6 +699,7 @@ def test_projection_head_pushdown(datapath):
     assert len(bodo_df3) == 3
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, count-star
 def test_series_head(datapath):
     """Test for Series.head() reading from Pandas."""
     # Make sure bodo_df3 is unevaluated in the process.
@@ -688,6 +713,7 @@ def test_series_head(datapath):
     assert len(bodo_df3) == 3
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, count-star
 def test_head(datapath):
     """Test for head pushed down to read parquet."""
 
@@ -753,6 +779,7 @@ def test_apply_str(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_apply_non_jit(datapath, index_val):
     """Test unsupported UDFs fallback to Pandas execution."""
@@ -782,6 +809,7 @@ def test_apply_non_jit(datapath, index_val):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, utf8_lower
 def test_chain_python_func(datapath, index_val):
     """Make sure chaining multiple Series functions that run in Python works"""
     with assert_executed_plan_count(0):
@@ -828,6 +856,7 @@ def test_series_map(datapath, index_val, na_action):
     _test_equal(out_bodo, out_pd, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, UDF
 @pytest.mark.jit_dependency
 def test_series_map_non_jit(index_val):
     """Test non-jittable UDFs in ser.map still work."""
@@ -874,6 +903,7 @@ def test_series_map_non_jit(index_val):
     _test_equal(pdf2, bdf2, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, UDF
 @pytest.mark.jit_dependency
 def test_set_df_column(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
@@ -926,6 +956,7 @@ def test_set_df_column(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 def test_set_df_column_const(datapath, index_val):
     """Test setting a dataframe column with a constant value."""
 
@@ -1009,6 +1040,7 @@ def test_set_df_column_func_nested_arith(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 def test_set_df_column_arith(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe."""
 
@@ -1129,6 +1161,7 @@ def test_set_df_column_extra_proj(datapath, index_val):
     _test_equal(bdf2, pdf2, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback partitioning
 def test_parquet_read_partitioned(datapath):
     """Test reading a partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -1158,6 +1191,7 @@ def test_parquet_read_partitioned(datapath):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback partitioning
 def test_parquet_read_partitioned_filter(datapath):
     """Test filter pushdown on partitioned parquet dataset."""
     path = datapath("dataframe_library/example_partitioned.parquet")
@@ -1197,6 +1231,7 @@ def test_parquet_read_shape_head(datapath):
     _test_equal(bdf_head, pdf_head)
 
 
+@pytest.mark.gpu
 def test_project_after_filter(datapath):
     """Test creating a plan with a Projection on top of a filter works"""
 
@@ -1255,6 +1290,7 @@ def test_merge(how, broadcast):
     )
 
 
+@pytest.mark.gpu
 def test_merge_cross():
     """Simple test for DataFrame merge with cross join."""
     with assert_executed_plan_count(0):
@@ -1287,6 +1323,7 @@ def test_merge_cross():
     )
 
 
+@pytest.mark.gpu
 def test_merge_switch_side():
     """Test merge with left table smaller than right table so DuckDB reorders the input
     tables to use the smaller table as build.
@@ -1440,6 +1477,7 @@ def test_merge_mixed_join_conds(broadcast):
     )
 
 
+@pytest.mark.gpu
 def test_merge_output_column_to_input_map():
     """Test for a bug in join output column to input column mapping in
     TPCH Q20.
@@ -1499,6 +1537,7 @@ def test_dataframe_copy(index_val):
     _test_equal(df1, pdf_from_bodo, sort_output=True)
 
 
+@pytest.mark.gpu
 def test_dataframe_sort(datapath):
     """Very simple test for sorting for sanity checking."""
     with assert_executed_plan_count(0):
@@ -1523,6 +1562,7 @@ def test_dataframe_sort(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_sort(datapath):
     """Very simple test for sorting for sanity checking."""
     with assert_executed_plan_count(0):
@@ -1567,6 +1607,7 @@ def as_index(request):
     return request.param
 
 
+@pytest.mark.gpu
 def test_series_groupby(dropna, as_index):
     """
     Test a simple groupby operation.
@@ -1575,7 +1616,7 @@ def test_series_groupby(dropna, as_index):
         df1 = pd.DataFrame(
             {
                 "B": ["a1", "b11", "c111"] * 2,
-                "E": pd.array([1.1, pd.NA, 13.3, pd.NA, pd.NA, 13.3], "Float64"),
+                "E": pd.array([1.1, 4.1, 13.3, 1.9, 3.5, 13.3], "Float64"),
                 "A": pd.array([pd.NA, 2, 3] * 2, "Int64"),
             },
             index=[0, 41, 2] * 2,
@@ -1587,6 +1628,7 @@ def test_series_groupby(dropna, as_index):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback groupby with string aggregation
 @pytest.mark.parametrize(
     "selection",
     [pytest.param(None, id="select_all"), pytest.param(["C", "A"], id="select_subset")],
@@ -1598,7 +1640,7 @@ def test_dataframe_groupby(dropna, as_index, selection):
     with assert_executed_plan_count(0):
         df1 = pd.DataFrame(
             {
-                "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+                "A": pd.array([1, 2, 4, 2147483647] * 3, "Int32"),
                 "B": ["A", "B"] * 6,
                 "E": [False, True] * 6,
                 "D": pd.array(
@@ -1624,6 +1666,11 @@ def test_dataframe_groupby(dropna, as_index, selection):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True)
 
 
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(),
+    reason="[BSE-5430] Fix wrong result in multi-worker GPU test",
+)
 def test_groupby_fallback():
     """Checks that fallback is properly supported for DataFrame and Series groupby
     when unsupported arguments are provided.
@@ -1642,7 +1689,7 @@ def test_groupby_fallback():
     pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True)["B"].sum(
         engine="cython"
     )
-    _test_equal(pandas_out, fallback_out)
+    _test_equal(fallback_out, pandas_out)
 
     bdf2 = bd.from_pandas(df)
 
@@ -1655,16 +1702,16 @@ def test_groupby_fallback():
     pandas_out = df.groupby("A", dropna=False, as_index=False, sort=True).sum(
         engine="cython"
     )
-    _test_equal(pandas_out, fallback_out)
+    _test_equal(fallback_out, pandas_out)
 
 
 @pytest.fixture(scope="module")
 def groupby_agg_df(request):
     return pd.DataFrame(
         {
-            "A": pd.array([1, 2, pd.NA, 2147483647] * 3, "Int32"),
+            "A": pd.array([1, 2, 0, 1000] * 3, "Int32"),
             "D": pd.array(
-                [i * 2 if (i**2) % 3 == 0 else pd.NA for i in range(12)], "Int32"
+                [i * 2 if (i**2) % 3 == 0 else 0 for i in range(12)], "Int32"
             ),
             "B": pd.array(["A", "B", pd.NA] * 4),
             "C": pd.array([0.2, 0.2, 0.3] * 4, "Float32"),
@@ -1673,12 +1720,16 @@ def groupby_agg_df(request):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func, kwargs",
     [
         pytest.param({"A": "mean", "D": "count"}, {}, id="func_dict"),
         pytest.param(["sum", "count"], {}, id="func_list"),
         pytest.param("sum", {}, id="func_str"),
+        pytest.param(
+            {"A": ["mean", "count"], "D": ["count", "sum"]}, {}, id="func_dict"
+        ),
         pytest.param(
             None,
             {
@@ -1700,6 +1751,7 @@ def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
     _test_equal(bdf2, df2, check_pandas_types=False, sort_output=True, reset_index=True)
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func, kwargs",
     [
@@ -1729,36 +1781,39 @@ def test_series_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
 
 
 @pytest.mark.parametrize(
-    "func",
+    "func, kwargs",
     [
-        "sum",
-        "mean",
-        "count",
-        "max",
-        "min",
-        "median",
-        "nunique",
-        "size",
-        "var",
-        "std",
-        "skew",
+        pytest.param("sum", {}, marks=pytest.mark.gpu),
+        pytest.param("mean", {}, marks=pytest.mark.gpu),
+        pytest.param("count", {}, marks=pytest.mark.gpu),
+        pytest.param("max", {}, marks=pytest.mark.gpu),
+        pytest.param("min", {}, marks=pytest.mark.gpu),
+        pytest.param("median", {}),  # median not supported on GPU yet
+        pytest.param("nunique", {}, marks=pytest.mark.gpu),
+        pytest.param("size", {}, marks=pytest.mark.gpu),
+        pytest.param("var", {}, marks=pytest.mark.gpu),
+        pytest.param("std", {}, marks=pytest.mark.gpu),
+        pytest.param("var", {"ddof": 0}, marks=pytest.mark.gpu),
+        pytest.param("std", {"ddof": 0}, marks=pytest.mark.gpu),
+        pytest.param("skew", {}, marks=pytest.mark.gpu),
     ],
 )
-def test_groupby_agg_numeric(groupby_agg_df, func):
+def test_groupby_agg_numeric(groupby_agg_df, func, kwargs):
     """Tests supported aggfuncs on simple numeric (floats and ints)."""
 
     bdf1 = bd.from_pandas(groupby_agg_df)
 
     cols = ["D", "A", "C"]
 
-    bdf2 = getattr(bdf1.groupby("B")[cols], func)()
-    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)()
+    bdf2 = getattr(bdf1.groupby("B")[cols], func)(**kwargs)
+    df2 = getattr(groupby_agg_df.groupby("B")[cols], func)(**kwargs)
 
     assert bdf2.is_lazy_plan()
 
     _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 def test_size_no_val(groupby_agg_df, as_index):
     """Test groupby.size() on a DataFrame without value columns."""
     sel_cols = ["D", "A"]
@@ -1775,13 +1830,20 @@ def test_size_no_val(groupby_agg_df, as_index):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "func",
     [
         "count",
         "max",
         "min",
-        "nunique",
+        pytest.param(
+            "nunique",
+            marks=pytest.mark.skipif(
+                is_multi_worker_per_gpu_test(),
+                reason="[BSE-5428] Fix wrong result in multi-worker GPU test",
+            ),
+        ),
         "size",
     ],
 )
@@ -1814,6 +1876,35 @@ def test_groupby_agg_ordered(func):
     _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "func",
+    [
+        "any",
+        "all",
+    ],
+)
+def test_groupby_agg_bool(func):
+    """Tests supported boolean aggfuncs."""
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": pd.array(
+                    [True, True, True, False, False, False, True, pd.NA, False, pd.NA]
+                ),
+                "B": ["A", "A", "B", "B", "C", "C", "D", "D", "E", "E"],
+            }
+        )
+
+        bdf1 = bd.from_pandas(df)
+
+        bdf2 = getattr(bdf1.groupby("B"), func)()
+        df2 = getattr(df.groupby("B"), func)()
+
+    _test_equal(bdf2, df2, sort_output=True, reset_index=True, check_pandas_types=False)
+
+
+@pytest.mark.gpu
 def test_compound_projection_expression(datapath):
     """Very simple test for projection expressions."""
 
@@ -1835,6 +1926,7 @@ def test_compound_projection_expression(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_projection_expression_floordiv(datapath):
     """Test for floordiv."""
     with assert_executed_plan_count(0):
@@ -1855,6 +1947,28 @@ def test_projection_expression_floordiv(datapath):
     )
 
 
+@pytest.mark.gpu
+def test_projection_expression_pow(datapath):
+    """Test for power."""
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
+        bodo_df2 = bodo_df1[bodo_df1.A**2 > 15]
+
+        py_df1 = pd.read_parquet(
+            datapath("dataframe_library/df1.parquet"), dtype_backend="pyarrow"
+        )
+        py_df2 = py_df1[py_df1.A**2 > 15]
+
+    _test_equal(
+        bodo_df2,
+        py_df2,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.gpu
 def test_projection_expression_mod(datapath):
     """Test for mod."""
     with assert_executed_plan_count(0):
@@ -1891,6 +2005,7 @@ def test_series_mod(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_compound_expression(datapath):
     """Very simple test for projection expressions."""
     with assert_executed_plan_count(0):
@@ -1912,6 +2027,7 @@ def test_series_compound_expression(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_arith_binops(datapath, index_val):
     """Test various cases of Series binary operations."""
     df = pd.DataFrame({"A": [1, 2, 3], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
@@ -1953,6 +2069,7 @@ def test_series_arith_binops(datapath, index_val):
     )
 
 
+@pytest.mark.gpu
 def test_series_cmp_binops(datapath, index_val):
     """Test various cases of Series binary operations."""
     df = pd.DataFrame({"A": [1, 20, 300], "B": ["aa", "bb", "c"], "C": [4, 5, 6]})
@@ -1994,6 +2111,7 @@ def test_series_cmp_binops(datapath, index_val):
     )
 
 
+@pytest.mark.gpu
 def test_scalar_arith_binops(datapath, index_val):
     """Test various cases of BodoScalar binary operations."""
 
@@ -2040,6 +2158,7 @@ def test_scalar_arith_binops(datapath, index_val):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_map_partitions_df():
     """Simple tests for map_partition on lazy DataFrame."""
@@ -2075,6 +2194,7 @@ def test_map_partitions_df():
     _test_equal(bodo_df2, py_out, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_map_partitions_series():
     """Simple tests for map_partition on lazy Series."""
@@ -2107,6 +2227,7 @@ def test_map_partitions_series():
     _test_equal(bodo_df, py_out, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "file_path",
     [
@@ -2148,6 +2269,7 @@ def test_series_filter_pushdown(datapath, file_path, op):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
@@ -2193,6 +2315,7 @@ def test_series_filter_distributed(datapath, file_path, op):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 @pytest.mark.parametrize(
     "file_path",
@@ -2241,6 +2364,7 @@ def test_series_filter_series(datapath, file_path, op, mode):
     )
 
 
+@pytest.mark.gpu
 def test_filter_source_matching():
     """Test for matching expression source dataframes in filter"""
     with assert_executed_plan_count(0):
@@ -2275,9 +2399,11 @@ def test_filter_source_matching():
     )
 
 
-def test_filter_series_isin():
+@pytest.mark.gpu
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_filter_series_isin(broadcast):
     """Test dataframe filter with isin case"""
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1 = pd.DataFrame(
             {
                 "A": [1.4, 2.1, 3.3],
@@ -2303,9 +2429,11 @@ def test_filter_series_isin():
     )
 
 
-def test_filter_series_not_isin(index_val):
+@pytest.mark.gpu
+@pytest.mark.parametrize("broadcast", [True, False])
+def test_filter_series_not_isin(index_val, broadcast):
     """Test dataframe filter with not isin case"""
-    with assert_executed_plan_count(0):
+    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
         df1 = pd.DataFrame(
             {
                 "A": [1.4, 2.1, 3.3],
@@ -2317,8 +2445,8 @@ def test_filter_series_not_isin(index_val):
         )
         df2 = pd.DataFrame(
             {
-                "A": ["A", "B", "C", "D"],
-                "B": [11, 2, 2, 4],
+                "A": ["A", "B", "C", "D"] * 25,
+                "B": range(100),
             }
         )
 
@@ -2377,6 +2505,7 @@ def test_col_set_dtypes_bug():
         print(df)
 
 
+@pytest.mark.gpu
 def test_topn(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -2425,6 +2554,7 @@ def test_DataFrame_constructor(index_val):
     _test_equal(df, bdf, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 def test_Series_constructor(index_val):
     """Test creating a BodoSeries using regular constructor"""
     with assert_executed_plan_count(0):
@@ -2434,6 +2564,7 @@ def test_Series_constructor(index_val):
     _test_equal(pd_S, bodo_S, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 def test_series_min_max():
     """Basic test for Series min and max."""
     # Large number to ensure multiple batches
@@ -2455,6 +2586,9 @@ def test_series_min_max():
             ),
         },
     )
+    # TODO(ehsan): handle datetime, string, and decimal128 types on GPU
+    if bodo.gpu_enabled:
+        df = df.drop(columns=["E", "F", "G", "H"])
     bdf = bd.from_pandas(df)
     for c in df.columns:
         bodo_min = bdf[c].min()
@@ -2466,6 +2600,7 @@ def test_series_min_max():
             assert bodo_max == py_max
 
 
+@pytest.mark.gpu
 def test_series_min_max_unsupported_types():
     with assert_executed_plan_count(2):
         df = pd.DataFrame(
@@ -2480,7 +2615,17 @@ def test_series_min_max_unsupported_types():
             bdf["A"].max()
 
 
-@pytest.mark.parametrize("method", ["sum", "product", "count", "mean", "std"])
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
+@pytest.mark.parametrize(
+    "method",
+    [
+        pytest.param("sum", marks=pytest.mark.gpu),
+        pytest.param("product", marks=pytest.mark.gpu),
+        pytest.param("count", marks=pytest.mark.gpu),
+        pytest.param("mean", marks=pytest.mark.gpu),
+        "std",
+    ],
+)
 def test_series_reductions(method):
     """Basic test for Series sum, product, count, and mean."""
     n = 10000
@@ -2509,6 +2654,7 @@ def test_series_reductions(method):
             )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 def test_read_csv(datapath):
     """Very simple test to read a parquet file for sanity checking."""
@@ -2578,6 +2724,7 @@ def test_df_state_change():
     print(bdf2)
 
 
+@pytest.mark.gpu
 def test_dataframe_concat(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))[
@@ -2605,6 +2752,7 @@ def test_dataframe_concat(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_series_concat(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))["A"]
@@ -2628,6 +2776,7 @@ def test_series_concat(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_isin(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet"))
@@ -2651,6 +2800,7 @@ def test_isin(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_drop(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).drop(
@@ -2669,6 +2819,7 @@ def test_drop(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_loc(datapath):
     with assert_executed_plan_count(0):
         bodo_df1 = bd.read_parquet(datapath("dataframe_library/df1.parquet")).loc[
@@ -2704,6 +2855,7 @@ def test_loc(datapath):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 @pytest.mark.parametrize(
     "percentiles",
     [None, (0.1, 0.4, 0.7, 0.9), [0, 1]],
@@ -2765,6 +2917,7 @@ def test_series_describe_numeric(percentiles):
         )
 
 
+@pytest.mark.gpu
 def test_series_describe_nonnumeric():
     """Basic test for Series describe with string data."""
     df = pd.DataFrame(
@@ -2811,6 +2964,39 @@ def test_series_describe_empty():
     _test_equal(describe_bodo, describe_pd, check_pandas_types=False, check_names=False)
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize("data", [[None, np.nan, 1] * 10])
+def test_series_null(data):
+    """Basic test for Series isnull."""
+
+    pds = pd.Series(data, dtype="float64[pyarrow]")
+    bds = bd.Series(data, dtype="float64[pyarrow]")
+    print(bds)
+
+    pds_null = pds.isnull()
+    bds_null = bds.isnull()
+    _test_equal(bds_null, pds_null, check_pandas_types=False)
+    pds_notnull = pds.notnull()
+    bds_notnull = bds.notnull()
+    _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("data", [[None, np.nan, 1] * 10])
+def test_series_na(data):
+    """Basic test for Series isna."""
+
+    pds = pd.Series(data, dtype="float64[pyarrow]")
+    bds = bd.Series(data, dtype="float64[pyarrow]")
+
+    pds_null = pds.isna()
+    bds_null = bds.isna()
+    _test_equal(bds_null, pds_null, check_pandas_types=False)
+    pds_notnull = pds.notna()
+    bds_notnull = bds.notna()
+    _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
+
+
 def test_groupby_getattr_fallback_behavior():
     import warnings
 
@@ -2835,6 +3021,10 @@ def test_groupby_getattr_fallback_behavior():
         _ = grouped.not_a_column
 
 
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(), reason="[BSE-5432] Handle empty data in GPU reduce."
+)
 def test_series_agg():
     import pandas as pd
 
@@ -2888,6 +3078,7 @@ def test_groupby_apply():
     )
 
 
+@pytest.mark.gpu
 def test_empty_duckdb_filter():
     """Test for when duckdb generates an empty filter."""
 
@@ -2923,6 +3114,7 @@ def test_empty_duckdb_filter():
     )
 
 
+@pytest.mark.gpu
 def test_empty_aggregate_batches():
     """Test for when duckdb generates an empty filter."""
 
@@ -3057,6 +3249,7 @@ def test_set_df_column_non_arith_binops():
     _test_equal(bdf, pdf)
 
 
+@pytest.mark.gpu
 def test_fallback_wrapper_deep_fallback():
     s = bd.Series(pd.date_range("20130101 09:10:12", periods=10, freq="MS"))
 
@@ -3076,6 +3269,7 @@ def test_fallback_wrapper_deep_fallback():
     )
 
 
+@pytest.mark.gpu
 def test_drop_duplicates(index_val):
     """Test for drop_duplicates API."""
 
@@ -3101,6 +3295,7 @@ def test_drop_duplicates(index_val):
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -3136,6 +3331,7 @@ def test_drop_duplicates_subset(kwargs):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 def test_uncompilable_map():
     """Test for maps that can't be compiled."""
@@ -3197,6 +3393,7 @@ def test_numba_map():
     )
 
 
+@pytest.mark.gpu
 def test_df_reset_index():
     """Test for DataFrame reset_index API."""
 
@@ -3268,6 +3465,7 @@ def test_df_reset_index():
     )
 
 
+@pytest.mark.gpu
 def test_series_reset_index():
     """Test for Series reset_index API."""
 
@@ -3337,6 +3535,7 @@ def test_series_reset_index():
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, UDF
 @pytest.mark.jit_dependency
 def test_series_reset_index_compute():
     """Test Series.reset_index in between computation."""
@@ -3366,6 +3565,7 @@ def test_series_reset_index_compute():
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 def test_series_reset_index_pipeline():
     """Test reading from CSV, groupby + sum, reset_index, and more computes."""
@@ -3426,6 +3626,7 @@ def test_series_reset_index_pipeline():
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 def test_dataframe_reset_index_pipeline():
     """Test reading CSV, setting MultiIndex, resetting index, and computing."""
@@ -3463,6 +3664,7 @@ def test_dataframe_reset_index_pipeline():
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 def test_map_with_state():
     def init_state():
         return {1: 7}
@@ -3498,6 +3700,7 @@ def test_map_with_state():
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 def test_map_partitions_with_state():
     class mystate:
         def __init__(self):
@@ -3544,6 +3747,7 @@ def test_map_partitions_with_state():
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 @pytest.mark.parametrize(
     "quantiles", [[0, 0.25, 0.5, 0.75, 0.9, 1], [0.22, 0.55, 0.99], [0.5]]
 )
@@ -3593,6 +3797,7 @@ def test_series_quantile(quantiles):
             )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 @pytest.mark.parametrize("q", [0.25, 0.5, 0.75, 0.9])
 def test_series_quantile_scalar(q):
     """Tests that approximate quantiles with scalar arguments fall within expected error bounds."""
@@ -3634,6 +3839,7 @@ def test_series_quantile_scalar(q):
         )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 def test_series_quantile_empty():
     """Tests that quantile on an empty BodoSeries returns either a scalar pd.NA or a BodoSeries of pd.NA."""
 
@@ -3675,6 +3881,7 @@ def test_series_quantile_empty():
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 def test_series_quantile_tails():
     """Tests that querying quantiles at tail ends return exact values."""
 
@@ -3693,6 +3900,7 @@ def test_series_quantile_tails():
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 def test_series_quantile_singleton():
     """Tests quantile on a singleton BodoSeries."""
 
@@ -3712,6 +3920,7 @@ def test_series_quantile_singleton():
     )
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
 def test_dataframe_jit_fallback(datapath):
     """Test fallback to JIT."""
@@ -3822,6 +4031,7 @@ def test_set_column_names():
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+@pytest.mark.gpu
 def test_print_no_warn():
     """Make sure printing a BodoDataFrame or BodoSeries doesn't throw irrelevant
     fallback warnings
@@ -3837,6 +4047,7 @@ def test_print_no_warn():
         print(S)
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "pd_in, expr",
     [
@@ -3874,6 +4085,7 @@ def test_lazy_len(pd_in, expr, index_val):
     _test_equal(bodo_out, pd_out, check_pandas_types=False, reset_index=reset_index)
 
 
+@pytest.mark.gpu
 def test_len_no_warn(index_val):
     """Test that collecting length does not raise warnings"""
     df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6], "B": [1, 2, 3, 10, 20, 30]})
@@ -3886,7 +4098,12 @@ def test_len_no_warn(index_val):
         assert len(bdf[bdf.A > 5]) == len(df[df.A > 5])
 
 
+@pytest.mark.gpu
 @pytest.mark.jit_dependency
+@pytest.mark.skipif(
+    is_multi_worker_per_gpu_test(),
+    reason="[BSE-5431] Fix wrong result in multi-worker GPU test",
+)
 def test_bodo_pandas_inside_jit():
     """Make sure using bodo.pandas functions inside a bodo.jit function works as
     expected and is same as pandas.
@@ -3942,6 +4159,7 @@ def test_join_non_equi_key_not_in_output():
     )
 
 
+@pytest.mark.gpu
 def test_series_to_list():
     s1 = pd.Series(list(range(37)))
     bs1 = bd.Series(s1)
@@ -3949,9 +4167,16 @@ def test_series_to_list():
     bs2 = bs1 + 1
     l1 = s2.to_list()
     bl1 = bs2.to_list()
+
+    if is_multi_worker_per_gpu_test():
+        # Automatically sort output if we have multiple workers per GPU
+        # TODO(BSE-5322): remove after CPU-GPU exchange doesn't change the order of data.
+        bl1.sort()
+
     assert l1 == bl1
 
 
+@pytest.mark.gpu
 def test_series_str_match():
     s = pd.Series(["abc", "a1c", "zzz", None], dtype="string")
     bs = bd.Series(s)
@@ -4010,6 +4235,7 @@ def timezone_timestamp_df():
     return pd.DataFrame(data)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas
 @pytest.mark.jit_dependency
 @pytest.mark.parametrize("engine", ["python", "bodo"])
 def test_timezone_scalar_func(engine, index_val, timezone_timestamp_df):
@@ -4026,6 +4252,7 @@ def test_timezone_scalar_func(engine, index_val, timezone_timestamp_df):
     _test_equal(bodo_out, expected, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback timezone
 def test_timezone_filter(index_val, timezone_timestamp_df):
     """Test filter works with timezones"""
     df = timezone_timestamp_df
@@ -4041,6 +4268,7 @@ def test_timezone_filter(index_val, timezone_timestamp_df):
     _test_equal(bodo_out, pandas_out, check_pandas_types=False, reset_index=reset_index)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, hour
 def test_timezone_groupby(timezone_timestamp_df):
     """Test groupby works with timezones"""
     df = timezone_timestamp_df
@@ -4054,6 +4282,7 @@ def test_timezone_groupby(timezone_timestamp_df):
     _test_equal(bodo_out, pandas_out, check_pandas_types=False)
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback timezone
 def test_timezone_merge(timezone_timestamp_df):
     """Test merge works with timezone keys"""
     df = timezone_timestamp_df
@@ -4089,6 +4318,7 @@ def test_empty_df(datapath, index_val):
     _test_equal(bd.DataFrame(), pd.DataFrame())
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, UDF
 def test_np_ufunc(index_val):
     """Test for np.ufunc(Series) case."""
 
@@ -4130,6 +4360,7 @@ def test_empty_result(datapath):
     )
 
 
+@pytest.mark.gpu
 def test_crossproduct_column_removal(datapath):
     """Test that extra column introduced by crossproduct is removed."""
 
@@ -4155,6 +4386,7 @@ def test_crossproduct_column_removal(datapath):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, crossproduct
 def test_join_filter_push_cross_product():
     """Test for join filter pushdown through cross product."""
     df1 = pd.DataFrame(
@@ -4199,6 +4431,7 @@ def test_join_filter_push_cross_product():
     )
 
 
+@pytest.mark.gpu
 def test_join_filter_pushdown_union():
     """Test for join filter pushdown through union."""
     df1 = pd.DataFrame(
@@ -4243,6 +4476,7 @@ def test_join_filter_pushdown_union():
     )
 
 
+@pytest.mark.gpu
 def test_join_filter_pushdown_aggregate_split_keys():
     """Test that a join filter that is partially pushed through an aggregate also generates a filter above it with all keys."""
     df1 = pd.DataFrame(

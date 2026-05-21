@@ -64,6 +64,7 @@ def fallback_df():
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, UDF, utf8_upper
 @pytest.mark.parametrize(
     "lhs_expr, rhs_expr, kwargs",
     [
@@ -148,6 +149,7 @@ def test_str_cat_exprs(base_df, lhs_expr, rhs_expr, kwargs):
         )
 
 
+@pytest.mark.gpu
 def test_str_cat_fallback_no_others(fallback_df):
     """Should fallback when others is None (i.e., not passed)."""
     bdf = bd.from_pandas(fallback_df)
@@ -155,6 +157,7 @@ def test_str_cat_fallback_no_others(fallback_df):
         _ = bdf["A"].str.cat()
 
 
+@pytest.mark.gpu
 def test_str_cat_fallback_not_bodo_series(fallback_df):
     """Should fallback when others is not a BodoSeries."""
     bdf = bd.from_pandas(fallback_df)

@@ -1276,6 +1276,7 @@ def _check_query_equal(
 
     # Convert Time64[ns] to bodo.types.Time to avoid Pandas bugs
     bodosql_output = convert_arrow_time_to_bodo_time(bodosql_output)
+    expected_output = convert_arrow_time_to_bodo_time(expected_output)
     if convert_columns_to_pandas:
         bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
         expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)

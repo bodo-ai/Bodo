@@ -12,6 +12,8 @@ BodoSeries.sort_values(
         key: ValueKeyFunc | None = None,
     ) -> BodoSeries
 ```
+
+**GPU:** ✔ Supported
 Sorts the elements of the BodoSeries and returns a new sorted BodoSeries.
 
 <p class="api-header">Parameters</p>

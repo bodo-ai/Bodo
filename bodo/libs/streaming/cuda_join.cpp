@@ -8,17 +8,22 @@
 #include <cudf/copying.hpp>
 #include <cudf/filling.hpp>
 #include <cudf/join/conditional_join.hpp>
+#include <cudf/join/filtered_join.hpp>
 #include <cudf/join/join.hpp>
+#include <cudf/join/mixed_join.hpp>
 #include <cudf/reduction.hpp>
+#include <cudf/sorting.hpp>
 #include <cudf/stream_compaction.hpp>
 #include <cudf/types.hpp>
 #include <memory>
 #include <rmm/cuda_stream_view.hpp>
+#include <rmm/device_uvector.hpp>
 #include <stdexcept>
 #include "../../pandas/physical/gpu_expression.h"
 #include "../../pandas/physical/operator.h"
 #include "../_utils.h"
 #include "_util.h"
+#include "cuda_runtime_api.h"
 #include "duckdb/common/enum_util.hpp"
 #include "duckdb/common/enums/join_type.hpp"
 
@@ -111,7 +116,7 @@ CudaJoin::CudaJoin(std::shared_ptr<bodo::Schema> build_schema,
 
     if (is_broadcast_join) {
         build_broadcast_manager = std::make_shared<GpuTableBroadcastManager>();
-        if (duckdb::IsRightOuterJoin(this->join_type)) {
+        if (duckdb::PropagatesBuildSide(this->join_type)) {
             // This is the only case we need to sync build matches
             this->build_matches_synced = false;
         }
@@ -154,18 +159,25 @@ bool CudaJoin::BuildConsumeBatch(
 std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     std::unique_ptr<cudf::table> table, bool global_is_last,
     rmm::cuda_stream_view stream) {
-    if (!global_is_last || !duckdb::IsRightOuterJoin(this->join_type)) {
+    if (!global_is_last || !duckdb::PropagatesBuildSide(this->join_type)) {
         return table;
     }
 
     const MPI_Comm comm = this->probe_shuffle_manager->get_mpi_comm();
     if (this->is_broadcast_join && !this->build_matches_synced) {
         if (this->sync_build_matches_req == MPI_REQUEST_NULL) {
+            int n = this->unmatched_build_rows->size();
+            auto d_buf = unmatched_build_rows->view().data<uint8_t>();
+            cudaHostAlloc(&this->unmatched_build_rows_host, n,
+                          cudaHostAllocDefault);
+            cudaMemcpy(unmatched_build_rows_host, d_buf, n,
+                       cudaMemcpyDeviceToHost);
             CHECK_MPI(
-                MPI_Iallreduce(MPI_IN_PLACE, this->unmatched_build_rows.get(),
-                               this->unmatched_build_rows->size(), MPI_UINT8_T,
-                               MPI_BAND, comm, &this->sync_build_matches_req),
+                MPI_Iallreduce(MPI_IN_PLACE, unmatched_build_rows_host, n,
+                               MPI_UINT8_T, MPI_LAND, comm,
+                               &this->sync_build_matches_req),
                 "produce_unmatched_build_rows: MPI error on MPI_Iallreduce ");
+            return table;
         } else {
             int flag = 0;
             CHECK_MPI(MPI_Test(&this->sync_build_matches_req, &flag,
@@ -173,6 +185,12 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
                       "produce_unmatched_build_rows: MPI error on MPI_Test ");
             if (flag) {
                 this->build_matches_synced = true;
+                auto* d_buf =
+                    unmatched_build_rows->mutable_view().data<uint8_t>();
+                cudaMemcpy(d_buf, unmatched_build_rows_host,
+                           unmatched_build_rows->size(),
+                           cudaMemcpyHostToDevice);
+                cudaFreeHost(this->unmatched_build_rows_host);
             } else {
                 return table;
             }
@@ -184,12 +202,13 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     // If it's a broadcast join we only want to
     // produce the unmatched rows on one rank since
     // all ranks share a build table
-    if (this->is_broadcast_join && rank > 0) {
+    if ((this->is_broadcast_join && rank > 0) || !this->unmatched_build_rows) {
         return table;
     }
 
     cudf::table_view build_kept_view = _build_table->select(
         this->build_kept_cols.begin(), this->build_kept_cols.end());
+
     // For right and outer joins, we need to output unmatched build rows
     // at the end. We can identify these using the matched_build_rows
     // boolean mask.
@@ -200,25 +219,31 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     // Then we need to construct null columns for the probe side for
     // these unmatched build rows, and concatenate them with the
     // unmatched build rows to add to the final output
-    std::vector<std::unique_ptr<cudf::column>> null_probe_columns;
-    for (size_t i = 0; i < probe_kept_cols.size(); i++) {
-        std::shared_ptr<arrow::Field> field =
-            this->probe_table_schema->ToArrowSchema()->field(
-                this->probe_kept_cols[i]);
-        std::shared_ptr<arrow::Scalar> arrow_scalar =
-            arrow::MakeNullScalar(field->type());
-        std::unique_ptr<cudf::scalar> cudf_scalar =
-            arrow_scalar_to_cudf(arrow_scalar);
-        null_probe_columns.push_back(cudf::make_column_from_scalar(
-            *cudf_scalar, unmatched_build_build_side->num_rows()));
+    std::vector<cudf::table_view> unmatched_build_cols;
+    std::unique_ptr<cudf::table> unmatched_build_probe_side;
+    if (this->join_type != duckdb::JoinType::RIGHT_ANTI) {
+        std::vector<std::unique_ptr<cudf::column>> null_probe_columns;
+        for (size_t i = 0; i < probe_kept_cols.size(); i++) {
+            std::shared_ptr<arrow::Field> field =
+                this->probe_table_schema->ToArrowSchema()->field(
+                    this->probe_kept_cols[i]);
+            std::shared_ptr<arrow::Scalar> arrow_scalar =
+                arrow::MakeNullScalar(field->type());
+            std::unique_ptr<cudf::scalar> cudf_scalar =
+                arrow_scalar_to_cudf(arrow_scalar);
+            null_probe_columns.push_back(cudf::make_column_from_scalar(
+                *cudf_scalar, unmatched_build_build_side->num_rows()));
+        }
+        unmatched_build_probe_side =
+            std::make_unique<cudf::table>(std::move(null_probe_columns));
+        unmatched_build_cols.push_back(unmatched_build_probe_side->view());
     }
-    cudf::table unmatched_build_probe_side =
-        cudf::table(std::move(null_probe_columns));
+    if (this->join_type != duckdb::JoinType::ANTI) {
+        unmatched_build_cols.push_back(unmatched_build_build_side->view());
+    }
 
     // Zip up the two tables into a table view so we can concatenate it
     // with the main output
-    std::vector<cudf::table_view> unmatched_build_cols = {
-        unmatched_build_probe_side.view(), unmatched_build_build_side->view()};
     cudf::table_view unmatched_build_output_view =
         cudf::table_view(unmatched_build_cols);
 
@@ -233,6 +258,71 @@ std::unique_ptr<cudf::table> CudaJoin::produce_unmatched_build_rows(
     return table;
 }
 
+std::pair<std::unique_ptr<cudf::table>, bool> CudaJoin::get_empty_output_table(
+    bool global_is_last, rmm::cuda_stream_view stream) {
+    return {
+        produce_unmatched_build_rows(
+            empty_table_from_arrow_schema(this->output_schema->ToArrowSchema()),
+            global_is_last, stream),
+        global_is_last && this->build_matches_synced};
+}
+
+std::pair<std::unique_ptr<cudf::table>, bool> CudaJoin::materialize_and_output(
+    cudf::table_view const& probe_kept_view,
+    cudf::column_view const& probe_idx_view,
+    cudf::table_view const& build_kept_view,
+    cudf::column_view const& build_idx_view, bool global_is_last,
+    rmm::cuda_stream_view stream) {
+    std::vector<std::unique_ptr<cudf::column>> final_columns;
+
+    // Materialize the selected rows
+    cudf::out_of_bounds_policy oob_policy =
+        this->join_type == duckdb::JoinType::INNER ||
+                this->join_type == duckdb::JoinType::RIGHT ||
+                this->join_type == duckdb::JoinType::RIGHT_ANTI
+            ? cudf::out_of_bounds_policy::DONT_CHECK
+            : cudf::out_of_bounds_policy::NULLIFY;
+
+    auto gathered_probe =
+        cudf::gather(probe_kept_view, probe_idx_view, oob_policy, stream);
+
+    for (auto& col : gathered_probe->release()) {
+        final_columns.push_back(std::move(col));
+    }
+
+    if (this->join_type != duckdb::JoinType::ANTI) {
+        auto gathered_build =
+            cudf::gather(build_kept_view, build_idx_view, oob_policy, stream);
+        for (auto& col : gathered_build->release()) {
+            final_columns.push_back(std::move(col));
+        }
+    }
+    std::unique_ptr<cudf::table> output_table =
+        std::make_unique<cudf::table>(std::move(final_columns));
+
+    return {produce_unmatched_build_rows(std::move(output_table),
+                                         global_is_last, stream),
+            global_is_last && this->build_matches_synced};
+}
+
+void CudaJoin::sort_build_table() {
+    if (!this->_build_table) {
+        throw std::runtime_error(
+            "CudaJoin::sort_build_table called before build table is "
+            "initialized");
+    }
+
+    auto unsorted_build = std::move(this->_build_table);
+    auto order = cudf::sorted_order(
+        unsorted_build->view(),
+        std::vector<cudf::order>(unsorted_build->num_columns(),
+                                 cudf::order::ASCENDING),
+        std::vector<cudf::null_order>(unsorted_build->num_columns(),
+                                      cudf::null_order::AFTER));
+    auto sorted = cudf::gather(unsorted_build->view(), order->view());
+    this->_build_table = std::move(sorted);
+}
+
 void CudaHashJoin::build_hash_table(
     const std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
     std::vector<cudf::table_view> build_views;
@@ -241,16 +331,40 @@ void CudaHashJoin::build_hash_table(
     for (const auto& chunk : build_chunks) {
         build_views.push_back(chunk->view());
     }
-    this->_build_table = cudf::concatenate(build_views);
+    if (build_views.size() > 0) {
+        this->_build_table = cudf::concatenate(build_views);
+
+        if (this->is_broadcast_join &&
+            duckdb::PropagatesBuildSide(this->join_type)) {
+            sort_build_table();
+        }
+    } else {
+        std::shared_ptr<arrow::Schema> build_table_arrow_schema =
+            this->build_table_schema->ToArrowSchema();
+
+        this->_build_table =
+            empty_table_from_arrow_schema(build_table_arrow_schema);
+    }
 
     // 2. Create the hash_join object
     //    This triggers the kernel that builds the hash table on the GPU.
     //    We maintain ownership of _join_handle to reuse it for probing.
     cudf::table_view build_view = _build_table->view();
+    cudf::table_view selected_build_view =
+        build_view.select(this->build_key_indices);
 
     if (build_view.num_rows() != 0 && this->build_key_indices.size() > 0) {
-        this->_join_handle = std::make_unique<cudf::hash_join>(
-            build_view.select(this->build_key_indices), this->null_equality);
+        if (this->join_type == duckdb::JoinType::MARK ||
+            this->join_type == duckdb::JoinType::ANTI) {
+            this->_join_handle = std::make_unique<cudf::filtered_join>(
+                selected_build_view, this->null_equality,
+                /* default args otherwise the compiler can't figure out which
+                   constructor to call */
+                cudf::set_as_build_table::RIGHT, 0.5);
+        } else {
+            this->_join_handle = std::make_unique<cudf::hash_join>(
+                selected_build_view, this->null_equality);
+        }
     }
 
     uint64_t build_total_size = gather_blooms.allreduce(build_view.num_rows());
@@ -352,7 +466,7 @@ void CudaHashJoin::FinalizeBuild() {
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 
-    if (duckdb::IsRightOuterJoin(this->join_type) && this->_build_table) {
+    if (duckdb::PropagatesBuildSide(this->join_type) && this->_build_table) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
         this->unmatched_build_rows = cudf::make_column_from_scalar(
@@ -366,22 +480,15 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     std::shared_ptr<StreamAndEvent> input_stream_event,
     rmm::cuda_stream_view& stream, bool local_is_last) {
     bool global_is_last;
-    // Assemble Final Result
-    std::vector<std::unique_ptr<cudf::column>> final_columns;
     std::shared_ptr<cudf::table> probe_to_select;
-    cudf::table_view selected;
 
     if (is_broadcast_join) {
         // In broadcast join mode, we don't need to wait for other workers to
-        // send probe data to us and that is the only reason that there is a
-        // need for a global check in the non-broadcast section unless we have a
-        // right/outer join. In broadcast mode, if this is the last batch for
-        // this worker then we set the global_is_last flag just so that the
-        // below code will finish and allow this operator to terminate. If this
-        // is a right/outer join, we need to synchronize which build rows have
-        // been globally matched before terminating this operator.
+        // send probe data to us. If this is a right/outer join, we need to
+        // synchronize which build rows have been globally matched before
+        // terminating this operator.
         global_is_last =
-            duckdb::IsRightOuterJoin(this->join_type)
+            duckdb::PropagatesBuildSide(this->join_type)
                 ? probe_shuffle_manager->sync_is_last(local_is_last)
                 : local_is_last;
 
@@ -390,14 +497,8 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         }
 
         if (probe_chunk->num_rows() == 0) {
-            return {produce_unmatched_build_rows(
-                        empty_table_from_arrow_schema(
-                            this->output_schema->ToArrowSchema()),
-                        global_is_last, stream),
-                    global_is_last && this->build_matches_synced};
+            return get_empty_output_table(global_is_last, stream);
         }
-
-        selected = probe_chunk->select(this->probe_key_indices);
 
         probe_to_select = probe_chunk;
     } else {
@@ -416,11 +517,7 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             return {nullptr, global_is_last};
         }
         if (shuffled_probe_chunks.empty()) {
-            return {produce_unmatched_build_rows(
-                        empty_table_from_arrow_schema(
-                            this->output_schema->ToArrowSchema()),
-                        global_is_last, stream),
-                    global_is_last && this->build_matches_synced};
+            return get_empty_output_table(global_is_last, stream);
         }
 
         // Concatenate all incoming chunks into one contiguous table and join
@@ -430,21 +527,22 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         for (const auto& chunk : shuffled_probe_chunks) {
             probe_views.push_back(chunk->view());
         }
-        std::unique_ptr<cudf::table> coalesced_probe =
-            cudf::concatenate(probe_views, stream);
+        probe_to_select = cudf::concatenate(probe_views, stream);
 
-        if (coalesced_probe->num_rows() == 0 || this->_join_handle == nullptr) {
-            return {produce_unmatched_build_rows(
-                        empty_table_from_arrow_schema(
-                            this->output_schema->ToArrowSchema()),
-                        global_is_last, stream),
-                    global_is_last && this->build_matches_synced};
+        bool null_handle = std::visit(
+            [](auto& handle) { return handle == nullptr; }, this->_join_handle);
+        // ANTI joins with an empty build table (null join handle) should output
+        // all probe rows, and for other join types we can just return early
+        // since we know the probe rows can't match.
+        if (probe_to_select->num_rows() == 0 ||
+            (null_handle && this->join_type != duckdb::JoinType::ANTI)) {
+            return get_empty_output_table(global_is_last, stream);
         }
-
-        selected = coalesced_probe->select(this->probe_key_indices);
-
-        probe_to_select = std::move(coalesced_probe);
     }
+
+    cudf::table_view selected =
+        probe_to_select->select(this->probe_key_indices);
+
     // Create views for the columns we want to keep
     cudf::table_view probe_kept_view = probe_to_select->select(
         this->probe_kept_cols.begin(), this->probe_kept_cols.end());
@@ -456,10 +554,13 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
 
     cudf::join_kind cudf_join_kind;
     switch (this->join_type) {
+        case duckdb::JoinType::RIGHT_ANTI:
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::INNER: {
+            auto& join_handle =
+                std::get<std::unique_ptr<cudf::hash_join>>(this->_join_handle);
             std::tie(probe_indices, build_indices) =
-                _join_handle->inner_join(selected, {}, stream);
+                join_handle->inner_join(selected, {}, stream);
             cudf_join_kind = cudf::join_kind::INNER_JOIN;
         } break;
         // Use left join for outer because it will give us all probe rows,
@@ -469,9 +570,39 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         // unmatched build rows every batch
         case duckdb::JoinType::OUTER:
         case duckdb::JoinType::LEFT: {
+            auto& join_handle =
+                std::get<std::unique_ptr<cudf::hash_join>>(this->_join_handle);
             std::tie(probe_indices, build_indices) =
-                _join_handle->left_join(selected, {}, stream);
+                join_handle->left_join(selected, {}, stream);
             cudf_join_kind = cudf::join_kind::LEFT_JOIN;
+        } break;
+        case duckdb::JoinType::ANTI: {
+            bool null_handle =
+                std::visit([](auto& handle) { return handle == nullptr; },
+                           this->_join_handle);
+            if (null_handle) {
+                probe_indices =
+                    std::make_unique<rmm::device_uvector<cudf::size_type>>(
+                        make_uvector_iota(selected.num_rows(), stream));
+            } else {
+                auto& join_handle =
+                    std::get<std::unique_ptr<cudf::filtered_join>>(
+                        this->_join_handle);
+                probe_indices = join_handle->anti_join(selected, stream);
+            }
+            build_indices =
+                std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
+                                                                       stream);
+            cudf_join_kind = cudf::join_kind::LEFT_ANTI_JOIN;
+        } break;
+        case duckdb::JoinType::MARK: {
+            auto& join_handle = std::get<std::unique_ptr<cudf::filtered_join>>(
+                this->_join_handle);
+            probe_indices = join_handle->semi_join(selected, stream);
+            build_indices =
+                std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
+                                                                       stream);
+            cudf_join_kind = cudf::join_kind::LEFT_SEMI_JOIN;
         } break;
         default: {
             throw std::runtime_error(
@@ -487,6 +618,37 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
             cudf_join_kind, stream);
     }
 
+    if (this->join_type == duckdb::JoinType::MARK) {
+        // Create the mark column (all false)
+        auto mark_col = cudf::make_fixed_width_column(
+            cudf::data_type{cudf::type_id::BOOL8}, probe_to_select->num_rows(),
+            cudf::mask_state::ALL_VALID, stream);
+        cudaMemsetAsync(mark_col->mutable_view().head<uint8_t>(), 0,
+                        probe_to_select->num_rows() * sizeof(uint8_t),
+                        stream.value());
+
+        // Set matched indices to true
+        cudf_set_bools_from_indices<true>(
+            mark_col->mutable_view(),
+            cudf::column_view(cudf::data_type{cudf::type_id::INT32},
+                              probe_indices->size(), probe_indices->data(),
+                              nullptr, 0),
+            stream);
+
+        // Prepare final columns: probe_kept_cols + mark_col
+        std::vector<std::unique_ptr<cudf::column>> final_columns;
+        for (auto const& i : this->probe_kept_cols) {
+            final_columns.push_back(std::make_unique<cudf::column>(
+                probe_to_select->get_column(i), stream));
+        }
+        final_columns.push_back(std::move(mark_col));
+
+        std::unique_ptr<cudf::table> output_table =
+            std::make_unique<cudf::table>(std::move(final_columns));
+        return {std::move(output_table),
+                global_is_last && this->build_matches_synced};
+    }
+
     // Create column views of the indices from the indices buffers
     cudf::column_view probe_idx_view(cudf::data_type{cudf::type_id::INT32},
                                      probe_indices->size(),
@@ -497,37 +659,22 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
                                      build_indices->data(), nullptr, 0);
 
     // Update which build table indices we've matched if it's relevant
-    if (duckdb::IsRightOuterJoin(this->join_type) &&
+    if (duckdb::PropagatesBuildSide(this->join_type) &&
         // If this is nullptr we either don't have a build table on this rank
         // or we've already produced the unmatched output
         this->unmatched_build_rows && build_idx_view.size()) {
-        cudf_set_bools_false_from_indices(
+        cudf_set_bools_from_indices<false>(
             this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
     }
 
-    // Materialize the selected rows
-    cudf::out_of_bounds_policy oob_policy =
-        this->join_type == duckdb::JoinType::INNER ||
-                this->join_type == duckdb::JoinType::RIGHT
-            ? cudf::out_of_bounds_policy::DONT_CHECK
-            : cudf::out_of_bounds_policy::NULLIFY;
-    auto gathered_probe =
-        cudf::gather(probe_kept_view, probe_idx_view, oob_policy, stream);
-    auto gathered_build =
-        cudf::gather(build_kept_view, build_idx_view, oob_policy, stream);
-
-    for (auto& col : gathered_probe->release()) {
-        final_columns.push_back(std::move(col));
+    // Right anti joins only output unmatched build rows, so we can return early
+    if (this->join_type == duckdb::JoinType::RIGHT_ANTI) {
+        return get_empty_output_table(global_is_last, stream);
     }
-    for (auto& col : gathered_build->release()) {
-        final_columns.push_back(std::move(col));
-    }
-    std::unique_ptr<cudf::table> output_table =
-        std::make_unique<cudf::table>(std::move(final_columns));
 
-    return {produce_unmatched_build_rows(std::move(output_table),
-                                         global_is_last, stream),
-            global_is_last && this->build_matches_synced};
+    return materialize_and_output(probe_kept_view, probe_idx_view,
+                                  build_kept_view, build_idx_view,
+                                  global_is_last, stream);
 }
 
 CudaHashJoin::CudaHashJoin(std::vector<cudf::size_type> build_keys,
@@ -571,12 +718,16 @@ void CudaNonEquiJoin::FinalizeBuild() {
     // Clear build chunks to free memory
     this->_build_chunks.clear();
 
-    if (duckdb::IsRightOuterJoin(this->join_type) && this->_build_table) {
+    if (duckdb::PropagatesBuildSide(this->join_type) && this->_build_table) {
         // For right and outer joins we need to track which build rows have been
         // matched so we can output unmatched build rows at the end
         this->unmatched_build_rows = cudf::make_column_from_scalar(
             cudf::numeric_scalar(true), this->_build_table->num_rows(),
             cudf::get_default_stream());
+
+        if (this->is_broadcast_join) {
+            sort_build_table();
+        }
     }
 }
 
@@ -586,11 +737,8 @@ CudaNonEquiJoin::ProbeProcessBatch(
     std::shared_ptr<StreamAndEvent> input_stream_event,
     rmm::cuda_stream_view& stream, bool local_is_last) {
     bool global_is_last;
-    // Assemble Final Result
-    std::vector<std::unique_ptr<cudf::column>> final_columns;
-    std::shared_ptr<cudf::table> probe_to_select;
 
-    global_is_last = duckdb::IsRightOuterJoin(this->join_type)
+    global_is_last = duckdb::PropagatesBuildSide(this->join_type)
                          ? probe_shuffle_manager->sync_is_last(local_is_last)
                          : local_is_last;
 
@@ -599,14 +747,10 @@ CudaNonEquiJoin::ProbeProcessBatch(
     }
 
     if (probe_chunk->num_rows() == 0) {
-        return {produce_unmatched_build_rows(
-                    empty_table_from_arrow_schema(
-                        this->output_schema->ToArrowSchema()),
-                    global_is_last, stream),
-                global_is_last && this->build_matches_synced};
+        return get_empty_output_table(global_is_last, stream);
     }
 
-    probe_to_select = probe_chunk;
+    std::shared_ptr<cudf::table> probe_to_select = probe_chunk;
 
     // Create views for the columns we want to keep
     cudf::table_view probe_kept_view = probe_to_select->select(
@@ -617,28 +761,77 @@ CudaNonEquiJoin::ProbeProcessBatch(
     std::unique_ptr<rmm::device_uvector<cudf::size_type>> probe_indices,
         build_indices;
 
-    const cudf::ast::expression& root = this->non_equi_expression->get_root();
-
     switch (this->join_type) {
+        case duckdb::JoinType::RIGHT_ANTI:
         case duckdb::JoinType::RIGHT:
         case duckdb::JoinType::INNER: {
             std::tie(probe_indices, build_indices) =
-                cudf::conditional_inner_join(probe_to_select->view(),
-                                             this->_build_table->view(), root,
-                                             {}, stream);
+                cudf::conditional_inner_join(
+                    probe_to_select->view(), this->_build_table->view(),
+                    this->non_equi_expression->get_root(), {}, stream);
         } break;
         case duckdb::JoinType::OUTER:
         case duckdb::JoinType::LEFT: {
             std::tie(probe_indices, build_indices) =
-                cudf::conditional_left_join(probe_to_select->view(),
-                                            this->_build_table->view(), root,
-                                            {}, stream);
+                cudf::conditional_left_join(
+                    probe_to_select->view(), this->_build_table->view(),
+                    this->non_equi_expression->get_root(), {}, stream);
+        } break;
+        case duckdb::JoinType::ANTI: {
+            probe_indices = cudf::conditional_left_anti_join(
+                probe_to_select->view(), this->_build_table->view(),
+                this->non_equi_expression->get_root(), {}, stream);
+            build_indices =
+                std::make_unique<rmm::device_uvector<cudf::size_type>>(0,
+                                                                       stream);
+        } break;
+        case duckdb::JoinType::MARK: {
+            probe_indices = cudf::conditional_left_semi_join(
+                probe_to_select->view(), this->_build_table->view(),
+                this->non_equi_expression->get_root(), {}, stream);
+        } break;
+        // We use duckdb::JoinType::INVALID to mark cross join
+        case duckdb::JoinType::INVALID: {
+            return {cudf::cross_join(probe_to_select->view(),
+                                     this->_build_table->view(), stream),
+                    global_is_last};
         } break;
         default: {
             throw std::runtime_error(
                 "Unsupported join type " +
                 duckdb::EnumUtil::ToString(this->join_type));
         }
+    }
+
+    if (this->join_type == duckdb::JoinType::MARK) {
+        // Create the mark column (all false)
+        auto mark_col = cudf::make_fixed_width_column(
+            cudf::data_type{cudf::type_id::BOOL8}, probe_to_select->num_rows(),
+            cudf::mask_state::ALL_VALID, stream);
+        cudaMemsetAsync(mark_col->mutable_view().head<uint8_t>(), 0,
+                        probe_to_select->num_rows() * sizeof(uint8_t),
+                        stream.value());
+
+        // Set matched indices to true
+        cudf_set_bools_from_indices<true>(
+            mark_col->mutable_view(),
+            cudf::column_view(cudf::data_type{cudf::type_id::INT32},
+                              probe_indices->size(), probe_indices->data(),
+                              nullptr, 0),
+            stream);
+
+        // Prepare final columns: probe_kept_cols + mark_col
+        std::vector<std::unique_ptr<cudf::column>> final_columns;
+        for (auto const& i : this->probe_kept_cols) {
+            final_columns.push_back(std::make_unique<cudf::column>(
+                probe_to_select->get_column(i), stream));
+        }
+        final_columns.push_back(std::move(mark_col));
+
+        std::unique_ptr<cudf::table> output_table =
+            std::make_unique<cudf::table>(std::move(final_columns));
+        return {std::move(output_table),
+                global_is_last && this->build_matches_synced};
     }
 
     // Create column views of the indices from the indices buffers
@@ -651,33 +844,19 @@ CudaNonEquiJoin::ProbeProcessBatch(
                                      build_indices->data(), nullptr, 0);
 
     // Update which build table indices we've matched if it's relevant
-    if (duckdb::IsRightOuterJoin(this->join_type) &&
+    if (duckdb::PropagatesBuildSide(this->join_type) &&
         this->unmatched_build_rows && build_idx_view.size()) {
-        cudf_set_bools_false_from_indices(
+        cudf_set_bools_from_indices<false>(
             this->unmatched_build_rows->mutable_view(), build_idx_view, stream);
     }
 
-    // Materialize the selected rows
-    cudf::out_of_bounds_policy oob_policy =
-        this->join_type == duckdb::JoinType::INNER ||
-                this->join_type == duckdb::JoinType::RIGHT
-            ? cudf::out_of_bounds_policy::DONT_CHECK
-            : cudf::out_of_bounds_policy::NULLIFY;
-    auto gathered_probe =
-        cudf::gather(probe_kept_view, probe_idx_view, oob_policy, stream);
-    auto gathered_build =
-        cudf::gather(build_kept_view, build_idx_view, oob_policy, stream);
-
-    for (auto& col : gathered_probe->release()) {
-        final_columns.push_back(std::move(col));
+    // Only output unmatched build rows for right anti joins, so we can return
+    // early
+    if (this->join_type == duckdb::JoinType::RIGHT_ANTI) {
+        return get_empty_output_table(global_is_last, stream);
     }
-    for (auto& col : gathered_build->release()) {
-        final_columns.push_back(std::move(col));
-    }
-    std::unique_ptr<cudf::table> output_table =
-        std::make_unique<cudf::table>(std::move(final_columns));
 
-    return {produce_unmatched_build_rows(std::move(output_table),
-                                         global_is_last, stream),
-            global_is_last && this->build_matches_synced};
+    return materialize_and_output(probe_kept_view, probe_idx_view,
+                                  build_kept_view, build_idx_view,
+                                  global_is_last, stream);
 }

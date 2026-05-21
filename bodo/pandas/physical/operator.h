@@ -91,7 +91,15 @@ class RankDataExchange {
    public:
     RankDataExchange(int64_t op_id_);
 
-    ~RankDataExchange();
+    ~RankDataExchange() = default;
+
+    /**
+     * @brief Finalize the exchange state. This includes clearing the exchange
+     * barrier if the exchange could not finish due to an upstream operator
+     * finishing early and freeing the shuffle communicator.
+     *
+     */
+    void Finalize();
 
    protected:
     int64_t op_id;
@@ -204,7 +212,7 @@ class GPUtoCPUExchange : public RankDataExchange {
 
     std::unique_ptr<ChunkedTableBuilderState> ctb_state;
 };
-#else
+#else  // USE_CUDF
 
 struct GPU_DATA {};
 struct StreamAndEvent {};
@@ -213,7 +221,7 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
     return std::shared_ptr<StreamAndEvent>();
 }
 
-#endif
+#endif  // USE_CUDF
 
 /**
  * @brief Physical operators to be used in the execution pipelines (NOTE: they
@@ -278,10 +286,21 @@ class PhysicalSink : public PhysicalOperator {
     virtual OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                         OperatorResult prev_op_result);
 
-    virtual std::variant<std::shared_ptr<table_info>, PyObject*>
+    virtual std::variant<std::shared_ptr<table_info>, PyObject *>
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
+
+    /**
+     * @brief Execute common finalization logic and call operator FinalizeSink.
+     *
+     */
+    void FinalizeSinkCommon() {
+#ifdef USE_CUDF
+        gpu_to_cpu_exchange.Finalize();
+#endif
+        FinalizeSink();
+    }
 
 #ifdef USE_CUDF
     PhysicalSink() : gpu_to_cpu_exchange(this->op_id) {}
@@ -310,6 +329,18 @@ class PhysicalProcessBatch : public PhysicalOperator {
         GPU_DATA input_batch, OperatorResult prev_op_result);
 
     virtual void FinalizeProcessBatch() = 0;
+
+    /**
+     * @brief Execute common finalization logic and call operator
+     * FinalizeProcessBatch.
+     *
+     */
+    void FinalizeProcessBatchCommon() {
+#ifdef USE_CUDF
+        gpu_to_cpu_exchange.Finalize();
+#endif
+        FinalizeProcessBatch();
+    }
 
     /**
      * @brief Get the physical schema of the output data
@@ -348,11 +379,42 @@ class PhysicalGPUSource : public PhysicalOperator {
     virtual void FinalizeSource() = 0;
 
     /**
+     * @brief Replace numpy array types with nullable int bool type in the
+     * schema. This is because GPU operators do not support numpy array types in
+     * the output schema. This is because in the GPU -> CPU process the batch
+     * goes through Arrow and our Arrow -> Bodo conversion does not support
+     * numpy array types. If we encounter a numpy array type in the input
+     * schema, we convert it to a nullable int bool type in the output schema
+     * and rely on duckdb's type coercion to convert it back to the correct
+     * type.
+     *
+     * @param schema Schema to modify.
+     */
+    static void EnsureNoNumpyColumns(std::shared_ptr<bodo::Schema> schema) {
+        for (size_t i = 0; i < schema->ncols(); i++) {
+            if (schema->column_types[i]->array_type == bodo_array_type::NUMPY) {
+                std::unique_ptr<bodo::DataType> &col_type =
+                    schema->column_types[i];
+                schema->column_types[i] = std::make_unique<bodo::DataType>(
+                    bodo_array_type::NULLABLE_INT_BOOL, col_type->c_type,
+                    col_type->precision, col_type->scale, col_type->timezone);
+            }
+        }
+    }
+
+    /**
      * @brief Get the physical schema of the source data
      *
      * @return std::shared_ptr<bodo::Schema> physical schema
      */
-    virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
+    const std::shared_ptr<bodo::Schema> getOutputSchema() {
+        const std::shared_ptr<bodo::Schema> schema = getOutputSchemaInternal();
+        EnsureNoNumpyColumns(schema);
+        return schema;
+    };
+
+   private:
+    virtual const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() = 0;
 };
 
 /**
@@ -375,10 +437,21 @@ class PhysicalGPUSink : public PhysicalOperator {
         GPU_DATA input_batch, OperatorResult prev_op_result,
         std::shared_ptr<StreamAndEvent> se) = 0;
 
-    virtual std::variant<std::shared_ptr<table_info>, PyObject*>
+    virtual std::variant<std::shared_ptr<table_info>, PyObject *>
     GetResult() = 0;
 
     virtual void FinalizeSink() = 0;
+
+    /**
+     * @brief Execute common finalization logic and call operator FinalizeSink.
+     *
+     */
+    void FinalizeSinkCommon() {
+#ifdef USE_CUDF
+        cpu_to_gpu_exchange.Finalize();
+#endif
+        FinalizeSink();
+    }
 
 #ifdef USE_CUDF
     PhysicalGPUSink() : cpu_to_gpu_exchange(this->op_id) {}
@@ -410,6 +483,18 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
         std::shared_ptr<StreamAndEvent> se) = 0;
 
     virtual void FinalizeProcessBatch() = 0;
+
+    /**
+     * @brief Execute common finalization logic and call operator
+     * FinalizeProcessBatch.
+     *
+     */
+    void FinalizeProcessBatchCommon() {
+#ifdef USE_CUDF
+        cpu_to_gpu_exchange.Finalize();
+#endif
+        FinalizeProcessBatch();
+    }
 
     /**
      * @brief Get the physical schema of the output data
@@ -455,6 +540,8 @@ using PhysicalCpuGpuProcessBatch =
 #ifdef USE_CUDF
 GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch,
                            std::shared_ptr<StreamAndEvent> se);
+GPU_DATA convertArrowTableToGPU(std::shared_ptr<arrow::Table> arrow_table,
+                                std::shared_ptr<StreamAndEvent> se);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
 std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
 #endif

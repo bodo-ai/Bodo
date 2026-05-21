@@ -43,8 +43,22 @@ def test_agg_numeric(
 ):
     """test aggregation calls in queries"""
 
-    if bodosql.use_cpp_backend and numeric_agg_builtin_funcs != "SUM":
-        pytest.skip("Only SUM is supported in C++ backend for now")
+    if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
+        "AVG",
+        "COUNT",
+        "MAX",
+        "MIN",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        "VARIANCE_SAMP",
+        "STDDEV_POP",
+        "VAR_POP",
+        "VARIANCE_POP",
+    ]:
+        pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -62,10 +76,28 @@ def test_agg_numeric(
     )
 
 
+@pytest.mark.bodosql_cpp  # failing for variance, stddev w/ unimplemented CASE
 def test_agg_numeric_larger_group(
     grouped_dfs, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aggregation calls in queries on DataFrames with a larger data in each group."""
+
+    if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
+        "AVG",
+        "COUNT",
+        "MAX",
+        "MIN",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        "VARIANCE_SAMP",
+        "STDDEV_POP",
+        "VAR_POP",
+        "VARIANCE_POP",
+    ]:
+        pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -85,10 +117,28 @@ def test_agg_numeric_larger_group(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp  # failing for variance, stddev w/ unimplemented CASE
 def test_aliasing_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aliasing of aggregations in queries"""
+
+    if bodosql.use_cpp_backend and numeric_agg_builtin_funcs not in [
+        "AVG",
+        "COUNT",
+        "MAX",
+        "MIN",
+        "STDDEV",
+        "STDDEV_SAMP",
+        "SUM",
+        "VARIANCE",
+        "VAR_SAMP",
+        "VARIANCE_SAMP",
+        "STDDEV_POP",
+        "VAR_POP",
+        "VARIANCE_POP",
+    ]:
+        pytest.skip(f"{numeric_agg_builtin_funcs} not supported in C++ backend for now")
 
     # bitwise aggregate function only valid on integers
     if numeric_agg_builtin_funcs in {"BIT_XOR", "BIT_OR", "BIT_AND"}:
@@ -106,6 +156,7 @@ def test_aliasing_agg_numeric(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_count_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     """test various count queries on numeric data."""
     check_query(
@@ -124,6 +175,7 @@ def test_count_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_count_nullable_numeric(
     bodosql_nullable_numeric_types, spark_info, memory_leak_check
 ):
@@ -144,6 +196,7 @@ def test_count_nullable_numeric(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     """test various count queries on Timestamp data."""
     check_query(
@@ -162,6 +215,7 @@ def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_count_interval(bodosql_interval_types, memory_leak_check):
     """test various count queries on Timedelta data."""
     check_query(
@@ -190,6 +244,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_count_string(bodosql_string_types, spark_info, memory_leak_check):
     """test various count queries on string data."""
     check_query(
@@ -208,6 +263,7 @@ def test_count_string(bodosql_string_types, spark_info, memory_leak_check):
     )
 
 
+# @pytest.mark.bodosql_cpp   # dataframe are different
 def test_count_binary(bodosql_binary_types, spark_info, memory_leak_check):
     """test various count queries on binary data."""
     check_query(
@@ -226,6 +282,7 @@ def test_count_binary(bodosql_binary_types, spark_info, memory_leak_check):
     )
 
 
+# @pytest.mark.bodosql_cpp   # dataframe are different
 def test_count_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
     """test various count queries on boolean data."""
     check_query(
@@ -245,6 +302,7 @@ def test_count_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_count_numeric_alias(bodosql_numeric_types, spark_info, memory_leak_check):
     """test various count queries on numeric data with aliases."""
     check_query(
@@ -264,6 +322,7 @@ def test_count_numeric_alias(bodosql_numeric_types, spark_info, memory_leak_chec
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_having_repeat_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     """test having clause in numeric queries"""
     check_query(
@@ -275,6 +334,7 @@ def test_having_repeat_numeric(bodosql_numeric_types, spark_info, memory_leak_ch
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     """test having clause in datetime queries"""
     check_query(
@@ -287,6 +347,7 @@ def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
     """test having clause in datetime queries"""
     expected_output = bodosql_interval_types["TABLE1"].groupby("A")["B"].count()
@@ -304,6 +365,7 @@ def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_agg_repeat_col(bodosql_numeric_types, spark_info, memory_leak_check):
     """test aggregations repeating the same column"""
     check_query(
@@ -316,6 +378,7 @@ def test_agg_repeat_col(bodosql_numeric_types, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_groupby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on boolean types
@@ -333,6 +396,7 @@ def test_groupby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_groupby_string(bodosql_string_types, spark_info, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on string types
@@ -354,6 +418,7 @@ def test_groupby_string(bodosql_string_types, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_groupby_numeric_scalars(basic_df, spark_info, memory_leak_check):
     """
     tests to ensure that groupby and max are working with numeric scalars
@@ -370,6 +435,7 @@ def test_groupby_numeric_scalars(basic_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_groupby_datetime_types(bodosql_datetime_types, spark_info, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on datetime types
@@ -391,6 +457,7 @@ def test_groupby_datetime_types(bodosql_datetime_types, spark_info, memory_leak_
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on interval types
@@ -444,6 +511,7 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
         ),
     ],
 )
+# @pytest.mark.bodosql_cpp   # agg OTHER_FUNCTION not supported, SqlPostfixOperator not supported IS NULL
 def test_count_if(query, spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -467,6 +535,7 @@ def test_count_if(query, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_having_numeric(
     bodosql_numeric_types,
     comparison_ops,
@@ -495,6 +564,7 @@ def test_having_numeric(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Tests groupby + having with aggregation in the condition
@@ -518,6 +588,7 @@ def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_having_boolean_groupby_cond(
     bodosql_boolean_types, spark_info, memory_leak_check
 ):
@@ -544,6 +615,7 @@ def test_having_boolean_groupby_cond(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_repeat_columns(basic_df, spark_info, memory_leak_check):
     """
     Tests that a column that won't produce a conflicting name
@@ -582,6 +654,7 @@ def groupby_extension_table():
     }
 
 
+# @pytest.mark.bodosql_cpp   # uses grouping sets not implemented
 def test_cube(groupby_extension_table, spark_info, memory_leak_check):
     """
     Tests that bodosql can use snowflake's cube syntax in groupby.
@@ -604,6 +677,7 @@ def test_cube(groupby_extension_table, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+# @pytest.mark.bodosql_cpp   # uses grouping sets not implemented
 def test_rollup(groupby_extension_table, spark_info, memory_leak_check):
     """
     Tests that bodosql can use snowflake's rollup syntax in groupby.
@@ -626,6 +700,7 @@ def test_rollup(groupby_extension_table, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+# @pytest.mark.bodosql_cpp   # uses grouping sets not implemented
 def test_grouping_sets(groupby_extension_table, spark_info, memory_leak_check):
     """
     Tests that bodosql can use snowflake's grouping sets syntax in groupby.
@@ -646,6 +721,7 @@ def test_grouping_sets(groupby_extension_table, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+# @pytest.mark.bodosql_cpp   # uses grouping sets not implemented
 def test_no_group_or_agg(groupby_extension_table, spark_info, memory_leak_check):
     """Tests the case in which we have at least one empty group with no aggregation"""
 
@@ -708,6 +784,7 @@ def test_nested_grouping_clauses(
         pytest.param("H", id="string_array"),
     ],
 )
+# @pytest.mark.bodosql_cpp   # aggregation ANY_VALUE not supported
 def test_any_value(agg_col, memory_leak_check):
     """Tests ANY_VALUE, which is normally nondeterministic but has been
     implemented in a way that is reproducible (by always returning the first
@@ -914,6 +991,7 @@ def test_any_value(agg_col, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
     """Tests boolor_agg, booland_agg and boolxor_agg. These is done separately
     from existing aggregation tests, as we need specific inputs to stress this function
@@ -1058,6 +1136,7 @@ def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_booland_agg_having(memory_leak_check):
     """Test having with booland_agg aggregation in the condition"""
     query = (
@@ -1122,6 +1201,7 @@ def test_booland_agg_having(memory_leak_check):
 
 
 @pytest.mark.slow
+# @pytest.mark.bodosql_cpp   # aggregations without group by not supported yet
 def test_boolor_agg_output_type(memory_leak_check):
     """Test boolor_agg to verify the output type is boolean"""
     query = """WITH TEMP AS(SELECT boolor_agg(A) as agg_A, B FROM table1 GROUP BY B)
@@ -1175,6 +1255,7 @@ def test_boolor_agg_output_type(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_max_min_tz_aware(memory_leak_check):
     """
     Test max and min on a tz-aware timestamp column
@@ -1202,6 +1283,7 @@ def test_max_min_tz_aware(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_count_tz_aware(memory_leak_check):
     """
     Test count and count(*) on a tz-aware timestamp column
@@ -1230,6 +1312,7 @@ def test_count_tz_aware(memory_leak_check):
 
 @pytest.mark.tz_aware
 @pytest.mark.slow
+# @pytest.mark.bodosql_cpp   # aggregation ANY_VALUE not supported yet
 def test_any_value_tz_aware(memory_leak_check):
     """
     Test any_value on a tz-aware timestamp column
@@ -1260,6 +1343,7 @@ def test_any_value_tz_aware(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_key(memory_leak_check):
     """
     Test tz_aware values as a key to groupby.
@@ -1290,6 +1374,7 @@ def test_tz_aware_key(memory_leak_check):
 
 @pytest.mark.tz_aware
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tz_aware_having(memory_leak_check):
     """
     Test having with tz-aware values.
@@ -1339,6 +1424,7 @@ def test_tz_aware_having(memory_leak_check):
     )
 
 
+# @pytest.mark.bodosql_cpp   # aggregation OTHER not supported yet
 def test_all_nulls_1(memory_leak_check):
     """
     Test the case where all values in a group are null.
@@ -1380,6 +1466,7 @@ def test_all_nulls_1(memory_leak_check):
     check_query(query, ctx, None, check_dtype=False, expected_output=py_output)
 
 
+# @pytest.mark.bodosql_cpp   # Call operator SqlCastFunction not supported yet
 def test_all_nulls_2(memory_leak_check):
     """
     Tests that groupby aggregations work correctly when the
@@ -1465,6 +1552,7 @@ def test_all_nulls_2(memory_leak_check):
         pytest.param("HIJ", id="slow_tests_b", marks=pytest.mark.slow),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
     """Tests the Kurtosis and Skew functions"""
     query = (
@@ -1552,6 +1640,7 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
         ),
     ],
 )
+# @pytest.mark.bodosql_cpp   # Aggregation MODE not supported yet
 def test_mode(values, dtype, memory_leak_check):
     """Tests MODE as a groupby aggregation on a subset of datatypes. The
     full type tests are done in the Python tests.
@@ -1596,6 +1685,7 @@ def test_mode(values, dtype, memory_leak_check):
     )
 
 
+# @pytest.mark.bodosql_cpp   # GroupBy.<bodo.pandas.groupby.GroupbyAggFunc object at 0x7ca675130d70>() on input column 'dummy' with type: decimal128(38, 37) not supported yet.
 def test_decimal_sum():
     """Tests groupby sum for decimals, which shoud throw error in case of overflow"""
     query = "SELECT A, sum(B) FROM table1 GROUP BY A"
@@ -1655,6 +1745,7 @@ def test_decimal_sum():
         ),
     ],
 )
+# @pytest.mark.bodosql_cpp   # Aggregation ARRAY_AGG not supported yet
 def test_array_agg(call, answer, memory_leak_check):
     """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
     a single ordering term, no DISTINCT, and accompanied by a GROUP BY.
@@ -1731,6 +1822,7 @@ def test_array_agg(call, answer, memory_leak_check):
         ),
     ],
 )
+# @pytest.mark.bodosql_cpp   # Aggregation ARRAY_AGG not supported yet
 def test_array_agg_distinct(call, answer, memory_leak_check):
     """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
     a single ordering term, with DISTINCT, and accompanied by a GROUP BY.
@@ -1828,6 +1920,7 @@ def test_array_agg_distinct(call, answer, memory_leak_check):
         ),
     ],
 )
+# @pytest.mark.bodosql_cpp   # from_pandas(): Could not convert DataFrame to Bodo: Unsupported datatype encountered in one or more columns: Could not convert Time(hour=0, minute=0, second=10, millisecond=648, microsecond=0, nanosecond=0, precision=9) with type Time: did not recognize Python value type when inferring an Arrow data type.  Aggregation OTHER_FUNCTION/OBJECT_AGG not supported yet
 def test_object_agg(value_pool, dtype, val_arrow_type, nullable, memory_leak_check):
     """Tests OBJECT_AGG with GROUP BY"""
     query = "SELECT G AS G, OBJECT_AGG(K, V) AS J FROM table1 GROUP BY G"
@@ -1894,6 +1987,7 @@ def test_object_agg(value_pool, dtype, val_arrow_type, nullable, memory_leak_che
         ),
     ],
 )
+# @pytest.mark.bodosql_cpp   # Aggregation OTHER_FUNCTION/ARRAY_UNIQUE_AGG not supported yet
 def test_array_unique_agg(call, expected, memory_leak_check):
     """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
     a single ordering term, with DISTINCT, and accompanied by a GROUP BY.
@@ -1934,6 +2028,7 @@ def test_array_unique_agg(call, expected, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_mixed_nested_agg(memory_leak_check):
     """
     Test the case where we have a mix of semi-structured and regular keys.
@@ -1974,6 +2069,7 @@ def test_mixed_nested_agg(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_mixed_nested_agg_keys(memory_leak_check):
     query = "SELECT A, B, SUM(C) as C from table1 GROUP BY A, B"
     ctx = {
@@ -2012,6 +2108,7 @@ def test_mixed_nested_agg_keys(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_groupby_agg_on_key_col(spark_info, memory_leak_check):
     """
     Test Groupby cases where the key columns are also the data columns.

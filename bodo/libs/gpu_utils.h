@@ -125,12 +125,20 @@ class GpuShuffleSendState {
     /**
      * @brief Construct a new send state.
      *
+     * @param tables Packed tables to send.
+     * @param stream CUDA stream for synchronizing packed tables with MPI.
      * @param starting_msg_tag Starting message tag to use for posting the
      * messages that send the data buffers.
+     * @param shuffle_comm MPI communicator for shuffle.
+     * @param n_ranks Number of ranks in the shuffle.
+     * @param broadcast If true, only one table is expected and it is sent to
+     * all ranks. Otherwise, one table per rank is expected and each is sent to
+     * the corresponding rank.
      */
     explicit GpuShuffleSendState(std::vector<cudf::packed_table> tables,
-                                 int starting_msg_tag_, MPI_Comm shuffle_comm,
-                                 size_t n_ranks, bool broadcast);
+                                 cudaStream_t stream, int starting_msg_tag_,
+                                 MPI_Comm shuffle_comm, size_t n_ranks,
+                                 bool broadcast);
 
     /**
      * @brief Getter for starting_msg_tag.
@@ -251,6 +259,7 @@ class GpuMpiManager {
     ~GpuMpiManager();
 
     int get_rank() const { return rank; }
+    int get_num_ranks() const { return n_ranks; }
 
     /**
      * @brief Get the underlying CUDA stream
@@ -394,12 +403,82 @@ class GpuTableBroadcastManager : public GpuTableManager {
 
     bool is_available() const { return true; }
 
-    std::vector<std::shared_ptr<cudf::table>> ownAndClear() {
+    std::vector<std::shared_ptr<cudf::table>> ownAndClear() override {
         std::vector<std::shared_ptr<cudf::table>> out_tables;
         for (auto& shuffle_info : this->tables_to_broadcast) {
             out_tables.push_back(shuffle_info.table);
         }
         this->tables_to_broadcast.clear();
+        return out_tables;
+    }
+};
+
+/**
+ * @brief Class for managing async all-gather of cudf::tables using MPI.
+ * Every rank broadcasts its table to all other ranks.
+ */
+class GpuTableAllGatherManager : public GpuTableBroadcastManager {
+   public:
+    void append_batch(std::shared_ptr<cudf::table> table,
+                      std::shared_ptr<StreamAndEvent> se) {
+        this->broadcast_table(std::move(table), std::move(se));
+    }
+};
+
+/**
+ * @brief Class for managing async shuffle of cudf::tables using MPI where
+ * tables are shuffled based on range partitioning. Each rank sends one table
+ * to each other rank, where the table sent to rank i contains rows for which
+ * the partitioning column value falls within the range assigned to rank i.
+ */
+class GpuRangeShuffleManager : public GpuTableManager {
+   private:
+    struct RangeShuffleTableInfo {
+        std::shared_ptr<cudf::table> table;
+        std::vector<cudf::size_type> split_indices;
+        cuda_event_wrapper event;
+
+        RangeShuffleTableInfo(std::shared_ptr<cudf::table> t,
+                              std::vector<cudf::size_type> s,
+                              cuda_event_wrapper e)
+            : table(std::move(t)),
+              split_indices(std::move(s)),
+              event(std::move(e)) {}
+    };
+    std::vector<RangeShuffleTableInfo> tables_to_shuffle;
+
+    bool tableReadyToSend() override {
+        return !this->tables_to_shuffle.empty() &&
+               this->tables_to_shuffle.back().event.ready();
+    }
+
+    std::vector<cudf::packed_table> getNextPerRankTables(
+        bool& do_broadcast) override;
+
+    bool hasMoreTables() override { return !tables_to_shuffle.empty(); }
+
+   public:
+    /**
+     * @brief Shuffle a cudf table across all ranks using range partitioning,
+     * essentially a IMPIAlltoallv. We use this since CUDA aware MPI
+     * doesn't support non-blocking alltoallv.
+     * @param table Input table to shuffle
+     * @param split_indices Row indices where the table should be split for each
+     * rank
+     * @param se Stream and event for synchronization
+     */
+    void append_batch(std::shared_ptr<cudf::table> table,
+                      std::vector<cudf::size_type> split_indices,
+                      std::shared_ptr<StreamAndEvent> se);
+
+    bool is_available() const { return true; }
+
+    std::vector<std::shared_ptr<cudf::table>> ownAndClear() override {
+        std::vector<std::shared_ptr<cudf::table>> out_tables;
+        for (auto& info : this->tables_to_shuffle) {
+            out_tables.push_back(info.table);
+        }
+        this->tables_to_shuffle.clear();
         return out_tables;
     }
 };
@@ -433,6 +512,12 @@ rmm::cuda_device_id get_gpu_id();
 int get_cluster_cuda_device_count();
 
 /**
+ * @brief Get the smallest memory size of all the GPUs in the system.
+ * @return Smallest GPU memory size.
+ */
+size_t get_smallest_gpu_mem_size();
+
+/**
  * @brief Get the MPI communicator for ranks with GPUs assigned
  * @param gpu_id GPU device ID
  * @return MPI_Comm
@@ -460,11 +545,11 @@ allgather_device_buffers_across_ranks(rmm::device_buffer const& local_buf,
 bool is_gpu_rank();
 
 /**
- * @brief Sets specific elements in a boolean column to `true` based on an array
- * of indices.
+ * @brief Sets specific elements in a boolean column to `Value` based on an
+ * array of indices.
  *
  * @details This function iterates over the `indices` column and sets the
- * corresponding row in `target_bools` to `true`. If the `indices` column
+ * corresponding row in `target_bools` to `Value`. If the `indices` column
  * contains null values, those specific indices are safely ignored.
  * * @warning This function does **not** perform bounds checking. The caller is
  * strictly responsible for ensuring that all valid values in the `indices`
@@ -474,26 +559,47 @@ bool is_gpu_rank();
  * * @note This function only updates the data buffer of `target_bools`. It does
  * not modify the validity bitmask of the target column.
  *
+ * @tparam Value               The boolean value to set.
  * @param[in,out] target_bools A mutable view of the boolean column to update.
  * Must be of type `cudf::type_id::BOOL8`.
- * @param[in] indices          A view of the indices to set to true. Must be of
+ * @param[in] indices          A view of the indices to set. Must be of
  * type `cudf::type_id::INT32`. Can contain nulls.
  * @param[in] stream           CUDA stream used for device memory operations and
  * kernel launches.
  */
-void cudf_set_bools_false_from_indices(cudf::mutable_column_view target_bools,
-                                       cudf::column_view const indices,
-                                       rmm::cuda_stream_view stream);
+template <bool Value>
+void cudf_set_bools_from_indices(cudf::mutable_column_view target_bools,
+                                 cudf::column_view const indices,
+                                 rmm::cuda_stream_view stream);
 
 /**
  * @brief Get a cuda asynchronous memory resource instance.
  *
- * NOTE: This function must be called after a rank's device id is set.
+ * @note This function must be called after a rank's device id is set.
  *
  * @return std::shared_ptr<rmm::mr::device_memory_resource>
  */
 std::shared_ptr<rmm::mr::device_memory_resource>
 get_gpu_async_memory_resource();
+
+/**
+ * @brief Get a static Cuda memory resource reference for allocating buffers for
+ * MPI to enable GPU Direct paths.
+ *
+ * @note Device id must remain the same for all calls.
+ *
+ * @return rmm::device_async_resource_ref
+ */
+rmm::device_async_resource_ref get_cuda_memory_resource_ref();
+
+/**
+ * @brief Get a device_uvector containing an iota sequence from 0 to n-1.
+ * @param n The length of the iota sequence.
+ * @param stream The CUDA stream to use for any device memory operations.
+ * @return the device_uvector containing the iota sequence.
+ */
+rmm::device_uvector<cudf::size_type> make_uvector_iota(
+    cudf::size_type n, rmm::cuda_stream_view stream);
 
 #else
 // Empty implementation when CUDF is not available

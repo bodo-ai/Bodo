@@ -2,6 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <fmt/format.h>
 #include <cstddef>
+#include <cstdlib>
 #include <utility>
 
 #include <arrow/api.h>
@@ -139,6 +140,19 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
     int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::TIMESTAMPNS(duckdb::timestamp_ns_t(val)));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
+    int64_t val) {
+    std::lldiv_t div_res = std::div((long long)val, 1000LL);
+    if (div_res.rem != 0) {
+        throw std::runtime_error(
+            "make_const_timedelta_ns_expr only supports values with "
+            "microsecond precision since duckdb::Value::INTERVAL only supports "
+            "microsecond precision");
+    }
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(div_res.quot)));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
@@ -409,12 +423,9 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     auto lhs_duck = to_duckdb(lhs);
 
     switch (etype) {
-        case duckdb::ExpressionType::OPERATOR_NOT: {
-            auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
-                etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
-            ret->children.push_back(std::move(lhs_duck));
-            return ret;
-        } break;
+        case duckdb::ExpressionType::OPERATOR_NOT:
+        case duckdb::ExpressionType::OPERATOR_IS_TRUE:
+        case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
                 etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
@@ -1104,9 +1115,9 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
-    std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *out_schema_py,
-    PyObject *args, const std::vector<int> &selected_columns, bool is_cfunc,
-    bool has_state, const std::string arrow_compute_func) {
+    PyObject *out_schema_py,
+    std::vector<std::unique_ptr<duckdb::Expression>> &in_exprs, PyObject *args,
+    bool is_cfunc, bool has_state, const std::string arrow_compute_func) {
     // Get output data type (UDF output is a single column)
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
     auto [_, out_types] = arrow_schema_to_duckdb(out_schema);
@@ -1114,15 +1125,17 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
     assert(out_types.size() > 0);
     duckdb::LogicalType out_type = out_types[0];
 
-    // Necessary before accessing source->types attribute
-    source->ResolveOperatorTypes();
-
     auto scalar_name =
         (arrow_compute_func == "") ? "bodo_udf" : arrow_compute_func;
 
+    duckdb::vector<duckdb::LogicalType> input_types;
+    for (auto &expr : in_exprs) {
+        input_types.push_back(expr->return_type);
+    }
+
     // Create ScalarFunction for Python UDF or Arrow Compute Function
     duckdb::ScalarFunction scalar_function = duckdb::ScalarFunction(
-        scalar_name, source->types, out_type, RunFunction, nullptr, nullptr,
+        scalar_name, input_types, out_type, RunFunction, nullptr, nullptr,
         nullptr, nullptr, duckdb::LogicalTypeId::INVALID,
         duckdb::FunctionStability::CONSISTENT,
         duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING);
@@ -1131,15 +1144,12 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
         duckdb::make_uniq<BodoScalarFunctionData>(
             args, out_schema, is_cfunc, has_state, arrow_compute_func);
 
-    std::vector<duckdb::ColumnBinding> source_cols =
-        source->GetColumnBindings();
-
-    // Add UDF input expressions for selected columns
+    // Add UDF input expressions columns
     std::vector<duckdb::unique_ptr<duckdb::Expression>> udf_in_exprs;
-    for (int col_idx : selected_columns) {
-        auto expr = duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
-            source->types[col_idx], source_cols[col_idx]);
-        udf_in_exprs.emplace_back(std::move(expr));
+    for (auto &expr : in_exprs) {
+        // Convert std::unique_ptr to duckdb::unique_ptr.
+        auto expr_duck = to_duckdb(expr);
+        udf_in_exprs.push_back(std::move(expr_duck));
     }
 
     // Create UDF expression
@@ -1315,7 +1325,7 @@ std::pair<int64_t, PyObject *> execute_plan(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows) {
+    int64_t num_rows, bool has_partitioning) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1323,7 +1333,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
         BodoParquetScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoParquetScanFunctionData>(
-            parquet_path, pyarrow_schema, storage_options);
+            parquet_path, pyarrow_schema, storage_options, has_partitioning);
 
     // Convert Arrow schema to DuckDB
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
@@ -1556,11 +1566,33 @@ void registerFloor(duckdb::shared_ptr<duckdb::DuckDB> db) {
     system_catalog.CreateFunction(data, floor_info);
 }
 
+void registerPower(duckdb::shared_ptr<duckdb::DuckDB> db) {
+    duckdb::LogicalType double_type(duckdb::LogicalType::DOUBLE);
+    duckdb::LogicalType float_type(duckdb::LogicalType::FLOAT);
+    duckdb::vector<duckdb::LogicalType> double_arguments = {double_type,
+                                                            double_type};
+    duckdb::vector<duckdb::LogicalType> float_arguments = {float_type,
+                                                           float_type};
+    duckdb::ScalarFunction power_fun_double("POWER", double_arguments,
+                                            double_type, nullptr);
+    duckdb::ScalarFunction power_fun_float("POWER", float_arguments, float_type,
+                                           nullptr);
+    duckdb::ScalarFunctionSet power_set("POWER");
+    power_set.AddFunction(power_fun_double);
+    power_set.AddFunction(power_fun_float);
+    duckdb::CreateScalarFunctionInfo power_info(power_set);
+    auto &system_catalog = duckdb::Catalog::GetSystemCatalog(*(db->instance));
+    auto data =
+        duckdb::CatalogTransaction::GetSystemTransaction(*(db->instance));
+    system_catalog.CreateFunction(data, power_info);
+}
+
 duckdb::shared_ptr<duckdb::DuckDB> get_duckdb() {
     static duckdb::shared_ptr<duckdb::DuckDB> db =
         duckdb::make_shared_ptr<duckdb::DuckDB>(nullptr);
     static bool floor_registered = []() {
         registerFloor(db);
+        registerPower(db);
         return true;
     }();
     // Prevent unused variable error.

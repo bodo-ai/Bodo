@@ -84,11 +84,13 @@ class BodoParquetScanFunction : public BodoScanFunction {
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
     BodoParquetScanFunctionData(PyObject *path, PyObject *pyarrow_schema,
-                                PyObject *storage_options)
+                                PyObject *storage_options,
+                                bool has_partitioning)
         : BodoScanFunctionData(BodoScanFunctionType::PARQUET_SCAN),
           path(path),
           pyarrow_schema(pyarrow_schema),
-          storage_options(storage_options) {
+          storage_options(storage_options),
+          has_partitioning(has_partitioning) {
         Py_INCREF(pyarrow_schema);
         Py_INCREF(storage_options);
         Py_INCREF(path);
@@ -109,13 +111,14 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         bool run_on_gpu) override;
 
     bool canRunOnGPU(bool has_filters, bool has_limit) override {
-        return !has_limit;
+        return !has_limit && !has_partitioning;
     }
 
     // Parquet dataset path
     PyObject *path;
     PyObject *pyarrow_schema;
     PyObject *storage_options;
+    bool has_partitioning;
 };
 
 /**
@@ -251,6 +254,11 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
         bool run_on_gpu) override;
+
+    bool canRunOnGPU(bool has_filters, bool has_limit) override {
+        return !has_limit;
+    }
+
     const std::shared_ptr<arrow::Schema> arrow_schema;
     PyObject *catalog;
     PyObject *iceberg_filter;

@@ -45,11 +45,16 @@ BUILTIN_AGG_FUNCS = {
     "std",
     "var",
     "skew",
+    "kurt",
+    "kurtosis",
     "count",
     "size",
     "nunique",
     "first",
     "last",
+    "boolor_agg",
+    "booland_agg",
+    "boolxor_agg",
 }
 
 
@@ -178,9 +183,14 @@ class DataFrameGroupBy:
             ]
         elif is_dict_like(func):
             # Handle cases like {"A": "sum"} -> creates sum column over column A
-            normalized_func = [
-                GroupbyAggFunc(col, func_) for col, func_ in func.items()
-            ]
+            for col, func_ in func.items():
+                # Handle cases like {"A": ["sum", "count"]} -> creates sum
+                # and count column for the input column A
+                if is_list_like(func_):
+                    for lagg in func_:
+                        normalized_func.append(GroupbyAggFunc(col, lagg))
+                else:
+                    normalized_func.append(GroupbyAggFunc(col, func_))
         elif is_list_like(func):
             # Handle cases like ["sum", "count"] -> creates a sum and count column
             # for each input column (column names are a multi-index) i.e.:
@@ -272,19 +282,27 @@ class DataFrameGroupBy:
         """
         return _groupby_agg_plan(self, "skew")
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the std of each group.
         """
-        return _groupby_agg_plan(self, "std")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "DataFrameGroupby only supports ddof of 0 or 1"
+            )
+        return _groupby_agg_plan(self, "std", ddof=ddof)
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the var of each group.
         """
-        return _groupby_agg_plan(self, "var")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "DataFrameGroupby only supports ddof of 0 or 1"
+            )
+        return _groupby_agg_plan(self, "var", ddof=ddof)
 
     @check_args_fallback(supported="none")
     def first(self):
@@ -299,6 +317,20 @@ class DataFrameGroupBy:
         Get the last entry for each group.
         """
         return _groupby_agg_plan(self, "last")
+
+    @check_args_fallback(supported="none")
+    def any(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "boolor_agg", pandas_name="any")
+
+    @check_args_fallback(supported="none")
+    def all(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "booland_agg", pandas_name="all")
 
 
 class SeriesGroupBy:
@@ -448,19 +480,41 @@ class SeriesGroupBy:
         """
         return _groupby_agg_plan(self, "skew")
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def std(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the std of each group.
         """
-        return _groupby_agg_plan(self, "std")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "SeriesGroupby only supports ddof of 0 or 1"
+            )
+        return _groupby_agg_plan(self, "std", ddof=ddof)
 
-    @check_args_fallback(supported="none")
+    @check_args_fallback(supported=["ddof"])
     def var(self, ddof=1, engine=None, engine_kwargs=None, numeric_only=False):
         """
         Compute the var of each group.
         """
-        return _groupby_agg_plan(self, "var")
+        if ddof not in [0, 1]:
+            raise BodoLibNotImplementedException(
+                "SeriesGroupby only supports ddof of 0 or 1"
+            )
+        return _groupby_agg_plan(self, "var", ddof=ddof)
+
+    @check_args_fallback(supported="none")
+    def any(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "boolor_agg", pandas_name="any")
+
+    @check_args_fallback(supported="none")
+    def all(self):
+        """
+        Get the last entry for each group.
+        """
+        return _groupby_agg_plan(self, "booland_agg", pandas_name="all")
 
 
 def _groupby_apply_plan(
@@ -553,20 +607,26 @@ def _groupby_agg_plan(
 ) -> BodoSeries | BodoDataFrame:
     """Compute groupby.func() on the Series or DataFrame GroupBy object."""
     from bodo.pandas.base import _empty_like
+    from bodo.pandas_compat import pandas_version
 
+    pandas_name = kwargs.pop("pandas_name", func)
     grouped_selection = grouped.selection_for_plan
 
     zero_size_df = _empty_like(grouped._obj)
 
-    # Convert to Pandas types to avoid gaps in Arrow conversion
-    zero_size_df_pandas = convert_to_pandas_types(zero_size_df)
+    # Convert to Pandas types to avoid gaps in Arrow types of Pandas <3
+    zero_size_df_pandas = (
+        convert_to_pandas_types(zero_size_df)
+        if pandas_version < (3, 0)
+        else zero_size_df
+    )
     empty_data_pandas = zero_size_df_pandas.groupby(
         grouped._keys, as_index=grouped._as_index
     )[
         grouped_selection[0]
         if isinstance(grouped, SeriesGroupBy)
         else grouped_selection
-    ].agg(func, *args, **kwargs)
+    ].agg(pandas_name, *args, **kwargs)
 
     normalized_func = grouped._normalize_agg_func(func, grouped_selection, kwargs)
 
@@ -579,7 +639,7 @@ def _groupby_agg_plan(
 
     n_key_cols = 0 if grouped._as_index else len(grouped._keys)
     empty_data = _cast_groupby_agg_columns(
-        normalized_func, zero_size_df, empty_data_pandas, n_key_cols
+        normalized_func, zero_size_df, empty_data_pandas, n_key_cols, grouped._keys
     )
 
     out_types = empty_data
@@ -592,6 +652,10 @@ def _groupby_agg_plan(
             out_types.iloc[:, i] if isinstance(out_types, pd.DataFrame) else out_types
         )
         func_name = f"udf_{i}" if func.is_custom_aggfunc else func.func_name
+        if func_name == "std" and kwargs.get("ddof", 1) == 0:
+            func_name = "std_pop"
+        elif func_name == "var" and kwargs.get("ddof", 1) == 0:
+            func_name = "var_pop"
         cfunc_wrapper = (
             _get_cfunc_wrapper(func.func, zero_size_df[func.in_col], out_type)
             if func.is_custom_aggfunc
@@ -900,7 +964,17 @@ def _get_agg_output_type(
         elif pa.types.is_decimal(pa_type):
             # TODO: Decimal sum
             fallback = True
-    elif func_name in ("mean", "std", "var", "skew"):
+    elif func_name in (
+        "mean",
+        "std",
+        "var",
+        "std_pop",
+        "var_pop",
+        "skew",
+        "kurt",
+        "kurtosis",
+        "median",
+    ):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
         elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
@@ -935,6 +1009,8 @@ def _get_agg_output_type(
             fallback = True
     elif func_name in ("first", "last"):
         new_type = pa_type
+    elif func_name in ("boolor_agg", "booland_agg"):
+        new_type = pa.bool_()
     elif callable(func.func):
         # Import compiler
         import bodo.decorators  # isort:skip # noqa
@@ -960,7 +1036,9 @@ def _get_agg_output_type(
         fallback = True
         new_type = _numba_type_to_pyarrow_type(out_numba_type)
     else:
-        raise BodoLibNotImplementedException("Unsupported aggregate function: ", func)
+        raise BodoLibNotImplementedException(
+            "_get_agg_output_type Unsupported aggregate function: ", func
+        )
 
     if new_type is not None:
         return new_type
@@ -982,6 +1060,7 @@ def _cast_groupby_agg_columns(
     in_data: pd.DataFrame,
     out_data: pd.Series | pd.DataFrame,
     n_key_cols: int,
+    keys: list[str],
 ) -> pd.Series | pd.DataFrame:
     """
     Casts dtypes in the output of GroupBy.agg() to the correct type for aggregation.
@@ -994,6 +1073,7 @@ def _cast_groupby_agg_columns(
         in_data : An empty DataFrame with the same shape as the input to the
             aggregation.
         n_key_cols : Number of grouping keys in the output.
+        keys: column names of key columns
 
     Returns:
         pd.Series | pd.DataFrame: A DataFrame or Series with the dtypes casted depending
@@ -1030,5 +1110,11 @@ def _cast_groupby_agg_columns(
 
         out_col_name = out_data.columns[i + n_key_cols]
         out_data[out_col_name] = pd.Series([], dtype=pd.ArrowDtype(new_type))
+
+    # Set key dtypes as Arrow dtypes to avoid object dtype issues downstream
+    # TODO(ehsan): handle as_index=True case which generates MultiIndex
+    for i in range(n_key_cols):
+        key_col_name = keys[i]
+        out_data[key_col_name] = pd.Series([], dtype=in_data[key_col_name].dtype)
 
     return out_data

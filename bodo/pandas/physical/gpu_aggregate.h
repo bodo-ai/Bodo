@@ -19,6 +19,7 @@
 #include "duckdb/planner/operator/logical_aggregate.hpp"
 #include "duckdb/planner/operator/logical_distinct.hpp"
 #include "expression.h"
+#include "gpu_reduce.h"
 #include "operator.h"
 
 struct PhysicalGPUAggregateMetrics {
@@ -32,8 +33,12 @@ struct PhysicalGPUAggregateMetrics {
 inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
     // Temporarily don't support count_start and quantile on GPU.
     if (logical_aggregate.groups.empty()) {
-        return false;
+        return gpu_capable_reduce(logical_aggregate);
     }
+
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+        getColRefMap(logical_aggregate.children[0]->GetColumnBindings());
+    logical_aggregate.children[0]->ResolveOperatorTypes();
 
     for (size_t i = 0; i < logical_aggregate.expressions.size(); i++) {
         const auto& expr = logical_aggregate.expressions[i];
@@ -48,6 +53,43 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
         // Check if the aggregate function is supported
         bool is_udf = agg_expr.function.name.starts_with("udf");
         if (is_udf) {
+            return false;
+        }
+
+        // Check input types of the aggregate function
+        auto& child_expr = agg_expr.children[0];
+        if (child_expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
+            throw std::runtime_error(
+                "Aggregate expression must have only col ref "
+                "expression children" +
+                expr->ToString());
+        }
+        auto& colref = child_expr->Cast<duckdb::BoundColumnRefExpression>();
+
+        uint64_t col_idx = col_ref_map.at(
+            {colref.binding.table_index, colref.binding.column_index});
+
+        // cudf doesn't support sum aggregation on string columns
+        if (agg_expr.function.name == "sum" &&
+            logical_aggregate.children[0]->types[col_idx].id() ==
+                duckdb::LogicalTypeId::VARCHAR) {
+            return false;
+        }
+
+        if (agg_expr.function.name != "sum" &&
+            agg_expr.function.name != "count" &&
+            agg_expr.function.name != "mean" &&
+            agg_expr.function.name != "min" &&
+            agg_expr.function.name != "max" &&
+            agg_expr.function.name != "size" &&
+            agg_expr.function.name != "nunique" &&
+            agg_expr.function.name != "skew" &&
+            agg_expr.function.name != "std" &&
+            agg_expr.function.name != "std_pop" &&
+            agg_expr.function.name != "var_pop" &&
+            agg_expr.function.name != "boolor_agg" &&
+            agg_expr.function.name != "booland_agg" &&
+            agg_expr.function.name != "var") {
             return false;
         }
     }
@@ -88,8 +130,9 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
             // Check if the aggregate function is supported
             if (function_to_ftype.find(agg_expr.function.name) ==
                 function_to_ftype.end()) {
-                throw std::runtime_error("Unsupported aggregate function: " +
-                                         agg_expr.function.name);
+                throw std::runtime_error(
+                    "PhysicalGPUAggregate Unsupported aggregate function: " +
+                    agg_expr.function.name);
             }
 
             if (agg_expr.children.size() != 1) {
@@ -148,9 +191,11 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         if (!dropna.has_value()) {
             dropna = true;
         }
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         arrow_output_schema = this->output_schema->ToArrowSchema();
         this->groupby_state = std::make_unique<CudaGroupbyState>(
-            keys, column_agg_funcs, arrow_output_schema);
+            keys, column_agg_funcs, arrow_output_schema, dropna.value());
 
         this->metrics.init_time += end_timer(start_init);
     }
@@ -168,6 +213,9 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
 
         std::vector<std::pair<uint64_t, int32_t>> column_agg_funcs;
         this->output_schema = in_table_schema;
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
+
         arrow_output_schema = this->output_schema->ToArrowSchema();
         this->groupby_state = std::make_unique<CudaGroupbyState>(
             cols_to_keep_vec, column_agg_funcs, arrow_output_schema);
@@ -260,7 +308,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
      *
      * @return std::shared_ptr<bodo::Schema>
      */
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return output_schema;
     }
 
@@ -311,6 +359,8 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         }
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
+
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
     }
 
     std::shared_ptr<CudaGroupbyState> groupby_state;
@@ -373,7 +423,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
             "GetResult called on a PhysicalGPUCountStar node.");
     }
 
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return out_schema;
     }
 
@@ -384,7 +434,7 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
                     OperatorResult::FINISHED};
         }
 
-        cudf::numeric_scalar<uint64_t> s(global_count, true);
+        cudf::numeric_scalar<uint64_t> s(global_count, true, se->stream);
         auto col = cudf::make_column_from_scalar(s, 1, se->stream);
         std::vector<std::unique_ptr<cudf::column>> cols;
         cols.push_back(std::move(col));

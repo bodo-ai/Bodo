@@ -42,3 +42,9 @@ void iceberg_pq_write(
     const char *iceberg_metadata, PyObject *iceberg_files_info_py,
     std::shared_ptr<arrow::Schema> iceberg_schema,
     std::shared_ptr<arrow::fs::FileSystem> arrow_fs, void *sketches_ptr);
+
+/**
+ * @brief Utility function to generate a unique file name for an Iceberg data
+ * file.
+ */
+std::string generate_iceberg_file_name();

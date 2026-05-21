@@ -6,16 +6,13 @@
 #include <arrow/compute/kernel.h>
 #include <arrow/result.h>
 #include <arrow/status.h>
+#include <arrow/table.h>
 #include <arrow/type_traits.h>
 #include <future>
 #include <rmm/cuda_stream_view.hpp>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
-#include "../libs/_array_utils.h"
-#include "../libs/_bodo_common.h"
-#include "../libs/_bodo_to_arrow.h"
-#include "../tests/utils.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
 #include "duckdb/planner/expression.hpp"
@@ -29,9 +26,17 @@
 #include <cudf/binaryop.hpp>
 #include <cudf/column/column_factories.hpp>
 #include <cudf/copying.hpp>
+#include <cudf/datetime.hpp>
+#include <cudf/replace.hpp>
+#include <cudf/round.hpp>
 #include <cudf/scalar/scalar.hpp>
 #include <cudf/scalar/scalar_factories.hpp>
+#include <cudf/search.hpp>
+#include <cudf/strings/contains.hpp>
 #include <cudf/strings/find.hpp>
+#include <cudf/strings/regex/regex_program.hpp>
+#include <cudf/strings/slice.hpp>
+#include <cudf/strings/strip.hpp>
 #include <cudf/unary.hpp>
 
 #include "duckdb/common/enums/expression_type.hpp"
@@ -101,13 +106,13 @@ std::unique_ptr<cudf::scalar> make_cudf_scalar_from_value(
     using T = std::decay_t<U>;
 
     if constexpr (std::is_same_v<T, std::string>) {
-        return std::make_unique<cudf::string_scalar>(value, se->stream);
+        return std::make_unique<cudf::string_scalar>(value, true, se->stream);
     } else if constexpr (std::is_same_v<T, const char *>) {
-        return std::make_unique<cudf::string_scalar>(std::string(value),
+        return std::make_unique<cudf::string_scalar>(std::string(value), true,
                                                      se->stream);
     } else if constexpr (std::is_same_v<T, bool>) {
-        return std::make_unique<cudf::numeric_scalar<int8_t>>(
-            static_cast<int8_t>(value), true, se->stream);
+        return std::make_unique<cudf::numeric_scalar<bool>>(value, true,
+                                                            se->stream);
     } else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
         if constexpr (sizeof(T) == 1)
             return std::make_unique<cudf::numeric_scalar<int8_t>>(
@@ -276,8 +281,8 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -307,10 +312,10 @@ class PhysicalGPUComparisonExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUNullExpression::join_expr_internal unimplemented ");
     }
@@ -331,8 +336,8 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
         : constant(val), generate_array(no_scalars) {}
     virtual ~PhysicalGPUNullExpression() = default;
 
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // The current rule is that if the expression infrastructure
         // is used for filtering then constants are treated as
         // scalars and if used for projection then constants become
@@ -354,7 +359,7 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
             std::size_t length = input_batch.table->num_rows();
             // create a column filled with that scalar
             std::unique_ptr<cudf::column> col =
-                cudf::make_column_from_scalar(*scalar, length, se->stream);
+                cudf::make_column_from_scalar(*invalid, length, se->stream);
             return std::make_shared<ArrayExprGPUResult>(
                 std::move(col), std::string("Constant"));
         } else {
@@ -362,10 +367,10 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
         }
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUNullExpression::join_expr_internal unimplemented ");
     }
@@ -416,10 +421,10 @@ class PhysicalGPUConstantExpression : public PhysicalGPUExpression {
         }
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUConstantExpression::join_expr_internal unimplemented ");
     }
@@ -447,8 +452,8 @@ class PhysicalGPUColumnRefExpression : public PhysicalGPUExpression {
         : col_idx(column), bound_name(_bound_name), left_side(_left_side) {}
     virtual ~PhysicalGPUColumnRefExpression() = default;
 
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         GPU_COLUMN res_array = std::make_unique<cudf::column>(
             input_batch.table->view().column(col_idx), se->stream);
 
@@ -470,10 +475,10 @@ class PhysicalGPUColumnRefExpression : public PhysicalGPUExpression {
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
@@ -518,8 +523,8 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -549,10 +554,10 @@ class PhysicalGPUConjunctionExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPColumnRefExpression::join_expr_internal unimplemented ");
     }
@@ -580,8 +585,8 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // Process child first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -605,10 +610,10 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -657,8 +662,8 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // Process child first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -696,10 +701,10 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -751,6 +756,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
             comparator = cudf::binary_operator::FLOOR_DIV;
         } else if (opstr == "%") {
             comparator = cudf::binary_operator::MOD;
+        } else if (opstr == "POWER") {
+            comparator = cudf::binary_operator::POW;
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
                                      opstr);
@@ -763,8 +770,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // We know we have two children so process them first.
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -794,10 +801,10 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
         return ret;
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -828,8 +835,8 @@ class PhysicalGPUCaseExpression : public PhysicalGPUExpression {
      * @brief How to process this expression tree node.
      *
      */
-    virtual std::shared_ptr<ExprGPUResult> ProcessBatch(
-        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) {
+    std::shared_ptr<ExprGPUResult> ProcessBatch(
+        GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
         // Process children first.
         std::shared_ptr<ExprGPUResult> when_res =
             children[0]->ProcessBatch(input_batch, se);
@@ -842,10 +849,10 @@ class PhysicalGPUCaseExpression : public PhysicalGPUExpression {
         return std::make_shared<ArrayExprGPUResult>(std::move(result), "Case");
     }
 
-    virtual arrow::Datum join_expr_internal(
+    arrow::Datum join_expr_internal(
         cudf::column **left_table, cudf::column **right_table, void **left_data,
         void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
+        int64_t left_index, int64_t right_index) override {
         throw std::runtime_error(
             "PhysicalGPUCastExpression::join_expr_internal unimplemented ");
     }
@@ -893,10 +900,39 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
           scalar_func_data(_scalar_func_data),
           result_type(std::move(_result_type)) {
         if (scalar_func_data.arrow_func_name != "ends_with" &&
-            scalar_func_data.arrow_func_name != "starts_with") {
+            scalar_func_data.arrow_func_name != "starts_with" &&
+            scalar_func_data.arrow_func_name != "match_substring_regex" &&
+            scalar_func_data.arrow_func_name != "match_substring_regex_first" &&
+            scalar_func_data.arrow_func_name != "utf8_slice_codeunits" &&
+            scalar_func_data.arrow_func_name != "utf8_trim_whitespace" &&
+            scalar_func_data.arrow_func_name != "utf8_trim" &&
+            scalar_func_data.arrow_func_name != "year" &&
+            scalar_func_data.arrow_func_name != "round" &&
+            scalar_func_data.arrow_func_name != "is_null" &&
+            scalar_func_data.arrow_func_name != "is_not_null" &&
+            scalar_func_data.arrow_func_name != "is_in") {
             throw std::runtime_error(
-                "PhysicalGPUArrowExpression only supports ends_with and "
-                "starts_with for now.");
+                "PhysicalGPUArrowExpression only supports ends_with, "
+                "starts_with, match_substring_regex, "
+                "match_substring_regex_first, "
+                "year, round, is_null, is_not_null and is_in for now.");
+        }
+        if (scalar_func_data.arrow_func_name == "ends_with" ||
+            scalar_func_data.arrow_func_name == "starts_with" ||
+            scalar_func_data.arrow_func_name == "match_substring_regex" ||
+            scalar_func_data.arrow_func_name == "match_substring_regex_first" ||
+            scalar_func_data.arrow_func_name == "utf8_trim") {
+            extract_string_arg_from_python();
+        } else if (scalar_func_data.arrow_func_name == "utf8_trim_whitespace") {
+            // Empty string which indicates strip whitespace characters in
+            // cudf::strings::strip()
+            str_scalar_in = std::make_shared<cudf::string_scalar>("", true);
+        } else if (scalar_func_data.arrow_func_name == "round") {
+            round_ndigits = get_py_round_arg(scalar_func_data.args);
+        } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            extract_slice_arg_from_python();
+        } else if (scalar_func_data.arrow_func_name == "is_in") {
+            extract_isin_arg_from_python();
         }
     }
 
@@ -906,35 +942,6 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
      */
     std::shared_ptr<ExprGPUResult> ProcessBatch(
         GPU_DATA input_batch, std::shared_ptr<StreamAndEvent> se) override {
-        // Extract string argument from scalar_func_data.args for ends_with and
-        // starts_with
-        if (!PyTuple_Check(scalar_func_data.args) ||
-            PyTuple_Size(scalar_func_data.args) != 1) {
-            throw std::runtime_error(
-                fmt::format("{} args not a 1-element tuple.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        // Get the first element (borrowed reference)
-        PyObject *py_str = PyTuple_GetItem(scalar_func_data.args, 0);
-
-        if (!PyUnicode_Check(py_str)) {
-            throw std::runtime_error(
-                fmt::format("{} args element is not a Python string.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        // Convert to UTF‑8 C string
-        const char *c_str = PyUnicode_AsUTF8(py_str);
-        if (!c_str) {
-            throw std::runtime_error(
-                fmt::format("{} error extracting Python string.",
-                            scalar_func_data.arrow_func_name));
-        }
-
-        str_scalar_in = std::make_shared<cudf::string_scalar>(
-            std::string(c_str), true, se->stream);
-
         std::shared_ptr<ExprGPUResult> in_res =
             children[0]->ProcessBatch(input_batch, se);
 
@@ -948,6 +955,59 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
         } else if (scalar_func_data.arrow_func_name == "starts_with") {
             result = cudf::strings::starts_with(in_as_array->result->view(),
                                                 *str_scalar_in, se->stream);
+        } else if (scalar_func_data.arrow_func_name ==
+                   "match_substring_regex") {
+            result = cudf::strings::contains_re(in_as_array->result->view(),
+                                                *regex_prog, se->stream);
+        } else if (scalar_func_data.arrow_func_name ==
+                   "match_substring_regex_first") {
+            result = cudf::strings::matches_re(in_as_array->result->view(),
+                                               *regex_prog, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            result = cudf::strings::slice_strings(
+                in_as_array->result->view(), start, stop, step, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "utf8_trim_whitespace" ||
+                   scalar_func_data.arrow_func_name == "utf8_trim") {
+            result = cudf::strings::strip(in_as_array->result->view(),
+                                          cudf::strings::side_type::BOTH,
+                                          *str_scalar_in, se->stream);
+        } else if (scalar_func_data.arrow_func_name == "year") {
+            result = cudf::datetime::extract_datetime_component(
+                in_as_array->result->view(),
+                cudf::datetime::datetime_component::YEAR, se->stream);
+            // Cast int16 to int64 to match frontend (and CPU side)
+            result =
+                cudf::cast(result->view(),
+                           cudf::data_type(cudf::type_id::INT64), se->stream);
+        } else if (scalar_func_data.arrow_func_name == "round") {
+// NOTE: cudf::round is deprecated but still used here in cudf:
+// https://github.com/rapidsai/cudf/blob/1ed06c6105fb31bba18fc7cf69e2529f9c6a7a22/python/cudf/cudf/core/column/numerical_base.py#L252
+// cudf::round_decimal doesn't support floating point data for some reason.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+            result = cudf::round(in_as_array->result->view(), round_ndigits,
+                                 cudf::rounding_method::HALF_EVEN, se->stream);
+#pragma GCC diagnostic pop
+        } else if (scalar_func_data.arrow_func_name == "is_null") {
+            result = cudf::is_null(in_as_array->result->view(), se->stream);
+        } else if (scalar_func_data.arrow_func_name == "is_not_null") {
+            result = cudf::is_valid(in_as_array->result->view(), se->stream);
+
+        } else if (scalar_func_data.arrow_func_name == "is_in") {
+            result = cudf::contains(isin_data->get_column(0).view(),
+                                    in_as_array->result->view(), se->stream);
+            // handle nulls in input to match Pandas similar to cudf:
+            // https://github.com/rapidsai/cudf/blob/1fd16fda34a6e78777330f4e02bdd122a6977a22/python/cudf/cudf/core/column/column.py#L2164
+            if (in_as_array->result->has_nulls()) {
+                std::unique_ptr<cudf::scalar> fill_scalar =
+                    arrow_scalar_to_cudf(
+                        arrow::MakeScalar(arrow::boolean(),
+                                          isin_data->get_column(0).has_nulls())
+                            .ValueOrDie(),
+                        se->stream);
+                result = cudf::replace_nulls(result->view(), *fill_scalar,
+                                             se->stream);
+            }
         } else {
             throw std::runtime_error(
                 fmt::format("Unsupported Arrow function: {}",
@@ -979,9 +1039,54 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     const duckdb::LogicalType result_type;
     PhysicalGPUArrowExpressionMetrics metrics;
 
+    void extract_string_arg_from_python() {
+        const char *c_str = get_py_single_arg_as_cstr(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str());
+
+        if (scalar_func_data.arrow_func_name == "match_substring_regex" ||
+            scalar_func_data.arrow_func_name == "match_substring_regex_first") {
+            regex_prog =
+                cudf::strings::regex_program::create(std::string(c_str));
+        } else {
+            str_scalar_in =
+                std::make_shared<cudf::string_scalar>(std::string(c_str), true);
+        }
+    }
+
+    void extract_slice_arg_from_python() {
+        std::tie(start, stop, step) =
+            get_py_slice_args<cudf::size_type>(scalar_func_data.args);
+    }
+
+    void extract_isin_arg_from_python() {
+        std::shared_ptr<arrow::Array> values_array =
+            get_py_isin_arg_as_arrow_array(scalar_func_data.args);
+
+        // Convert isin input to cudf table
+        std::shared_ptr<arrow::Table> values_table = arrow::Table::Make(
+            arrow::schema({arrow::field("values", values_array->type())}),
+            {values_array});
+        GPU_DATA gpu_data = convertArrowTableToGPU(values_table, nullptr);
+
+        isin_data = gpu_data.table;
+    }
+
     // Keeping reference to the cudf string scalar created from the Python
     // string argument to ensure it stays alive during processing.
     std::shared_ptr<cudf::string_scalar> str_scalar_in;
+
+    // Needed for match_substring_regex
+    std::shared_ptr<cudf::strings::regex_program> regex_prog;
+
+    int32_t round_ndigits = 0;
+
+    // str.slice() arguments
+    int64_t start = 0;
+    int64_t stop = 0;
+    int64_t step = 0;
+
+    // isin argument
+    std::shared_ptr<cudf::table> isin_data;
 };
 
 struct PhysicalGPUUDFExpressionMetrics {
@@ -1076,8 +1181,10 @@ class CudfASTOwner {
     const cudf::ast::expression *root{nullptr};
 
    public:
-    void insert_literal(const duckdb::Value &val,
-                        rmm::cuda_stream_view &stream);
+    const cudf::ast::expression &insert_literal(const duckdb::Value &val,
+                                                rmm::cuda_stream_view &stream);
+    const cudf::ast::expression &insert_literal(
+        std::unique_ptr<cudf::scalar> val, rmm::cuda_stream_view &stream);
     const cudf::ast::expression &get_root() const {
         if (!root) {
             throw std::runtime_error("CudfASTOwner: tree is empty");
@@ -1092,7 +1199,9 @@ class CudfASTOwner {
     }
 
     friend const cudf::ast::expression &duckdb_expr_to_cudf_ast(
-        const duckdb::Expression &, const std::unordered_set<duckdb::idx_t> &,
+        const duckdb::Expression &,
+        const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &,
+        const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &,
         CudfASTOwner &, rmm::cuda_stream_view &);
 };
 
@@ -1113,14 +1222,13 @@ cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
  * (table_index, column_index) duckdb pairs to a flat column index into the
  * *_conditional table_view passed to mixed_join.  The table_reference
  * (LEFT vs RIGHT) is determined by whether the duckdb table_index is
- * found in @p left_table_indices.
+ * found in @p left_col_ref_map.
  *
  * @param expr              Root of the duckdb expression subtree to convert.
- * @param left_table_indices
- *                          Set of duckdb table indices that belong to the left
- *                          side of the join.  Any table index NOT in this set
- *                          is treated as belonging to the right side.
- * @param owner             Keeps all allocated AST nodes and scalars alive.
+ * @param left_col_ref_map Duckdb column references on the left side of the
+ * join.
+ * @param right_col_ref_map Duckdb column references on the right side of the
+ * join.
  *
  * @param stream cuda stream to create scalars on
  *
@@ -1131,7 +1239,10 @@ cudf::ast::ast_operator duckdb_etype_to_cudf_ast_op(
  */
 const cudf::ast::expression &duckdb_expr_to_cudf_ast(
     const duckdb::Expression &expr,
-    const std::unordered_set<duckdb::idx_t> &left_table_indices,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        &left_col_ref_map,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        &right_col_ref_map,
     CudfASTOwner &owner, rmm::cuda_stream_view &stream);
 /**
  * @brief Convert multiple duckdb expressions into a single CudfASTOwner,
@@ -1139,12 +1250,17 @@ const cudf::ast::expression &duckdb_expr_to_cudf_ast(
  *
  * @param exprs             The duckdb expressions to combine.
  * index.
- * @param left_table_indices Set of duckdb table indices on the left side of the
+ * @param left_col_ref_map Duckdb column references on the left side of the
+ * join.
+ * @param right_col_ref_map Duckdb column references on the right side of the
  * join.
  * @param stream to create scalars on
  * @return CudfASTOwner whose tree root is the AND of all expressions.
  */
 CudfASTOwner build_mixed_join_predicate(
     const std::vector<duckdb::unique_ptr<duckdb::Expression>> &exprs,
-    const std::unordered_set<duckdb::idx_t> &left_table_indices,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        &left_col_ref_map,
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        &right_col_ref_map,
     rmm::cuda_stream_view &stream);

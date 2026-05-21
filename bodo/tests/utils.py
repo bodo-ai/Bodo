@@ -38,7 +38,7 @@ from numba.core.ir_utils import build_definitions, find_callname, guard  # noqa 
 import bodo
 import bodo.pandas as bodo_pd
 from bodo import BodoWarning
-from bodo.spawn.spawner import SpawnDispatcher
+from bodo.spawn.spawner import SpawnDispatcher, get_num_workers
 from bodo.utils.arrow_conversion import convert_arrow_arr_to_dict
 
 test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
@@ -1198,7 +1198,10 @@ def sort_dataframe_values_index(df):
         c
         for i, c in enumerate(df.columns)
         # Avoid sorting nested dtypes since not supported in Pandas yet
-        if not _is_nested_arrow_dtype(df.dtypes.iloc[i])
+        if not (
+            _is_nested_arrow_dtype(df.dtypes.iloc[i])
+            or (len(df) > 0 and isinstance(df.iloc[0, i], dict))
+        )
     ] + [eName]
     if None in list_col_names:
         raise RuntimeError(
@@ -1313,6 +1316,23 @@ def _pd_fillna_value(series: pd.Series, value) -> pd.Series:
     return series.fillna(value=value)
 
 
+def get_num_gpus() -> int:
+    """Get the number of GPUs available. Returns 0 if GPU is not enabled."""
+    if not bodo.gpu_enabled:
+        return 0
+    else:
+        import pynvml
+
+        pynvml.nvmlInit()
+        num_devices = pynvml.nvmlDeviceGetCount()
+        return num_devices
+
+
+def is_multi_worker_per_gpu_test():
+    """Return True if the test is running with multiple workers per GPU."""
+    return bodo.gpu_enabled and get_num_workers() > get_num_gpus()
+
+
 def _test_equal(
     bodo_out,
     py_out,
@@ -1329,6 +1349,12 @@ def _test_equal(
         from scipy.sparse import csr_matrix
     except ImportError:
         csr_matrix = type(None)
+
+    if is_multi_worker_per_gpu_test():
+        # Automatically sort output if we have multiple workers per GPU
+        # TODO(BSE-5322): remove after CPU-GPU exchange doesn't change the order of data.
+        sort_output = True
+        reset_index = True
 
     # Bodo converts lists to array in array(item) array cases
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
@@ -1429,7 +1455,7 @@ def _test_equal(
 
             # Pandas boolean output may have False instead of NA
             if pa.types.is_boolean(pa_type) and py_out.dtype == np.bool_:
-                bodo_out = _pd_fillna_value(py_out, False)
+                bodo_out = _pd_fillna_value(bodo_out, False)
 
             # Handle NA/nan mismatch
             if pa.types.is_boolean(pa_type) and py_out.dtype == np.object_:

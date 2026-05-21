@@ -150,6 +150,7 @@ cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" no
         POSITIONAL_REFERENCE "duckdb::ExpressionType::POSITIONAL_REFERENCE"
         BOUND_LAMBDA_REF "duckdb::ExpressionType::BOUND_LAMBDA_REF"
         BOUND_EXPANDED "duckdb::ExpressionType::BOUND_EXPANDED"
+        OPERATOR_IS_TRUE "duckdb::ExpressionType::OPERATOR_IS_TRUE"
 
 def str_to_expr_type(val):
     if val is operator.eq:
@@ -172,6 +173,10 @@ def str_to_expr_type(val):
         return CExpressionType.OPERATOR_NOT
     elif val == "notnull":
         return CExpressionType.OPERATOR_IS_NOT_NULL
+    elif val == "isnull":
+        return CExpressionType.OPERATOR_IS_NULL
+    elif val == "istrue":
+        return CExpressionType.OPERATOR_IS_TRUE
     else:
         raise NotImplementedError(f"Unhandled case {str(val)} in str_to_expr_type")
 
@@ -314,7 +319,7 @@ cdef extern from "_plan.h" nogil:
         pass
 
     cdef idx_t getTableIndex() except +
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows) except +
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, c_bool has_partitioning) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate) except +
@@ -329,7 +334,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalDistinct] make_distinct(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CExpression] make_scalar_func_expr(unique_ptr[CLogicalOperator] source, object out_schema, object args, vector[int] input_column_indices, c_bool is_cfunc, c_bool has_state, c_string arrow_compute_func) except +
+    cdef unique_ptr[CExpression] make_scalar_func_expr(object out_schema, vector[unique_ptr[CExpression]] in_exprs, object args, c_bool is_cfunc, c_bool has_state, c_string arrow_compute_func) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
@@ -342,6 +347,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_int_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_double_expr(double val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
+    cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_date32_expr(int32_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
@@ -658,25 +664,29 @@ cdef class AggregateExpression(Expression):
     def __str__(self):
         return f"AggregateExpression({self.function_name})"
 
+
 cdef class PythonScalarFuncExpression(Expression):
     """Wrapper around DuckDB's BoundFunctionExpression for running Python/Arrow functions.
     """
 
     def __cinit__(self,
         object out_schema,
-        LogicalOperator source,
+        list in_exprs,
         object args,
-        vector[int] input_column_indices,
         c_bool is_cfunc,
         c_bool has_state):
+        cdef vector[unique_ptr[CExpression]] in_c_exprs
+
+        for in_expr in in_exprs:
+            in_c_exprs.push_back(move((<Expression>in_expr).c_expression))
 
         self.out_schema = out_schema
         empty_str = ""
         self.c_expression = make_scalar_func_expr(
-            source.c_logical_operator, out_schema, args, input_column_indices, is_cfunc, has_state, empty_str.encode())
+            out_schema, in_c_exprs, args, is_cfunc, has_state, empty_str.encode())
 
     def __str__(self):
-        return f"PythonScalarFuncExpression({self.function_name})"
+        return f"PythonScalarFuncExpression()"
 
 
 cdef class ArrowScalarFuncExpression(Expression):
@@ -685,14 +695,17 @@ cdef class ArrowScalarFuncExpression(Expression):
 
     def __cinit__(self,
         object out_schema,
-        LogicalOperator source,
-        vector[int] input_column_indices,
+        list in_exprs,
         str function_name,
         object args):
+        cdef vector[unique_ptr[CExpression]] in_c_exprs
+
+        for in_expr in in_exprs:
+            in_c_exprs.push_back(move((<Expression>in_expr).c_expression))
 
         self.out_schema = out_schema
         self.c_expression = make_scalar_func_expr(
-            source.c_logical_operator, out_schema, args, input_column_indices, False, False, function_name.encode())
+            out_schema, in_c_exprs, args, False, False, function_name.encode())
 
     def __str__(self):
         return f"ArrowScalarFuncExpression({self.function_name})"
@@ -719,6 +732,8 @@ cdef unique_ptr[CExpression] make_const_expr(val):
         # NOTE: Timestamp.value always converts to nanoseconds
         # https://github.com/pandas-dev/pandas/blob/0691c5cf90477d3503834d983f69350f250a6ff7/pandas/_libs/tslibs/timestamps.pyx#L242
         return move(make_const_timestamp_ns_expr(val.value))
+    elif isinstance(val, pd.Timedelta):
+        return move(make_const_timedelta_ns_expr(val.value))
     elif isinstance(val, (datetime.datetime, datetime.date)):
         return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):
@@ -778,6 +793,8 @@ def python_arith_dunder_to_duckdb(str opstr):
     elif opstr == "__floordiv__" or opstr == "__rfloordiv__":
         # NOTE: only used for integers since "//" is integer division in duckdb
         return "//"
+    elif opstr == "__pow__":
+        return "POWER"
     else:
         raise NotImplementedError("Unknown Python arith dunder method name")
 
@@ -911,7 +928,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly object storage_options
     cdef readonly int64_t nrows
 
-    def __cinit__(self, object out_schema, object parquet_path, object storage_options):
+    def __cinit__(self, object out_schema, object parquet_path, object storage_options, bool has_partitioning):
         from bodo.ext import hdist
 
         self.out_schema = out_schema
@@ -919,7 +936,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         self.storage_options = storage_options
         self.nrows = -1
         cdef int64_t nrows_estimate = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=False) if bodo.get_rank() == 0 else 0)
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate, has_partitioning)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):

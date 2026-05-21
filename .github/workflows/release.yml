@@ -5,11 +5,16 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'pixi.lock'
-      - '.github/workflows/release.yml'
-      - '.github/workflows/_build_*.yml'
+  # pull_request:
+  #   paths:
+  #     - 'pixi.lock'
+  #     - '.github/workflows/release.yml'
+  #     - '.github/workflows/_build_*.yml'
+
+# Limit CI to cancel previous runs in the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }} 
+  cancel-in-progress: true
 
 jobs:
   # For Linux, we need to build conda inside a docker container for best support.
@@ -54,12 +59,21 @@ jobs:
       python-version: ${{ matrix.python-version }}
       platform-build: false
       is-release: ${{ github.event_name == 'release' }}
-      os: ${{ matrix.os }}
+      runner-id: ${{ matrix.os }}
+    secrets: inherit
+  bodo-conda-gpu:
+    uses: ./.github/workflows/_build_bodo_conda_native.yml
+    with:
+      python-version: '3.14'
+      platform-build: false
+      gpu-build: true
+      is-release: ${{ github.event_name == 'release' }}
+      runner-id: self-hosted-single-gpu
     secrets: inherit
   bodo-conda-platform:
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
-      python-version: '3.13'
+      python-version: '3.14'
       platform-build: true
       arm: false
       is-release: ${{ github.event_name == 'release' }}

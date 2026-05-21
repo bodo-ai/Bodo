@@ -12,6 +12,7 @@
 #include "../libs/_utils.h"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
+#include "duckdb/common/types/value.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
@@ -101,6 +102,14 @@ extractValue(const duckdb::Value &value) {
             duckdb::date_t extracted = value.GetValue<duckdb::date_t>();
             // Create a DateScalar with the date value
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
+        } break;
+        case duckdb::LogicalTypeId::INTERVAL: {
+            auto interval_type = arrow::duration(arrow::TimeUnit::NANO);
+            duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
+            return arrow::MakeScalar(
+                       interval_type,
+                       duckdb::Interval::GetMicro(extracted) * 1000)
+                .ValueOrDie();
         } break;
         default:
             throw std::runtime_error("extractValue unhandled type." +
@@ -815,7 +824,7 @@ PyObject *duckdbFilterSetToPyicebergFilter(
         std::shared_ptr<arrow::Field> field = arrow_schema->field(tf.first);
         std::string field_name = field->name();
         PyObject *py_expr = _duckdbFilterToPyicebergFilter(
-            std::move(tf.second), field_name, pyiceberg_expression_mod);
+            tf.second->Copy(), field_name, pyiceberg_expression_mod);
         PyObject *original_ret = ret;
         ret = PyObject_CallMethod(ret, "__and__", "O", py_expr);
         if (!ret) {
@@ -1052,7 +1061,106 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     return filters;
 }
 
+const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name) {
+    if (!PyTuple_Check(args) || PyTuple_Size(args) != 1) {
+        throw std::runtime_error(
+            fmt::format("{} args not a 1-element tuple.", func_name));
+    }
+
+    // Get the first element (borrowed reference)
+    PyObject *py_str = PyTuple_GetItem(args, 0);
+
+    if (!PyUnicode_Check(py_str)) {
+        throw std::runtime_error(
+            fmt::format("{} args element is not a Python string.", func_name));
+    }
+
+    // Convert to UTF‑8 C string
+    const char *c_str = PyUnicode_AsUTF8(py_str);
+    if (!c_str) {
+        throw std::runtime_error(
+            fmt::format("{} error extracting Python string.", func_name));
+    }
+    return c_str;
+}
+
+int64_t get_py_round_arg(PyObject *args) {
+    int64_t digits = 0;  // default value if no argument is provided
+    if (PyTuple_Check(args) && PyTuple_Size(args) == 1) {
+        // Get the first element (borrowed reference)
+        PyObject *py_digits = PyTuple_GetItem(args, 0);
+
+        if (!PyLong_Check(py_digits)) {
+            throw std::runtime_error("round args element is not a Python int.");
+        }
+
+        digits = PyLong_AsLong(py_digits);
+    }
+    return digits;
+}
+
+template <typename StopMaxT>
+std::tuple<int64_t, int64_t, int64_t> get_py_slice_args(PyObject *args) {
+    if (!PyTuple_Check(args) || PyTuple_Size(args) != 3) {
+        throw std::runtime_error(
+            "utf8_slice_codeunits args not a 3-element tuple.");
+    }
+
+    // Get the tuple elements (borrowed references)
+    PyObject *py_start = PyTuple_GetItem(args, 0);
+    PyObject *py_stop = PyTuple_GetItem(args, 1);
+    PyObject *py_step = PyTuple_GetItem(args, 2);
+
+    if (!PyLong_Check(py_start) || !PyLong_Check(py_step)) {
+        throw std::runtime_error(
+            "utf8_slice_codeunits args are not Python ints.");
+    }
+
+    if (!PyLong_Check(py_stop) && py_stop != Py_None) {
+        throw std::runtime_error(
+            "utf8_slice_codeunits stop arg is not a Python int or None.");
+    }
+
+    int64_t start = PyLong_AsLong(py_start);
+    int64_t stop =
+        (py_stop == Py_None)
+            ? static_cast<int64_t>(std::numeric_limits<StopMaxT>::max())
+            : PyLong_AsLong(py_stop);
+    int64_t step = PyLong_AsLong(py_step);
+
+    return {start, stop, step};
+}
+
+template std::tuple<int64_t, int64_t, int64_t> get_py_slice_args<int64_t>(
+    PyObject *args);
+
+std::shared_ptr<arrow::Array> get_py_isin_arg_as_arrow_array(PyObject *args) {
+    if (!PyTuple_Check(args) || PyTuple_Size(args) != 1) {
+        throw std::runtime_error("isin args not a 1-element tuple.");
+    }
+
+    // Get the first element (borrowed reference)
+    PyObject *py_arg = PyTuple_GetItem(args, 0);
+
+    // Convert the Python object to an Arrow array
+    // https://arrow.apache.org/docs/python/integration/extending.html
+    if (arrow::py::import_pyarrow() != 0) {
+        throw std::runtime_error("Failed to import pyarrow module.");
+    }
+    arrow::Result<std::shared_ptr<arrow::Array>> result =
+        arrow::py::unwrap_array(py_arg);
+    if (!result.ok()) {
+        throw std::runtime_error(
+            "Failed to convert isin argument to Arrow array: " +
+            result.status().ToString());
+    }
+    return result.ValueOrDie();
+}
+
 #ifdef USE_CUDF
+
+template std::tuple<int64_t, int64_t, int64_t>
+get_py_slice_args<cudf::size_type>(PyObject *args);
 
 cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
     using cudf::type_id;
@@ -1106,8 +1214,12 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
             return cudf::data_type{type_id::TIMESTAMP_MICROSECONDS};
 
         case LogicalTypeId::TIMESTAMP_NS:
-        case LogicalTypeId::TIMESTAMP_TZ:
             return cudf::data_type{type_id::TIMESTAMP_NANOSECONDS};
+
+        case LogicalTypeId::TIMESTAMP_TZ:
+            throw std::runtime_error(
+                "duckdb_logicaltype_to_cudf: cudf does not support "
+                "TIMESTAMP_TZ type");
 
         // Date / Time / Interval
         case LogicalTypeId::DATE:
@@ -1168,8 +1280,8 @@ std::unique_ptr<cudf::scalar> make_invalid_like(
 
         // **bool**
         case cudf::type_id::BOOL8:
-            return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                static_cast<int8_t>(false), false, stream);
+            return std::make_unique<cudf::numeric_scalar<bool>>(false, false,
+                                                                stream);
 
         // **string**
         case cudf::type_id::STRING:
@@ -1187,6 +1299,20 @@ std::unique_ptr<cudf::scalar> make_invalid_like(
                 static_cast<int64_t>(0), false, stream, mr);
         case cudf::type_id::TIMESTAMP_NANOSECONDS:
             return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ns>>(
+                static_cast<int64_t>(0), false, stream, mr);
+
+        // **durations**
+        case cudf::type_id::DURATION_SECONDS:
+            return std::make_unique<cudf::duration_scalar<cudf::duration_s>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::DURATION_MILLISECONDS:
+            return std::make_unique<cudf::duration_scalar<cudf::duration_ms>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::DURATION_MICROSECONDS:
+            return std::make_unique<cudf::duration_scalar<cudf::duration_us>>(
+                static_cast<int64_t>(0), false, stream, mr);
+        case cudf::type_id::DURATION_NANOSECONDS:
+            return std::make_unique<cudf::duration_scalar<cudf::duration_ns>>(
                 static_cast<int64_t>(0), false, stream, mr);
 
         default:
@@ -1241,8 +1367,8 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                                                                       false);
 
             case arrow::Type::BOOL:
-                return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                    static_cast<int8_t>(false), false);
+                return std::make_unique<cudf::numeric_scalar<bool>>(false,
+                                                                    false);
 
             case arrow::Type::LARGE_STRING:
             case arrow::Type::STRING:
@@ -1339,10 +1465,8 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                 std::static_pointer_cast<arrow::DoubleScalar>(s)->value, true);
 
         case arrow::Type::BOOL:
-            return std::make_unique<cudf::numeric_scalar<int8_t>>(
-                static_cast<int8_t>(
-                    std::static_pointer_cast<arrow::BooleanScalar>(s)->value),
-                true);
+            return std::make_unique<cudf::numeric_scalar<bool>>(
+                std::static_pointer_cast<arrow::BooleanScalar>(s)->value, true);
 
         // ---------------- STRINGS / BINARY ----------------
         case arrow::Type::STRING: {
@@ -1425,8 +1549,14 @@ cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
             return cudf::data_type{type_id::STRING};
 
         case Type::TIMESTAMP: {
-            auto unit =
-                std::static_pointer_cast<arrow::TimestampType>(t)->unit();
+            auto timestamp = std::static_pointer_cast<arrow::TimestampType>(t);
+            if (!timestamp->timezone().empty()) {
+                throw std::runtime_error(
+                    "Arrow timestamp has timezone '" + timestamp->timezone() +
+                    "' but cuDF does not support timezones.");
+            }
+
+            auto unit = timestamp->unit();
             switch (unit) {
                 case arrow::TimeUnit::SECOND:
                     return cudf::data_type{type_id::TIMESTAMP_SECONDS};
@@ -1445,9 +1575,26 @@ cudf::data_type arrow_to_cudf_type(const std::shared_ptr<arrow::DataType> &t) {
             return cudf::data_type{type_id::TIMESTAMP_DAYS};
         }
 
-        default:
+        case Type::DURATION: {
+            auto duration = std::static_pointer_cast<arrow::DurationType>(t);
+            switch (duration->unit()) {
+                case arrow::TimeUnit::SECOND:
+                    return cudf::data_type{type_id::DURATION_SECONDS};
+                case arrow::TimeUnit::MILLI:
+                    return cudf::data_type{type_id::DURATION_MILLISECONDS};
+                case arrow::TimeUnit::MICRO:
+                    return cudf::data_type{type_id::DURATION_MICROSECONDS};
+                case arrow::TimeUnit::NANO:
+                    return cudf::data_type{type_id::DURATION_NANOSECONDS};
+                default:
+                    throw std::runtime_error("Unsupported Arrow duration unit");
+            }
+        }
+
+        default: {
             throw std::runtime_error("Unsupported Arrow type: " +
                                      t->ToString());
+        }
     }
 }
 
@@ -1465,6 +1612,89 @@ std::unique_ptr<cudf::table> empty_table_from_arrow_schema(
     }
 
     return std::make_unique<cudf::table>(std::move(cols));
+}
+
+MPI_Datatype cudf_dtype_to_mpi(cudf::data_type dtype) {
+    using cudf::type_id;
+
+    switch (dtype.id()) {
+        case type_id::INT8:
+            return MPI_INT8_T;
+        case type_id::INT16:
+            return MPI_INT16_T;
+        case type_id::INT32:
+            return MPI_INT32_T;
+        case type_id::INT64:
+            return MPI_INT64_T;
+        case type_id::UINT8:
+            return MPI_UINT8_T;
+        case type_id::UINT16:
+            return MPI_UINT16_T;
+        case type_id::UINT32:
+            return MPI_UINT32_T;
+        case type_id::UINT64:
+            return MPI_UINT64_T;
+        case type_id::FLOAT32:
+            return MPI_FLOAT;
+        case type_id::FLOAT64:
+            return MPI_DOUBLE;
+        default:
+            throw std::runtime_error(
+                "Unsupported cudf data_type for MPI conversion: " +
+                std::to_string(static_cast<int>(dtype.id())));
+    }
+}
+
+std::shared_ptr<arrow::DataType> cudf_to_arrow_type(cudf::data_type &t) {
+    using cudf::type_id;
+    switch (t.id()) {
+        case type_id::BOOL8:
+            return arrow::boolean();
+        case type_id::INT8:
+            return arrow::int8();
+        case type_id::INT16:
+            return arrow::int16();
+        case type_id::INT32:
+            return arrow::int32();
+        case type_id::INT64:
+            return arrow::int64();
+        case type_id::UINT8:
+            return arrow::uint8();
+        case type_id::UINT16:
+            return arrow::uint16();
+        case type_id::UINT32:
+            return arrow::uint32();
+        case type_id::UINT64:
+            return arrow::uint64();
+        case type_id::FLOAT32:
+            return arrow::float32();
+        case type_id::FLOAT64:
+            return arrow::float64();
+        case type_id::STRING:
+            return arrow::large_utf8();
+        case type_id::TIMESTAMP_SECONDS:
+            return arrow::timestamp(arrow::TimeUnit::SECOND);
+        case type_id::TIMESTAMP_MILLISECONDS:
+            return arrow::timestamp(arrow::TimeUnit::MILLI);
+        case type_id::TIMESTAMP_MICROSECONDS:
+            return arrow::timestamp(arrow::TimeUnit::MICRO);
+        case type_id::TIMESTAMP_NANOSECONDS:
+            return arrow::timestamp(arrow::TimeUnit::NANO);
+        case type_id::TIMESTAMP_DAYS:
+            return arrow::date32();
+        case type_id::DURATION_SECONDS:
+            return arrow::duration(arrow::TimeUnit::SECOND);
+        case type_id::DURATION_MILLISECONDS:
+            return arrow::duration(arrow::TimeUnit::MILLI);
+        case type_id::DURATION_MICROSECONDS:
+            return arrow::duration(arrow::TimeUnit::MICRO);
+        case type_id::DURATION_NANOSECONDS:
+            return arrow::duration(arrow::TimeUnit::NANO);
+        default:
+            throw std::runtime_error(
+                "Unsupported cudf data_type for Arrow conversion: " +
+                std::to_string(static_cast<int>(t.id())));
+    }
 }
 
 #endif  // USE_CUDF

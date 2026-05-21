@@ -1,11 +1,14 @@
 """Tests bytecode changes that are unique to Bodo."""
 
 import numba  # noqa TID253
+import pytest
 from numba.core import ir  # noqa TID253
 
 from bodo.tests.utils import check_func, pytest_mark_one_rank
 
 
+@pytest.mark.timeout(600)
+@pytest_mark_one_rank
 def test_very_large_tuple(memory_leak_check):
     """
     Tests that when there is a very large tuple it only

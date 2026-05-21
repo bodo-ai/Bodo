@@ -187,8 +187,13 @@ sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
 
 # ---------------------------- GPU Config ----------------------------
 
+try:
+    from ._build_config import DEFAULT_GPU_ENABLED
+except ImportError:
+    DEFAULT_GPU_ENABLED = "0"
+
 # Flag to enable Bodo to use GPUs when available.
-gpu_enabled = os.environ.get("BODO_GPU", "0") != "0"
+gpu_enabled = os.environ.get("BODO_GPU", DEFAULT_GPU_ENABLED) != "0"
 
 # Flag to use async streams when GPU enabled.
 gpu_async_enabled = os.environ.get("BODO_GPU_ASYNC", "0") != "0"
@@ -278,6 +283,8 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
+if gpu_enabled:
+    os.environ["OMPI_MCA_pml"] = "ucx"
 
 # NOTE: 'pandas_compat' has to be imported first in bodo package to make sure all Numba
 # patches are applied before Bodo's use.

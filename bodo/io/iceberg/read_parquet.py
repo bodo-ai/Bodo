@@ -747,7 +747,9 @@ def generate_expr_filter(
     return expr_filter
 
 
-def distribute_pieces(pieces: list[IcebergPiece]) -> list[IcebergPiece]:
+def distribute_pieces(
+    pieces: list[IcebergPiece], myrank=None, n_pes=None
+) -> list[IcebergPiece]:
     """
     Distribute Iceberg File pieces between all ranks so that all ranks
     have to read roughly the same number of rows.
@@ -760,6 +762,8 @@ def distribute_pieces(pieces: list[IcebergPiece]) -> list[IcebergPiece]:
         pieces (list[IcebergPiece]): List of file pieces to
             distribute between all ranks. This must be the global
             list of pieces and must be ordered the same on all ranks.
+        myrank (int, optional): The rank of the current process. If None, it will be obtained from MPI COMM_WORLD. Defaults to None.
+        n_pes (int, optional): The total number of ranks. If None, it will be obtained from MPI COMM_WORLD. Defaults to None.
 
     Returns:
         list[IcebergPiece]: List of pieces assigned that this
@@ -781,9 +785,15 @@ def distribute_pieces(pieces: list[IcebergPiece]) -> list[IcebergPiece]:
 
     import heapq
 
-    comm = MPI.COMM_WORLD
-    myrank: int = comm.Get_rank()
-    n_pes: int = comm.Get_size()
+    if myrank is None != n_pes is None:
+        raise ValueError(
+            "Both myrank and n_pes should be provided or both should be None."
+        )
+
+    if myrank is None and n_pes is None:
+        comm = MPI.COMM_WORLD
+        myrank: int = comm.Get_rank()
+        n_pes: int = comm.Get_size()
 
     # Sort the pieces
     sorted_pieces: list[IcebergPiece] = sorted(

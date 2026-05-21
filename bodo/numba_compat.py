@@ -4908,6 +4908,8 @@ def BaseNativeLowering_run_pass(self, state):
     flags = state.flags
     metadata = state.metadata
     pre_stats = llvm.newpassmanagers.dump_refprune_stats()
+    # Add reload functions to library
+    library._reload_init.update(state.reload_init)
 
     msg = "Function %s failed at nopython " "mode lowering" % (state.func_id.func_name,)
     with fallback_context(state, msg):
@@ -4927,7 +4929,7 @@ def BaseNativeLowering_run_pass(self, state):
         targetctx.global_arrays = []
         with targetctx.push_code_library(library):
             # Bodo change: no need for ParforLower custom lowerer
-            lower = lowering.Lower(
+            lower = self.lowering_class(
                 targetctx, library, fndesc, interp, metadata=metadata
             )
             lower.lower()
@@ -4960,6 +4962,7 @@ def BaseNativeLowering_run_pass(self, state):
             # We also register its library to allow for inlining.
             cfunc = targetctx.get_executable(library, fndesc, env)
             targetctx.insert_user_function(cfunc, fndesc, [library])
+            state.reload_init.extend(library._reload_init)
             state["cr"] = _LowerResult(fndesc, call_helper, cfunc=cfunc, env=env)
 
         # Bodo change: save constant global arrays in overload metadata so they are not
@@ -4980,7 +4983,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typed_passes.BaseNativeLowering.run_pass)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "49a9d0f4a8aa592f7304a14f960452274af3ff8aa911e1eb48c9fd5e1e05f29c"
+        != "0b482df4865451f4163c61506423e5fc4e5c74155661687cb3b44c60970fbf11"
     ):  # pragma: no cover
         warnings.warn("numba.core.typed_passes.BaseNativeLowering.run_pass has changed")
 

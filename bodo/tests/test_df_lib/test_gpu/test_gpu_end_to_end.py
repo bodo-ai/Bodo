@@ -126,7 +126,7 @@ def test_cpu_to_gpu_exchange(datapath):
 
     pdf2 = pd.read_parquet(path)
     pdf3 = pdf1.merge(pdf2, how="inner", on="A")
-    _test_equal(pdf3, bdf3)
+    _test_equal(bdf3, pdf3)
 
     # Case 2: CPU (read pandas) -> GPU sink (write parquet)
     with tempfile.TemporaryDirectory() as tmp:
@@ -137,7 +137,7 @@ def test_cpu_to_gpu_exchange(datapath):
 
         out_df = pd.read_parquet(out_path)
         # [BSE-5322] Sorting data because CPU -> GPU affects the order.
-        _test_equal(pdf, out_df, sort_output=True, reset_index=True)
+        _test_equal(out_df, pdf, sort_output=True, reset_index=True)
 
         # Check the write parquet is happening on GPU:
         write_plan = LogicalParquetWrite(
@@ -165,7 +165,7 @@ def test_gpu_to_cpu_exchange(datapath):
 
     pdf = pd.read_parquet(path)
     pdf["F"] = pdf["F"].map(lambda x: str(x))
-    _test_equal(pdf, bdf)
+    _test_equal(bdf, pdf)
 
     # Case 2: GPU (join) -> CPU sink (result collector)
     bdf = bd.read_parquet(path)
@@ -174,7 +174,7 @@ def test_gpu_to_cpu_exchange(datapath):
     bdf.execute_plan()
 
     pdf = pd.read_parquet(path)
-    _test_equal(pdf, bdf)
+    _test_equal(bdf, pdf)
 
 
 @pytest.mark.parametrize("broadcast", [True, False])
@@ -208,3 +208,18 @@ def test_gpu_join_bloom_filter(datapath, broadcast):
             result_bodo = pd.read_parquet(out_path_bodo)
             result_pd = pd.read_parquet(out_path_pd)
             _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
+
+
+def test_head(datapath):
+    """Test head.  Using sum aggregate to prevent pushdowns."""
+    with tempfile.TemporaryDirectory() as tmp:
+        df1_path = datapath("dataframe_library/df1.parquet")
+        df1_bodo = bd.read_parquet(df1_path)
+        out_path_bodo = os.path.join(tmp, "out_bodo.pq")
+        df1_agg = getattr(
+            df1_bodo.groupby("D", as_index=False, sort=False)["A"], "sum"
+        )().head(3)
+        df1_agg.to_parquet(out_path_bodo)
+
+        result_bodo = pd.read_parquet(out_path_bodo)
+        assert len(result_bodo) == 3

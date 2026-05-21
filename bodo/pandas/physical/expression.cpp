@@ -115,72 +115,6 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
     return array;
 }
 
-/**
- * @brief Change nulls in arrow Datum to given val.
- *
- */
-arrow::Datum fill_null(arrow::Datum& src, arrow::Datum& val) {
-    if (src.is_array() || src.is_chunked_array()) {
-        auto mask_result = arrow::compute::IsNull(src);
-        if (!mask_result.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary: Error in Arrow compute: " +
-                mask_result.status().message());
-        }
-        arrow::Datum mask = mask_result.ValueOrDie();
-
-        arrow::Result<arrow::Datum> src_res =
-            arrow::compute::ReplaceWithMask(src, mask, val);
-        if (!src_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary: Error in Arrow compute: " +
-                src_res.status().message());
-        }
-        return src_res.ValueOrDie();
-    } else if (src.is_scalar()) {
-        auto scalar = src.scalar();
-        if (scalar->is_valid) {
-            return src;
-        } else {
-            return val;
-        }
-    } else {
-        throw std::runtime_error(
-            "fill_null can't handle non-array or scalar datum type.");
-    }
-}
-
-/**
- * @brief Returns true if arrow datatype can hold a NaN.
- *
- */
-inline bool canHoldNan(std::shared_ptr<arrow::DataType> type) {
-    return type->id() == arrow::Type::HALF_FLOAT ||
-           type->id() == arrow::Type::FLOAT ||
-           type->id() == arrow::Type::DOUBLE;
-}
-
-arrow::Datum MakeNanScalar(const std::shared_ptr<arrow::DataType>& dtype) {
-    arrow::Result<std::shared_ptr<arrow::Scalar>> res;
-
-    if (dtype->id() == arrow::Type::FLOAT) {
-        res = arrow::MakeScalar(dtype, static_cast<float>(std::nan("")));
-    } else if (dtype->id() == arrow::Type::DOUBLE) {
-        res = arrow::MakeScalar(dtype, static_cast<double>(std::nan("")));
-    } else if (dtype->id() == arrow::Type::HALF_FLOAT) {
-        res = arrow::MakeScalar(dtype, static_cast<float>(std::nan("")));
-    } else {
-        throw std::runtime_error("DataType does not support NaN");
-    }
-
-    if (!res.ok()) {
-        throw std::runtime_error("MakeScalar failed: " +
-                                 res.status().ToString());
-    }
-
-    return arrow::Datum(res.ValueOrDie());
-}
-
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator,
@@ -220,19 +154,6 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
             "do_arrow_compute right is neither array nor scalar.");
     }
 
-    std::shared_ptr<arrow::DataType> src1_dtype = src1.type();
-    std::shared_ptr<arrow::DataType> src2_dtype = src2.type();
-
-    // If type is float then match Pandas and convert NA to NaN.
-    if (canHoldNan(src1_dtype)) {
-        arrow::Datum null_scalar = MakeNanScalar(src1_dtype);
-        src1 = fill_null(src1, null_scalar);
-    }
-    if (canHoldNan(src2_dtype)) {
-        arrow::Datum null_scalar = MakeNanScalar(src2_dtype);
-        src2 = fill_null(src2, null_scalar);
-    }
-
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1, src2});
     if (!cmp_res.ok()) [[unlikely]] {
@@ -240,34 +161,9 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
             "do_arrow_compute_binary cmp_res: Error in Arrow compute: " +
             cmp_res.status().message());
     }
+
     auto cmp_datum = cmp_res.ValueOrDie();
-
     std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
-    // Bodo checks is_na with NULL but NaN in Pandas considered NA
-    // so convert all NaN into NA.
-    if (canHoldNan(cmp_dtype)) {
-        // Convert NaN into NULLs.
-        auto mask_result = arrow::compute::IsNan(cmp_datum);
-        if (!mask_result.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary mask_result: Error in Arrow "
-                "compute: " +
-                mask_result.status().message());
-        }
-        arrow::Datum mask = mask_result.ValueOrDie();
-
-        auto null_scalar = arrow::MakeNullScalar(cmp_datum.type());
-
-        cmp_res = arrow::compute::ReplaceWithMask(cmp_datum, mask,
-                                                  arrow::Datum(null_scalar));
-        if (!cmp_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary post replacewithmask: Error in Arrow "
-                "compute: " +
-                cmp_res.status().message());
-        }
-    }
-
     if (result_type && cmp_dtype != result_type) {
         // Cast to result type if available and different from current type.
         arrow::Result<arrow::Datum> cast_res =
@@ -307,6 +203,14 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
     }
     arrow::Datum cmp_res =
         do_arrow_compute_unary(src1, comparator, func_options);
+
+    // DuckDB's optimizer may evaluate expressions with scalar input, see
+    // test_tpch_q22
+    if (cmp_res.is_scalar()) {
+        return arrow_array_to_bodo(
+            arrow::MakeArrayFromScalar(*cmp_res.scalar(), 1).ValueOrDie(),
+            bodo::BufferPool::DefaultPtr());
+    }
 
     return arrow_array_to_bodo(cmp_res.make_array(),
                                bodo::BufferPool::DefaultPtr());
@@ -387,6 +291,20 @@ arrow::Datum do_arrow_compute_unary(
         return invert_res.ValueOrDie();
     }
 
+    // Special handling for is_true since it is not supported directly
+    // by Arrow compute.
+    if (comparator == "is_true") {
+        auto arrow_false = arrow::MakeScalar(false);
+        arrow::Result<arrow::Datum> is_true_res = arrow::compute::CallFunction(
+            "coalesce", {src1, arrow_false}, func_options);
+        if (!is_true_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_array_compute_unary: Error in Arrow compute: " +
+                is_true_res.status().message());
+        }
+        return is_true_res.ValueOrDie();
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
@@ -436,6 +354,13 @@ std::shared_ptr<array_info> do_arrow_compute_case(
         std::shared_ptr<arrow::Array> arr =
             prepare_arrow_compute(when_as_array->result);
 
+        // Wrap the boolean array into a struct array with one child,
+        // as required by Arrow's "case_when" kernel.
+        auto struct_type = arrow::struct_({arrow::field("cond", arr->type())});
+        arr = std::make_shared<arrow::StructArray>(
+            struct_type, arr->length(),
+            std::vector<std::shared_ptr<arrow::Array>>{arr});
+
         src1 = arrow::Datum(arr);
     } else if (when_as_scalar) {
         src1 = arrow::MakeScalar(prepare_arrow_compute(when_as_scalar->result)
@@ -470,8 +395,10 @@ std::shared_ptr<array_info> do_arrow_compute_case(
             "do_arrow_compute else is neither array nor scalar.");
     }
 
+    // NOTE: Arrow's "if_else" doesn't match our Python and SQL semantics since
+    // it propagates nulls in the condition.
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction("if_else", {src1, src2, src3});
+        arrow::compute::CallFunction("case_when", {src1, src2, src3});
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_array_compute_case: Error in Arrow compute: " +
@@ -569,12 +496,21 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // processed first and then the resulting Bodo Physical expression
             // subtrees are combined with the expression sub-type (e.g., equal,
             // greater_than, less_than) to make the Bodo PhysicalComparisonExpr.
+            int left_child = 0;
+            int right_child = 1;
+            // With short-circuit evaluation, make expensive bound_function
+            // operators be on the right side.
+            if (bce.children[0]->GetExpressionClass() ==
+                duckdb::ExpressionClass::BOUND_FUNCTION) {
+                left_child = 1;
+                right_child = 0;
+            }
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalConjunctionExpression>(
-                    buildPhysicalExprTree(bce.children[0], col_ref_map,
+                    buildPhysicalExprTree(bce.children[left_child], col_ref_map,
                                           no_scalars),
-                    buildPhysicalExprTree(bce.children[1], col_ref_map,
-                                          no_scalars),
+                    buildPhysicalExprTree(bce.children[right_child],
+                                          col_ref_map, no_scalars),
                     expr_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_OPERATOR: {

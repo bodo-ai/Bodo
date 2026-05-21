@@ -16,6 +16,7 @@ class PhysicalGPUCTE : public PhysicalGPUSink {
    public:
     explicit PhysicalGPUCTE(const std::shared_ptr<bodo::Schema> sink_schema)
         : output_schema(sink_schema) {
+        PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         arrow_output_schema = this->output_schema->ToArrowSchema();
     }
 
@@ -95,7 +96,7 @@ class PhysicalGPUCTERef : public PhysicalGPUSource {
      *
      * @return std::shared_ptr<bodo::Schema>
      */
-    const std::shared_ptr<bodo::Schema> getOutputSchema() override {
+    const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return cte->output_schema;
     }
 

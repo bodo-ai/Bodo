@@ -8,6 +8,7 @@ from bodo.tests.test_df_lib.series_test_generator import generate_series_test
 from bodo.tests.utils import _test_equal
 
 
+@pytest.mark.gpu
 @pytest.mark.parametrize("use_index1", [True, False])
 @pytest.mark.parametrize("use_index2", [True, False])
 def test_series_isin(index_val, use_index1, use_index2):
@@ -38,6 +39,7 @@ def test_series_isin(index_val, use_index1, use_index2):
     )
 
 
+@pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas dataframe
 def test_series_where(index_val):
     """Tests Series.where() with condition and other arguments."""
     df = pd.DataFrame(
@@ -76,10 +78,36 @@ def test_series_where(index_val):
     _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
 
 
+@pytest.mark.parametrize(
+    "S, value",
+    [
+        (pd.Series([1.445, 2.12, None, -4.133], dtype="Float64"), 1.1),
+        (pd.Series([1, None, 3, 4], dtype="Int64"), 2),
+    ],
+)
+def test_series_fillna(S, value, index_val):
+    """Tests Series.fillna()"""
+    S.index = index_val[: len(S)]
+    S.name = "A"
+
+    py_out = S.fillna(value)
+    bdf = bd.from_pandas(pd.DataFrame({"A": S}))
+
+    with assert_executed_plan_count(0):
+        bd_out = bdf["A"].fillna(value)
+
+    _test_equal(bd_out.copy(), py_out, check_pandas_types=False)
+
+
 def _install_series_direct_tests():
     """Installs tests for direct Series.<method> methods."""
     for method_name, arg_sets in test_map_arg_direct.items():
         test = generate_series_test(method_name, df, arg_sets)
+        if method_name in ("isnull", "isin", "round"):
+            test = pytest.mark.gpu(test)
+        if method_name in ("notnull", "abs"):
+            # fallback read Pandas dataframe
+            test = pytest.mark.gpu(allow_fallback=True)(test)
         globals()[f"test_dir_{method_name}"] = test
 
 
