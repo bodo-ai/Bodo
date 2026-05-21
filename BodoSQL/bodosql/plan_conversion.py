@@ -581,6 +581,10 @@ def java_literal_to_python_literal(java_literal, input_plan):
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
             return ConstantExpression(dummy_empty_data, input_plan, float(val))
 
+    if lit_type_name.equals(SqlTypeName.FLOAT):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float32()))
+        return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
+
     if lit_type_name.equals(SqlTypeName.DOUBLE):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
         return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
