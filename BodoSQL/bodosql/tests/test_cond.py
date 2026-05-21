@@ -177,16 +177,16 @@ def test_coalesce_time(use_case, memory_leak_check):
                         bodo.types.Time(1, 1, 3),
                         None,
                         None,
-                        bodo.types.Time(12, 0, 31, 5, 92),
+                        bodo.types.Time(12, 0, 31),
                     ]
                 ).astype(pd.ArrowDtype(pa.time64("ns"))),
                 "B": pd.Series(
                     [
                         None,
-                        bodo.types.Time(17, 12, 13, 92, 234, 193),
+                        bodo.types.Time(17, 12, 13),
                         bodo.types.Time(2, 18, 37),
                         None,
-                        bodo.types.Time(15, 26, 3, 44),
+                        bodo.types.Time(15, 26, 3),
                     ]
                 ).astype(pd.ArrowDtype(pa.time64("ns"))),
             }
@@ -200,7 +200,7 @@ def test_coalesce_time(use_case, memory_leak_check):
                     bodo.types.Time(1, 1, 3),
                     bodo.types.Time(2, 18, 37),
                     None,
-                    bodo.types.Time(12, 0, 31, 5, 92),
+                    bodo.types.Time(12, 0, 31),
                 ]
             ).astype(pd.ArrowDtype(pa.time64("ns")))
         }
