@@ -724,7 +724,7 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
         const_schema = pa.schema([pa.field("dummy_scalar", pa.scalar(val).type)])
 
     if isinstance(val, (int, np.int64)):
-        return move(make_const_number_expr[int](const_schema, val))
+        return move(make_const_number_expr[int64_t](const_schema, val))
     elif isinstance(val, float):
         return move(make_const_number_expr[double](const_schema, val))
     elif isinstance(val, str):

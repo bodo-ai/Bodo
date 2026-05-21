@@ -138,6 +138,8 @@ duckdb::unique_ptr<duckdb::Expression> make_const_number_expr(
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(duckdb_value);
 }
 
+template duckdb::unique_ptr<duckdb::Expression> make_const_number_expr<int>(
+    PyObject *out_schema_py, int val);
 template duckdb::unique_ptr<duckdb::Expression> make_const_number_expr<int64_t>(
     PyObject *out_schema_py, int64_t val);
 template duckdb::unique_ptr<duckdb::Expression> make_const_number_expr<double>(
