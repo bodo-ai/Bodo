@@ -344,8 +344,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_case_expr(unique_ptr[CExpression] when, unique_ptr[CExpression] then, unique_ptr[CExpression] else_) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
     cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
-    cdef unique_ptr[CExpression] make_const_int_expr(object arrow_schema, int64_t val) except +
-    cdef unique_ptr[CExpression] make_const_double_expr(object arrow_schema, double val) except +
+    cdef unique_ptr[CExpression] make_const_number_expr[T](object arrow_schema, T val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_date32_expr(int32_t val) except +
@@ -725,9 +724,9 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
         const_schema = pa.schema([pa.field("dummy_scalar", pa.scalar(val).type)])
 
     if isinstance(val, (int, np.int64)):
-        return move(make_const_int_expr(const_schema, val))
+        return move(make_const_number_expr[int](const_schema, val))
     elif isinstance(val, float):
-        return move(make_const_double_expr(const_schema, val))
+        return move(make_const_number_expr[double](const_schema, val))
     elif isinstance(val, str):
         val_cstr = val.encode()
         return move(make_const_string_expr(val_cstr))

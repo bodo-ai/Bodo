@@ -121,12 +121,13 @@ duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
         duckdb::Value(out_type));
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(
-    PyObject *out_schema_py, int64_t val) {
+template <typename T>
+duckdb::unique_ptr<duckdb::Expression> make_const_number_expr(
+    PyObject *out_schema_py, T val) {
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
     if (arrow_schema->num_fields() != 1) {
         throw std::runtime_error(
-            "make_const_int_expr expects schema with exactly one field");
+            "make_const_number_expr expects schema with exactly one field");
     }
     const std::shared_ptr<arrow::Field> &field = arrow_schema->field(0);
 
@@ -137,21 +138,10 @@ duckdb::unique_ptr<duckdb::Expression> make_const_int_expr(
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(duckdb_value);
 }
 
-duckdb::unique_ptr<duckdb::Expression> make_const_double_expr(
-    PyObject *out_schema_py, double val) {
-    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
-    if (arrow_schema->num_fields() != 1) {
-        throw std::runtime_error(
-            "make_const_double_expr expects schema with exactly one field");
-    }
-    const std::shared_ptr<arrow::Field> &field = arrow_schema->field(0);
-
-    std::shared_ptr<arrow::Scalar> arrow_scalar =
-        arrow::MakeScalar(field->type(), val).ValueOrDie();
-    duckdb::Value duckdb_value = ArrowScalarToDuckDBValue(arrow_scalar);
-
-    return duckdb::make_uniq<duckdb::BoundConstantExpression>(duckdb_value);
-}
+template duckdb::unique_ptr<duckdb::Expression> make_const_number_expr<int64_t>(
+    PyObject *out_schema_py, int64_t val);
+template duckdb::unique_ptr<duckdb::Expression> make_const_number_expr<double>(
+    PyObject *out_schema_py, double val);
 
 duckdb::unique_ptr<duckdb::Expression> make_const_bool_expr(bool val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
