@@ -3022,9 +3022,6 @@ def test_groupby_getattr_fallback_behavior():
 
 
 @pytest.mark.gpu
-@pytest.mark.skipif(
-    is_multi_worker_per_gpu_test(), reason="[BSE-5432] Handle empty data in GPU reduce."
-)
 def test_series_agg():
     import pandas as pd
 
