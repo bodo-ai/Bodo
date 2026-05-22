@@ -16,6 +16,7 @@ from bodo.pandas.plan import (
     ArithOpExpression,
     ArrowScalarFuncExpression,
     CaseExpression,
+    CastExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
@@ -196,6 +197,14 @@ def java_call_to_python_call(java_call, input_plan):
         ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
             # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
             return java_expr_to_python_expr(operand, input_plan)
+
+        empty_data = pd.Series(
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(operand_type.getSqlTypeName()))
+        )
+        return CastExpression(
+            empty_data,
+            java_expr_to_python_expr(operand, input_plan),
+        )
 
     if (
         operator_class_name == "SqlPostfixOperator"

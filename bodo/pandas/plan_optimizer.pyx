@@ -910,6 +910,24 @@ cdef class CaseExpression(Expression):
         return f"CaseExpression({self.out_schema})"
 
 
+cdef class CastExpression(Expression):
+    """Wrapper around DuckDB's BoundCastExpression to provide access in Python.
+    """
+
+    def __cinit__(self, object out_schema, source):
+        cdef unique_ptr[CExpression] source_expr
+
+        source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_const_expr(None, source))
+
+        self.out_schema = out_schema
+        self.c_expression = make_cast_expr(
+            source_expr,
+            out_schema)
+
+    def __str__(self):
+        return f"CastExpression({self.out_schema})"
+
+
 cdef class LogicalLimit(LogicalOperator):
     cdef public int n
 

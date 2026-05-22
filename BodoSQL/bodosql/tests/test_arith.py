@@ -272,6 +272,7 @@ def test_multiply_columns(bodosql_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_division_constants(basic_df, memory_leak_check):
     """
     Tests that division works on constants

@@ -995,6 +995,37 @@ class CaseExpression(Expression):
         return out
 
 
+class CastExpression(Expression):
+    """Expression representing a type cast in the query plan."""
+
+    def __init__(self, empty_data, source_expr):
+        self.empty_data = empty_data
+        self.source_expr = source_expr
+        super().__init__(empty_data, source_expr)
+
+    @property
+    def source(self):
+        """Return the source of the cast expression."""
+        return self.source_expr.source
+
+    def replace_source(self, new_source: LazyPlan):
+        """Replace the source of the expression with a new source plan."""
+        new_source_expr = self.source_expr.replace_source(new_source)
+        if new_source_expr is None:
+            return None
+
+        out = CastExpression(self.empty_data, new_source_expr)
+        out.is_series = self.is_series
+        return out
+
+    def with_new_source(self, new_source):
+        out = CastExpression(
+            self.empty_data, self.source_expr.with_new_source(new_source)
+        )
+        out.is_series = self.is_series
+        return out
+
+
 class ArithOpExpression(BinaryExpression):
     """Expression representing an arithmetic operation (e.g. addition, subtraction)
     in the query plan.
