@@ -195,6 +195,7 @@ def test_select_col_arith(bodosql_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_addition_constants(basic_df, memory_leak_check):
     """
     Tests that addition works on integer constants

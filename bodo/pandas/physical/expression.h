@@ -281,6 +281,13 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             children[1]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
+        auto left_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        auto right_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(right_res);
+        if (left_as_scalar && right_as_scalar) {
+            return std::make_shared<ScalarExprResult>(result);
+        }
         return std::make_shared<ArrayExprResult>(result,
                                                  "Comparison" + comparator);
     }
@@ -696,6 +703,11 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
             children[1]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_binary(left_res, right_res, comparator);
+        auto right_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(right_res);
+        if (left_as_scalar && right_as_scalar) {
+            return std::make_shared<ScalarExprResult>(result);
+        }
         return std::make_shared<ArrayExprResult>(result,
                                                  "Conjunction" + comparator);
     }
@@ -772,6 +784,11 @@ class PhysicalCastExpression : public PhysicalExpression {
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
         auto result = do_arrow_compute_cast(left_res, return_type);
+        auto left_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        if (left_as_scalar) {
+            return std::make_shared<ScalarExprResult>(result);
+        }
         return std::make_shared<ArrayExprResult>(result, "Cast");
     }
 
@@ -839,6 +856,12 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
         auto result = do_arrow_compute_unary(left_res, comparator);
+        auto left_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        if (left_as_scalar) {
+            return std::make_shared<ScalarExprResult>(result);
+        }
+
         return std::make_shared<ArrayExprResult>(result, "Unary" + comparator);
     }
 
@@ -928,6 +951,13 @@ class PhysicalBinaryExpression : public PhysicalExpression {
 
         std::shared_ptr<array_info> result = do_arrow_compute_binary(
             left_res, right_res, comparator, result_type);
+        auto left_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        auto right_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(right_res);
+        if (left_as_scalar && right_as_scalar) {
+            return std::make_shared<ScalarExprResult>(result);
+        }
         return std::make_shared<ArrayExprResult>(result, "Binary" + comparator);
     }
 
@@ -981,6 +1011,15 @@ class PhysicalCaseExpression : public PhysicalExpression {
             children[2]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_case(when_res, then_res, else_res);
+        auto when_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(when_res);
+        auto then_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(then_res);
+        auto else_as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(else_res);
+        if (when_as_scalar && then_as_scalar && else_as_scalar) {
+            return std::make_shared<ScalarExprResult>(result);
+        }
         return std::make_shared<ArrayExprResult>(result, "Case");
     }
 
