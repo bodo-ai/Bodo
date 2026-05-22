@@ -283,6 +283,7 @@ def test_division_constants(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_division_columns(bodosql_numeric_types, memory_leak_check):
     """
     Tests that division works on columns
@@ -299,6 +300,7 @@ def test_division_columns(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_op_order(bodosql_numeric_types, memory_leak_check):
     """
     Tests that order of operations is correct
@@ -315,6 +317,7 @@ def test_op_order(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_op_order_cols(bodosql_numeric_types, memory_leak_check):
     """
     Tests that order of operations is correct on columns
@@ -331,6 +334,7 @@ def test_op_order_cols(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_arith_ops_between_tables(basic_df, memory_leak_check):
     """
     Tests that arith operations between tables work as intended
