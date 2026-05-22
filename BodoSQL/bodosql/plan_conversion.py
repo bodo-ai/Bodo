@@ -655,9 +655,6 @@ def java_agg_to_python_agg(ctx, java_plan):
 
     keys = list(java_plan.getGroupSet().toList())
 
-    if len(keys) == 0:
-        raise NotImplementedError("Aggregations without group by not supported yet")
-
     input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
 
     exprs = []

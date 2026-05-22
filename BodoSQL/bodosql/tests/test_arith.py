@@ -87,6 +87,7 @@ def test_column_arithmetic_select(bodosql_numeric_types, memory_leak_check):
         )
 
 
+@pytest.mark.bodosql_cpp
 def test_sum_arith_select(bodosql_numeric_types, memory_leak_check):
     """test sum on a call with an arithmetic expression"""
     check_query(
