@@ -800,9 +800,7 @@ class ArrowScalarFuncExpression(Expression):
     def update_func_expr_source(self, new_source_plan: LazyPlan, col_index_offset: int):
         """Update the source and column index of the function expression."""
         if self.source != new_source_plan:
-            assert len(self.input_exprs) == 1 + get_n_index_arrays(
-                self.empty_data.index
-            ), (
+            assert len(self.input_exprs) == 1, (
                 "ArrowScalarFuncExpression::update_func_expr_source: expected single input column"
             )
             assert is_col_ref(self.input_exprs[0]), (
@@ -810,20 +808,9 @@ class ArrowScalarFuncExpression(Expression):
             )
             # Previous input data column index
             in_col_ind = self.input_exprs[0].col_index
-            n_source_cols = len(new_source_plan.empty_data.columns)
-            # Add Index columns of the new source plan as input
-            index_cols = tuple(
-                range(
-                    n_source_cols,
-                    n_source_cols
-                    + get_n_index_arrays(new_source_plan.empty_data.index),
-                )
-            )
             expr = ArrowScalarFuncExpression(
                 self.empty_data,
-                make_col_ref_exprs(
-                    (in_col_ind + col_index_offset,) + index_cols, new_source_plan
-                ),
+                make_col_ref_exprs((in_col_ind + col_index_offset,), new_source_plan),
                 self.function_name,
                 self.function_args,
             )

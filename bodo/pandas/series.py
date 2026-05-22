@@ -2900,7 +2900,7 @@ def make_expr(expr, plan, first, schema, index_cols, side="right"):
         empty_data = arrow_to_empty_df(pa.schema([expr.pa_schema[0]]))
         return ArrowScalarFuncExpression(
             empty_data,
-            make_col_ref_exprs((idx,) + tuple(index_cols), plan),
+            make_col_ref_exprs((idx,), plan),
             expr.function_name,
             (),
         )
@@ -3138,7 +3138,8 @@ def _get_series_func_plan(
         has_state = False
         expr = ArrowScalarFuncExpression(
             empty_data,
-            input_exprs,
+            # Arrow functions don't need index columns as input
+            [input_exprs[0]],
             func_name,
             func_args,
         )

@@ -446,9 +446,9 @@ def bodosql_datetime_types(request):
             "TABLE1": pd.DataFrame(
                 {
                     "A": [
-                        bodo.types.Time(19, 53, 6, 15),
+                        bodo.types.Time(19, 53, 6),
                         bodo.types.Time(14, 28, 57),
-                        bodo.types.Time(8, 2, 5, 0, 1),
+                        bodo.types.Time(8, 2, 5),
                         None,
                     ]
                     * 3,
@@ -461,11 +461,11 @@ def bodosql_datetime_types(request):
                     "C": [
                         None,
                         bodo.types.Time(13, 37, 45),
-                        bodo.types.Time(1, 47, 59, 290, 574),
+                        bodo.types.Time(1, 47, 59),
                     ]
                     * 4,
                 }
-            ),
+            ).astype(pd.ArrowDtype(pa.time64("ns"))),
         },
     ]
 )

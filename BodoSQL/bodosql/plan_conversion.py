@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import operator
+import zoneinfo
 from dataclasses import dataclass
+from datetime import datetime
 
 import pandas as pd
 import pyarrow as pa
@@ -12,6 +14,7 @@ import bodosql
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
+    ArrowScalarFuncExpression,
     CaseExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
@@ -235,6 +238,61 @@ def java_call_to_python_call(java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "__invert__")
 
+    if (
+        operator_class_name == "SqlDatePartFunction"
+        and len(java_call.getOperands()) == 1
+    ):
+        operands = java_call.getOperands()
+        input = java_expr_to_python_expr(operands[0], input_plan)
+        func_name = op.getName().upper()
+
+        if func_name == "YEAR":
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], "year", ())
+
+        if func_name == "HOUR":
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], "hour", ())
+
+    if operator_class_name == "SqlCoalesceFunction":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
+        # Unify data types to match output type of coalesce (e.g. int8 + int32 -> int32)
+        out_col_name = op_exprs[0].empty_data.columns[0]
+        in_schemas = [
+            pa.Schema.from_pandas(e.empty_data.set_axis([out_col_name], axis=1))
+            for e in op_exprs
+        ]
+        # If some but not all inputs are timestamps, promote all to timestamps to
+        # avoid errors in C++ backend
+        if any(pa.types.is_timestamp(s.field(0).type) for s in in_schemas) and not all(
+            pa.types.is_timestamp(s.field(0).type) for s in in_schemas
+        ):
+            t = next(
+                s.field(0).type
+                for s in in_schemas
+                if pa.types.is_timestamp(s.field(0).type)
+            )
+            out_schema = pa.schema([pa.field(out_col_name, t)])
+        else:
+            out_schema = pa.unify_schemas(
+                in_schemas,
+                promote_options="permissive",
+            )
+        empty_data = arrow_to_empty_df(out_schema)
+        return ArrowScalarFuncExpression(empty_data, op_exprs, "coalesce", ())
+
+    if operator_class_name == "SqlCurrentDateFunction":
+        # Matching BodoSQL JIT backend which uses UTC by default
+        # https://github.com/bodo-ai/Bodo/blob/c151771c58a61753daba450901eb294a76b8ff58/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/BodoSQLCodeGen/DatetimeFnCodeGen.java#L260
+        # https://github.com/bodo-ai/Bodo/blob/c151771c58a61753daba450901eb294a76b8ff58/bodo/hiframes/datetime_date_ext.py#L1252
+        tz_info = zoneinfo.ZoneInfo("UTC")
+        curr_date = datetime.now(tz_info).date()
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+        # NOTE: this is assuming that plans are not cached so has to be changed if we
+        # add plan caching
+        return ConstantExpression(dummy_empty_data, input_plan, curr_date)
+
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
         operands = java_call.getOperands()
@@ -292,6 +350,15 @@ def java_call_to_python_call(java_call, input_plan):
             inp = op_exprs[0]
             out_empty = inp.empty_data
             return UnaryOpExpression(out_empty, inp, "round")
+
+        if func_name == "IFF" and len(op_exprs) == 3:
+            # IFF is equivalent to CASE with single WHEN
+            return java_case_to_python_case(operands, input_plan)
+
+        if func_name == "NULLIF" and len(op_exprs) == 2:
+            return ArrowScalarFuncExpression(
+                op_exprs[0].empty_data, op_exprs, "nullif", ()
+            )
 
         # If we didn't match a supported basic function, fall through to NotImplemented
         raise NotImplementedError(
@@ -491,10 +558,16 @@ def java_filter_to_python_filter(ctx, java_filter):
 def java_literal_to_python_literal(java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-    lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
+    lit_type_name = lit_type.getSqlTypeName()
 
     # TODO[BSE-5156]: support all Calcite literal types
+
+    if java_literal.getTypeName().equals(SqlTypeName.NULL):
+        dummy_empty_data = pd.Series(
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type_name))
+        )
+        return NullExpression(dummy_empty_data, input_plan, 0)
 
     if lit_type_name.equals(SqlTypeName.DECIMAL):
         lit_type_scale = lit_type.getScale()
@@ -508,11 +581,21 @@ def java_literal_to_python_literal(java_literal, input_plan):
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
             return ConstantExpression(dummy_empty_data, input_plan, float(val))
 
+    if lit_type_name.equals(SqlTypeName.FLOAT):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float32()))
+        return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
+
     if lit_type_name.equals(SqlTypeName.DOUBLE):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
         return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
 
     if lit_type_name.equals(SqlTypeName.CHAR):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.large_string()))
+        return ConstantExpression(
+            dummy_empty_data, input_plan, java_literal.getValue2()
+        )
+
+    if lit_type_name.equals(SqlTypeName.VARCHAR):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.large_string()))
         return ConstantExpression(
             dummy_empty_data, input_plan, java_literal.getValue2()
@@ -536,11 +619,18 @@ def java_literal_to_python_literal(java_literal, input_plan):
         val = pd.to_timedelta(int(java_literal.getValue2()), unit="ms")
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
-    if lit_type_name.equals(SqlTypeName.NULL):
+    if (
+        lit_type_name.equals(SqlTypeName.TINYINT)
+        or lit_type_name.equals(SqlTypeName.SMALLINT)
+        or lit_type_name.equals(SqlTypeName.INTEGER)
+        or lit_type_name.equals(SqlTypeName.BIGINT)
+    ):
         dummy_empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type.getSqlTypeName()))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type_name))
         )
-        return NullExpression(dummy_empty_data, input_plan, 0)
+        return ConstantExpression(
+            dummy_empty_data, input_plan, java_literal.getValue2()
+        )
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"

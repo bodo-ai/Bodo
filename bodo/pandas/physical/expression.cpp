@@ -1,4 +1,5 @@
 #include "expression.h"
+#include <arrow/type_fwd.h>
 #include "_util.h"
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
@@ -113,6 +114,96 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
     }
 
     return array;
+}
+
+/**
+ * @brief Perform an Arrow compute operation with multiple input expressions.
+ *
+ * @param in_expr_results A vector of input expression results.
+ * @param arrow_func_name The name of the Arrow function to call.
+ * @return std::shared_ptr<array_info> The result of the Arrow compute
+ * operation.
+ */
+std::shared_ptr<array_info> do_arrow_compute_multi_input(
+    std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
+    const std::string& arrow_func_name) {
+    std::vector<arrow::Datum> arg_datums;
+    for (auto& expr_res : in_expr_results) {
+        std::shared_ptr<ArrayExprResult> as_array =
+            std::dynamic_pointer_cast<ArrayExprResult>(expr_res);
+        std::shared_ptr<ScalarExprResult> as_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(expr_res);
+
+        if (as_array) {
+            arg_datums.push_back(
+                arrow::Datum(prepare_arrow_compute(as_array->result)));
+        } else if (as_scalar) {
+            arg_datums.push_back(
+                arrow::MakeScalar(prepare_arrow_compute(as_scalar->result)
+                                      ->GetScalar(0)
+                                      .ValueOrDie()));
+        } else {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input input is neither array nor "
+                "scalar.");
+        }
+    }
+
+    arrow::Result<arrow::Datum> func_res;
+
+    if (arrow_func_name == "nullif") {
+        // SQL NULLIF(a, b): returns NULL when a == b, else a.
+        // Arrow has no direct nullif kernel, so implement as:
+        //   case_when(equal(a, b), null_scalar_of_a_type, a)
+        if (arg_datums.size() != 2) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: nullif expects exactly 2 "
+                "arguments.");
+        }
+        auto eq_res = arrow::compute::CallFunction("equal", arg_datums);
+        if (!eq_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: Error in Arrow compute "
+                "(nullif/equal): " +
+                eq_res.status().message());
+        }
+
+        // Build a null scalar with the same type as the first argument.
+        auto null_scalar_res = arrow::MakeNullScalar(arg_datums[0].type());
+        arrow::Datum null_datum(null_scalar_res);
+
+        auto cond = eq_res.ValueOrDie();
+        // Use struct array condition for case_when
+        if (!cond.is_scalar()) {
+            auto struct_type =
+                arrow::struct_({arrow::field("cond", arrow::boolean())});
+            auto cond_arr = std::make_shared<arrow::StructArray>(
+                struct_type, cond.length(),
+                std::vector<std::shared_ptr<arrow::Array>>{cond.make_array()});
+            cond = arrow::Datum(cond_arr);
+        }
+
+        func_res = arrow::compute::CallFunction(
+            "case_when", {cond, null_datum, arg_datums[0]});
+    } else {
+        func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums);
+    }
+
+    if (!func_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "do_arrow_compute_multi_input: Error in Arrow compute: " +
+            func_res.status().message());
+    }
+
+    arrow::Datum result_datum = func_res.ValueOrDie();
+    if (result_datum.is_scalar()) {
+        return arrow_array_to_bodo(
+            arrow::MakeArrayFromScalar(*result_datum.scalar(), 1).ValueOrDie(),
+            bodo::BufferPool::DefaultPtr());
+    }
+
+    return arrow_array_to_bodo(result_datum.make_array(),
+                               bodo::BufferPool::DefaultPtr());
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
@@ -735,11 +826,25 @@ std::shared_ptr<ExprResult> PhysicalUDFExpression::ProcessBatch(
 
 std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {
-    std::shared_ptr<ExprResult> res = children[0]->ProcessBatch(input_batch);
     std::shared_ptr<array_info> result;
-    time_pt start_init_time = start_timer();
-    result = this->do_arrow_compute(res);
-    this->metrics.arrow_compute_time += end_timer(start_init_time);
+    // BodoSQL functions may have multiple arguments. TODO(Ehsan): refactor
+    // various Arrow compute call code paths.
+    if (children.size() > 1) {
+        std::vector<std::shared_ptr<ExprResult>> in_expr_results;
+        for (const auto& child : children) {
+            in_expr_results.emplace_back(child->ProcessBatch(input_batch));
+        }
+        time_pt start_init_time = start_timer();
+        result = do_arrow_compute_multi_input(in_expr_results,
+                                              scalar_func_data.arrow_func_name);
+        this->metrics.arrow_compute_time += end_timer(start_init_time);
+    } else {
+        std::shared_ptr<ExprResult> res =
+            children[0]->ProcessBatch(input_batch);
+        time_pt start_init_time = start_timer();
+        result = this->do_arrow_compute(res);
+        this->metrics.arrow_compute_time += end_timer(start_init_time);
+    }
     return std::make_shared<ArrayExprResult>(result, "Arrow Scalar");
 }
 

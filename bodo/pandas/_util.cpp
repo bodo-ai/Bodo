@@ -159,6 +159,10 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeNullScalar(date_type);
         } break;
+        case duckdb::LogicalTypeId::TIME: {
+            auto time_type = arrow::time64(arrow::TimeUnit::NANO);
+            return arrow::MakeNullScalar(time_type);
+        } break;
         default:
             throw std::runtime_error(
                 "getDefaultValueForDuckdbValueType unhandled type." +
@@ -483,6 +487,10 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::date32();
         case duckdb::LogicalTypeId::TIMESTAMP_NS:
             return arrow::timestamp(arrow::TimeUnit::NANO);
+        case duckdb::LogicalTypeId::TIME:
+            return arrow::time64(arrow::TimeUnit::NANO);
+        case duckdb::LogicalTypeId::BLOB:
+            return arrow::large_binary();
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +
