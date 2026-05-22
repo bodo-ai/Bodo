@@ -55,7 +55,7 @@ requirements:
     - aws-sdk-cpp
     - zstd
 
-    - hdf5 * *mpi_mpich_*       # [not gpu and linux]
+    - hdf5 <2 *mpi_mpich_*       # [not gpu and linux]
     - hdf5 * *mpi_openmpi_*     # [gpu or osx]
     - hdf5 * *mpi_impi_*        # [not gpu and win]
     - h5py
