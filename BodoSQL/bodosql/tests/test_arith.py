@@ -65,22 +65,24 @@ def test_column_arithmetic_select(bodosql_numeric_types, memory_leak_check):
         check_names=False,
         use_duckdb=True,
     )
-    check_query(
-        "select C - A from table1",
-        bodosql_numeric_types,
-        None,
-        check_dtype=False,
-        check_names=False,
-        use_duckdb=True,
-    )
-    check_query(
-        "select A * (1 - C) from table1",
-        bodosql_numeric_types,
-        None,
-        check_dtype=False,
-        check_names=False,
-        use_duckdb=True,
-    )
+    # Avoid overflow errors for unsigned integer
+    if bodosql_numeric_types["TABLE1"].A.dtype.kind != "u":
+        check_query(
+            "select C - A from table1",
+            bodosql_numeric_types,
+            None,
+            check_dtype=False,
+            check_names=False,
+            use_duckdb=True,
+        )
+        check_query(
+            "select A * (1 - C) from table1",
+            bodosql_numeric_types,
+            None,
+            check_dtype=False,
+            check_names=False,
+            use_duckdb=True,
+        )
 
 
 def test_sum_arith_select(bodosql_numeric_types, memory_leak_check):
