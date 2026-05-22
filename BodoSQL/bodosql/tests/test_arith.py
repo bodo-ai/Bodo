@@ -158,6 +158,7 @@ def test_nested_arithmetic_select(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_multicolumn_arithmetic_select(bodosql_numeric_types, memory_leak_check):
     """test select calls with an arithmetic expression"""
     check_query(
@@ -179,6 +180,7 @@ def test_multicolumn_arithmetic_select(bodosql_numeric_types, memory_leak_check)
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_select_col_arith(bodosql_numeric_types, memory_leak_check):
     """test selecting a single column and performing arithmetic
     on that columns
