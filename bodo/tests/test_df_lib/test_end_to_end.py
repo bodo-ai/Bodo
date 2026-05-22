@@ -2874,7 +2874,7 @@ def test_get(key, default):
 
         pd_out = df.get(key, default)
         bd_out = bdf.get(key, default)
-    _test_equal(pd_out, bd_out, check_pandas_types=False, reset_index=True)
+    _test_equal(bd_out, pd_out, check_pandas_types=False, reset_index=True)
 
 
 @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
@@ -3046,7 +3046,7 @@ def test_series_get(key, default, epc, bodo_convert):
         if bodo_convert:
             key = bd.Series(key)
         bds_out = bds.get(key, default)
-    _test_equal(pds_out, bds_out, check_pandas_types=False, reset_index=True)
+    _test_equal(bds_out, pds_out, check_pandas_types=False, reset_index=True)
 
 
 def test_groupby_getattr_fallback_behavior():
