@@ -34,6 +34,7 @@ requirements:
 
   host:
     - python {{ PY_VER }}
+    # Avoid mixing no-GIL Python (*_cp314t) during build.
     - python_abi {{ PY_VER }} *_cp{{ PY_VER|replace('.', '') }}
     - pip
 
