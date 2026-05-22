@@ -3019,7 +3019,6 @@ def test_series_na(data):
     _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
 
 
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "key, default, epc, bodo_convert",
     [
