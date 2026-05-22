@@ -14,7 +14,7 @@ Bodo DataFrames provides hybrid CPU-GPU execution.  It can execute anywhere from
 To use Bodo's GPU support, install the GPU-enabled conda package available on the `bodo.ai` channel:
 
 ```
-conda install -c bodo.ai -c rapidsai -c nvidia "bodo=*=*cuda" --no-channel-priority
+conda install -c bodo.ai -c rapidsai -c nvidia -c conda-forge "bodo=*=*cuda" --no-channel-priority
 ```
 
 This version of the Bodo package includes the dependencies necessary for running Bodo on GPUs, including CUDA, and is pre-configured to use GPUs by default.
@@ -104,13 +104,15 @@ Below is a concise summary of broad capabilities that can run on GPU today, foll
 
 * Most kinds of joins
 
-* GroupBy aggregations: sum, count, mean, min, max, var, std, size, skew, nunique
+* GroupBy aggregations: sum, count, mean, min, max, var, std, size, skew, nunique, any, all
 
 * Series reductions: sum, product, count, mean, min, max
 
+* Series string functions: str.contains, str.match, str.slice, and str.strip
+
 * drop_duplicates, concat, Series.isin
 
-* Iceberg read (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
+* Iceberg read and write (local filesystem, S3, HDFS, Azure Data Lake, Google Cloud Storage)
 
 ## Unsupported Capabilities
 
@@ -134,12 +136,12 @@ Column selection and built-in arithmetic/boolean expressions are supported on GP
 
 ### GroupBy
 
-The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nunique) are supported on GPU. Custom aggregations implemented as UDFs or Python callbacks will run on CPU.
+The listed aggregations (sum, count, mean, min, max, var, std, size, skew, nunique, any, all) are supported on GPU. Custom aggregations implemented as UDFs or Python callbacks will run on CPU.
 `sum` of an all-NA group produces NA output (libcudf behavior) instead of zero (Pandas behavior).
 
 ### Joins
 
-Supported join types include inner, left, right, outer, anti, anti-right and mark joins (i.e. `Series.isin`),
+Supported join types include inner, left, right, outer, anti, anti-right, cross and mark joins (i.e. `Series.isin`),
 though these joins may still fall back to CPU if they contain unsupported expressions in the join condition.
 
 ### Sorting
