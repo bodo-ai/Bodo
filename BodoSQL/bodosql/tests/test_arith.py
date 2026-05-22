@@ -204,6 +204,7 @@ def test_addition_constants(basic_df, memory_leak_check):
     check_query(query, basic_df, None, check_dtype=False, use_duckdb=True)
 
 
+@pytest.mark.bodosql_cpp
 def test_addition_columns(bodosql_numeric_types, memory_leak_check):
     """
     Tests that addition works on columns
@@ -219,6 +220,7 @@ def test_addition_columns(bodosql_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_subtraction_constants(basic_df, memory_leak_check):
     """
     Tests that subtraction works on constants
@@ -227,6 +229,7 @@ def test_subtraction_constants(basic_df, memory_leak_check):
     check_query(query, basic_df, None, check_dtype=False, use_duckdb=True)
 
 
+@pytest.mark.bodosql_cpp
 def test_subtraction_columns(bodosql_numeric_types, memory_leak_check):
     """
     Tests that subtraction works on columns
@@ -242,6 +245,7 @@ def test_subtraction_columns(bodosql_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_multiplication_constants(basic_df, memory_leak_check):
     """
     Tests that multiplication works on constants
@@ -252,6 +256,7 @@ def test_multiplication_constants(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_multiply_columns(bodosql_numeric_types, memory_leak_check):
     """
     Tests that multiplication works on columns
