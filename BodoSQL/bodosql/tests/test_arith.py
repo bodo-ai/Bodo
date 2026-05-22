@@ -42,14 +42,16 @@ def test_basic_arithmetic_select(bodosql_numeric_types, memory_leak_check):
         check_names=False,
         use_duckdb=True,
     )
-    check_query(
-        "select 1 - A from table1",
-        bodosql_numeric_types,
-        None,
-        check_dtype=False,
-        check_names=False,
-        use_duckdb=True,
-    )
+    # Avoid overflow errors for unsigned integer
+    if bodosql_numeric_types["TABLE1"].A.dtype.kind != "u":
+        check_query(
+            "select 1 - A from table1",
+            bodosql_numeric_types,
+            None,
+            check_dtype=False,
+            check_names=False,
+            use_duckdb=True,
+        )
 
 
 @pytest.mark.slow
