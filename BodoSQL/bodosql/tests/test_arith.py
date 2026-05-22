@@ -16,6 +16,7 @@ pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_basic_arithmetic_select(bodosql_numeric_types, memory_leak_check):
     """test select calls with an arithmetic expression"""
     check_query(
@@ -55,6 +56,7 @@ def test_basic_arithmetic_select(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_column_arithmetic_select(bodosql_numeric_types, memory_leak_check):
     """test select calls with an arithmetic expression"""
     check_query(
