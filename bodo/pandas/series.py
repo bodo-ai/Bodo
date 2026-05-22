@@ -1286,6 +1286,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         """
         Fill missing values in Series with specified `value`.
         """
+        if not pd.api.types.is_scalar(value):
+            raise BodoLibNotImplementedException("fillna only supports scalar values")
 
         index = self.head(0).index
         new_metadata = pd.Series(
