@@ -667,6 +667,59 @@ def test_filter_datetime(datapath, op):
     )
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "kwargs, error, epc",
+    [
+        pytest.param({}, TypeError, 0),
+        pytest.param({"items": [], "like": "A"}, TypeError, 0),
+        pytest.param({"items": ["A_3", "2-A", "2-A", "not_a_column"]}, None, 0),
+        pytest.param({"items": {"1AA", "B-", "A_3"}}, None, 0),
+        pytest.param({"like": "A"}, None, 0),
+        pytest.param({"regex": ".*[-A].*"}, None, 0),
+        pytest.param(
+            {"items": []},
+            None,
+            0,
+            marks=pytest.mark.skip(reason="Existing minor Bodo difference"),
+        ),
+        pytest.param(
+            {"items": [], "axis": 1},
+            None,
+            1,
+            marks=pytest.mark.skip(reason="Currently crashes"),
+        ),
+        pytest.param({"items": ["A1", "2-A"], "axis": 1}, None, 1),
+    ],
+)
+def test_filter_method(kwargs, error, epc):
+    """Basic test for DataFrame.filter()"""
+    with assert_executed_plan_count(epc):
+        df = pd.DataFrame(
+            {
+                "A1": [1, 2, 3, 4, 5],
+                "1AA": [10, 9, 8, 7, 6],
+                "2-A": [5, 5.9, -0.13, 1, 1],
+                "B-": [1, 10, 2, 9, 3],
+                "A_3": [8.2, 1.43, 7.3, 9.7, 8.21],
+            }
+        )
+        bdf = bd.from_pandas(df)
+
+        if error:
+            with pytest.raises(error):
+                df_filtered = df.filter(**kwargs)
+            with pytest.raises(error):
+                bdf_filtered = bdf.filter(**kwargs)
+        else:
+            df_filtered = df.filter(**kwargs)
+            bdf_filtered = bdf.filter(**kwargs)
+    if not error:
+        _test_equal(
+            bdf_filtered, df_filtered, check_pandas_types=False, reset_index=True
+        )
+
+
 @pytest.mark.gpu(allow_fallback=True)  # fallback count-star
 def test_head_pushdown(datapath):
     """Test for head pushed down to read parquet."""
@@ -2349,6 +2402,41 @@ def test_series_filter_series(datapath, file_path, op, mode):
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "kwargs, error",
+    [
+        pytest.param({}, TypeError),
+        pytest.param({"items": [], "like": "A"}, TypeError),
+        pytest.param({"items": ["2B2", "2B2", "not_a_column", "3C_A"]}, None),
+        pytest.param({"items": {"1-A", "A1", "3C_"}}, None),
+        pytest.param({"like": "_"}, None),
+        pytest.param({"regex": "A$"}, None),
+        pytest.param({"items": []}, None),
+        pytest.param({"items": ["A1", "2B2"], "axis": 0}, None),
+        pytest.param({"items": [], "axis": 1}, ValueError),
+    ],
+)
+def test_series_filter_method(kwargs, error):
+    """Basic test for Series.filter()"""
+    pds = pd.Series(data=[1, 4, 3, 9, 1], index=["A1", "1-A", "2B2", "3C_", "3C_A"])
+    bds = bd.Series(pds)
+
+    if error:
+        with pytest.raises(error):
+            pds_filtered = pds.filter(**kwargs)
+        with assert_executed_plan_count(0):
+            with pytest.raises(error):
+                bds_filtered = bds.filter(**kwargs)
+    else:
+        with assert_executed_plan_count(1):
+            pds_filtered = pds.filter(**kwargs)
+            bds_filtered = bds.filter(**kwargs)
+        _test_equal(
+            bds_filtered, pds_filtered, check_pandas_types=False, reset_index=True
+        )
 
 
 @pytest.mark.gpu

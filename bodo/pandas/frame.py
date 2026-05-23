@@ -1477,6 +1477,45 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._plan, empty_series, "apply", (func,), apply_kwargs
         )
 
+    @check_args_fallback(supported=["items", "like", "regex"])
+    def filter(
+        self,
+        items=None,
+        like: str | None = None,
+        regex: str | None = None,
+        axis: Axis | None = None,
+    ) -> BodoDataFrame | None:
+        if sum(x is not None for x in [items, like, regex]) > 1:
+            raise TypeError(
+                "Keyword arguments `items`, `like`, or `regex` are mutually exclusive"
+            )
+
+        if items is not None:
+            items = pd.Index(items).intersection(self.columns).to_list()
+        elif like:
+
+            def search(label):
+                if not isinstance(label, str):
+                    label = str(label)
+                return like in label
+
+            items = list(np.array(self.columns)[self.columns.map(search)])
+        elif regex:
+            import re
+
+            matcher = re.compile(regex)
+
+            def search(label):
+                if not isinstance(label, str):
+                    label = str(label)
+                return matcher.search(label) is not None
+
+            items = list(np.array(self.columns)[self.columns.map(search)])
+        else:
+            raise TypeError("Must pass either `items`, `like`, or `regex`")
+
+        return self.__getitem__(items)
+
     @check_args_fallback(supported=["by", "ascending", "na_position", "kind"])
     def sort_values(
         self,
