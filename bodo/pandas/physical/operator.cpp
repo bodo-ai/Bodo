@@ -686,7 +686,7 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     }
     finished = static_cast<bool>(sync_is_last_non_blocking(
                    is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
-               (gpu_batch_generator ? (gpu_batch_generator->collected_rows == 1)
+               (gpu_batch_generator ? (gpu_batch_generator->collected_rows == 0)
                                     : true);
 
     if (finished) {
