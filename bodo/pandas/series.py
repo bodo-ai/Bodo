@@ -960,10 +960,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             ),
         )
 
-    @check_args_fallback(unsupported="none")
-    def get(self, key, default=None):
-        return pd.Series.get(self, key, default)
-
     @check_args_fallback(unsupported="all")
     def min(
         self, axis: Axis | None = 0, skipna: bool = True, numeric_only: bool = False

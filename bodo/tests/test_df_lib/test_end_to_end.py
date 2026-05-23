@@ -3019,35 +3019,6 @@ def test_series_na(data):
     _test_equal(bds_notnull, pds_notnull, check_pandas_types=False)
 
 
-@pytest.mark.parametrize(
-    "key, default, epc, bodo_convert",
-    [
-        pytest.param(3, None, 1, 0),
-        pytest.param(6, None, 1, 0),
-        pytest.param(6, 10, 1, 0),
-        pytest.param([True, False, False, True, True], None, 1, 0),
-        pytest.param(
-            pd.Series([True, False, False, True, True]),
-            None,
-            0,
-            1,
-            marks=pytest.mark.skip(reason="Currently crashes"),
-        ),
-    ],
-)
-def test_series_get(key, default, epc, bodo_convert):
-    """Basic test for Series get."""
-    with assert_executed_plan_count(epc):
-        pds = pd.Series([1, 3, 4, 5, 2])
-        bds = bd.Series(pds)
-
-        pds_out = pds.get(key, default)
-        if bodo_convert:
-            key = bd.Series(key)
-        bds_out = bds.get(key, default)
-    _test_equal(bds_out, pds_out, check_pandas_types=False, reset_index=True)
-
-
 def test_groupby_getattr_fallback_behavior():
     import warnings
 
