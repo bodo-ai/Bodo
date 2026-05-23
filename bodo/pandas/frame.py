@@ -1120,7 +1120,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @check_args_fallback("none")
     def get(self, key, default=None):
-        return pd.DataFrame.get(self, key, default)
+        # From pandas implmentation:
+        # https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/generic.py#L4427
+
+        try:
+            return self.__getitem__(key)
+        except (KeyError, ValueError, IndexError):
+            return default
 
     @check_args_fallback("all")
     def __getitem__(self, key):
