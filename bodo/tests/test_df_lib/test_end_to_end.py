@@ -2842,6 +2842,32 @@ def test_loc(datapath):
     )
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "key, default",
+    [
+        pytest.param("A", None),
+        pytest.param(["A", "B"], "fail"),
+        pytest.param("D", "not found"),
+    ],
+)
+def test_get(key, default):
+    """Basic test for DataFrame get."""
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": [1, 2, 3, 4, 5],
+                "B": [10, 9, 8, 7, 6],
+                "C": [8.2, 1.43, 7.3, 9.7, 8.21],
+            }
+        )
+        bdf = bd.from_pandas(df)
+
+        pd_out = df.get(key, default)
+        bd_out = bdf.get(key, default)
+    _test_equal(bd_out, pd_out, check_pandas_types=False, reset_index=True)
+
+
 @pytest.mark.gpu(allow_fallback=True)  # fallback read Pandas, aggregate
 @pytest.mark.parametrize(
     "percentiles",
