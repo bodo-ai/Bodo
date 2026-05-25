@@ -150,7 +150,7 @@ struct GPUBatchGenerator {
  */
 class CPUtoGPUExchange : public RankDataExchange {
    public:
-    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {}
 
     /**
      * @brief Send data from all ranks to GPUs.

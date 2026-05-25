@@ -646,13 +646,7 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
             return std::make_tuple(convertTableToGPU(input_batch, se),
                                    OperatorResult::FINISHED);
         } else {
-            std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
-            if (!table_schema->metadata) {
-                table_schema->metadata = std::make_shared<bodo::TableMetadata>(
-                    std::vector<std::string>({}), std::vector<std::string>({}));
-            }
-            auto output_batch =
-                GPU_DATA(nullptr, table_schema->ToArrowSchema(), nullptr);
+            auto output_batch = GPU_DATA(nullptr, nullptr, nullptr);
             return std::make_tuple(output_batch, OperatorResult::FINISHED);
         }
     }
@@ -688,13 +682,7 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     if (is_gpu_rank()) {
         output_batch = gpu_batch_generator->next(se, local_is_last);
     } else {
-        std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
-        if (!table_schema->metadata) {
-            table_schema->metadata = std::make_shared<bodo::TableMetadata>(
-                std::vector<std::string>({}), std::vector<std::string>({}));
-        }
-        output_batch =
-            GPU_DATA(nullptr, table_schema->ToArrowSchema(), nullptr);
+        output_batch = GPU_DATA(nullptr, nullptr, nullptr);
     }
     finished = static_cast<bool>(sync_is_last_non_blocking(
                    is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
