@@ -647,6 +647,10 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
                                    OperatorResult::FINISHED);
         } else {
             std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
+            if (!table_schema->metadata) {
+                table_schema->metadata = std::make_shared<bodo::TableMetadata>(
+                    std::vector<std::string>({}), std::vector<std::string>({}));
+            }
             auto output_batch =
                 GPU_DATA(nullptr, table_schema->ToArrowSchema(), nullptr);
             return std::make_tuple(output_batch, OperatorResult::FINISHED);
@@ -668,19 +672,27 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     }
     // Determine whether we need more input, have more output, or are finished
     // with the exchange.
-    bool request_input =
-        !(this->shuffle_state->BuffersFull() &&
-          (gpu_batch_generator ? (gpu_batch_generator->collected_rows >
-                                  (2 * gpu_batch_generator->out_batch_size))
-                               : false));
+    bool request_input;
+    if (!is_gpu_rank()) {
+        request_input = true;
+    } else {
+        request_input = !(this->shuffle_state->BuffersFull() &&
+                          (gpu_batch_generator->collected_rows >
+                           (2 * gpu_batch_generator->out_batch_size)));
+    }
+
     bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
                          (this->shuffle_state->SendRecvEmpty());
 
     GPU_DATA output_batch;
-    if (gpu_batch_generator) {
+    if (is_gpu_rank()) {
         output_batch = gpu_batch_generator->next(se, local_is_last);
     } else {
         std::unique_ptr<bodo::Schema> table_schema = input_batch->schema();
+        if (!table_schema->metadata) {
+            table_schema->metadata = std::make_shared<bodo::TableMetadata>(
+                std::vector<std::string>({}), std::vector<std::string>({}));
+        }
         output_batch =
             GPU_DATA(nullptr, table_schema->ToArrowSchema(), nullptr);
     }
