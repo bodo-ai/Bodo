@@ -430,10 +430,12 @@ duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
  *
  * @param lhs - the left-hand side of the expression
  * @param etype - the expression type (e.g., not) to apply to the source
+ * @param out_schema_py - the output schema for the expression
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
-    std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype);
+    std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype,
+    PyObject *out_schema_py);
 
 /**
  * @brief Create a case expression from a source.

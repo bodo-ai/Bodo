@@ -16,6 +16,7 @@ from bodo.pandas.plan import (
     ArithOpExpression,
     ArrowScalarFuncExpression,
     CaseExpression,
+    CastExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
@@ -197,6 +198,14 @@ def java_call_to_python_call(java_call, input_plan):
             # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
             return java_expr_to_python_expr(operand, input_plan)
 
+        empty_data = pd.Series(
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(operand_type.getSqlTypeName()))
+        )
+        return CastExpression(
+            empty_data,
+            java_expr_to_python_expr(operand, input_plan),
+        )
+
     if (
         operator_class_name == "SqlPostfixOperator"
         and len(java_call.getOperands()) == 1
@@ -233,6 +242,10 @@ def java_call_to_python_call(java_call, input_plan):
         input = java_expr_to_python_expr(operands[0], input_plan)
         kind = op.getKind()
         SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+        if kind.equals(SqlKind.MINUS_PREFIX):
+            out_empty = -input.empty_data.iloc[:, 0]
+            return UnaryOpExpression(out_empty, input, "__neg__")
 
         if kind.equals(SqlKind.NOT):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
@@ -654,9 +667,6 @@ def java_agg_to_python_agg(ctx, java_plan):
     from bodo.pandas.groupby import GroupbyAggFunc, _get_agg_output_type
 
     keys = list(java_plan.getGroupSet().toList())
-
-    if len(keys) == 0:
-        raise NotImplementedError("Aggregations without group by not supported yet")
 
     input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
 

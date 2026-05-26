@@ -491,6 +491,14 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::time64(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::BLOB:
             return arrow::large_binary();
+        // DuckDB sometimes generates non-standard HUGEINT types for cases like
+        // A+1 for uint64 (see test_nested_arithmetic_select) We just use
+        // int64/uint64 for HUGEINT/UHUGEINT since we don't have a larger
+        // integer type.
+        case duckdb::LogicalTypeId::HUGEINT:
+            return arrow::int64();
+        case duckdb::LogicalTypeId::UHUGEINT:
+            return arrow::uint64();
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +

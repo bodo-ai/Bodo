@@ -267,6 +267,13 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
         cmp_res = cast_res;
     }
 
+    auto res = cmp_res.ValueOrDie();
+    if (res.is_scalar()) {
+        return arrow_array_to_bodo(
+            arrow::MakeArrayFromScalar(*res.scalar(), 1).ValueOrDie(),
+            bodo::BufferPool::DefaultPtr());
+    }
+
     std::shared_ptr<arrow::Array> arrow_arr = cmp_res.ValueOrDie().make_array();
     return arrow_array_to_bodo(arrow_arr, bodo::BufferPool::DefaultPtr());
 }
@@ -339,7 +346,14 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
             cmp_res.status().message());
     }
 
-    return arrow_array_to_bodo(cmp_res.ValueOrDie().make_array(),
+    auto res = cmp_res.ValueOrDie();
+    if (res.is_scalar()) {
+        return arrow_array_to_bodo(
+            arrow::MakeArrayFromScalar(*res.scalar(), 1).ValueOrDie(),
+            bodo::BufferPool::DefaultPtr());
+    }
+
+    return arrow_array_to_bodo(res.make_array(),
                                bodo::BufferPool::DefaultPtr());
 }
 
