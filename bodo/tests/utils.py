@@ -3714,6 +3714,9 @@ def uncompress_dir(dir_name):
 
 
 def get_gpu_0_process_count():
+    if not bodo.gpu_enabled:
+        return 0
+
     import pynvml
 
     try:
