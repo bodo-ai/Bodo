@@ -676,7 +676,7 @@ def test_filter_datetime(datapath, op):
         pytest.param({"items": ["A_3", "2-A", "2-A", "not_a_column"]}, None, 0),
         pytest.param({"items": {"1AA", "B-", "A_3"}}, None, 0),
         pytest.param({"like": "A"}, None, 0),
-        pytest.param({"regex": ".*[-A].*"}, None, 0),
+        pytest.param({"regex": ".*[-4].*"}, None, 0),
         pytest.param(
             {"items": []},
             None,
@@ -702,6 +702,7 @@ def test_filter_method(kwargs, error, epc):
                 "2-A": [5, 5.9, -0.13, 1, 1],
                 "B-": [1, 10, 2, 9, 3],
                 "A_3": [8.2, 1.43, 7.3, 9.7, 8.21],
+                4: [2.5, 3, 3.5, 4, 4.02],
             }
         )
         bdf = bd.from_pandas(df)
