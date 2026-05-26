@@ -446,6 +446,7 @@ def test_add_sub_intervals(bodosql_datetime_types, memory_leak_check, interval):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_negation(query, bodosql_numeric_types, memory_leak_check):
     """Tests unary negation"""
 
