@@ -212,6 +212,9 @@ macos = "12.0"
 pyiceberg = ">=0.11"
 # Snowflake (Added to PyPi to ignore Pandas <3 constraint)
 snowflake-connector-python = "*"
+# Following dependencies are added to PyPi to be compatible with Platform conda environments.
+matplotlib = "*"
+psycopg2-binary = "*"
 
 [feature.cpu.pypi-options.dependency-overrides]
 pandas = ">=3.0.0"
@@ -247,7 +250,6 @@ huggingface_hub = "*"
 zstandard = "*"
 # Databases
 pymysql = "*"
-psycopg2 = "*"
 sqlalchemy = "*"
 # Excel
 xlrd = "*"
@@ -306,6 +308,9 @@ hdf5 = { version = "*", build = "*mpi_openmpi_*" }
 zstd = "*"
 boost-cpp = "*"
 aws-sdk-cpp = "*"
+# Required for platform conda compatibility
+# TODO(scott): Remove after PyArrow 24 upgrade.
+aws-crt-cpp = "<=0.37.4"
 
 [feature.rcpp.target.osx.dependencies]
 hdf5 = { version = "*", build = "*mpi_openmpi_*" }
@@ -348,7 +353,6 @@ duckdb = "!=1.2.1"
 
 # Restricted due to Spark 4.1 error in bodo/tests/test_df_lib/test_iceberg.py::test_simple_table_read[PARTITIONS_DT_TABLE]
 pyspark = "4.0.*"
-matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
