@@ -15,7 +15,7 @@ pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = tr
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
 default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
-platform-cuda =      { features = ["py314", "rcpp", "dev", "platform-cuda-mpi", "cudf", "mpich-build-vars"],          solve-group = "platform-gpu" }
+platform-cuda =      { features = ["py314", "rcpp", "dev", "platform-mpi", "cudf", "mpich-build-vars"],          solve-group = "platform-gpu" }
 
 [activation.env]
 # Avoid using system cmake during build-config step
@@ -237,7 +237,6 @@ h5py = "*"
 scipy = "*"
 # sklearn 1.8 is not compatible with imblearn 0.14 used  in credit card fraud notebook
 scikit-learn = ">=1.4,<1.8"
-matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
 botocore = "*"
@@ -285,16 +284,10 @@ librmm = ">=26.04"
 cudf = ">=26.04"
 pandas = ">=2.2.0"
 nvidia-ml-py = "*"
+ucx = "*"
 
 [feature.open-mpi.dependencies]
 openmpi = { version = "*" }
-
-[feature.platform-cuda-mpi]
-channels = ["conda-forge/label/mpi-external", "conda-forge"]
-
-[feature.platform-cuda-mpi.dependencies]
-mpich = { version = "*", channel = "conda-forge/label/mpi-external" }
-ucx = "*"
 
 [feature.rcpp-openmpi.dependencies]
 zstd = "*"
@@ -456,7 +449,7 @@ platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
 [feature.platform-mpi.dependencies]
-mpich = { version = "*", channel = "conda-forge/label/mpi-external" }
+mpich = { version = "5.*", channel = "conda-forge/label/mpi-external" }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
