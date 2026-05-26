@@ -5,10 +5,7 @@ import pytest
 import benchmarks.tpch.bodo.dataframe_queries as tpch
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
-from bodo.tests.utils import (
-    _test_equal,
-    set_broadcast_join,
-)
+from bodo.tests.utils import _test_equal, set_broadcast_join
 
 pytestmark = pytest.mark.jit_dependency
 
