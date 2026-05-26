@@ -3727,10 +3727,11 @@ def get_gpu_0_process_count():
     except Exception:
         procs = []
 
+    driver_pid = os.getpid()
     observed = set()
     for p in procs:
         pid = getattr(p, "pid", None)
-        if pid is None:
+        if pid is None or pid == driver_pid:
             continue
         observed.add(int(pid))
     return len(observed)
