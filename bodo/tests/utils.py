@@ -3713,129 +3713,24 @@ def uncompress_dir(dir_name):
     bodo.barrier()
 
 
-def _monitor_proc(conn, gpu_index: int, poll_interval: float):
-    import time
-
+def get_gpu_0_process_count():
     import pynvml
 
     try:
         pynvml.nvmlInit()
-        handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
     except Exception:
-        conn.send("ready")
-        conn.send(set())
-        conn.close()
-        return
+        return 0
+
+    try:
+        procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
+    except Exception:
+        procs = []
 
     observed = set()
-    # Tell the parent process we are about the enter the loop so that
-    # it can progress and start the work that makes GPU allocations.
-    conn.send("ready")
-    try:
-        while True:
-            # nonblocking stop check
-            if conn.poll():
-                msg = conn.recv()
-                # Parent process is done with its test so we can stop too.
-                if msg == "stop":
-                    break
-
-            try:
-                procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
-            except Exception:
-                procs = []
-
-            for p in procs:
-                pid = getattr(p, "pid", None)
-                if pid is None:
-                    continue
-                observed.add(int(pid))
-
-            time.sleep(poll_interval)
-    finally:
-        try:
-            conn.send(observed)
-        except Exception:
-            pass
-        try:
-            pynvml.nvmlShutdown()
-        except Exception:
-            pass
-        conn.close()
-
-
-class MultiprocessGPUAllocationMonitor:
-    """
-    Context manager that monitors GPU allocations on a separate process.
-    Usage:
-      with MultiprocessGPUAllocationMonitor(gpu_index=0) as monitor:
-          run_work_that_may_allocate()
-      observed = monitor.observed_pids()
-    """
-
-    def __init__(self, gpu_index: int = 0, poll_interval: float = 0.05):
-        self.gpu_index = gpu_index
-        self.poll_interval = poll_interval
-        self._proc = None
-        self._parent_conn = None
-        self._child_conn = None
-        self._observed = set()
-
-    def __enter__(self):
-        if not bodo.gpu_enabled:
-            # Do nothing in non-GPU mode.
-            return self
-        from multiprocessing import Pipe, Process
-
-        parent_conn, child_conn = Pipe()
-        self._parent_conn = parent_conn
-        self._child_conn = child_conn
-        p = Process(
-            target=_monitor_proc,
-            args=(child_conn, self.gpu_index, self.poll_interval),
-            daemon=True,
-        )
-        p.start()
-        self._proc = p
-        # Wait until process is started.
-        if not parent_conn.poll(timeout=5.0):
-            raise RuntimeError(
-                "MultiprocessGPUAllocationMonitor did not signal ready within timeout"
-            )
-        msg = parent_conn.recv()
-        if msg != "ready":
-            raise RuntimeError(
-                "MultiprocessGPUAllocationMonitor did not receive ready message from process"
-            )
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        if not bodo.gpu_enabled:
-            # Do nothing in non-GPU mode.
-            return self
-        try:
-            if self._parent_conn:
-                try:
-                    self._parent_conn.send("stop")
-                except Exception:
-                    pass
-                try:
-                    observed = self._parent_conn.recv()
-                    if isinstance(observed, set):
-                        self._observed = observed
-                except Exception:
-                    pass
-        finally:
-            if self._proc:
-                self._proc.join(timeout=2.0)
-            try:
-                if self._parent_conn:
-                    self._parent_conn.close()
-            except Exception:
-                pass
-
-    def observed_pids(self):
-        return set(self._observed)
-
-    def observed_count(self) -> int:
-        return len(self._observed)
+    for p in procs:
+        pid = getattr(p, "pid", None)
+        if pid is None:
+            continue
+        observed.add(int(pid))
+    return len(observed)

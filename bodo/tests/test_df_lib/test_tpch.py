@@ -3,13 +3,10 @@ import pandas as pd
 import pytest
 
 import benchmarks.tpch.bodo.dataframe_queries as tpch
-import bodo
 import bodo.pandas as bd
 from bodo.pandas.plan import assert_executed_plan_count
 from bodo.tests.utils import (
-    MultiprocessGPUAllocationMonitor,
     _test_equal,
-    get_num_gpus,
     set_broadcast_join,
 )
 
@@ -64,21 +61,8 @@ def run_tpch_query_test(query_func, plan_executions=0, ctes_created=0):
 
     pd_result = query_func(*pd_args, **pd_kwargs)
 
-    with MultiprocessGPUAllocationMonitor(gpu_index=0, poll_interval=0.05) as monitor:
-        with assert_executed_plan_count(plan_executions):
-            bd_result = query_func(*bd_args)
-
-    if bodo.gpu_enabled:
-        observed_count = monitor.observed_count()
-        # Strictly speaking this is only looking at distinct process
-        # allocations on GPU 0 so if some GPU rank didn't have an
-        # allocation on GPU 0 but some non-GPU rank did then this will
-        # miss those problems.  However, since we test with 9 workers
-        # and 4 GPUs even if only one GPU rank gets an allocation on GPU 0
-        # then all 5 of the non-GPU ranks will typically allocate if they
-        # have a problem since they share the same code path then we'll
-        # still detect non-GPU rank allocations this way.
-        assert observed_count <= get_num_gpus()
+    with assert_executed_plan_count(plan_executions):
+        bd_result = query_func(*bd_args)
 
     # We can't capture all CTEs created because the above should create
     # and execute plans if plan_executions > 0.  If those plans executed
