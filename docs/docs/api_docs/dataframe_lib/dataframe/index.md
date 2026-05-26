@@ -15,6 +15,7 @@ Bodo DataFrames supports Pandas DataFrame methods and accessors that are listed 
 ---
 
 ## Reindexing / selection / label manipulation
+- [`bodo.pandas.BodoDataFrame.get`][bododfget]
 - [`bodo.pandas.BodoDataFrame.head`][bododfhead]
 - [`bodo.pandas.BodoDataFrame.reset_index`][bododfresetindex]
 ___
@@ -32,7 +33,7 @@ ___
 - [`bodo.pandas.BodoDataFrame.to_s3_vectors`][bododftos3vectors]
 
 
-
+[bododfget]: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.get.html
 [bododfresetindex]: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.reset_index.html
 
 [bododfhead]: ../dataframe/head.md
@@ -43,3 +44,5 @@ ___
 [bododftoparquet]: ../dataframe/to_parquet.md
 [bododftos3vectors]: ../dataframe/to_s3_vectors.md
 [bododfgroupby]: ../dataframe/groupby.md
+
+[overview]: ../index.md/#lazy-evaluation-and-fallback-to-pandas
