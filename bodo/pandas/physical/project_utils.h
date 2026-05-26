@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arrow/api.h>
+#include <arrow/type.h>
 #include <arrow/type_traits.h>
 
 /**
@@ -173,18 +174,12 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
                 col_names.emplace_back("Not");
             }
         } else if (expr->type == duckdb::ExpressionType::OPERATOR_NEG) {
+            auto& neg_expr = expr->Cast<duckdb::BoundOperatorExpression>();
+
             std::unique_ptr<bodo::DataType> col_type =
-                input_schema->column_types[expr_idx]->copy();
-            // Convert unsigned integers to signed integers for negate operator
-            std::shared_ptr<arrow::DataType> arrow_type =
-                col_type->ToArrowDataType();
-            if (arrow::is_integer(arrow_type->id()) &&
-                !arrow::is_signed_integer(arrow_type->id())) {
-                std::shared_ptr<arrow::DataType> signed_arrow_type =
-                    ToSignedArrowInt(arrow_type);
-                col_type =
-                    arrow_type_to_bodo_data_type(signed_arrow_type)->copy();
-            }
+                arrow_type_to_bodo_data_type(
+                    duckdbTypeToArrow(neg_expr.return_type))
+                    ->copy();
             output_schema->append_column(std::move(col_type));
             if (input_schema->column_names.size() > 0) {
                 col_names.emplace_back(input_schema->column_names[0]);
