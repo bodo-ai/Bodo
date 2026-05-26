@@ -992,11 +992,4 @@ def pytest_runtest_teardown(item, nextitem):
         # then all 5 of the non-GPU ranks will typically allocate if they
         # have a problem since they share the same code path then we'll
         # still detect non-GPU rank allocations this way.
-
         assert get_gpu_0_process_count() <= get_num_gpus()
-        if get_gpu_0_process_count() > get_num_gpus():
-            import warnings
-
-            warnings.warn(
-                f"GPU 0 now has more processes on it than GPUs in the system. in {item.name}"
-            )
