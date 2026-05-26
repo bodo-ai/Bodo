@@ -151,6 +151,8 @@ cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" no
         BOUND_LAMBDA_REF "duckdb::ExpressionType::BOUND_LAMBDA_REF"
         BOUND_EXPANDED "duckdb::ExpressionType::BOUND_EXPANDED"
         OPERATOR_IS_TRUE "duckdb::ExpressionType::OPERATOR_IS_TRUE"
+        OPERATOR_NEG "duckdb::ExpressionType::OPERATOR_NEG"
+
 
 def str_to_expr_type(val):
     if val is operator.eq:
@@ -171,6 +173,8 @@ def str_to_expr_type(val):
         return CExpressionType.CONJUNCTION_OR
     elif val == "__invert__":
         return CExpressionType.OPERATOR_NOT
+    elif val == "__neg__":
+        return CExpressionType.OPERATOR_NEG
     elif val == "notnull":
         return CExpressionType.OPERATOR_IS_NOT_NULL
     elif val == "isnull":
@@ -340,7 +344,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
     cdef unique_ptr[CExpression] make_cast_expr(unique_ptr[CExpression] source, object out_schema) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
-    cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype) except +
+    cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype, object out_schema) except +
     cdef unique_ptr[CExpression] make_case_expr(unique_ptr[CExpression] when, unique_ptr[CExpression] then, unique_ptr[CExpression] else_) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
     cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
@@ -881,7 +885,7 @@ cdef class UnaryOpExpression(Expression):
         self.out_schema = out_schema
         self.c_expression = make_unary_expr(
             source_expr,
-            str_to_expr_type(op))
+            str_to_expr_type(op), out_schema)
 
     def __str__(self):
         return f"UnaryOpExpression({self.out_schema})"

@@ -1,5 +1,41 @@
 #pragma once
 
+#include <arrow/api.h>
+#include <arrow/type_traits.h>
+
+/**
+ * @brief Convert an unsigned Arrow integer type to its signed counterpart.
+ *
+ * @param type The Arrow data type to convert.
+ * @return std::shared_ptr<arrow::DataType> The signed Arrow data type.
+ */
+inline std::shared_ptr<arrow::DataType> ToSignedArrowInt(
+    const std::shared_ptr<arrow::DataType>& type) {
+    if (!arrow::is_integer(type->id())) {
+        throw std::runtime_error(
+            "Type " + type->ToString() +
+            " is not an integer type, cannot convert to signed.");
+    }
+
+    if (arrow::is_signed_integer(type->id())) {
+        return type;  // already signed
+    }
+
+    switch (type->id()) {
+        case arrow::Type::UINT8:
+            return arrow::int8();
+        case arrow::Type::UINT16:
+            return arrow::int16();
+        case arrow::Type::UINT32:
+            return arrow::int32();
+        case arrow::Type::UINT64:
+            return arrow::int64();
+        default:
+            throw std::runtime_error("Unhandled integer type: " +
+                                     type->ToString());
+    }
+}
+
 template <typename EXPR_TYPE, typename BUILD_EXPR>
 inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
     std::vector<duckdb::ColumnBinding>& source_cols,
@@ -135,6 +171,25 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
                 col_names.emplace_back(input_schema->column_names[0]);
             } else {
                 col_names.emplace_back("Not");
+            }
+        } else if (expr->type == duckdb::ExpressionType::OPERATOR_NEG) {
+            std::unique_ptr<bodo::DataType> col_type =
+                input_schema->column_types[expr_idx]->copy();
+            // Convert unsigned integers to signed integers for negate operator
+            std::shared_ptr<arrow::DataType> arrow_type =
+                col_type->ToArrowDataType();
+            if (arrow::is_integer(arrow_type->id()) &&
+                !arrow::is_signed_integer(arrow_type->id())) {
+                std::shared_ptr<arrow::DataType> signed_arrow_type =
+                    ToSignedArrowInt(arrow_type);
+                col_type =
+                    arrow_type_to_bodo_data_type(signed_arrow_type)->copy();
+            }
+            output_schema->append_column(std::move(col_type));
+            if (input_schema->column_names.size() > 0) {
+                col_names.emplace_back(input_schema->column_names[0]);
+            } else {
+                col_names.emplace_back("NEGATE");
             }
         } else {
             throw std::runtime_error(

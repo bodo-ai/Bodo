@@ -432,7 +432,8 @@ duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
-    std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype) {
+    std::unique_ptr<duckdb::Expression> &lhs, duckdb::ExpressionType etype,
+    PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
 
@@ -443,6 +444,16 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
                 etype, duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN));
+            ret->children.push_back(std::move(lhs_duck));
+            return ret;
+        } break;
+        case duckdb::ExpressionType::OPERATOR_NEG: {
+            std::shared_ptr<arrow::Schema> out_schema =
+                unwrap_schema(out_schema_py);
+            auto field = out_schema->field(0);
+            auto [_, out_type] = arrow_field_to_duckdb(field);
+            auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
+                etype, out_type);
             ret->children.push_back(std::move(lhs_duck));
             return ret;
         } break;

@@ -243,6 +243,10 @@ def java_call_to_python_call(java_call, input_plan):
         kind = op.getKind()
         SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
+        if kind.equals(SqlKind.MINUS_PREFIX):
+            out_empty = -input.empty_data.iloc[:, 0]
+            return UnaryOpExpression(out_empty, input, "__neg__")
+
         if kind.equals(SqlKind.NOT):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "__invert__")
