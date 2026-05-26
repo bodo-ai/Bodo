@@ -451,11 +451,12 @@ mpich = { version = "*" }
 impi-devel = "<2021.18" # Exclude version that segfaults on spawn in Windows
 
 [feature.platform-mpi]
-channels = ["conda-forge", "conda-forge/label/broken"]
+channels = ["conda-forge/label/mpi-external", "conda-forge"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
+[feature.platform-mpi.dependencies]
+mpich = { version = "5.*", channel = "conda-forge/label/mpi-external" }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
