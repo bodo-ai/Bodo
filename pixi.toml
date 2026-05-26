@@ -456,7 +456,7 @@ platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
 [feature.platform-mpi.dependencies]
-mpich = { version = "5.*", channel = "conda-forge/label/mpi-external" }
+mpich = { version = "*", channel = "conda-forge/label/mpi-external" }
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
