@@ -3711,3 +3711,30 @@ def uncompress_dir(dir_name):
                     shutil.copyfileobj(f_in, f_out)
             os.remove(full_fname)
     bodo.barrier()
+
+
+def get_gpu_0_process_count():
+    if not bodo.gpu_enabled:
+        return 0
+
+    import pynvml
+
+    try:
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+    except Exception:
+        return 0
+
+    try:
+        procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
+    except Exception:
+        procs = []
+
+    driver_pid = os.getpid()
+    observed = set()
+    for p in procs:
+        pid = getattr(p, "pid", None)
+        if pid is None or pid == driver_pid:
+            continue
+        observed.add(int(pid))
+    return len(observed)
