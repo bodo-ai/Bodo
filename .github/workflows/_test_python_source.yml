@@ -139,6 +139,7 @@ jobs:
               # Checkout narwhals fork
               git clone https://github.com/bodo-ai/narwhals.git
               cd narwhals
+              pip install .
               python -c "import bodo; print('Detected Bodo version:', bodo.__version__)"
               pytest -s -v -Wignore -k bodo
               exit $?
