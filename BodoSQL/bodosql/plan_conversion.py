@@ -199,7 +199,7 @@ def java_call_to_python_call(java_call, input_plan):
             return java_expr_to_python_expr(operand, input_plan)
 
         empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(operand_type.getSqlTypeName()))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(target_type.getSqlTypeName()))
         )
         return CastExpression(
             empty_data,
