@@ -982,7 +982,7 @@ def gpu_disable_cpu_fallback(request, monkeypatch):
 
 def pytest_runtest_teardown(item, nextitem):
     if item.get_closest_marker("gpu"):
-        # At the end of each tested marked to run on GPU, we try to check if
+        # At the end of each test marked to run on GPU, we try to check if
         # the test has non-GPU ranks created GPU allocations but
         # strictly speaking this is only looking at distinct process
         # allocations on GPU 0 so if some GPU rank didn't have an
