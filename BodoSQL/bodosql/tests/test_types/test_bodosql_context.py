@@ -703,17 +703,17 @@ def test_sql_jit_options():
 
     # Test args_maybe_distributed=True and returns_maybe_distributed=True defaults
     bc = bodosql.BodoSQLContext({"T1": df_dist})
-    bc.sql("select sum(B) from T1 group by A")
+    bc.sql("select sum(B) from T1 group by A", use_jit=True)
     assert count_array_REPs() == 0
 
     # Test distributed flag
     bc = bodosql.BodoSQLContext({"T1": df})
-    bc.sql("select sum(B) from T1 group by A", distributed=["T1"])
+    bc.sql("select sum(B) from T1 group by A", use_jit=True, distributed=["T1"])
     assert count_array_REPs() == 0
 
     # Test replicated data
     bc = bodosql.BodoSQLContext({"T1": df})
-    bc.sql("select sum(B) from T1 group by A")
+    bc.sql("select sum(B) from T1 group by A", use_jit=True)
     assert count_array_REPs() > 0
 
     # Using JIT options inside JIT should raise error
