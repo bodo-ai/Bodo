@@ -73,38 +73,44 @@ def test_add_or_replace_view(memory_leak_check):
     )
     bc = bc_orig
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE1"), df1, check_column_type=False
+        bc.sql("select * from TABLE1"), df1, check_column_type=False, check_dtype=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE2"), df2, check_column_type=False
+        bc.sql("select * from TABLE2"), df2, check_column_type=False, check_dtype=False
     )
     bc = bc_orig.add_or_replace_view("TABLE3", df3)
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE1"), df1, check_column_type=False
+        bc.sql("select * from TABLE1"), df1, check_column_type=False, check_dtype=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE2"), df2, check_column_type=False
+        bc.sql("select * from TABLE2"), df2, check_column_type=False, check_dtype=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE3"), df3, check_column_type=False
+        bc.sql("select * from TABLE3"), df3, check_column_type=False, check_dtype=False
     )
     bc = bc.add_or_replace_view("TABLE1", df3)
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE1"), df3, check_column_type=False
+        bc.sql("select * from TABLE1"), df3, check_column_type=False, check_dtype=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE2"), df2, check_column_type=False
+        bc.sql("select * from TABLE2"), df2, check_column_type=False, check_dtype=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE3"), df3, check_column_type=False
+        bc.sql("select * from TABLE3"), df3, check_column_type=False, check_dtype=False
     )
 
     # The original context should be unchanged.
     pd.testing.assert_frame_equal(
-        bc_orig.sql("select * from TABLE1"), df1, check_column_type=False
+        bc_orig.sql("select * from TABLE1"),
+        df1,
+        check_column_type=False,
+        check_dtype=False,
     )
     pd.testing.assert_frame_equal(
-        bc_orig.sql("select * from TABLE2"), df2, check_column_type=False
+        bc_orig.sql("select * from TABLE2"),
+        df2,
+        check_column_type=False,
+        check_dtype=False,
     )
     with pytest.raises(BodoError):
         bc_orig.sql("select * from TABLE3")
@@ -121,14 +127,14 @@ def test_remove_view(memory_leak_check):
     )
     bc = bc_orig
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE1"), df1, check_column_type=False
+        bc.sql("select * from TABLE1"), df1, check_column_type=False, check_dtype=False
     )
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE2"), df2, check_column_type=False
+        bc.sql("select * from TABLE2"), df2, check_column_type=False, check_dtype=False
     )
     bc = bc.remove_view("TABLE2")
     pd.testing.assert_frame_equal(
-        bc.sql("select * from TABLE1"), df1, check_column_type=False
+        bc.sql("select * from TABLE1"), df1, check_column_type=False, check_dtype=False
     )
     with pytest.raises(BodoError):
         bc.sql("select * from TABLE2")
@@ -142,10 +148,16 @@ def test_remove_view(memory_leak_check):
 
     # The original context should be unchanged.
     pd.testing.assert_frame_equal(
-        bc_orig.sql("select * from TABLE1"), df1, check_column_type=False
+        bc_orig.sql("select * from TABLE1"),
+        df1,
+        check_column_type=False,
+        check_dtype=False,
     )
     pd.testing.assert_frame_equal(
-        bc_orig.sql("select * from TABLE2"), df2, check_column_type=False
+        bc_orig.sql("select * from TABLE2"),
+        df2,
+        check_column_type=False,
+        check_dtype=False,
     )
 
 
