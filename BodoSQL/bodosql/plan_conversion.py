@@ -222,8 +222,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
         ):
             if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+                cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
                 in_expr = CastExpression(
-                    empty_data,
+                    cast_empty_data,
                     in_expr,
                 )
 
