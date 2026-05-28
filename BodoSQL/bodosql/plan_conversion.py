@@ -201,7 +201,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return in_expr
 
         empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(target_type.getSqlTypeName()))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type.getSqlTypeName()))
         )
 
         # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
@@ -614,7 +614,7 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
 
     if java_literal.getTypeName().equals(SqlTypeName.NULL):
         dummy_empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type_name))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, lit_type_name))
         )
         return NullExpression(dummy_empty_data, input_plan, 0)
 
@@ -675,7 +675,7 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         or lit_type_name.equals(SqlTypeName.BIGINT)
     ):
         dummy_empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type_name))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, lit_type_name))
         )
         return ConstantExpression(
             dummy_empty_data, input_plan, java_literal.getValue2()
@@ -945,7 +945,9 @@ def java_values_to_python_values(ctx, java_plan):
     for row in rows:
         data.append([java_literal_to_python_literal(ctx, e, None).value for e in row])
 
-    pa_schema = pa.schema([java_field_to_pa_field(f) for f in row_type.getFieldList()])
+    pa_schema = pa.schema(
+        [java_field_to_pa_field(ctx, f) for f in row_type.getFieldList()]
+    )
 
     df = pd.DataFrame()
     for i, name in enumerate(pa_schema.names):
@@ -957,16 +959,16 @@ def java_values_to_python_values(ctx, java_plan):
     return bd.from_pandas(df)._plan
 
 
-def java_field_to_pa_field(java_field):
+def java_field_to_pa_field(ctx, java_field):
     """Convert a Calcite RelDataTypeField to a PyArrow field."""
     name = java_field.getName()
     java_type = java_field.getType()
     type_name = java_type.getSqlTypeName()
 
-    return pa.field(name, sql_type_to_pa_type(type_name))
+    return pa.field(name, sql_type_to_pa_type(ctx, type_name))
 
 
-def sql_type_to_pa_type(sql_type_name):
+def sql_type_to_pa_type(ctx, sql_type_name):
     """Convert a Calcite SqlTypeName to a PyArrow data type."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
 
@@ -991,10 +993,9 @@ def sql_type_to_pa_type(sql_type_name):
     if sql_type_name.equals(SqlTypeName.TIMESTAMP):
         return pa.timestamp("ns")
     if sql_type_name.equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE):
-        # BodoSQL doesn't preserve time zone info for TIMESTAMP_WITH_LOCAL_TIME_ZONE, so
-        # we treat it the same as TIMESTAMP in C++ backend and handle time zones using
-        # other information if needed.
-        return pa.timestamp("ns")
+        # BodoSQL uses UTC if timezone is not specified
+        tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+        return pa.timestamp("ns", tz=tz)
     if sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
         return pa.duration("ns")
     if sql_type_name.equals(SqlTypeName.BOOLEAN):
