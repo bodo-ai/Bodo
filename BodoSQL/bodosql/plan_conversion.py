@@ -201,6 +201,19 @@ def java_call_to_python_call(java_call, input_plan):
         empty_data = pd.Series(
             dtype=pd.ArrowDtype(sql_type_to_pa_type(target_type.getSqlTypeName()))
         )
+
+        # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
+        # local_timestamp() function of Arrow (not cast)
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+            return ArrowScalarFuncExpression(
+                empty_data,
+                [java_expr_to_python_expr(operand, input_plan)],
+                "local_timestamp",
+                (),
+            )
+
         return CastExpression(
             empty_data,
             java_expr_to_python_expr(operand, input_plan),
