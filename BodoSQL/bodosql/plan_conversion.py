@@ -238,6 +238,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (tz,),
             )
 
+        # Integers are assumed in seconds in BodoSQL
+        if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP
+        ):
+            cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
+            in_expr = CastExpression(
+                cast_empty_data,
+                in_expr,
+            )
+
         return CastExpression(
             empty_data,
             in_expr,
