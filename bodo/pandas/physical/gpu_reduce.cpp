@@ -149,12 +149,13 @@ void GPUReductionFunction::Finalize(MPI_Comm comm) {
     }
 
     for (size_t i = 0; i < this->function_names.size(); i++) {
-        // TODO(ehsan): handle empty and all null cases
         std::unique_ptr<cudf::scalar>& result = this->results[i];
 
         MPI_Comm has_data_comm;
-        MPI_Comm_split(comm, result != nullptr ? 1 : MPI_UNDEFINED, 0,
-                       &has_data_comm);
+        CHECK_MPI(
+            MPI_Comm_split(comm, result != nullptr ? 1 : MPI_UNDEFINED, 0,
+                           &has_data_comm),
+            "GPUReductionFunction::Finalize: MPI error on MPI_Comm_split:");
         if (result != nullptr) {
             cudf::data_type result_dtype = result->type();
             std::shared_ptr<arrow::Table> arrow_table =
