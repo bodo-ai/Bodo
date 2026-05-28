@@ -1493,24 +1493,14 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         if items is not None:
             items = pd.Index(items).intersection(self.columns).to_list()
         elif like:
-
-            def search(label):
-                if not isinstance(label, str):
-                    label = str(label)
-                return like in label
-
-            items = list(np.array(self.columns)[self.columns.map(search)])
+            items = [label for label in self.columns if like in str(label)]
         elif regex:
             import re
 
             matcher = re.compile(regex)
-
-            def search(label):
-                if not isinstance(label, str):
-                    label = str(label)
-                return matcher.search(label) is not None
-
-            items = list(np.array(self.columns)[self.columns.map(search)])
+            items = [
+                label for label in self.columns if matcher.search(label) is not None
+            ]
         else:
             raise TypeError("Must pass either `items`, `like`, or `regex`")
 
