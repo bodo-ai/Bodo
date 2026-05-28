@@ -106,11 +106,6 @@ jobs:
         echo "Skipping hadoop/arrow env var setup"
       fi
 
-      # BodoSQL C++ Backend
-      export BODOSQL_CPP_BACKEND=1
-      export BODOSQL_VERBOSE_CPP_BACKEND=1
-      export BODOSQL_CPP_BACKEND_NO_FALLBACK=0
-
       cd "$(System.DefaultWorkingDirectory)/BodoSQL"
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
