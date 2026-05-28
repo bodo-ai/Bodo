@@ -1173,6 +1173,17 @@ std::shared_ptr<arrow::Array> get_py_isin_arg_as_arrow_array(PyObject *args) {
     return result.ValueOrDie();
 }
 
+size_t col_ref_map_lookup(
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
+    duckdb::idx_t table, duckdb::idx_t column) {
+    auto iter = col_ref_map.find({table, column});
+    if (iter == col_ref_map.end()) {
+        throw std::runtime_error(
+            "Did not find table and column indices in col_ref_map");
+    }
+    return iter->second;
+}
+
 #ifdef USE_CUDF
 
 template std::tuple<int64_t, int64_t, int64_t>
