@@ -29,7 +29,7 @@ from numba.core.runtime import rtsys  # noqa TID253
 import bodo
 import bodo.user_logging
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
-from bodo.tests.utils import temp_env_override
+from bodo.tests.utils import get_gpu_0_process_count, get_num_gpus, temp_env_override
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -978,3 +978,18 @@ def gpu_disable_cpu_fallback(request, monkeypatch):
         allow_fallback = kws.get("allow_fallback", False)
         if not allow_fallback:
             monkeypatch.setenv("BODO_GPU_DISABLE_CPU_FALLBACK", "1")
+
+
+def pytest_runtest_teardown(item, nextitem):
+    if item.get_closest_marker("gpu"):
+        # At the end of each test marked to run on GPU, we try to check if
+        # the test has non-GPU ranks created GPU allocations but
+        # strictly speaking this is only looking at distinct process
+        # allocations on GPU 0 so if some GPU rank didn't have an
+        # allocation on GPU 0 but some non-GPU rank did then this will
+        # miss those problems.  However, since we test with 9 workers
+        # and 4 GPUs even if only one GPU rank gets an allocation on GPU 0
+        # then all 5 of the non-GPU ranks will typically allocate if they
+        # have a problem since they share the same code path then we'll
+        # still detect non-GPU rank allocations this way.
+        assert get_gpu_0_process_count() <= get_num_gpus()

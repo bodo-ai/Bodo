@@ -19,14 +19,15 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
    public:
     explicit PhysicalGPULimit(uint64_t nrows,
                               std::shared_ptr<bodo::Schema> input_schema)
-        : n(nrows),
-          local_remaining(nrows),
-          collected_rows(
-              GPU_DATA(
-                  empty_table_from_arrow_schema(input_schema->ToArrowSchema()),
-                  input_schema->ToArrowSchema(), make_stream_and_event(false)),
-              get_gpu_streaming_batch_size()),
-          output_schema(input_schema) {
+        : n(nrows), local_remaining(nrows), output_schema(input_schema) {
+        if (is_gpu_rank()) {
+            collected_rows = std::make_unique<GPUBatchGenerator>(
+                GPU_DATA(empty_table_from_arrow_schema(
+                             input_schema->ToArrowSchema()),
+                         input_schema->ToArrowSchema(),
+                         make_stream_and_event(false)),
+                get_gpu_streaming_batch_size());
+        }
         PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         arrow_output_schema = output_schema->ToArrowSchema();
     }
@@ -54,7 +55,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
         std::vector<uint64_t> row_counts(n_pes);
 
         // Get total rows on this GPU.
-        uint64_t cur_rows = collected_rows.collected_rows;
+        uint64_t cur_rows = collected_rows->collected_rows;
         CHECK_MPI(MPI_Allgather(&cur_rows, 1, MPI_UNSIGNED_LONG_LONG,
                                 row_counts.data(), 1, MPI_UNSIGNED_LONG_LONG,
                                 gpu_mpi.get_mpi_comm()),
@@ -95,7 +96,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                     std::make_unique<cudf::table>(
                         cudf::slice(input_batch.table->view(),
                                     {0, (int)select_local}, se->stream)[0]);
-                collected_rows.append_batch(
+                collected_rows->append_batch(
                     GPU_DATA(std::move(first_select_local_rows),
                              arrow_output_schema, se));
                 local_remaining -= select_local;
@@ -133,7 +134,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
                     OperatorResult::FINISHED};
         }
 
-        auto next_batch = collected_rows.next(se, true);
+        auto next_batch = collected_rows->next(se, true);
         if (next_batch.table->num_rows() >=
             static_cast<cudf::size_type>(local_remaining)) {
             cudf::table_view tv = next_batch.table->view();
@@ -162,7 +163,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
 
    private:
     uint64_t n, local_remaining;
-    GPUBatchGenerator collected_rows;
+    std::unique_ptr<GPUBatchGenerator> collected_rows = nullptr;
     const std::shared_ptr<bodo::Schema> output_schema;
     std::shared_ptr<arrow::Schema> arrow_output_schema;
 

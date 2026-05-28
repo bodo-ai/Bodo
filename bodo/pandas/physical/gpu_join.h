@@ -258,13 +258,19 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
                 bododuckdb::JoinCondition::CreateExpression(std::move(cond)));
         }
 
-        rmm::cuda_stream_view stream = cudf::get_default_stream();
-        std::unique_ptr<CudfASTOwner> physExprTree =
-            duckdb_exprs.size()
-                ? std::make_unique<CudfASTOwner>(
-                      build_mixed_join_predicate(duckdb_exprs, left_col_ref_map,
-                                                 right_col_ref_map, stream))
-                : nullptr;
+        rmm::cuda_stream_view stream;
+        std::unique_ptr<CudfASTOwner> physExprTree;
+
+        if (is_gpu_rank()) {
+            stream = cudf::get_default_stream();
+
+            physExprTree =
+                duckdb_exprs.size()
+                    ? std::make_unique<CudfASTOwner>(build_mixed_join_predicate(
+                          duckdb_exprs, left_col_ref_map, right_col_ref_map,
+                          stream))
+                    : nullptr;
+        }
 
         bool build_table_outer =
             (logical_join.join_type == duckdb::JoinType::RIGHT) ||
