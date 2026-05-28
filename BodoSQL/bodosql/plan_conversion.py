@@ -22,6 +22,7 @@ from bodo.pandas.plan import (
     ConstantExpression,
     LogicalAggregate,
     LogicalComparisonJoin,
+    LogicalCrossProduct,
     LogicalDistinct,
     LogicalFilter,
     LogicalJoinFilter,
@@ -474,10 +475,9 @@ def java_join_to_python_join(ctx, java_join):
     )
 
     join_info = java_join.analyzeCondition()
-
-    # TODO[BSE-5149]: support non-equi joins
-    if not join_info.isEqui():
-        raise NotImplementedError("Only equi-joins are supported")
+    join_info_cls = join_info.getClass()
+    field = join_info_cls.getField("nonEquiConditions")
+    nonEquiConds = field.get(join_info)
 
     left_keys, right_keys = join_info.keys()
     key_indices = list(zip(left_keys, right_keys))
@@ -497,16 +497,33 @@ def java_join_to_python_join(ctx, java_join):
     empty_join_out = pd.concat([left_plan.empty_data, right_plan.empty_data], axis=1)
     empty_join_out.columns = java_join.getRowType().getFieldNames()
 
-    # TODO[BSE-5150]: support broadcast join flag
-    planComparisonJoin = LogicalComparisonJoin(
-        empty_join_out,
-        left_plan,
-        right_plan,
-        join_type,
-        key_indices,
-        java_join.getJoinFilterID(),
-    )
-    return planComparisonJoin
+    if len(key_indices) > 0:
+        # TODO[BSE-5150]: support broadcast join flag
+        planJoinOrCross = LogicalComparisonJoin(
+            empty_join_out,
+            left_plan,
+            right_plan,
+            join_type,
+            key_indices,
+            java_join.getJoinFilterID(),
+        )
+    else:
+        planJoinOrCross = LogicalCrossProduct(empty_join_out, left_plan, right_plan)
+
+    if len(nonEquiConds) == 0:
+        return planJoinOrCross
+    else:
+        non_equi_exprs = java_expr_to_python_expr(nonEquiConds[0], planJoinOrCross)
+        # And all the conditions together with the first one above.
+        for e in nonEquiConds[1:]:
+            non_equi_exprs = ConjunctionOpExpression(
+                non_equi_exprs.empty_data,
+                non_equi_exprs,
+                java_expr_to_python_expr(e, planJoinOrCross),
+                "__and__",
+            )
+        planFilter = LogicalFilter(empty_join_out, planJoinOrCross, non_equi_exprs)
+        return planFilter
 
 
 def java_rtjf_to_python_rtjf(ctx, java_plan):
