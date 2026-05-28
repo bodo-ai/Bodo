@@ -620,7 +620,6 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
         expected_output=py_output,
         check_dtype=False,
         only_jit_1DVar=True,
-        use_duckdb=True,
     )
 
 
@@ -669,7 +668,6 @@ def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
         expected_output=py_output,
         check_dtype=False,
         only_jit_1DVar=True,
-        use_duckdb=True,
     )
 
 
@@ -712,7 +710,6 @@ def test_localtime_equivalents_cols(basic_df, localtime_equiv_fns, memory_leak_c
         expected_output=py_output,
         check_dtype=False,
         only_jit_1DVar=True,
-        use_duckdb=True,
     )
 
 
@@ -749,7 +746,6 @@ def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
         expected_output=py_output,
         check_dtype=False,
         only_jit_1DVar=True,
-        use_duckdb=True,
     )
 
 
@@ -764,9 +760,7 @@ def sysdate_equiv_fns(request):
 
 
 @pytest.mark.slow
-def test_sysdate_equivalents_cols(
-    basic_df, sysdate_equiv_fns, spark_info, memory_leak_check
-):
+def test_sysdate_equivalents_cols(basic_df, sysdate_equiv_fns, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp.
     As the results depend on when the function was run, we precompute a list of valid times.
@@ -795,7 +789,7 @@ def test_sysdate_equivalents_cols(
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=py_output,
@@ -804,7 +798,7 @@ def test_sysdate_equivalents_cols(
 
 
 @pytest.mark.slow
-def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_check):
+def test_sysdate_equivalents_case(sysdate_equiv_fns, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp in case.
     As the results depend on when the function was run, we precompute a list of valid times.
@@ -844,7 +838,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=py_output,

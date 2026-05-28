@@ -126,7 +126,6 @@ def test_to_boolean_valid_cols(to_boolean_valid_test_dfs, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
         expected_output=py_output,
     )
 

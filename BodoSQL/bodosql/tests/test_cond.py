@@ -427,68 +427,38 @@ def test_zeroifnull(memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT REGR_VALX(Y, X) from table1",
-                pd.DataFrame(
-                    {0: pd.Series([1.0, None, 3.0, 4.0, None, None, None, 8.0])}
-                ),
-            ),
+            "SELECT REGR_VALX(Y, X) from table1",
             id="regr_valx_all_vector",
         ),
         pytest.param(
-            (
-                "SELECT REGR_VALY(Y, X) from table1",
-                pd.DataFrame(
-                    {0: pd.Series([1.0, None, 9.0, 16.0, None, None, None, 64.0])}
-                ),
-            ),
+            "SELECT REGR_VALY(Y, X) from table1",
             id="regr_valy_all_vector",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT REGR_VALX(Y, 0.0) FROM table1",
-                pd.DataFrame(
-                    {0: pd.Series([0.0, 0.0, 0.0, 0.0, None, None, None, 0.0])}
-                ),
-            ),
+            "SELECT REGR_VALX(Y, 0.0) FROM table1",
             id="regr_valx_vector_scalar",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT REGR_VALY(Y, 0.0) FROM table1",
-                pd.DataFrame(
-                    {0: pd.Series([1.0, 4.0, 9.0, 16.0, None, None, None, 64.0])}
-                ),
-            ),
+            "SELECT REGR_VALY(Y, 0.0) FROM table1",
             id="regr_valy_vector_scalar",
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN X IS NULL OR Y IS NULL OR X <> 4 THEN REGR_VALX(Y, X) ELSE -1.0 END FROM table1",
-                pd.DataFrame(
-                    {0: pd.Series([1.0, None, 3.0, -1.0, None, None, None, 8.0])}
-                ),
-            ),
+            "SELECT CASE WHEN X IS NULL OR Y IS NULL OR X <> 4 THEN REGR_VALX(Y, X) ELSE -1.0 END FROM table1",
             id="regr_valx_case",
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN X IS NULL OR Y IS NULL OR X <> 4 THEN REGR_VALY(Y, X) ELSE -1.0 END FROM table1",
-                pd.DataFrame(
-                    {0: pd.Series([1.0, None, 9.0, -1.0, None, None, None, 64.0])}
-                ),
-            ),
+            "SELECT CASE WHEN X IS NULL OR Y IS NULL OR X <> 4 THEN REGR_VALY(Y, X) ELSE -1.0 END FROM table1",
             id="regr_valy_case",
             marks=pytest.mark.slow,
         ),
     ],
 )
-def test_regr_valx_regr_valy(args, memory_leak_check):
+def test_regr_valx_regr_valy(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -501,14 +471,12 @@ def test_regr_valx_regr_valy(args, memory_leak_check):
             }
         )
     }
-    query, answer = args
     check_query(
         query,
         ctx,
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=answer,
         use_duckdb=True,
     )
 

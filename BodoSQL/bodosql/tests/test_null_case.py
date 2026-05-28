@@ -288,7 +288,6 @@ def test_null_literal_then_else(major_types_nullable, memory_leak_check):
         None,
         expected_output=py_output,
         check_dtype=False,
-        use_duckdb=True,
     )
 
 

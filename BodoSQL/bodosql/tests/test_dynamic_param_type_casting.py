@@ -84,7 +84,7 @@ def test_bind_variable_string_offset(basic_df, memory_leak_check):
 
 @pytest.mark.slow
 def test_named_param_string_function_cast(
-    bodosql_string_types, spark_info, int_named_params, memory_leak_check
+    bodosql_string_types, int_named_params, memory_leak_check
 ):
     """
     Check that limit a string function will cast a non-string
@@ -97,7 +97,7 @@ def test_named_param_string_function_cast(
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         named_params=int_named_params,
         expected_output=expected_output,
     )

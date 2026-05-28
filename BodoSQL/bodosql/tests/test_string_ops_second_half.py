@@ -681,13 +681,13 @@ def test_strcmp_nonascii(args, memory_leak_check):
         ),
     ],
 )
-def test_format(args, spark_info, bodosql_string_fn_testing_df, memory_leak_check):
+def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
     query, refsol = args
 
     check_query(
         query,
         bodosql_string_fn_testing_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_nullable_bodosql=False,
@@ -2077,7 +2077,6 @@ def test_binary_pad_2args_errorchecking(func, memory_leak_check):
             None,
             # Pointless output, but must be set
             expected_output=pd.DataFrame(),
-            use_duckdb=True,
         )
 
 
