@@ -79,10 +79,6 @@ jobs:
           set -exo pipefail
           cd buildscripts/bodo/conda-recipe
 
-          if [[ "${{ inputs.gpu-build }}" == "true" ]]; then
-            export DISABLE_SCCACHE_IN_BUILD=1
-          fi
-
           gpu_variant=${{ inputs.gpu-build && 'true' || 'false' }}
           platform_variant=${{ inputs.platform-build && 'true' || 'false' }}
           # --no-verify because it doesn't work for Conda v2 packages

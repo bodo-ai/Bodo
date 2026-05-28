@@ -8,8 +8,6 @@ if  [[ -z ${DISABLE_SCCACHE_IN_BUILD+x} ]]; then
     export SCCACHE_REGION=us-east-2
     export SCCACHE_S3_USE_SSL=true
     export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-else
-    export DISABLE_SCCACHE=1
 fi
 
 export SETUPTOOLS_SCM_PRETEND_VERSION="$PKG_VERSION"
