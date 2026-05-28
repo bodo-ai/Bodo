@@ -174,30 +174,31 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operand_type = operand.getType()
         target_type = java_call.getType()
         SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+        in_expr = java_expr_to_python_expr(ctx, operand, input_plan)
         # TODO[BSE-5154]: support all Calcite casts
 
         # No-op casts
         if operand_type.getSqlTypeName().equals(target_type.getSqlTypeName()):
-            return java_expr_to_python_expr(ctx, operand, input_plan)
+            return in_expr
 
         if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
             operand_type
         ):
             # Cast of int to DECIMAL is unnecessary in C++ backend
-            return java_expr_to_python_expr(ctx, operand, input_plan)
+            return in_expr
 
         if operand_type.getSqlTypeName().equals(
             SqlTypeName.VARCHAR
         ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
             # No-op cast of VARCHAR (could be different lengths but sometimes equal
             # which seems like a Calcite gap)
-            return java_expr_to_python_expr(ctx, operand, input_plan)
+            return in_expr
 
         if operand_type.getSqlTypeName().equals(
             SqlTypeName.DATE
         ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
             # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
-            return java_expr_to_python_expr(ctx, operand, input_plan)
+            return in_expr
 
         empty_data = pd.Series(
             dtype=pd.ArrowDtype(sql_type_to_pa_type(target_type.getSqlTypeName()))
@@ -210,31 +211,35 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
             return ArrowScalarFuncExpression(
                 empty_data,
-                [java_expr_to_python_expr(ctx, operand, input_plan)],
+                [in_expr],
                 "local_timestamp",
                 (),
             )
 
         # TO_TIMESTAMP_LTZ adds local time zone which is same as assume_timezone()
         # function of Arrow (not cast)
-        if operand_type.getSqlTypeName().equals(
-            SqlTypeName.TIMESTAMP
-        ) and target_type.getSqlTypeName().equals(
+        if target_type.getSqlTypeName().equals(
             SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
         ):
+            if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+                in_expr = CastExpression(
+                    empty_data,
+                    in_expr,
+                )
+
             # BodoSQL uses UTC if timezone is not specified
             tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz)))
             return ArrowScalarFuncExpression(
                 empty_data,
-                [java_expr_to_python_expr(ctx, operand, input_plan)],
+                [in_expr],
                 "assume_timezone",
                 (tz,),
             )
 
         return CastExpression(
             empty_data,
-            java_expr_to_python_expr(ctx, operand, input_plan),
+            in_expr,
         )
 
     if (
