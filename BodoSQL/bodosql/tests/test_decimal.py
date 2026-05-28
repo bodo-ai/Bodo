@@ -322,7 +322,7 @@ def test_decimal_moment_functions_groupby(query, answer, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "query, answer",
+    "query",
     [
         pytest.param(
             "SELECT K, COVAR_POP(D1, D2) as RES FROM TABLE1 GROUP BY K",
