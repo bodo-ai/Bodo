@@ -215,6 +215,23 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (),
             )
 
+        # TO_TIMESTAMP_LTZ adds local time zone which is same as assume_timezone()
+        # function of Arrow (not cast)
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP
+        ) and target_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+        ):
+            # BodoSQL uses UTC if timezone is not specified
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz)))
+            return ArrowScalarFuncExpression(
+                empty_data,
+                [java_expr_to_python_expr(ctx, operand, input_plan)],
+                "assume_timezone",
+                (tz,),
+            )
+
         return CastExpression(
             empty_data,
             java_expr_to_python_expr(ctx, operand, input_plan),
