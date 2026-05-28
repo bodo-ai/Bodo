@@ -110,9 +110,7 @@ def to_boolean_all_test_dfs(request):
     return request.param
 
 
-def test_to_boolean_valid_cols(
-    spark_info, to_boolean_valid_test_dfs, memory_leak_check
-):
+def test_to_boolean_valid_cols(to_boolean_valid_test_dfs, memory_leak_check):
     df = to_boolean_valid_test_dfs
     query = "SELECT TO_BOOLEAN(a) FROM table1"
     ctx = {"TABLE1": df}
@@ -125,14 +123,15 @@ def test_to_boolean_valid_cols(
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
         expected_output=py_output,
     )
 
 
-def test_to_boolean_invalid_cols(spark_info, to_boolean_invalid_test_dfs):
+def test_to_boolean_invalid_cols(to_boolean_invalid_test_dfs):
     df = to_boolean_invalid_test_dfs
     query = "SELECT TO_BOOLEAN(a) FROM table1"
     ctx = {"TABLE1": df}
@@ -156,7 +155,7 @@ def to_boolean_equiv(arr):
         return arr.apply(lambda x: np.nan if pd.isna(x) or np.isinf(x) else bool(x))
 
 
-def test_to_boolean_scalars(spark_info, memory_leak_check):
+def test_to_boolean_scalars(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [
@@ -180,20 +179,17 @@ def test_to_boolean_scalars(spark_info, memory_leak_check):
     )
     ctx = {"TABLE1": df}
     query = "SELECT CASE WHEN TO_BOOLEAN(c) THEN TO_BOOLEAN(a) ELSE TO_BOOLEAN(b) END FROM table1"
-    py_output = (
-        df["A"].apply(str_to_bool).where(df["C"].astype(bool), df["B"].astype(bool))
-    )
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"A": py_output}),
+        use_duckdb=True,
     )
 
 
-def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_check):
+def test_try_to_boolean_cols(to_boolean_all_test_dfs, memory_leak_check):
     df = to_boolean_all_test_dfs
     query = "SELECT TRY_TO_BOOLEAN(a) FROM table1"
     ctx = {"TABLE1": df}
@@ -209,14 +205,14 @@ def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_ch
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=py_output,
     )
 
 
-def test_try_to_boolean_scalars(spark_info):
+def test_try_to_boolean_scalars():
     df = pd.DataFrame(
         {
             "A": [
@@ -240,16 +236,14 @@ def test_try_to_boolean_scalars(spark_info):
     )
     ctx = {"TABLE1": df}
     query = "SELECT CASE WHEN TRY_TO_BOOLEAN(c) THEN TRY_TO_BOOLEAN(a) ELSE TRY_TO_BOOLEAN(b) END FROM table1"
-    py_output = to_boolean_equiv(df["A"]).where(
-        df["C"].astype(bool), to_boolean_equiv(df["B"])
-    )
+
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"A": py_output}),
+        use_duckdb=True,
     )
 
 
@@ -310,7 +304,7 @@ def to_char_test_dfs(request):
         pytest.param("TO_VARCHAR", marks=pytest.mark.slow),
     ],
 )
-def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
+def test_to_char_cols(to_char_test_dfs, func, memory_leak_check):
     df = to_char_test_dfs
     query = f"SELECT {func}(a) FROM table1"
     ctx = {"TABLE1": df}
@@ -334,7 +328,7 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=py_output,
@@ -348,7 +342,7 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
         pytest.param("TO_VARCHAR", marks=pytest.mark.slow),
     ],
 )
-def test_to_char_scalars(spark_info, func):
+def test_to_char_scalars(func):
     df = pd.DataFrame(
         {
             "A": [1, 2, 3, 4, 5] * 3,
@@ -367,7 +361,7 @@ def test_to_char_scalars(spark_info, func):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=pd.DataFrame({"A": py_output}),
@@ -738,23 +732,22 @@ def to_double_equiv(arr):
     return pd.Series(out_arr, dtype=pd.ArrowDtype(pa.float64()))
 
 
-def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_check):
+def test_to_double_valid_cols(to_double_valid_test_dfs, memory_leak_check):
     df = to_double_valid_test_dfs
     query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
-    arr = df[df.columns[0]]
-    py_output = pd.DataFrame({"A": to_double_equiv(arr)})
+    df[df.columns[0]]
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
-def test_to_double_invalid_cols(spark_info, to_double_invalid_test_dfs):
+def test_to_double_invalid_cols(to_double_invalid_test_dfs):
     df = to_double_invalid_test_dfs
     query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
@@ -773,7 +766,7 @@ def test_to_double_invalid_cols(spark_info, to_double_invalid_test_dfs):
             bc.sql(query)
 
 
-def test_to_double_scalars(spark_info, memory_leak_check):
+def test_to_double_scalars(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [
@@ -815,40 +808,33 @@ def test_to_double_scalars(spark_info, memory_leak_check):
     )
     ctx = {"TABLE1": df}
     query = "SELECT CASE WHEN TO_DOUBLE(c) = 1.0 THEN TO_DOUBLE(a) ELSE TO_DOUBLE(b) END FROM table1"
-    py_output = to_double_equiv(df["A"]).where(
-        df["C"].astype(bool), to_double_equiv(df["B"])
-    )
-    # Avoid NaN vs NA mismatch
-    py_output = py_output.map(lambda x: pd.NA if pd.isna(x) else x).astype(
-        pd.ArrowDtype(pa.float64())
-    )
+
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"A": py_output}),
+        use_duckdb=True,
     )
 
 
-def test_try_to_double_cols(spark_info, to_double_all_test_dfs, memory_leak_check):
+def test_try_to_double_cols(to_double_all_test_dfs, memory_leak_check):
     df = to_double_all_test_dfs
     query = "SELECT TRY_TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
-    arr = df[df.columns[0]]
-    py_output = pd.DataFrame({"A": to_double_equiv(arr)})
+    df[df.columns[0]]
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
-def test_try_to_double_scalars(spark_info):
+def test_try_to_double_scalars():
     df = pd.DataFrame(
         {
             "A": [
@@ -890,20 +876,14 @@ def test_try_to_double_scalars(spark_info):
     )
     ctx = {"TABLE1": df}
     query = "SELECT CASE WHEN TRY_TO_DOUBLE(c) = 1.0 THEN TRY_TO_DOUBLE(a) ELSE TRY_TO_DOUBLE(b) END FROM table1"
-    py_output = to_double_equiv(df["A"]).where(
-        df["C"].astype(bool), to_double_equiv(df["B"])
-    )
-    # Avoid NaN vs NA mismatch
-    py_output = py_output.map(lambda x: pd.NA if pd.isna(x) else x).astype(
-        pd.ArrowDtype(pa.float64())
-    )
+
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({"A": py_output}),
+        use_duckdb=True,
     )
 
 

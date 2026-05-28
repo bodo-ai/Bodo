@@ -103,15 +103,15 @@ def numeric_truthy_df(request):
         ),
     ],
 )
-def test_booland(args, numeric_truthy_df, spark_info, memory_leak_check):
+def test_booland(args, numeric_truthy_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         numeric_truthy_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
@@ -163,15 +163,15 @@ def test_booland(args, numeric_truthy_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_boolor(args, numeric_truthy_df, spark_info, memory_leak_check):
+def test_boolor(args, numeric_truthy_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         numeric_truthy_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
@@ -223,15 +223,15 @@ def test_boolor(args, numeric_truthy_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_boolxor(args, numeric_truthy_df, spark_info, memory_leak_check):
+def test_boolxor(args, numeric_truthy_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         numeric_truthy_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
@@ -276,15 +276,15 @@ def test_boolxor(args, numeric_truthy_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_boolnot(args, numeric_truthy_df, spark_info, memory_leak_check):
+def test_boolnot(args, numeric_truthy_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         numeric_truthy_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 

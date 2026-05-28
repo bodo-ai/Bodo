@@ -16,14 +16,14 @@ from bodo.tests.utils import (
     pytest_slow_unless_groupby,
 )
 from bodo.tests.utils_jit import DistTestPipeline
-from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
+from bodosql.tests.utils import check_query
 
 # Skip unless any groupby-related files were changed
 pytestmark = pytest_slow_unless_groupby
 
 
 def test_agg_numeric(
-    bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
+    bodosql_numeric_types, numeric_agg_builtin_funcs, memory_leak_check
 ):
     """test agg func calls in queries"""
 
@@ -37,61 +37,25 @@ def test_agg_numeric(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(query),
+        None,
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
-        pytest.param(
-            (
-                "select median(A) from table1",
-                pd.DataFrame(
-                    {
-                        "A": [3.35],
-                    }
-                ),
-            ),
-        ),
-        pytest.param(
-            (
-                "select median(B) from table1",
-                pd.DataFrame(
-                    {
-                        "B": [-3.35],
-                    }
-                ),
-            ),
-        ),
-        pytest.param(
-            (
-                "select median(C) from table1",
-                pd.DataFrame(
-                    {
-                        "C": [0.0],
-                    }
-                ),
-            ),
-        ),
-        pytest.param(
-            (
-                "select median(D) from table1",
-                pd.DataFrame(
-                    {
-                        "D": [1.0],
-                    }
-                ),
-            ),
-        ),
+        pytest.param("select median(A) from table1"),
+        pytest.param("select median(B) from table1"),
+        pytest.param("select median(C) from table1"),
+        pytest.param("select median(D) from table1"),
     ],
 )
 @pytest.mark.slow
-def test_median(args, spark_info, memory_leak_check):
+def test_median(query, memory_leak_check):
     df1 = pd.DataFrame(
         {
             "A": [1.0, 2.5, 1000.0, 100.0, 4.2, 1.001],
@@ -100,22 +64,21 @@ def test_median(args, spark_info, memory_leak_check):
             "D": [0, 0, 1, 1, 1, 1],
         }
     )
-    query, expected_output = args
 
     check_query(
         query,
         {"TABLE1": df1},
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        expected_output=expected_output,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_aliasing_agg_numeric(
-    bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
+    bodosql_numeric_types, numeric_agg_builtin_funcs, memory_leak_check
 ):
     """test aliasing of aggregations in queries"""
 
@@ -129,16 +92,16 @@ def test_aliasing_agg_numeric(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(query),
+        None,
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_repeat_columns(basic_df, spark_info, memory_leak_check):
+def test_repeat_columns(basic_df, memory_leak_check):
     """
     Tests that a column that won't produce a conflicting name
     even if it performs the same operation.
@@ -147,74 +110,79 @@ def test_repeat_columns(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
-def test_count_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_count_numeric(bodosql_numeric_types, memory_leak_check):
     """test various count queries on numeric data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_count_nullable_numeric(
-    bodosql_nullable_numeric_types, spark_info, memory_leak_check
-):
+def test_count_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_check):
     """test various count queries on nullable numeric data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1",
         bodosql_nullable_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
         bodosql_nullable_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
+def test_count_datetime(bodosql_datetime_types, memory_leak_check):
     """test various count queries on Timestamp data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1",
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
@@ -227,10 +195,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        is_out_distributed=False,
-        expected_output=pd.DataFrame(
-            {"B": [bodosql_interval_types["TABLE1"]["B"].nunique()]}
-        ),
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
@@ -239,95 +204,103 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
-        expected_output=pd.DataFrame({"B": [len(bodosql_interval_types["TABLE1"])]}),
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_count_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_count_boolean(bodosql_boolean_types, memory_leak_check):
     """test various count queries on boolean data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_count_string(bodosql_string_types, spark_info, memory_leak_check):
+def test_count_string(bodosql_string_types, memory_leak_check):
     """test various count queries on string data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
-def test_count_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_count_binary(bodosql_binary_types, memory_leak_check):
     """test various count queries on string data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1",
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_count_numeric_alias(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_count_numeric_alias(bodosql_numeric_types, memory_leak_check):
     """test various count queries on numeric data with aliases."""
     check_query(
         "SELECT COUNT(Distinct B) as alias FROM table1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) as alias FROM table1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.skip("[BS-81]")
-def test_max_string(bodosql_string_types, spark_info, memory_leak_check):
+def test_max_string(bodosql_string_types, memory_leak_check):
     """
     Simple test to ensure that max is working on string types
     """
@@ -337,10 +310,16 @@ def test_max_string(bodosql_string_types, spark_info, memory_leak_check):
         FROM
             table1
         """
-    check_query(query, bodosql_string_types, spark_info, check_names=False)
+    check_query(
+        query,
+        bodosql_string_types,
+        None,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
-def test_max_datetime_types(bodosql_datetime_types, spark_info, memory_leak_check):
+def test_max_datetime_types(bodosql_datetime_types, memory_leak_check):
     """
     Simple test to ensure that max is working on datetime types
     """
@@ -353,7 +332,7 @@ def test_max_datetime_types(bodosql_datetime_types, spark_info, memory_leak_chec
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         is_out_distributed=False,
         use_duckdb=True,
@@ -376,9 +355,7 @@ def test_max_interval_types(bodosql_interval_types, memory_leak_check):
         bodosql_interval_types,
         None,
         is_out_distributed=False,
-        expected_output=pd.DataFrame(
-            {"OUTPUT": [bodosql_interval_types["TABLE1"]["A"].max()]}
-        ),
+        use_duckdb=True,
     )
 
 
@@ -394,7 +371,7 @@ def test_max_literal(basic_df, memory_leak_check):
         None,
         # Max outputs a nullable output by default to handle empty Series values
         check_dtype=False,
-        expected_output=pd.DataFrame({"A": basic_df["TABLE1"]["A"], "SCALAR_MAX": 1}),
+        use_duckdb=True,
     )
 
 
@@ -410,7 +387,7 @@ def test_max_literal(basic_df, memory_leak_check):
         ),
     ],
 )
-def test_count_if(query, spark_info, memory_leak_check):
+def test_count_if(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -427,14 +404,15 @@ def test_count_if(query, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
-def test_having(bodosql_numeric_types, comparison_ops, spark_info, memory_leak_check):
+def test_having(bodosql_numeric_types, comparison_ops, memory_leak_check):
     """
     Tests having with a constant
     """
@@ -449,15 +427,16 @@ def test_having(bodosql_numeric_types, comparison_ops, spark_info, memory_leak_c
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_max_bool(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_max_bool(bodosql_boolean_types, memory_leak_check):
     """
     Simple test to ensure that max is working on boolean types
     """
@@ -470,14 +449,15 @@ def test_max_bool(bodosql_boolean_types, spark_info, memory_leak_check):
     check_query(
         query,
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
-def test_having_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_having_boolean(bodosql_boolean_types, memory_leak_check):
     """
     Tests having with a constant
     """
@@ -492,10 +472,11 @@ def test_having_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
     check_query(
         query,
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
@@ -546,7 +527,7 @@ def test_agg_replicated(datapath, memory_leak_check):
         ),
     ],
 )
-def test_any_value(query, spark_info, memory_leak_check):
+def test_any_value(query, memory_leak_check):
     """Tests ANY_VALUE, which is normally nondeterministic but has been
     implemented in a way that is reproducible (by always returning the first
     value)"""
@@ -571,11 +552,11 @@ def test_any_value(query, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
@@ -600,9 +581,7 @@ def test_any_value_nulls(memory_leak_check):
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
-        expected_output=pd.DataFrame(
-            {0: pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
-        ),
+        use_duckdb=True,
     )
 
 
@@ -625,16 +604,14 @@ def test_max_min_tz_aware(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame(
-        {"OUTPUT1": S.max(), "OUTPUT2": S.min()}, index=pd.RangeIndex(0, 1, 1)
-    )
+    pd.DataFrame({"OUTPUT1": S.max(), "OUTPUT2": S.min()}, index=pd.RangeIndex(0, 1, 1))
     query = "Select max(A) as output1, min(A) as output2 from table1"
     check_query(
         query,
         ctx,
         None,
         is_out_distributed=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
@@ -657,7 +634,7 @@ def test_count_tz_aware(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame(
+    pd.DataFrame(
         {"OUTPUT1": S.count(), "OUTPUT2": len(S)}, index=pd.RangeIndex(0, 1, 1)
     )
     query = "Select count(A) as output1, Count(*) as output2 from table1"
@@ -666,7 +643,7 @@ def test_count_tz_aware(memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
@@ -689,7 +666,7 @@ def test_any_value_tz_aware(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame({"OUTPUT1": S.iloc[0]}, index=pd.RangeIndex(0, 1, 1))
+    pd.DataFrame({"OUTPUT1": S.iloc[0]}, index=pd.RangeIndex(0, 1, 1))
     # Note: We also output the first value although this is not strictly defined.
     query = "Select ANY_VALUE(A) as output1 from table1"
     check_query(
@@ -697,7 +674,7 @@ def test_any_value_tz_aware(memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
@@ -735,14 +712,14 @@ def test_tz_aware_having(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame({"OUTPUT1": df.A.min()}, index=pd.RangeIndex(0, 1, 1))
+    pd.DataFrame({"OUTPUT1": df.A.min()}, index=pd.RangeIndex(0, 1, 1))
     query = "Select MIN(A) as output1 from table1 HAVING MAX(A) > min(B)"
     check_query(
         query,
         ctx,
         None,
         is_out_distributed=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
@@ -771,7 +748,7 @@ def test_max_min_timestamptz(timestamptz_data, memory_leak_check):
     """
     df = pd.DataFrame({"A": timestamptz_data})
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame(
+    pd.DataFrame(
         {
             "OUT1": bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
             "OUT2": bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
@@ -784,7 +761,7 @@ def test_max_min_timestamptz(timestamptz_data, memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
@@ -794,7 +771,7 @@ def test_count_timestamptz(timestamptz_data, memory_leak_check):
     """
     df = pd.DataFrame({"A": timestamptz_data})
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame(
+    pd.DataFrame(
         {"OUTPUT1": 6, "OUTPUT2": 10},
         index=pd.RangeIndex(0, 1, 1),
     )
@@ -804,7 +781,7 @@ def test_count_timestamptz(timestamptz_data, memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
@@ -817,7 +794,7 @@ def test_anyvalue_timestamptz(timestamptz_data, memory_leak_check):
     # see what the values being compared are
     df = pd.DataFrame({"A": timestamptz_data})
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame(
+    pd.DataFrame(
         {"OUTPUT": bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0)},
         index=pd.RangeIndex(0, 1),
     )
@@ -827,11 +804,11 @@ def test_anyvalue_timestamptz(timestamptz_data, memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
-def test_single_value(spark_info, memory_leak_check):
+def test_single_value(memory_leak_check):
     """Test Calcite's SINGLE_VALUE Agg function"""
     query = "select B from t1 where t1.A = (select C from t2)"
 
@@ -854,15 +831,16 @@ def test_single_value(spark_info, memory_leak_check):
     check_query(
         query,
         {"T1": df1, "T2": df2},
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         # ensure_single_value() makes input replicated, causing error for dist arg
         only_jit_seq=True,
+        use_duckdb=True,
     )
 
 
-def test_single_value2(spark_info, memory_leak_check):
+def test_single_value2(memory_leak_check):
     """Test Calcite's SINGLE_VALUE Agg function in a max query"""
     query = "select max((select max(A)-1 from t1)) from t1"
 
@@ -875,10 +853,11 @@ def test_single_value2(spark_info, memory_leak_check):
     check_query(
         query,
         {"T1": df1},
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
@@ -915,8 +894,7 @@ def test_single_value_error():
                 check_dtype=False,
                 # ensure_single_value() makes input replicated, causing error for dist arg
                 only_jit_seq=True,
-                # dummy output to avoid Spark errors
-                expected_output=1,
+                use_duckdb=True,
             )
 
 
@@ -947,25 +925,21 @@ def test_approx_percentile(data, quantiles, memory_leak_check):
             "C": pd.Series(gaus, dtype=np.float64),
         }
     )
-    expected_output = pd.DataFrame(
-        {i: df[data].quantile(q) for i, q in enumerate(quantiles)}, index=np.arange(1)
-    )
     # 40% was chosen as an arbitrary cutoff for the relative tolerance based on
     # observations of the test data outputs.
     check_query(
         query,
         {"TABLE1": df},
         None,
-        expected_output=expected_output,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
         atol=0.01,
         rtol=0.4,
+        use_duckdb=True,
     )
 
 
-@pytest.mark.skip(reason="fix Pandas 3 NA/NaN mismatch in testing")
 @pytest.mark.parametrize(
     "agg_cols",
     [
@@ -975,7 +949,7 @@ def test_approx_percentile(data, quantiles, memory_leak_check):
         pytest.param("JKL", id="slow_tests_b", marks=pytest.mark.slow),
     ],
 )
-def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
+def test_kurtosis_skew(agg_cols, memory_leak_check):
     """Tests the Kurtosis and Skew functions"""
     query = (
         "SELECT "
@@ -1018,44 +992,26 @@ def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
         )
     }
 
-    def kurt_skew_refsol(cols):
-        result = pd.DataFrame({"A0": [0]})
-        i = 0
-        for col in cols:
-            result[f"A{i}"] = ctx["TABLE1"][col].skew()
-            i += 1
-            result[f"A{i}"] = ctx["TABLE1"][col].kurtosis()
-            i += 1
-        return result
-
-    answer = kurt_skew_refsol(agg_cols)
-
     check_query(
         query,
         ctx,
         None,
-        expected_output=answer,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "func, results",
+    "func",
     [
-        pytest.param(
-            "BOOLOR_AGG", [None, False, True, True, True] * 2, id="boolor_agg"
-        ),
-        pytest.param(
-            "BOOLAND_AGG", [None, False, False, True, True] * 2, id="booland_agg"
-        ),
-        pytest.param(
-            "BOOLXOR_AGG", [None, False, True, False, True] * 2, id="boolxor_agg"
-        ),
+        pytest.param("BOOLOR_AGG", id="boolor_agg"),
+        pytest.param("BOOLAND_AGG", id="booland_agg"),
+        pytest.param("BOOLXOR_AGG", id="boolxor_agg"),
     ],
 )
-def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
+def test_boolor_booland_boolxor_agg(func, memory_leak_check):
     """Tests the BOOLOR_AGG, BOOLAND_AGG and BOOLXOR_AGG functions"""
     selects = ", ".join([f"{func}({col})" for col in "ABCDEFGHIJ"])
     query = f"SELECT {selects} FROM table1"
@@ -1088,48 +1044,41 @@ def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
         )
     }
 
-    answer = pd.DataFrame(dict(enumerate(results)), index=np.arange(1))
-
     check_query(
         query,
         ctx,
         None,
-        expected_output=answer,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "col, expected",
+    "col",
     [
         pytest.param(
             pd.Series([None] * 20, dtype=pd.Int32Dtype()),
-            (None, None, None),
             id="all_null",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([1, 2, 4, 63, 4, None, 20], dtype=pd.Int32Dtype()),
-            (63, 0, 40),
             id="ints",
         ),
         pytest.param(
             pd.Series([10, 253, 253, None, 42], dtype=pd.UInt8Dtype()),
-            (255, 8, 32),
             id="unsigned",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([0, 2, 62, 60, 20, 16, 4], dtype=pd.Int32Dtype()),
-            (62, 0, 0),
             id="ints-xor",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([-64, 1, 4, 8, 1, 4], dtype=pd.Int32Dtype()),
-            (-51, 0, -56),
             id="neg_ints",
             marks=pytest.mark.slow,
         ),
@@ -1137,30 +1086,26 @@ def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
             pd.Series(
                 [3625133335, 7285961799, 4755749177, 7850278502], dtype=pd.Int64Dtype()
             ),
-            (8522825599, 268443648, 7026152975),
             id="big_ints",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([2.0, 50.5, None, 602.4, 61.6], dtype=pd.Float32Dtype()),
-            (639, 2, 597),
             id="floats",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series(["2", "50.5", "601.5", None, "2"]),
-            (635, 2, 617),
             id="strings",
         ),
     ],
 )
-def test_bit_agg(col, expected, memory_leak_check):
+def test_bit_agg(col, memory_leak_check):
     """Tests the BITOR_AGG, BITAND_AGG, and BITXOR_AGG aggregation functions
     without groupby on string data.
 
     Args:
         col (pd.Series): Input column
-        expected (int): Expected output
         memory_leak_check (): Fixture, see `conftest.py`.
     """
     ctx = {
@@ -1173,23 +1118,14 @@ def test_bit_agg(col, expected, memory_leak_check):
 
     query = "SELECT bitor_agg(A), bitand_agg(A), bitxor_agg(A) from table1"
 
-    expected_df = pd.DataFrame(
-        {
-            0: expected[0],
-            1: expected[1],
-            2: expected[2],
-        },
-        index=np.arange(1),
-    )
-
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=expected_df,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
@@ -1238,43 +1174,12 @@ def test_all_null(memory_leak_check):
         }
     )
 
-    expected = pd.DataFrame(
-        {
-            # [BSE-2183]
-            # "SU": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "MI": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "MA": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "V": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "VP": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "S": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "SP": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "SK": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "KU": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "ME": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "AP": pd.Series([None], dtype=pd.Int32Dtype()),
-            # "AV": pd.Series([None], dtype=pd.Int32Dtype()),
-            "CS": pd.Series([10], dtype=pd.Int32Dtype()),
-            "C": pd.Series([0], dtype=pd.Int32Dtype()),
-            "CI": pd.Series([0], dtype=pd.Int32Dtype()),
-            "BO": pd.Series([None], dtype=pd.Int32Dtype()),
-            "BA": pd.Series([None], dtype=pd.Int32Dtype()),
-            "BX": pd.Series([None], dtype=pd.Int32Dtype()),
-            "BIO": pd.Series([None], dtype=pd.Int32Dtype()),
-            "BIA": pd.Series([None], dtype=pd.Int32Dtype()),
-            "BIX": pd.Series([None], dtype=pd.Int32Dtype()),
-            # [BSE-2184]
-            # "LA": pd.Series([""]),
-            "PC": pd.Series([None], dtype=pd.Int32Dtype()),
-            "PD": pd.Series([None], dtype=pd.Int32Dtype()),
-        }
-    )
-
     check_query(
         query,
         {"TABLE1": df},
         None,
-        expected_output=expected,
         check_dtype=False,
         sort_output=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )

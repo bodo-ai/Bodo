@@ -31,23 +31,33 @@ def test_named_agg(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_groupby_quansite(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_groupby_quansite(bodosql_numeric_types, memory_leak_check):
     """
     Group by test aimed to match the bug reported in the quansite
     thread.
     """
     query = "select A, AVG(C) from table1 group by A"
     check_query(
-        query, bodosql_numeric_types, spark_info, check_dtype=False, check_names=False
+        query,
+        bodosql_numeric_types,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_groupby_multicolumn(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_groupby_multicolumn(bodosql_numeric_types, memory_leak_check):
     """
     Group by test with multiple output columns
     """
     query = "select A, AVG(C) from table1 group by A, B"
     check_query(
-        query, bodosql_numeric_types, spark_info, check_dtype=False, check_names=False
+        query,
+        bodosql_numeric_types,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
     )

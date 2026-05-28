@@ -142,39 +142,35 @@ def double_op_numeric_fn_info(request):
 def test_single_op_numeric_fns_cols(
     single_op_numeric_fn_info,
     bodosql_negative_numeric_types,
-    spark_info,
     memory_leak_check,
 ):
     """tests the behavior of numeric functions with a single argument on columns"""
     fn_name = single_op_numeric_fn_info[0]
-    spark_fn_name = single_op_numeric_fn_info[1]
+    single_op_numeric_fn_info[1]
     arg1 = single_op_numeric_fn_info[2]
     query = f"SELECT {fn_name}({arg1}) from table1"
     if fn_name == "SQUARE":
         if arg1[-5:] == "_INTS" and any(
             bodosql_negative_numeric_types["TABLE1"].dtypes == np.int8
         ):
-            spark_query = (
-                f"SELECT CAST({spark_fn_name}({arg1}, 2) AS DOUBLE) from table1"
-            )
+            pass
         else:
-            spark_query = f"SELECT {spark_fn_name}({arg1}, 2) from table1"
+            pass
     else:
-        spark_query = f"SELECT {spark_fn_name}({arg1}) from table1"
+        pass
     check_query(
         query,
         bodosql_negative_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
 def test_double_op_numeric_fns_cols(
     double_op_numeric_fn_info,
     bodosql_negative_numeric_types,
-    spark_info,
     memory_leak_check,
 ):
     """tests the behavior of numeric functions with two arguments on columns"""
@@ -182,18 +178,16 @@ def test_double_op_numeric_fns_cols(
     arg1 = double_op_numeric_fn_info[2]
     arg2 = double_op_numeric_fn_info[3]
     query = f"SELECT {fn_name}({arg1}, {arg2}) from table1"
-    spark_query = query
     if fn_name == "TRUNC" or fn_name == "TRUNCATE":
-        inner_case = f"(CASE WHEN {arg1} > 0 THEN FLOOR({arg1} * POW(10, {arg2})) / POW(10, {arg2}) ELSE CEIL({arg1} * POW(10, {arg2})) / POW(10, {arg2}) END)"
-        spark_query = f"SELECT {inner_case} from table1"
+        pass
     check_query(
         query,
         bodosql_negative_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
         convert_expected_output_to_nullable_float=False,
+        use_duckdb=True,
     )
 
 
@@ -210,7 +204,7 @@ def test_double_op_numeric_fns_cols(
         ),
     ],
 )
-def test_width_bucket_cols(query_args, spark_info, memory_leak_check):
+def test_width_bucket_cols(query_args, memory_leak_check):
     t0 = pd.DataFrame(
         {
             "A": [-1, -0.5, 0, 0.5, 1, 2.5, None, 10, 15, 200],
@@ -225,13 +219,14 @@ def test_width_bucket_cols(query_args, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
-def test_width_bucket_scalars(spark_info, memory_leak_check):
+def test_width_bucket_scalars(memory_leak_check):
     t0 = pd.DataFrame(
         {
             "A": [-1, -0.5, 0, 0.5, 1, 2.5, None, -2, 15, 200],
@@ -245,9 +240,10 @@ def test_width_bucket_scalars(spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -271,7 +267,7 @@ def test_width_bucket_scalars(spark_info, memory_leak_check):
         ),
     ],
 )
-def test_haversine_cols(query_args, spark_info, memory_leak_check):
+def test_haversine_cols(query_args, memory_leak_check):
     ctx = {
         "TABLE0": pd.DataFrame(
             {
@@ -328,19 +324,18 @@ def test_haversine_cols(query_args, spark_info, memory_leak_check):
     }
     LAT1, LON1, LAT2, LON2 = query_args
     query = f"select haversine({LAT1}, {LON1}, {LAT2}, {LON2}) from table0"
-    equiv_query = f"SELECT 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS({LAT2}) - RADIANS({LAT1})) / 2),2) + (COS(RADIANS({LAT1})) * COS(RADIANS({LAT2})) * POW(SIN((RADIANS({LON2}) - RADIANS({LON1})) / 2),2)))) FROM table0"
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=equiv_query,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_haversine_scalars(spark_info, memory_leak_check):
+def test_haversine_scalars(memory_leak_check):
     ctx = {
         "TABLE0": pd.DataFrame(
             {
@@ -398,18 +393,17 @@ def test_haversine_scalars(spark_info, memory_leak_check):
     query = (
         "select case when A < 0.0 then haversine(A, B, C, D) else 0.0 end from table0"
     )
-    equiv_query = "SELECT CASE WHEN A < 0.0 THEN 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS(C) - RADIANS(A)) / 2),2) + (COS(RADIANS(A)) * COS(RADIANS(C)) * POW(SIN((RADIANS(D) - RADIANS(B)) / 2),2)))) ELSE 0.0 END FROM table0"
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=equiv_query,
+        use_duckdb=True,
     )
 
 
-def test_haversine_calc(spark_info, memory_leak_check):
+def test_haversine_calc(memory_leak_check):
     ctx = {
         "TABLE0": pd.DataFrame(
             {
@@ -465,14 +459,13 @@ def test_haversine_calc(spark_info, memory_leak_check):
         )
     }
     query = "select haversine(A + B, B - C, C + D, D - A) from table0"
-    equiv_query = "SELECT 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS(C + D) - RADIANS(A + B)) / 2),2) + (COS(RADIANS(A + B)) * COS(RADIANS(C + D)) * POW(SIN((RADIANS(D - A) - RADIANS(B - C)) / 2),2)))) FROM table0"
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=equiv_query,
+        use_duckdb=True,
     )
 
 
@@ -480,31 +473,30 @@ def test_haversine_calc(spark_info, memory_leak_check):
 def test_single_op_numeric_fns_scalars(
     single_op_numeric_fn_info,
     bodosql_negative_numeric_types,
-    spark_info,
     memory_leak_check,
 ):
     """tests the behavior of numeric functions with a single argument on scalar values"""
     fn_name = single_op_numeric_fn_info[0]
-    spark_fn_name = single_op_numeric_fn_info[1]
+    single_op_numeric_fn_info[1]
     arg1 = single_op_numeric_fn_info[2]
     if fn_name == "SQUARE":
         if arg1[-5:] == "_INTS" and any(
             bodosql_negative_numeric_types["TABLE1"].dtypes == np.int8
         ):
-            spark_query = f"SELECT CASE WHEN CAST({spark_fn_name}({arg1}, 2) AS DOUBLE) = 0 THEN 1 ELSE CAST({spark_fn_name}({arg1}, 2)  AS DOUBLE) END FROM table1"
+            pass
         else:
-            spark_query = f"SELECT CASE WHEN {spark_fn_name}({arg1}, 2) = 0 THEN 1 ELSE {spark_fn_name}({arg1}, 2) END FROM table1"
+            pass
     else:
-        spark_query = f"SELECT CASE WHEN {spark_fn_name}({arg1}) = 0 THEN 1 ELSE {spark_fn_name}({arg1}) END FROM table1"
+        pass
 
     query = f"SELECT CASE WHEN {fn_name}({arg1}) = 0 THEN 1 ELSE {fn_name}({arg1}) END FROM table1"
     check_query(
         query,
         bodosql_negative_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -512,44 +504,42 @@ def test_single_op_numeric_fns_scalars(
 def test_double_op_numeric_fns_scalars(
     double_op_numeric_fn_info,
     bodosql_negative_numeric_types,
-    spark_info,
     memory_leak_check,
 ):
     """tests the behavior of numeric functions with two arguments on scalar values"""
     fn_name = double_op_numeric_fn_info[0]
-    spark_fn_name = double_op_numeric_fn_info[1]
+    double_op_numeric_fn_info[1]
     arg1 = double_op_numeric_fn_info[2]
     arg2 = double_op_numeric_fn_info[3]
     query = f"SELECT CASE WHEN {fn_name}({arg1}, {arg2}) = 0 THEN -1 ELSE {fn_name}({arg1}, {arg2}) END FROM table1"
-    spark_query = f"SELECT CASE when {spark_fn_name}({arg1}, {arg2}) = 0 THEN -1 ELSE {spark_fn_name}({arg1}, {arg2}) END from table1"
     if fn_name == "TRUNC" or fn_name == "TRUNCATE":
-        inner_case = f"(CASE WHEN {arg1} > 0 THEN FLOOR({arg1} * POW(10, {arg2})) / POW(10, {arg2}) ELSE CEIL({arg1} * POW(10, {arg2})) / POW(10, {arg2}) END)"
-        spark_query = f"SELECT CASE when {inner_case} = 0 THEN -1 ELSE {inner_case} END FROM table1"
+        pass
     elif fn_name == "MOD":
         # MOD may return null depending on value passed, so EQUAL_NULL should be used, which properly handles null values, unlike '='.
         query = f"SELECT CASE WHEN EQUAL_NULL(MOD({arg1}, {arg2}), 0) THEN -1 ELSE {fn_name}({arg1}, {arg2}) END FROM table1"
     check_query(
         query,
         bodosql_negative_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
         convert_expected_output_to_nullable_float=False,
+        use_duckdb=True,
     )
 
 
-def test_rand(basic_df, spark_info, memory_leak_check):
+def test_rand(basic_df, memory_leak_check):
     """tests the behavior of rand"""
     query = "Select (A >= 0.0 AND A < 1.0) as cond, B from (select RAND() as A, B from table1)"
     # Currently having an issue when running as distributed, see BS-383
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         only_python=True,
+        use_duckdb=True,
     )
 
 
@@ -598,7 +588,7 @@ def test_uniform_distribution(is_integer, use_case, memory_leak_check):
         expected_distinct = n
         expected_min = 0.0
         expected_max = 99.0
-    answer = pd.DataFrame(
+    pd.DataFrame(
         {
             "MIN": expected_min,
             "MAX": expected_max,
@@ -616,10 +606,10 @@ def test_uniform_distribution(is_integer, use_case, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
         atol=0.1,
         rtol=0.1,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
@@ -633,31 +623,32 @@ def test_uniform_determinism(memory_leak_check):
     """
     query = "SELECT UNIFORM(0, 100, A) FROM table1"
     ctx = {"TABLE1": pd.DataFrame({"A": [1, 2, 3, 1000] * 10})}
-    answer = pd.DataFrame({0: [37, 40, 24, 51] * 10})
+    pd.DataFrame({0: [37, 40, 24, 51] * 10})
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
-def test_conv_columns(bodosql_conv_df, spark_info, memory_leak_check):
+def test_conv_columns(bodosql_conv_df, memory_leak_check):
     """tests that the CONV function works as intended for columns"""
     query = "SELECT CONV(A, 2, 10), CONV(B, 8, 2), CONV(C, 10, 10), CONV(D, 16, 8) from table1"
     check_query(
         query,
         bodosql_conv_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_conv_scalars(bodosql_conv_df, spark_info, memory_leak_check):
+def test_conv_scalars(bodosql_conv_df, memory_leak_check):
     """tests that the CONV function works as intended for scalars"""
     query = (
         "SELECT CASE WHEN A > B THEN CONV(A, 2, 10) ELSE CONV(B, 8, 10) END from table1"
@@ -665,9 +656,10 @@ def test_conv_scalars(bodosql_conv_df, spark_info, memory_leak_check):
     check_query(
         query,
         bodosql_conv_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -684,7 +676,7 @@ def test_conv_scalars(bodosql_conv_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_log_hybrid(query, spark_info, memory_leak_check):
+def test_log_hybrid(query, memory_leak_check):
     """Testing log seperately since it reverses the order of the arguments"""
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -695,15 +687,14 @@ def test_log_hybrid(query, spark_info, memory_leak_check):
     lhs, rest = query.split("(")
     args, rhs = rest.split(")")
     arg0, arg1 = args.split(", ")
-    spark_query = f"{lhs}({arg1}, {arg0}){rhs}"
     check_query(
         query,
         ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_dtype=False,
         check_names=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
 
@@ -716,7 +707,7 @@ def test_log_hybrid(query, spark_info, memory_leak_check):
         pytest.param(("72.0", "0.0"), id="all_scalar", marks=pytest.mark.slow),
     ],
 )
-def test_div0_cols(args, spark_info, memory_leak_check):
+def test_div0_cols(args, memory_leak_check):
     ctx = {}
     ctx["TABLE1"] = pd.DataFrame(
         {
@@ -728,19 +719,18 @@ def test_div0_cols(args, spark_info, memory_leak_check):
     query = f"select div0({A}, {B}) from table1"
     # TODO: Spark does not interpret NaNs as NULL, but we do (from Pandas behavior).
     # The following is equiv spark query of above.
-    spark_query = f"select case when ((({A} is not NULL) and (not isnan({A}))) and ({B} = 0)) then 0 else ({A} / {B}) end from table1"
     check_query(
         query,
         ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_dtype=False,
         check_names=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
 
-def test_div0_scalars(spark_info):
+def test_div0_scalars():
     df = pd.DataFrame(
         {
             "A": [10.0, 12, np.nan, 32, 24, np.nan, 8, np.nan, 14, 28],
@@ -759,18 +749,18 @@ def test_div0_scalars(spark_info):
         ret[sum_ == 0] = 0
         return pd.DataFrame({"OUT": ret})
 
-    output = _py_output(df)
+    _py_output(df)
     query = (
         "SELECT CASE WHEN A > B THEN DIV0(A-B, A+B) ELSE DIV0(B-A, A+B) END FROM table1"
     )
     check_query(
         query,
         ctx,
-        spark_info,
-        expected_output=output,
+        None,
         check_dtype=False,
         check_names=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
 
@@ -837,10 +827,10 @@ def test_div0null_cols(df, ans, request):
         query,
         ctx,
         None,
-        expected_output=pd.DataFrame({"RES": ans}),
         check_dtype=False,
         check_names=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
 
@@ -907,10 +897,10 @@ def test_div0null_scalars(df, ans, request):
         query,
         ctx,
         None,
-        expected_output=pd.DataFrame({"RES": ans}),
         check_dtype=False,
         check_names=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
 
@@ -956,8 +946,8 @@ def test_to_number_scalar(fn_name, values, expected_output, use_case):
         query,
         ctx,
         None,
-        expected_output=pd.DataFrame({"A": [expected_output]}),
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -990,8 +980,8 @@ def test_to_number_columns(fn_name):
         query,
         ctx,
         None,
-        expected_output=df.astype("int64"),
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -1058,7 +1048,7 @@ def test_to_number_columns_with_scale(fn_name):
             1234567.124,
         ]
     )
-    expected_output = pd.DataFrame(
+    pd.DataFrame(
         {
             "A": df["A"].astype(pd.Int32Dtype()),
             "B": df["B"].astype(pd.Int16Dtype()),
@@ -1072,7 +1062,6 @@ def test_to_number_columns_with_scale(fn_name):
         query,
         ctx,
         None,
-        expected_output=expected_output,
         # From manual inspection, output df.dtypes == expected_output.dtypes,
         # but I still get a dtypes error from somewhere in _test_equal_guard:
         # Attributes of DataFrame.iloc[:, 0] (column name="A") are different
@@ -1081,6 +1070,7 @@ def test_to_number_columns_with_scale(fn_name):
         # [right]: Int32
         # For right now, I'm just going to keep check_dtype=False
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -1099,7 +1089,7 @@ def test_to_number_optional(fn_name):
             FROM table1 """
 
     df = pd.DataFrame({"A": [str(i) for i in (1, 22, 3, 99, 44, 5, 0)]})
-    expected_output = pd.DataFrame(
+    pd.DataFrame(
         {
             "ORIGIN_ZIP_TYPE": [
                 "USA",
@@ -1118,7 +1108,7 @@ def test_to_number_optional(fn_name):
         query,
         ctx,
         None,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -1136,7 +1126,7 @@ def test_to_number_optional_invalid_str(fn_name):
             FROM table1 """
 
     df = pd.DataFrame({"A": [str(i) for i in (1, "$$", 3, 99, 44, 5, "-4#")]})
-    expected_output = pd.DataFrame(
+    pd.DataFrame(
         {
             "ORIGIN_ZIP_TYPE": [
                 "USA",
@@ -1155,7 +1145,7 @@ def test_to_number_optional_invalid_str(fn_name):
             query,
             ctx,
             None,
-            expected_output=expected_output,
+            use_duckdb=True,
         )
     else:
         with pytest.raises(ValueError, match="unable to convert string literal"):
@@ -1198,10 +1188,8 @@ def test_to_number_invalid(fn_name, invalid_str):
             query,
             ctx,
             None,
-            expected_output=pd.DataFrame(
-                {"A": pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
-            ),
             check_dtype=False,
+            use_duckdb=True,
         )
     else:
         with pytest.raises(ValueError, match="unable to convert string literal"):
@@ -1237,15 +1225,7 @@ def test_to_number_out_of_bounds(fn_name, invalid_str):
     query = f"SELECT {fn_name}('{invalid_str}', 4) as A"
     ctx = {}
     if "TRY" in fn_name:
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=pd.DataFrame(
-                {"A": pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
-            ),
-            check_dtype=False,
-        )
+        check_query(query, ctx, None, check_dtype=False, use_duckdb=True)
     else:
         with pytest.raises(
             ValueError, match="too many digits to the left of the decimal"
@@ -1382,7 +1362,7 @@ def round_data(request):
         pytest.param(True, id="with_case", marks=pytest.mark.slow),
     ],
 )
-def test_round(round_data, use_case, spark_info, memory_leak_check):
+def test_round(round_data, use_case, memory_leak_check):
     ctx, scale_str, answer = round_data
     if use_case:
         query = f"SELECT CASE WHEN A < -999999 THEN NULL ELSE ROUND(A{scale_str}) END FROM table1"
@@ -1391,10 +1371,10 @@ def test_round(round_data, use_case, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        expected_output=pd.DataFrame({0: answer}),
+        use_duckdb=True,
     )
 
 
@@ -1410,7 +1390,7 @@ def test_floor_ceil(memory_leak_check):
             {"X": [2.71828] * 3 + [123.456] * 3, "P": [1, -1, 3] * 2}
         )
     }
-    expected_output = pd.DataFrame(
+    pd.DataFrame(
         {
             0: [2.0] * 3 + [123.0] * 3,
             1: [3.0] * 3 + [124.0] * 3,
@@ -1424,7 +1404,7 @@ def test_floor_ceil(memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -1461,7 +1441,7 @@ def test_random(use_case, memory_leak_check):
         FROM table2
     """
     ctx = {"TABLE1": pd.DataFrame({"A": np.arange(n)})}
-    answer = pd.DataFrame(
+    pd.DataFrame(
         {
             "MIN": True,
             "MAX": True,
@@ -1478,9 +1458,9 @@ def test_random(use_case, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
         atol=0.1,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
@@ -1491,7 +1471,7 @@ def test_trunc_truncate_single_arg(memory_leak_check):
     t0 = pd.DataFrame({"A": [100, 100.123, 100.5, -100.5, -100.123, -100]})
     ctx = {"TABLE0": t0}
     query = "SELECT TRUNC(A) as trunc_out, TRUNCATE(A) as truncate_out from table0"
-    expected_output = pd.DataFrame(
+    pd.DataFrame(
         {
             "TRUNC_OUT": [100, 100, 100, -100, -100, -100],
             "TRUNCATE_OUT": [100, 100, 100, -100, -100, -100],
@@ -1503,5 +1483,5 @@ def test_trunc_truncate_single_arg(memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )

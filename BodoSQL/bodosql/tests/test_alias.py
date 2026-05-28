@@ -56,7 +56,7 @@ def test_aliasing_numeric(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
+def test_as_on_colnames(join_dataframes, memory_leak_check):
     """
     Tests that the as operator is working correctly for aliasing columns
     """
@@ -92,25 +92,28 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query1,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray1,
+        use_duckdb=True,
     )
     check_query(
         query2,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray2,
+        use_duckdb=True,
     )
     check_query(
         query3,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray3,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
+def test_as_on_tablenames(join_dataframes, memory_leak_check):
     """
     Tests that the as operator is working correctly for aliasing table names
     """
@@ -146,25 +149,28 @@ def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query1,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray1,
+        use_duckdb=True,
     )
     check_query(
         query2,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray2,
+        use_duckdb=True,
     )
     check_query(
         query3,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray3,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
+def test_cyclic_alias(join_dataframes, memory_leak_check):
     """
     Tests that aliasing that could be interpreted as cyclic works as intended
     """
@@ -184,14 +190,15 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check):
+def test_col_aliased_to_tablename(join_dataframes, memory_leak_check):
     """
     Tests that bodosql works correctly when the column names are aliased to table names
     """
@@ -211,13 +218,14 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check):
+def test_table_aliased_to_colname(join_dataframes, memory_leak_check):
     """
     Tests that bodosql works correctly when the table names are aliased to column names
     """
@@ -237,12 +245,13 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
-def test_multi_table_renamed_projection(join_dataframes, spark_info, memory_leak_check):
+def test_multi_table_renamed_projection(join_dataframes, memory_leak_check):
     """
     Test that verifies that aliased projections from two different tables
     behave as expected.
@@ -265,25 +274,28 @@ def test_multi_table_renamed_projection(join_dataframes, spark_info, memory_leak
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray1,
+        use_duckdb=True,
     )
     check_query(
         query2,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray2,
+        use_duckdb=True,
     )
     check_query(
         query3,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray3,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
+def test_implicit_table_alias(join_dataframes, memory_leak_check):
     """
     Test that aliasing tables with the implicit syntax works as intended
     """
@@ -301,19 +313,21 @@ def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray1,
+        use_duckdb=True,
     )
     check_query(
         query2,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray2,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_unreserved_kw(spark_info, memory_leak_check):
+def test_unreserved_kw(memory_leak_check):
     """Test that language/lead/user/method/rank"""
     query = "SELECT t.LANGUAGE, t.LEAD, t.USER, t.METHOD, t.RANK AS A FROM table1 t"
     check_query(
@@ -329,22 +343,14 @@ def test_unreserved_kw(spark_info, memory_leak_check):
                 }
             )
         },
-        spark_info,
-        expected_output=pd.DataFrame(
-            {
-                "A": ["A", "B", "C", "D", "E"],
-                "LEAD": ["A", "B", "C", "D", "E"],
-                "USER": ["A", "B", "C", "D", "E"],
-                "METHOD": ["A", "B", "C", "D", "E"],
-                "RANK": ["A", "B", "C", "D", "E"],
-            }
-        ),
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_unreserved_kw_pt2(spark_info, memory_leak_check):
+def test_unreserved_kw_pt2(memory_leak_check):
     """Test that "OUT", "FILTER", "CONDITION", "TRANSLATION", "POSITION"
     can be columns
     """
@@ -362,22 +368,14 @@ def test_unreserved_kw_pt2(spark_info, memory_leak_check):
                 }
             )
         },
-        spark_info,
-        expected_output=pd.DataFrame(
-            {
-                "OUT": ["A", "B", "C", "D", "E"],
-                "FILTER": ["A", "B", "C", "D", "E"],
-                "CONDITION": ["A", "B", "C", "D", "E"],
-                "TRANSLATION": ["A", "B", "C", "D", "E"],
-                "POSITION": ["A", "B", "C", "D", "E"],
-            }
-        ),
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_unreserved_kw_pt3(spark_info, memory_leak_check):
+def test_unreserved_kw_pt3(memory_leak_check):
     """Test that "ROW_NUMBER", "INTERVAL", "PERCENT", "COUNT", "TRANSLATE", "ROLLUP", "MATCHES", "ABS", "LAG", "MATCH_NUMBER",
     can be columns, aliases, or table names
     """
@@ -396,23 +394,14 @@ def test_unreserved_kw_pt3(spark_info, memory_leak_check):
                 }
             )
         },
-        spark_info,
-        expected_output=pd.DataFrame(
-            {
-                "AB": ["A", "B", "C", "D", "E"],
-                "COUNT": ["A", "B", "C", "D", "E"],
-                "PERCENT": ["A", "B", "C", "D", "E"],
-                "TRANSLATE": ["A", "B", "C", "D", "E"],
-                "ROLLUP": ["A", "B", "C", "D", "E"],
-                "MATCHES": ["A", "B", "C", "D", "E"],
-            }
-        ),
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_unreserved_kw_agg_fns(spark_info, memory_leak_check):
+def test_unreserved_kw_agg_fns(memory_leak_check):
     """Test that no aggregation functions are reserved"""
 
     # Copied from https://docs.snowflake.com/en/sql-reference/functions-aggregation
@@ -497,7 +486,7 @@ def test_unreserved_kw_agg_fns(spark_info, memory_leak_check):
     check_query(
         query,
         {"TABLE1": pd.DataFrame({fn: [0, 1, 2, 3, 4] for fn in agg_fns})},
-        spark_info,
-        expected_output=pd.DataFrame({fn: [0, 1, 2, 3, 4] for fn in agg_fns}),
+        None,
         check_names=False,
+        use_duckdb=True,
     )

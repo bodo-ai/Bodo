@@ -176,12 +176,12 @@ def regexp_strings_df():
         ),
     ],
 )
-def test_regexp_like(regexp_strings_df, args, spark_info, memory_leak_check):
+def test_regexp_like(regexp_strings_df, args, memory_leak_check):
     query, answer = args
     check_query(
         query,
         regexp_strings_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,
@@ -217,7 +217,7 @@ def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_che
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
@@ -262,12 +262,12 @@ def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_che
         ),
     ],
 )
-def test_regexp_count(regexp_strings_df, args, spark_info, memory_leak_check):
+def test_regexp_count(regexp_strings_df, args, memory_leak_check):
     query, answer = args
     check_query(
         query,
         regexp_strings_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,
@@ -548,12 +548,12 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
         ),
     ],
 )
-def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
+def test_regexp_substr(regexp_strings_df, args, memory_leak_check):
     query, answer = args
     check_query(
         query,
         regexp_strings_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,
@@ -633,12 +633,12 @@ def test_regexp_substr(regexp_strings_df, args, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_regexp_instr(regexp_strings_df, args, spark_info, memory_leak_check):
+def test_regexp_instr(regexp_strings_df, args, memory_leak_check):
     query, answer = args
     check_query(
         query,
         regexp_strings_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answer,

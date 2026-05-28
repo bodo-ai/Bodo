@@ -38,9 +38,7 @@ def greatest_least_output_func(row, op):
         return row.min()
 
 
-def test_greatest_integer_literals(
-    basic_df, spark_info, greatest_or_least, memory_leak_check
-):
+def test_greatest_integer_literals(basic_df, greatest_or_least, memory_leak_check):
     """
     tests that Greatest and Least work on integer literals
     """
@@ -56,13 +54,25 @@ def test_greatest_integer_literals(
     FROM
         table1
     """
-    check_query(query1, basic_df, spark_info, check_dtype=False, check_names=False)
-    check_query(query2, basic_df, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query1,
+        basic_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
+    check_query(
+        query2,
+        basic_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
-def test_greatest_float_literals(
-    basic_df, spark_info, greatest_or_least, memory_leak_check
-):
+def test_greatest_float_literals(basic_df, greatest_or_least, memory_leak_check):
     """
     tests that Greatest and Least work on float literals
     """
@@ -81,24 +91,24 @@ def test_greatest_float_literals(
     check_query(
         query1,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         convert_columns_decimal=["output"],
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         convert_columns_decimal=["output"],
+        use_duckdb=True,
     )
 
 
-def test_greatest_string_literals(
-    basic_df, spark_info, greatest_or_least, memory_leak_check
-):
+def test_greatest_string_literals(basic_df, greatest_or_least, memory_leak_check):
     """
     tests that Greatest works on string literals
     """
@@ -114,13 +124,25 @@ def test_greatest_string_literals(
     FROM
         table1
     """
-    check_query(query1, basic_df, spark_info, check_dtype=False, check_names=False)
-    check_query(query2, basic_df, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query1,
+        basic_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
+    check_query(
+        query2,
+        basic_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
-def test_greatest_bool_literals(
-    basic_df, spark_info, greatest_or_least, memory_leak_check
-):
+def test_greatest_bool_literals(basic_df, greatest_or_least, memory_leak_check):
     """
     tests that Greatest works on boolean literals
     """
@@ -130,11 +152,18 @@ def test_greatest_bool_literals(
     FROM
         table1
     """
-    check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 def test_greatest_numeric_columns(
-    bodosql_numeric_types, spark_info, greatest_or_least, memory_leak_check
+    bodosql_numeric_types, greatest_or_least, memory_leak_check
 ):
     """
     tests that Greatest and Least work on numeric columns
@@ -148,14 +177,15 @@ def test_greatest_numeric_columns(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 def test_greatest_string_columns(
-    bodosql_string_types, spark_info, greatest_or_least, memory_leak_check
+    bodosql_string_types, greatest_or_least, memory_leak_check
 ):
     """
     tests that Greatest and Least work on string columns
@@ -167,7 +197,12 @@ def test_greatest_string_columns(
         table1
     """
     check_query(
-        query, bodosql_string_types, spark_info, check_dtype=False, check_names=False
+        query,
+        bodosql_string_types,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -218,7 +253,7 @@ def test_greatest_bool_columns(
     check_query(query, bodosql_boolean_types, None, expected_output=expected_output)
 
 
-def test_greatest_date_literals(spark_info, greatest_or_least, memory_leak_check):
+def test_greatest_date_literals(greatest_or_least, memory_leak_check):
     """
     tests that Greatest works on date literals.
     """
@@ -226,7 +261,14 @@ def test_greatest_date_literals(spark_info, greatest_or_least, memory_leak_check
     SELECT
         {greatest_or_least}(Date '2022-1-1',Date '2022-10-1',Date '2022-1-10')
     """
-    check_query(query, {}, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query,
+        {},
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 def test_greatest_date_columns(
@@ -258,7 +300,7 @@ def test_greatest_date_columns(
     )
 
 
-def test_greatest_timestamp_literals(spark_info, greatest_or_least, memory_leak_check):
+def test_greatest_timestamp_literals(greatest_or_least, memory_leak_check):
     """
     tests that Greatest works on timestamp literals
     """
@@ -266,7 +308,14 @@ def test_greatest_timestamp_literals(spark_info, greatest_or_least, memory_leak_
     SELECT
         {greatest_or_least}(Timestamp '2022-1-1', Timestamp '2022-10-1', Timestamp '2022-1-1 10:35:32')
     """
-    check_query(query, {}, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query,
+        {},
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 def test_greatest_timestamp_columns(
@@ -372,7 +421,7 @@ def test_single_column_least_greatest(greatest_or_least, memory_leak_check):
 
     query = f"SELECT {greatest_or_least}(A) as output FROM table1"
     py_output = pd.DataFrame({"OUTPUT": df.A})
-    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, ctx, None, check_dtype=False, expected_output=py_output)
 
 
 def test_greatest_time_literals(greatest_or_least, memory_leak_check):
@@ -384,16 +433,16 @@ def test_greatest_time_literals(greatest_or_least, memory_leak_check):
         {greatest_or_least}(TO_TIME('17:24:57'), TO_TIME('04:19:46'), TO_TIME('10:35:32'))
     """
     if greatest_or_least == "GREATEST":
-        answer = pd.DataFrame({"A": pd.Series([bodo.types.Time(17, 24, 57)])})
+        pd.DataFrame({"A": pd.Series([bodo.types.Time(17, 24, 57)])})
     else:
-        answer = pd.DataFrame({"A": pd.Series([bodo.types.Time(4, 19, 46)])})
+        pd.DataFrame({"A": pd.Series([bodo.types.Time(4, 19, 46)])})
     check_query(
         query,
         {},
         None,
         check_names=False,
-        expected_output=answer,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 

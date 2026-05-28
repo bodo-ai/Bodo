@@ -387,7 +387,6 @@ def test_coalesce_variable_type_scalars(
 def test_nvl2(memory_leak_check):
     """Tests NVL2 (equivalent to IF(A IS NOT NULL, B, C)"""
     query = "SELECT NVL2(A+B, B+C, C+A) from table1"
-    spark_query = "SELECT IF((A+B) IS NOT NULL, B+C, C+A) from table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -403,7 +402,6 @@ def test_nvl2(memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 
@@ -411,7 +409,6 @@ def test_nvl2(memory_leak_check):
 def test_zeroifnull(memory_leak_check):
     """Tests ZEROIFNULL (same as COALESCE(X, 0))"""
     query = "SELECT ZEROIFNULL(A) from table1"
-    spark_query = "SELECT COALESCE(A, 0) from table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -425,7 +422,6 @@ def test_zeroifnull(memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 
@@ -536,13 +532,11 @@ def test_if_columns(basic_df, memory_leak_check):
 def test_if_scalar(basic_df, memory_leak_check):
     """Checks if function with all scalar values"""
     query = "Select IFF(1 < 2, 7, 31)"
-    spark_query = "Select IF(1 < 2, 7, 31)"
     check_query(
         query,
         basic_df,
         None,
         check_names=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 
@@ -550,9 +544,6 @@ def test_if_scalar(basic_df, memory_leak_check):
 def test_if_dt(memory_leak_check):
     """Checks if function with datetime values"""
     query = "Select IF(YEAR(A) < 2010, makedate(2010, 1), A) FROM table1"
-    equivalent_spark_query = (
-        "Select IF(YEAR(A) < 2010, make_date(2010, 1, 1), A) FROM table1"
-    )
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -573,7 +564,6 @@ def test_if_dt(memory_leak_check):
         ctx,
         None,
         check_names=False,
-        equivalent_spark_query=equivalent_spark_query,
         use_duckdb=True,
     )
 
@@ -583,14 +573,12 @@ def test_if_dt(memory_leak_check):
 def test_if_mixed(basic_df, memory_leak_check):
     """Checks if function with a mix of scalar and column values"""
     query = "Select IFF(B > C, A, -45) from table1"
-    spark_query = "Select IF(B > C, A, -45) from table1"
     check_query(
         query,
         basic_df,
         None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 
@@ -678,14 +666,12 @@ def test_ifnull_columns(
     """Checks ifnull function with all column values"""
 
     query = f"Select {ifnull_equivalent_fn}(A, B) from table1"
-    spark_query = "Select IFNULL(A, B) from table1"
     check_query(
         query,
         bodosql_nullable_numeric_types,
         None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 
@@ -696,14 +682,12 @@ def test_ifnull_scalar(basic_df, ifnull_equivalent_fn, memory_leak_check):
     """Checks ifnull function with all scalar values"""
 
     query = f"Select {ifnull_equivalent_fn}(-1, 45)"
-    spark_query = "Select IFNULL(-1, 45)"
     check_query(
         query,
         basic_df,
         None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 
@@ -718,14 +702,12 @@ def test_ifnull_mixed(
 
     """Checks ifnull function with a mix of scalar and column values"""
     query = f"Select {ifnull_equivalent_fn}(A, 0) from table1"
-    spark_query = "Select IFNULL(A, 0) from table1"
     check_query(
         query,
         bodosql_nullable_numeric_types,
         None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 
@@ -737,14 +719,12 @@ def test_ifnull_case(
 ):
     """Checks ifnull function inside a case statement"""
     query = f"Select CASE WHEN A > B THEN {ifnull_equivalent_fn}(A, C) ELSE B END from table1"
-    spark_query = "Select CASE WHEN A > B THEN IFNULL(A, C) ELSE B END from table1"
     check_query(
         query,
         bodosql_nullable_numeric_types,
         None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 
@@ -756,16 +736,14 @@ def test_ifnull_multitable(
 ):
     """Checks ifnull function with columns from multiple tables"""
     query = "Select IFNULL(table2.B, table1.B) from table1, table2"
-    spark_query = (
-        f"Select {ifnull_equivalent_fn}(table2.B, table1.B) from table1, table2"
-    )
     # Have to use Spark since DuckDB doesn't support NVL on scalars
     check_query(
         query,
         join_dataframes,
         spark_info,
         check_names=False,
-        equivalent_spark_query=spark_query,
+        # equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -937,7 +915,6 @@ def test_nullif_multi_table(join_dataframes, memory_leak_check):
 def test_nullifzero_cols(memory_leak_check):
     """Tests NULLIFZERO (same as NULLIF(X, 0))"""
     query = "SELECT NULLIFZERO(A) from table1"
-    spark_query = "SELECT NULLIF(A, 0) from table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -953,7 +930,6 @@ def test_nullifzero_cols(memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 

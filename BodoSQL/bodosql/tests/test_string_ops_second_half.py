@@ -18,34 +18,22 @@ pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "select A from table1 where contains(A, 'a')",
-                pd.DataFrame({"A": ["alpha", "beta", "zeta"]}),
-            ),
+            "select A from table1 where contains(A, 'a')",
         ),
         pytest.param(
-            (
-                "select B from table1 where contains(B, 'bet')",
-                pd.DataFrame({"B": ["beta"]}),
-            ),
+            "select B from table1 where contains(B, 'bet')",
         ),
         pytest.param(
-            (
-                "select C from table1 where contains(C, 'Â Ê Î')",
-                pd.DataFrame({"C": ["Â Ê Î"]}),
-            ),
+            "select C from table1 where contains(C, 'Â Ê Î')",
         ),
         pytest.param(
-            (
-                "select A, B, C from table1 where contains(C, 'aaaaaaaaa')",
-                pd.DataFrame({"A": [], "B": [], "C": []}).astype(object),
-            ),
+            "select A, B, C from table1 where contains(C, 'aaaaaaaaa')",
         ),
         pytest.param(
-            ("select C, D from table1 where contains(D, X'616263')", pd.DataFrame()),
+            "select C, D from table1 where contains(D, X'616263')",
             marks=pytest.mark.skip(
                 "[BE-3304]: Add support for binary literals in BodoSQL"
             ),
@@ -53,7 +41,7 @@ pytestmark = pytest_slow_unless_codegen
     ],
 )
 @pytest.mark.slow
-def test_contains(args, spark_info, memory_leak_check):
+def test_contains(query, memory_leak_check):
     df = pd.DataFrame(
         {
             "A": ["alpha", "beta", "zeta", "pi", "epsilon"],
@@ -63,29 +51,29 @@ def test_contains(args, spark_info, memory_leak_check):
         }
     )
 
-    query, expected_output = args
     check_query(
         query,
         {"TABLE1": df},
-        spark_info,
+        None,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
-def test_concat_operator_cols(bodosql_string_types, spark_info, memory_leak_check):
+def test_concat_operator_cols(bodosql_string_types, memory_leak_check):
     """Checks that the concat operator is working for columns"""
     query = "select A || B || 'scalar' || C from table1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_concat_operator_scalars(bodosql_string_types, spark_info, memory_leak_check):
+def test_concat_operator_scalars(bodosql_string_types, memory_leak_check):
     """Checks that the concat operator is working for scalar values"""
     query = (
         "select CASE WHEN A > 'A' THEN B || ' case1' ELSE C || ' case2' END from table1"
@@ -93,82 +81,83 @@ def test_concat_operator_scalars(bodosql_string_types, spark_info, memory_leak_c
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_concat_fn_cols(bodosql_string_types, spark_info, memory_leak_check):
+def test_concat_fn_cols(bodosql_string_types, memory_leak_check):
     """Checks that the concat function is working for columns"""
     query = "select CONCAT(A, B, 'scalar', C) from table1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_concat_fn_single_arg(bodosql_string_types, spark_info, memory_leak_check):
+def test_concat_fn_single_arg(bodosql_string_types, memory_leak_check):
     """Checks that the concat function is working for a single argument"""
     query = "select CONCAT(A) from table1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_concat_fn_scalars(bodosql_string_types, spark_info, memory_leak_check):
+def test_concat_fn_scalars(bodosql_string_types, memory_leak_check):
     """Checks that the concat function is working for scalar values"""
     query = "select CASE WHEN A > 'A' THEN CONCAT(B, ' case1') ELSE CONCAT(C, ' case2') END from table1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_concat_ws_single_arg(bodosql_string_types, spark_info, memory_leak_check):
+def test_concat_ws_single_arg(bodosql_string_types, memory_leak_check):
     """Checks that the concat_ws function is working for a single argument"""
     query = "select CONCAT_WS('_', A) from table1"
-    spark_query = "select CONCAT(A) from table1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
-def test_concat_ws_cols(bodosql_string_types, spark_info, memory_leak_check):
+def test_concat_ws_cols(bodosql_string_types, memory_leak_check):
     """Checks that the concat_ws function is working for columns"""
     query = "select CONCAT_WS('_', A, B, C), CONCAT_WS(A, B) from table1"
-    spark_query = "select CONCAT(A, '_', B, '_', C), B from table1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_concat_ws_scalars(bodosql_string_types, spark_info, memory_leak_check):
+def test_concat_ws_scalars(bodosql_string_types, memory_leak_check):
     """Checks that the concat_ws function is working for scalar values"""
     query = "select CASE WHEN A > 'A' THEN CONCAT_WS(' case1 ', B, C, A) ELSE CONCAT_WS(A,B,C) END from table1"
-    spark_query = "select CASE WHEN A > 'A' THEN CONCAT(B, ' case1 ', C, ' case1 ', A) ELSE CONCAT(B, A, C) END from table1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -227,7 +216,7 @@ def test_concat_ws_scalars_binary(bodosql_binary_types, memory_leak_check):
 
 
 def test_string_fns_cols(
-    spark_info, bodosql_string_fn_testing_df, string_fn_info, memory_leak_check
+    bodosql_string_fn_testing_df, string_fn_info, memory_leak_check
 ):
     """tests that the specified string functions work on columns"""
     bodo_fn_name = string_fn_info[0]
@@ -236,25 +225,18 @@ def test_string_fns_cols(
 
     query = f"SELECT {bodo_fn_call} FROM table1"
 
-    if bodo_fn_name in BODOSQL_TO_PYSPARK_FN_MAP:
-        spark_fn_name = BODOSQL_TO_PYSPARK_FN_MAP[bodo_fn_name]
-        spark_fn_call = f"{spark_fn_name}({arglistString})"
-        spark_query = f"SELECT {spark_fn_call} FROM table1"
-    else:
-        spark_query = None
-
     check_query(
         query,
         bodosql_string_fn_testing_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
 def test_string_fns_scalars(
-    spark_info, bodosql_string_fn_testing_df, string_fn_info, memory_leak_check
+    bodosql_string_fn_testing_df, string_fn_info, memory_leak_check
 ):
     """tests that the specified string functions work on Scalars"""
     bodo_fn_name = string_fn_info[0]
@@ -264,20 +246,14 @@ def test_string_fns_scalars(
     retval_2 = string_fn_info[2][1]
 
     query = f"SELECT CASE WHEN {bodo_fn_call} = {retval_1} THEN {retval_2} ELSE {bodo_fn_call} END FROM table1"
-    if bodo_fn_name in BODOSQL_TO_PYSPARK_FN_MAP:
-        spark_fn_name = BODOSQL_TO_PYSPARK_FN_MAP[bodo_fn_name]
-        spark_fn_call = f"{spark_fn_name}({arglistString})"
-        spark_query = f"SELECT CASE WHEN {spark_fn_call} = {retval_1} THEN {retval_2} ELSE {spark_fn_call} END FROM table1"
-    else:
-        spark_query = None
 
     check_query(
         query,
         bodosql_string_fn_testing_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -545,7 +521,7 @@ def test_string_fns_scalar_vector_case(
         ),
     ],
 )
-def test_strcmp(args, spark_info, memory_leak_check):
+def test_strcmp(args, memory_leak_check):
     """Spark doesn't support a BigInt for this function we use an expected output."""
 
     df = pd.DataFrame(
@@ -559,7 +535,7 @@ def test_strcmp(args, spark_info, memory_leak_check):
     check_query(
         query,
         {"T": df},
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_nullable_bodosql=False,
@@ -650,7 +626,7 @@ def test_rtrimmed_length(query, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_strcmp_nonascii(args, spark_info, memory_leak_check):
+def test_strcmp_nonascii(args, memory_leak_check):
     """Spark doesn't support a BigInt for this function we use an expected output."""
 
     df = pd.DataFrame(
@@ -664,7 +640,7 @@ def test_strcmp_nonascii(args, spark_info, memory_leak_check):
     check_query(
         query,
         {"T": df},
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_nullable_bodosql=False,
@@ -813,7 +789,7 @@ def test_substring(query, spark_info, memory_leak_check):
 
 
 @pytest.mark.parametrize("func", ["SUBSTR", "SUBSTRING"])
-def test_substring_suffix(func, spark_info, memory_leak_check):
+def test_substring_suffix(func, memory_leak_check):
     """Test SUBSTR/SUBSTRING with 2 arguments only where length is optional"""
     query = f"SELECT {func}(S, I) FROM table1"
     df = {
@@ -845,63 +821,64 @@ def test_substring_suffix(func, spark_info, memory_leak_check):
     check_query(
         query,
         df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
 
-def test_length(bodosql_string_types, spark_info, memory_leak_check):
+def test_length(bodosql_string_types, memory_leak_check):
     query = "SELECT LENGTH(A) as OUT1 FROM table1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
     query1 = "SELECT LEN(A) as OUT1 FROM table1"
-    spark_query1 = "SELECT LENGTH(A) as OUT1 FROM table1"
     check_query(
         query1,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
-        equivalent_spark_query=spark_query1,
+        use_duckdb=True,
     )
 
 
-def test_length_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_length_binary(bodosql_binary_types, memory_leak_check):
     query = "SELECT LENGTH(A) as OUT1 FROM table1"
     check_query(
         query,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
     query1 = "SELECT LEN(A) as OUT1 FROM table1"
-    spark_query1 = "SELECT LENGTH(A) as OUT1 FROM table1"
     check_query(
         query1,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
-        equivalent_spark_query=spark_query1,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_reverse_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_reverse_binary(bodosql_binary_types, memory_leak_check):
     query = "SELECT REVERSE(A) as OUT1 FROM table1"
     expected_output1 = pd.DataFrame(
         {
@@ -911,7 +888,7 @@ def test_reverse_binary(bodosql_binary_types, spark_info, memory_leak_check):
     check_query(
         query,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
@@ -958,7 +935,7 @@ def test_substring_binary(bodosql_binary_types, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_left_right_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_left_right_binary(bodosql_binary_types, memory_leak_check):
     query1 = "SELECT LEFT(B,3) as OUT1, RIGHT(B,3) as OUT2 FROM table1"
     query2 = "SELECT LEFT(A,10) as OUT1, RIGHT(C,10) as OUT2 FROM table1"
 
@@ -977,7 +954,7 @@ def test_left_right_binary(bodosql_binary_types, spark_info, memory_leak_check):
     check_query(
         query1,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
@@ -986,7 +963,7 @@ def test_left_right_binary(bodosql_binary_types, spark_info, memory_leak_check):
     check_query(
         query2,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
@@ -994,7 +971,7 @@ def test_left_right_binary(bodosql_binary_types, spark_info, memory_leak_check):
     )
 
 
-def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_lpad_rpad_binary(bodosql_binary_types, memory_leak_check):
     query1 = "SELECT LEFT(B,3) as OUT1, RPAD(A, 6, LEFT(B, 3)) as OUT2 FROM table1"
     query2 = "SELECT RIGHT(B,3) as OUT1, LPAD(A, 6, RIGHT(B, 3)) as OUT2 FROM table1"
 
@@ -1014,7 +991,7 @@ def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
     check_query(
         query1,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
@@ -1023,7 +1000,7 @@ def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
     check_query(
         query2,
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
@@ -1073,9 +1050,7 @@ def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_startswith_endswith(
-    startswith, table, answer, use_case, spark_info, memory_leak_check
-):
+def test_startswith_endswith(startswith, table, answer, use_case, memory_leak_check):
     if use_case:
         query = f"SELECT CASE WHEN {'STARTSWITH' if startswith else 'ENDSWITH'}(A, B) THEN 1 ELSE 0 END FROM {table}"
         answer = pd.DataFrame({0: [int(b) for b in answer[0]]})
@@ -1100,7 +1075,7 @@ def test_startswith_endswith(
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
@@ -1195,11 +1170,10 @@ def test_startswith_endswith(
                 }
             ),
             id="inject_delete-binary",
-            marks=pytest.mark.skip("TODO: fix for Pandas 3"),
         ),
     ],
 )
-def test_insert(calculation, table, answer, case, spark_info, memory_leak_check):
+def test_insert(calculation, table, answer, case, memory_leak_check):
     if case:
         query = f"SELECT CASE WHEN {calculation} IS NULL THEN -1 ELSE LENGTH({calculation}) END FROM {table}"
         answer = pd.DataFrame(
@@ -1264,7 +1238,7 @@ def test_insert(calculation, table, answer, case, spark_info, memory_leak_check)
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
@@ -1317,22 +1291,11 @@ def test_insert(calculation, table, answer, case, spark_info, memory_leak_check)
         ),
     ],
 )
-def test_position(calculation, table, case, spark_info, memory_leak_check):
+def test_position(calculation, table, case, memory_leak_check):
     if case:
         query = f"SELECT CASE WHEN {calculation} IS NULL THEN -1 ELSE {calculation} END FROM {table}"
     else:
         query = f"SELECT {calculation} FROM {table}"
-
-    # Spark has POSITION but not CHARINDEX, so change the function name for it
-    spark_query = query
-    spark_query = spark_query.replace("CHARINDEX", "POSITION")
-
-    # For some reason, Spark's POSITION handles nulls weirdly when there are 3
-    # arguments so manually outputing null is required
-    spark_query = spark_query.replace(
-        "POSITION(A, B, C)",
-        "CASE WHEN A IS NULL OR B IS NULL OR C IS NULL THEN NULL ELSE POSITION(A, B, C) END",
-    )
 
     ctx = {
         "STR_TABLE": pd.DataFrame(
@@ -1360,11 +1323,11 @@ def test_position(calculation, table, case, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         sort_output=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -1378,7 +1341,7 @@ def test_replace_two_args_scalar(memory_leak_check):
         None,
         check_names=False,
         is_out_distributed=False,
-        expected_output=pd.DataFrame({"A": ["strg"]}),
+        use_duckdb=True,
     )
 
 
@@ -1394,13 +1357,12 @@ def test_replace_two_args_column(memory_leak_check):
             }
         )
     }
-    expected_output = pd.DataFrame({"A": ["", None, None, "no replace", "zyxxx"] * 4})
     check_query(
         query,
         ctx,
         None,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -1443,7 +1405,7 @@ def test_sha2_scalars(query, output, memory_leak_check):
         None,
         check_names=False,
         is_out_distributed=False,
-        expected_output=pd.DataFrame({"A": pd.Series([output])}),
+        expected_output=output,
     )
 
 
@@ -1474,7 +1436,7 @@ def test_sha2_columns(query, memory_leak_check):
             }
         )
     }
-    output = pd.DataFrame(
+    pd.DataFrame(
         {
             "A": pd.Series(
                 [
@@ -1493,7 +1455,7 @@ def test_sha2_columns(query, memory_leak_check):
         ctx,
         None,
         check_names=False,
-        expected_output=output,
+        use_duckdb=True,
     )
 
 
@@ -1520,7 +1482,7 @@ def test_md5_scalars(query, output, memory_leak_check):
         None,
         check_names=False,
         is_out_distributed=False,
-        expected_output=pd.DataFrame({"A": pd.Series([output])}),
+        use_duckdb=True,
     )
 
 
@@ -1551,7 +1513,7 @@ def test_md5_columns(query, memory_leak_check):
             }
         )
     }
-    output = pd.DataFrame(
+    pd.DataFrame(
         {
             "A": pd.Series(
                 [
@@ -1570,7 +1532,7 @@ def test_md5_columns(query, memory_leak_check):
         ctx,
         None,
         check_names=False,
-        expected_output=output,
+        use_duckdb=True,
     )
 
 
@@ -1923,11 +1885,7 @@ def test_base64_encode_decode(query_fmt, answer, col_fmt, memory_leak_check):
         )
     }
     check_query(
-        query,
-        ctx,
-        None,
-        check_names=False,
-        expected_output=pd.DataFrame({0: answer}),
+        query, ctx, None, check_names=False, expected_output=pd.DataFrame({0: answer})
     )
 
 
@@ -2119,6 +2077,7 @@ def test_binary_pad_2args_errorchecking(func, memory_leak_check):
             None,
             # Pointless output, but must be set
             expected_output=pd.DataFrame(),
+            use_duckdb=True,
         )
 
 
@@ -2170,8 +2129,8 @@ def test_uuid_string_niladic(memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame({0: [10]}),
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 

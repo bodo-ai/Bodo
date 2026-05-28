@@ -99,15 +99,15 @@ def bitwise_df():
         ),
     ],
 )
-def test_bitand(args, bitwise_df, spark_info, memory_leak_check):
+def test_bitand(args, bitwise_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         bitwise_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
@@ -182,12 +182,12 @@ def test_bitand(args, bitwise_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_bitor(args, bitwise_df, spark_info, memory_leak_check):
+def test_bitor(args, bitwise_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         bitwise_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=answer,
@@ -265,12 +265,12 @@ def test_bitor(args, bitwise_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_bitxor(args, bitwise_df, spark_info, memory_leak_check):
+def test_bitxor(args, bitwise_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         bitwise_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=answer,
@@ -341,12 +341,12 @@ def test_bitxor(args, bitwise_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_bitnot(args, bitwise_df, spark_info, memory_leak_check):
+def test_bitnot(args, bitwise_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         bitwise_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=answer,
@@ -395,12 +395,12 @@ def test_bitnot(args, bitwise_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_bitshiftleft(args, bitwise_df, spark_info, memory_leak_check):
+def test_bitshiftleft(args, bitwise_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         bitwise_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=answer,
@@ -441,15 +441,15 @@ def test_bitshiftleft(args, bitwise_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_bitshiftright(args, bitwise_df, spark_info, memory_leak_check):
+def test_bitshiftright(args, bitwise_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         bitwise_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
@@ -486,12 +486,12 @@ def test_bitshiftright(args, bitwise_df, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_getbit(args, bitwise_df, spark_info, memory_leak_check):
+def test_getbit(args, bitwise_df, memory_leak_check):
     query, answer = args
     check_query(
         query,
         bitwise_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=answer,

@@ -46,12 +46,13 @@ def alias_preserving_project_join_transpose_queries(request):
 
 @pytest.mark.slow
 def test_alias_preserving_project_join_transpose(
-    simple_join_fixture, spark_info, alias_preserving_project_join_transpose_queries
+    simple_join_fixture, alias_preserving_project_join_transpose_queries
 ):
     """checking for alias bugs with project_unaliased_remove"""
     check_query(
         alias_preserving_project_join_transpose_queries,
         simple_join_fixture,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )

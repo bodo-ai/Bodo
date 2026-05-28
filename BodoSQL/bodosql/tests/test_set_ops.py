@@ -246,7 +246,7 @@ def make_tz_aware_df(tz):
         },
     ],
 )
-def test_union_numeric_cols(numeric_dfs, union_cmds, spark_info, memory_leak_check):
+def test_union_numeric_cols(numeric_dfs, union_cmds, memory_leak_check):
     """
     Test that UNION works for a single numeric column
 
@@ -258,26 +258,43 @@ def test_union_numeric_cols(numeric_dfs, union_cmds, spark_info, memory_leak_che
     - Truncation of float + decimal => float allowed
     """
     query = f"SELECT A FROM table1 {union_cmds} SELECT B FROM table2"
-    check_query(query, numeric_dfs, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query,
+        numeric_dfs,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
-def test_set_ops_numeric_cols(set_ops_dfs, set_ops_cmds, spark_info, memory_leak_check):
+def test_set_ops_numeric_cols(set_ops_dfs, set_ops_cmds, memory_leak_check):
     """
     Test that set ops work for a single numeric column
     """
     query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table2"
-    check_query(query, set_ops_dfs, spark_info, check_dtype=False)
+    check_query(
+        query,
+        set_ops_dfs,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
-def test_set_ops_nullable_many_cols(
-    null_set_dfs, set_ops_cmds, spark_info, memory_leak_check
-):
+def test_set_ops_nullable_many_cols(null_set_dfs, set_ops_cmds, memory_leak_check):
     """
     Test that set ops work for many nullable columns
     """
     query = f"SELECT A, B, C FROM table1 {set_ops_cmds} SELECT C, C, B FROM table1"
-    check_query(query, null_set_dfs, spark_info, check_dtype=False)
+    check_query(
+        query,
+        null_set_dfs,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -333,47 +350,57 @@ def test_set_ops_null_literals(query_cmd, py_output, memory_leak_check):
     )
     ctx = {"TABLE1": df}
     query = f"(SELECT A, B, C from table1) {query_cmd} (SELECT null as A, null as B, null as C)"
-    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
-def test_set_ops_string_cols(
-    bodosql_string_types, set_ops_cmds, spark_info, memory_leak_check
-):
+def test_set_ops_string_cols(bodosql_string_types, set_ops_cmds, memory_leak_check):
     """
     Test that set ops work for string columns
     """
     query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table1"
-    check_query(query, bodosql_string_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_string_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
-def test_set_ops_datetime_cols(
-    bodosql_datetime_types, set_ops_cmds, spark_info, memory_leak_check
-):
+def test_set_ops_datetime_cols(bodosql_datetime_types, set_ops_cmds, memory_leak_check):
     """
     Test that set ops work for datetime columns
     """
     query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table1"
-    check_query(query, bodosql_datetime_types, spark_info, use_duckdb=True)
+    check_query(query, bodosql_datetime_types, None, use_duckdb=True)
 
 
 @pytest.mark.slow
-def test_set_ops_binary_cols(
-    bodosql_binary_types, set_ops_cmds, spark_info, memory_leak_check
-):
+def test_set_ops_binary_cols(bodosql_binary_types, set_ops_cmds, memory_leak_check):
     """
     Test that set ops work for binary columns
     """
     query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table1"
-    check_query(query, bodosql_binary_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_binary_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 # ===== String Restrictions
 
 
-def test_union_string_restrictions(
-    bodosql_string_types, union_cmds, spark_info, memory_leak_check
-):
+def test_union_string_restrictions(bodosql_string_types, union_cmds, memory_leak_check):
     """
     Test that UNION [ALL/DISTINCT] works for string columns when used with restrictions
     """
@@ -384,13 +411,18 @@ def test_union_string_restrictions(
         f"(SELECT C, B, A FROM table1)"
     )
     check_query(
-        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
+        query,
+        bodosql_string_types,
+        None,
+        check_names=False,
+        check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_intersect_string_restrictions(
-    bodosql_string_types, intersect_cmds, spark_info, memory_leak_check
+    bodosql_string_types, intersect_cmds, memory_leak_check
 ):
     """
     Test that INTERSECT [ALL/DISTINCT] works for string columns when used with restrictions
@@ -402,12 +434,17 @@ def test_intersect_string_restrictions(
         f"(SELECT B, C, A FROM table1)"
     )
     check_query(
-        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
+        query,
+        bodosql_string_types,
+        None,
+        check_names=False,
+        check_dtype=False,
+        use_duckdb=True,
     )
 
 
 def test_except_string_restrictions(
-    bodosql_string_types, except_cmds, spark_info, memory_leak_check
+    bodosql_string_types, except_cmds, memory_leak_check
 ):
     """
     Test that EXCEPT/MINUS [ALL] works for string columns when used with restrictions
@@ -417,7 +454,12 @@ def test_except_string_restrictions(
         f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B, A LIMIT 2) "
     )
     check_query(
-        query, bodosql_string_types, spark_info, check_names=False, check_dtype=False
+        query,
+        bodosql_string_types,
+        None,
+        check_names=False,
+        check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -443,7 +485,11 @@ def test_union_tz_aware_cols(union_cmds, representative_tz, memory_leak_check):
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {union_cmds} SELECT B FROM table1"
     check_query(
-        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+        query,
+        ctx,
+        None,
+        session_tz=representative_tz,
+        use_duckdb=True,
     )
 
 
@@ -465,7 +511,11 @@ def test_intersect_tz_aware_cols(intersect_cmds, representative_tz, memory_leak_
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {intersect_cmds} SELECT B FROM table1"
     check_query(
-        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+        query,
+        ctx,
+        None,
+        session_tz=representative_tz,
+        use_duckdb=True,
     )
 
 
@@ -488,7 +538,11 @@ def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check)
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table1"
     check_query(
-        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+        query,
+        ctx,
+        None,
+        session_tz=representative_tz,
+        use_duckdb=True,
     )
 
 
@@ -568,6 +622,6 @@ def test_set_ops_scalars(query, py_output, memory_leak_check):
         {},
         None,
         check_names=False,
-        expected_output=py_output,
         check_dtype=False,
+        use_duckdb=True,
     )

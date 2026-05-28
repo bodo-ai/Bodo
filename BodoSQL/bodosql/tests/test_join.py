@@ -38,9 +38,7 @@ def join_type(request):
 
 
 @pytest.mark.bodosql_cpp
-def test_join(
-    join_dataframes, spark_info, join_type, comparison_ops, memory_leak_check
-):
+def test_join(join_dataframes, join_type, comparison_ops, memory_leak_check):
     """test simple join queries"""
 
     # TODO[BSE-5149]: support non-equi joins in BodoSQL C++ backend
@@ -62,7 +60,7 @@ def test_join(
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
@@ -70,7 +68,7 @@ def test_join(
     )
 
 
-def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
+def test_multitable_join_cond(join_dataframes, memory_leak_check):
     """tests selecting from multiple tables based upon a where clause"""
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
@@ -82,13 +80,14 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
     check_query(
         "select table1.A, table2.B from table1, table2 where table2.B > table2.A",
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
-def test_join_alias(join_dataframes, spark_info, memory_leak_check):
+def test_join_alias(join_dataframes, memory_leak_check):
     """
     Test that checks that joining two tables that share a column name
     can be merged if aliased.
@@ -110,14 +109,15 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
-def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check):
+def test_natural_join(join_dataframes, join_type, memory_leak_check):
     """test simple natural join queries"""
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
@@ -130,7 +130,7 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
@@ -139,7 +139,7 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
 
 
 @pytest.mark.slow
-def test_and_join(join_dataframes, spark_info, memory_leak_check):
+def test_and_join(join_dataframes, memory_leak_check):
     """
     Query that demonstrates that a join with an AND expression
     will merge on a common column, rather than just merge the entire tables.
@@ -155,13 +155,14 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         # TODO[BE-3478]: enable dict-encoded string test when fixed
         use_dict_encoded_strings=False,
+        use_duckdb=True,
     )
 
 
-def test_or_join(join_dataframes, spark_info, memory_leak_check):
+def test_or_join(join_dataframes, memory_leak_check):
     """
     Query that demonstrates that a join with an OR expression and common conds
     will merge on the common cond, rather than just merge the entire tables.
@@ -182,12 +183,13 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=byte_array_cols,
+        use_duckdb=True,
     )
 
 
-def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
+def test_join_types(join_dataframes, join_type, memory_leak_check):
     """test all possible join types"""
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
@@ -200,15 +202,14 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
-def test_join_different_size_tables(
-    join_dataframes, spark_info, join_type, memory_leak_check
-):
+def test_join_different_size_tables(join_dataframes, join_type, memory_leak_check):
     """tests that join operations still works when the dataframes have different sizes"""
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
@@ -225,13 +226,14 @@ def test_join_different_size_tables(
     check_query(
         query,
         copied_join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
-def test_nested_join(join_dataframes, spark_info, memory_leak_check):
+def test_nested_join(join_dataframes, memory_leak_check):
     """tests that nested joins work properly"""
 
     # for context, the nested right join should create a number of null values in table4.A,
@@ -259,14 +261,15 @@ def test_nested_join(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
-def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
+def test_nested_or_join(join_dataframes, memory_leak_check):
     """tests that nested joins work with implicit joins using 'or'"""
 
     # for context, the nested outer join should create a number of null values in table4.A and table4.B,
@@ -291,14 +294,15 @@ def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
-def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
+def test_nested_and_join(join_dataframes, memory_leak_check):
     """tests that nested joins work with implicit joins using 'and'"""
 
     # for context, the nested right join should create a number of null values in table4.A,
@@ -315,13 +319,14 @@ def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
-def test_join_boolean(bodosql_boolean_types, spark_info, join_type, memory_leak_check):
+def test_join_boolean(bodosql_boolean_types, join_type, memory_leak_check):
     """test all possible join types on boolean table"""
 
     newCtx = {
@@ -332,15 +337,14 @@ def test_join_boolean(bodosql_boolean_types, spark_info, join_type, memory_leak_
     check_query(
         query,
         newCtx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
-def test_multi_key_join_types(
-    join_dataframes, spark_info, join_type, memory_leak_check
-):
+def test_multi_key_join_types(join_dataframes, join_type, memory_leak_check):
     """test that for all possible join types "and equality conditions" turn into multi key join"""
     # Note: We don't check the generated code because column ordering isn't deterministic
     # Join code doesn't properly trim the filter yet, so outer joins will drop any NA columns
@@ -349,29 +353,27 @@ def test_multi_key_join_types(
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_trimmed_multi_key_cond_inner_join(
-    join_dataframes, spark_info, memory_leak_check
-):
+def test_trimmed_multi_key_cond_inner_join(join_dataframes, memory_leak_check):
     """test that with inner join, equality conditions that are used in AND become keys and don't appear in the filter."""
     query = "select C, D from table1 inner join table2 on table1.A = table2.A and table1.B < table2.B"
     # Note: We don't check the generated code because column ordering isn't deterministic
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         use_duckdb=True,
     )
 
 
-def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
+def test_nonascii_in_implicit_join(memory_leak_check):
     """
     Tests using non-ascii in an implicit join via select distinct.
     """
@@ -415,7 +417,14 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     GROUP BY s, d
     """
 
-    check_query(query, ctx, spark_info, check_names=False, check_dtype=False)
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 def test_tz_aware_join(representative_tz, memory_leak_check):
@@ -472,19 +481,16 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
         "TABLE1": df,
         "TABLE2": df,
     }
-    py_output = df.merge(df, left_on="A", right_on="B")
-    # Drop nulls to match SQL
-    py_output = py_output[py_output.A_x.notna()]
-    # Add the comparison
-    py_output = py_output[py_output.C_y > py_output.B_x]
-    py_output = py_output[["A_x", "B_y", "C_x", "D_y"]]
-    py_output.columns = ["A", "B", "C", "D"]
     check_query(
-        query, ctx, None, expected_output=py_output, session_tz=representative_tz
+        query,
+        ctx,
+        None,
+        session_tz=representative_tz,
+        use_duckdb=True,
     )
 
 
-def test_join_pow(spark_info, join_type, memory_leak_check):
+def test_join_pow(join_type, memory_leak_check):
     """
     Make sure pow() works inside join conditions
     """
@@ -496,8 +502,22 @@ def test_join_pow(spark_info, join_type, memory_leak_check):
         "ARG1": df1,
         "ARG2": df2,
     }
-    check_query(query1, ctx, spark_info, check_dtype=False, check_names=False)
-    check_query(query2, ctx, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query1,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
+    check_query(
+        query2,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 def test_interval_join_compilation(memory_leak_check):
@@ -541,7 +561,7 @@ def test_interval_join_compilation(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_join_div(spark_info, join_type, memory_leak_check):
+def test_join_div(join_type, memory_leak_check):
     """
     Make sure div operation works inside join conditions
     """
@@ -552,7 +572,13 @@ def test_join_div(spark_info, join_type, memory_leak_check):
         "T1": df1,
         "T2": df2,
     }
-    check_query(query1, ctx, spark_info, check_names=False)
+    check_query(
+        query1,
+        ctx,
+        None,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 @pytest_mark_one_rank
@@ -572,7 +598,12 @@ def test_join_invalid_condition(memory_leak_check):
         match=".* Encountered an unsupported join condition in an outer join that cannot be rewritten",
     ):
         check_query(
-            query1, ctx, None, check_dtype=False, check_names=False, expected_output=1
+            query1,
+            ctx,
+            None,
+            check_dtype=False,
+            check_names=False,
+            use_duckdb=True,
         )
 
 
@@ -596,18 +627,17 @@ def test_join_broadcast_hint(memory_leak_check, capfd):
         "TABLE1": df1,
         "TABLE2": df2,
     }
-    py_output = pd.DataFrame({"OUTPUT": pd.array([2] * 12, dtype="Int64")})
 
     with temp_env_override({"BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1"}):
         check_query(
             query,
             ctx,
             None,
-            expected_output=py_output,
             check_dtype=False,
             check_names=False,
             # Sequential execution won't trigger the "broadcast" message
             only_jit_1DVar=True,
+            use_duckdb=True,
         )
         stdout, stderr = capfd.readouterr()
         if bodo.get_rank() == 0:

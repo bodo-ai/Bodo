@@ -12,6 +12,11 @@ import bodo  # noqa
 
 
 @pytest.mark.slow
-def test_simple(spark_info, memory_leak_check):
+def test_simple(memory_leak_check):
     dataframe_dict = {"TABLE1": pd.DataFrame({"A": [1, 2, 3]})}
-    check_query("select * from table1", dataframe_dict, spark_info)
+    check_query(
+        "select * from table1",
+        dataframe_dict,
+        None,
+        use_duckdb=True,
+    )

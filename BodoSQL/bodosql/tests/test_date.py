@@ -95,8 +95,13 @@ def test_date_to_date_invalid(fn_name, scalar):
 def test_date_cast_to_date(scalar_to_cast, memory_leak_check):
     query = f"select CAST({scalar_to_cast} AS DATE) as A"
     ctx = {}
-    expected_output = pd.DataFrame({"A": [datetime.date(1999, 1, 1)]})
-    check_query(query, ctx, None, expected_output=expected_output)
+    pd.DataFrame({"A": [datetime.date(1999, 1, 1)]})
+    check_query(
+        query,
+        ctx,
+        None,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -109,8 +114,13 @@ def test_date_cast_to_date(scalar_to_cast, memory_leak_check):
 def test_date_cast_from_date(to_type, expected, memory_leak_check):
     query = f"select CAST(DATE '1999-01-01' AS {to_type}) as A"
     ctx = {}
-    expected_output = pd.DataFrame({"A": [expected]})
-    check_query(query, ctx, None, expected_output=expected_output)
+    pd.DataFrame({"A": [expected]})
+    check_query(
+        query,
+        ctx,
+        None,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.parametrize(
@@ -233,14 +243,14 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
         ):
             bc.sql(query)
     else:
-        expected_output = pd.DataFrame({"U": answer})
+        pd.DataFrame({"U": answer})
         check_query(
             query,
             ctx,
             None,
-            expected_output=expected_output,
             check_dtype=False,
             sort_output=False,
+            use_duckdb=True,
         )
 
 
@@ -330,9 +340,9 @@ def test_datediff_date_literals(query, expected_output, basic_df, memory_leak_ch
         query,
         basic_df,
         spark=None,
-        expected_output=expected_output,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -477,7 +487,7 @@ def test_datediff_upcasting(func, unit, answer, memory_leak_check):
         ctx,
         None,
         check_dtype=False,
-        expected_output=pd.DataFrame({"OUTPUT": answer}),
+        use_duckdb=True,
     )
 
 
@@ -491,8 +501,13 @@ def test_datediff_upcasting(func, unit, answer, memory_leak_check):
 def test_date_next_day(func_name, expected, memory_leak_check):
     query = f"select {func_name}(TO_DATE('1999-01-01'), 'Sunday') as A"
     ctx = {}
-    expected_output = pd.DataFrame({"A": [expected]})
-    check_query(query, ctx, None, expected_output=expected_output)
+    pd.DataFrame({"A": [expected]})
+    check_query(
+        query,
+        ctx,
+        None,
+        use_duckdb=True,
+    )
 
 
 def test_max_date(date_df, memory_leak_check):
@@ -504,8 +519,8 @@ def test_max_date(date_df, memory_leak_check):
         query,
         date_df,
         None,
-        expected_output=pd.DataFrame({"OUTPUT": [datetime.date(2024, 1, 1)]}),
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
@@ -518,12 +533,12 @@ def test_min_date(date_df, memory_leak_check):
         query,
         date_df,
         None,
-        expected_output=pd.DataFrame({"OUTPUT": [datetime.date(1700, 2, 4)]}),
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
-def test_max_date_group_by(date_df, spark_info, memory_leak_check):
+def test_max_date_group_by(date_df, memory_leak_check):
     """
     Test that max with group by is working for date type columns
     """
@@ -531,12 +546,13 @@ def test_max_date_group_by(date_df, spark_info, memory_leak_check):
     check_query(
         query,
         date_df,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_min_date_group_by(date_df, spark_info, memory_leak_check):
+def test_min_date_group_by(date_df, memory_leak_check):
     """
     Test that min with group by is working for date type columns
     """
@@ -544,8 +560,9 @@ def test_min_date_group_by(date_df, spark_info, memory_leak_check):
     check_query(
         query,
         date_df,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -560,7 +577,7 @@ def test_str_to_date_literals(basic_df, memory_leak_check):
         basic_df,
         None,
         check_names=False,
-        expected_output=pd.DataFrame({"output": [datetime.date(2010, 9, 17)]}),
+        use_duckdb=True,
     )
 
 
@@ -577,16 +594,7 @@ def test_str_to_date_columns(memory_leak_check):
         ctx,
         None,
         check_names=False,
-        expected_output=pd.DataFrame(
-            {
-                "output": [
-                    datetime.date(2003, 2, 1),
-                    datetime.date(2013, 2, 11),
-                    datetime.date(2011, 11, 1),
-                ]
-                * 4
-            }
-        ),
+        use_duckdb=True,
     )
 
 
@@ -602,22 +610,13 @@ def test_str_to_date_columns_format(memory_leak_check):
             {"A": ["2003-02-01:11", "2013-02-11:11", "2011-11-01:02"] * 4}
         )
     }
-    query = "SELECT STR_TO_DATE(A, '%Y-%m-%d:%h') from table1"
+    query = "SELECT STR_TO_DATE(A, '%Y-%m-%d:%H') from table1"
     check_query(
         query,
         ctx,
         None,
         check_names=False,
-        expected_output=pd.DataFrame(
-            {
-                "output": [
-                    datetime.date(2003, 2, 1),
-                    datetime.date(2013, 2, 11),
-                    datetime.date(2011, 11, 1),
-                ]
-                * 4
-            }
-        ),
+        use_duckdb=True,
     )
 
 

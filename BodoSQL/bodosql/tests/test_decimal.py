@@ -318,13 +318,7 @@ def test_decimal_moment_functions_groupby(query, answer, memory_leak_check):
     ctx = {"TABLE1": df}
 
     with temp_config_override("bodo_use_decimal", True):
-        check_query(
-            query,
-            ctx,
-            None,
-            expected_output=answer,
-            check_dtype=False,
-        )
+        check_query(query, ctx, None, expected_output=answer, check_dtype=False)
 
 
 @pytest.mark.parametrize(
@@ -332,79 +326,26 @@ def test_decimal_moment_functions_groupby(query, answer, memory_leak_check):
     [
         pytest.param(
             "SELECT K, COVAR_POP(D1, D2) as RES FROM TABLE1 GROUP BY K",
-            pd.DataFrame(
-                {
-                    "K": ["A", "B", "C", "D", "E", "F"],
-                    "RES": [
-                        36.666666667,
-                        None,
-                        None,
-                        0,
-                        0,
-                        -47.0391,
-                    ],
-                }
-            ),
             id="covar_pop",
         ),
         pytest.param(
             "SELECT K, COVAR_SAMP(D1, D2) as RES FROM TABLE1 GROUP BY K",
-            pd.DataFrame(
-                {
-                    "K": ["A", "B", "C", "D", "E", "F"],
-                    "RES": [
-                        55.0,
-                        None,
-                        None,
-                        None,
-                        0,
-                        -70.55865,
-                    ],
-                }
-            ),
             id="covar_samp",
         ),
         pytest.param(
             "SELECT K, CORR(D1, D2) as RES FROM TABLE1 GROUP BY K",
-            pd.DataFrame(
-                {
-                    "K": ["A", "B", "C", "D", "E", "F"],
-                    "RES": [
-                        0.9986254289,
-                        None,
-                        None,
-                        None,
-                        None,
-                        -0.2949576235,
-                    ],
-                }
-            ),
             id="corr",
         ),
         pytest.param(
             "SELECT K, COVAR_SAMP(D1, D2) + COVAR_POP(D1, D2) + CORR(D1, D2) as RES FROM TABLE1 GROUP BY K",
-            pd.DataFrame(
-                {
-                    "K": ["A", "B", "C", "D", "E", "F"],
-                    "RES": [
-                        92.665292096,
-                        None,
-                        None,
-                        None,
-                        None,
-                        -117.892707624,
-                    ],
-                }
-            ),
             id="multiple",
         ),
     ],
 )
-def test_decimal_two_arg_moment_functions_groupby(query, answer, memory_leak_check):
+def test_decimal_two_arg_moment_functions_groupby(query, memory_leak_check):
     """
     Tests the correctness of decimal covariance/correlation aggregation
-    functions (with group by) on decimal data. Reference
-    answers calculated from Snowflake.
+    functions (with group by) on decimal data.
     """
     keys = []
     decimals_1 = []
@@ -469,8 +410,8 @@ def test_decimal_two_arg_moment_functions_groupby(query, answer, memory_leak_che
             query,
             ctx,
             None,
-            expected_output=answer,
             check_dtype=False,
+            use_duckdb=True,
         )
 
 
@@ -505,22 +446,13 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         TABLE3.cashflow_group_ids,
         TABLE3.some_col
     """
-    answer = pd.DataFrame(
-        {
-            "group_ids": [1, 2],
-            "amounts": [9.0, 18.0],
-            "cashflow_type_ids": [1, 2],
-            "cashflow_group_ids": [1, 2],
-            "some_col": [1, 2],
-        }
-    )
     check_query(
         query,
         decimal_data,
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
@@ -633,9 +565,7 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=pd.DataFrame(
-            {"RES": pd.array(result, dtype=pd.ArrowDtype(result.type))}
-        ),
+        use_duckdb=True,
     )
 
 
@@ -725,10 +655,8 @@ def test_int_to_decimal(int_data, prec, scale, result, use_case, memory_leak_che
             None,
             check_dtype=False,
             check_names=False,
-            expected_output=pd.DataFrame(
-                {"RES": pd.array(result, dtype=pd.ArrowDtype(result.type))}
-            ),
             sort_output=False,
+            use_duckdb=True,
         )
 
 
@@ -859,8 +787,8 @@ def test_decimal_to_float_cast(memory_leak_check):
         ctx,
         None,
         check_dtype=False,
-        expected_output=pd.DataFrame({"OUTPUT": [0.0, None, 7.5, None, 51.25]}),
         sort_output=False,
+        use_duckdb=True,
     )
 
 
@@ -1352,7 +1280,7 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "df, expr, answer",
+    "df, expr",
     [
         pytest.param(
             pd.DataFrame(
@@ -1370,16 +1298,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "ROUND(D1, 3)",
-            pd.array(
-                [
-                    Decimal("1.235"),
-                    Decimal("5.679"),
-                    Decimal("3"),
-                    Decimal("313.212"),
-                    None,
-                ],
-                dtype=pd.ArrowDtype(pa.decimal128(14, 3)),
-            ),
             id="array-round",
         ),
         pytest.param(
@@ -1398,16 +1316,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "ROUND(D1, 3)",
-            pd.array(
-                [
-                    Decimal("-1.235"),
-                    Decimal("-5.679"),
-                    Decimal("-3"),
-                    Decimal("-313.212"),
-                    None,
-                ],
-                dtype=pd.ArrowDtype(pa.decimal128(14, 3)),
-            ),
             id="array-negative-round",
         ),
         pytest.param(
@@ -1426,16 +1334,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "ROUND(D1, -1)",
-            pd.array(
-                [
-                    Decimal("1520"),
-                    Decimal("63460"),
-                    Decimal("17540"),
-                    Decimal("99310"),
-                    None,
-                ],
-                dtype=pd.ArrowDtype(pa.decimal128(14, 0)),
-            ),
             id="array-round-negative_scale",
         ),
         pytest.param(
@@ -1454,16 +1352,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "ROUND(D1, -1)",
-            pd.array(
-                [
-                    Decimal("-1520"),
-                    Decimal("-63460"),
-                    Decimal("-17540"),
-                    Decimal("-99310"),
-                    None,
-                ],
-                dtype=pd.ArrowDtype(pa.decimal128(14, 0)),
-            ),
             id="array-negative-round-negative_scale",
         ),
         pytest.param(
@@ -1482,16 +1370,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "ROUND(D1, 7)",
-            pd.array(
-                [
-                    Decimal("-1521.2345"),
-                    Decimal("-63455.6789"),
-                    Decimal("-17542.9999"),
-                    Decimal("-99313.2121561"),
-                    None,
-                ],
-                dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
-            ),
             id="array-no_change",
         ),
         pytest.param(
@@ -1510,16 +1388,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "ROUND(D1, 2)",
-            pd.array(
-                [
-                    Decimal("1000"),
-                    Decimal("-1000"),
-                    Decimal("100000"),
-                    Decimal("-100000"),
-                    None,
-                ],
-                dtype=pd.ArrowDtype(pa.decimal128(14, 2)),
-            ),
             id="array-round-propagate",
         ),
         # Case statements
@@ -1539,15 +1407,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 3)::VARCHAR  END",
-            pd.array(
-                [
-                    "1.235",
-                    "5.679",
-                    "3.000",
-                    "313.212",
-                    "",
-                ],
-            ),
             id="array-round-case",
         ),
         pytest.param(
@@ -1566,15 +1425,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 3)::VARCHAR END",
-            pd.array(
-                [
-                    "-1.235",
-                    "-5.679",
-                    "-3.000",
-                    "-313.212",
-                    "",
-                ],
-            ),
             id="array-negative-round-case",
         ),
         pytest.param(
@@ -1593,15 +1443,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, -1)::VARCHAR END",
-            pd.array(
-                [
-                    "1520",
-                    "63460",
-                    "17540",
-                    "99310",
-                    "",
-                ],
-            ),
             id="array-round-negative_scale-case",
         ),
         pytest.param(
@@ -1620,15 +1461,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, -1)::VARCHAR END",
-            pd.array(
-                [
-                    "-1520",
-                    "-63460",
-                    "-17540",
-                    "-99310",
-                    "",
-                ],
-            ),
             id="array-negative-round-negative_scale-case",
         ),
         pytest.param(
@@ -1647,15 +1479,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 7)::VARCHAR END",
-            pd.array(
-                [
-                    "-1521.2345000",
-                    "-63455.6789000",
-                    "-17542.9999000",
-                    "-99313.2121561",
-                    "",
-                ],
-            ),
             id="array-no_change-case",
         ),
         pytest.param(
@@ -1674,20 +1497,11 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 }
             ),
             "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 2)::VARCHAR END",
-            pd.array(
-                [
-                    "1000.00",
-                    "-1000.00",
-                    "100000.00",
-                    "-100000.00",
-                    "",
-                ],
-            ),
             id="array-round-propagate-case",
         ),
     ],
 )
-def test_decimal_rounding(df, expr, answer, spark_info, memory_leak_check):
+def test_decimal_rounding(df, expr, memory_leak_check):
     """
     Tests the correctness of decimal rounding with different scales.
     """
@@ -1698,10 +1512,10 @@ def test_decimal_rounding(df, expr, answer, spark_info, memory_leak_check):
         check_query(
             query,
             ctx,
-            spark_info,
-            expected_output=pd.DataFrame({"RES": answer}),
+            None,
             sort_output=False,
             check_dtype=False,
+            use_duckdb=True,
         )
 
 
@@ -1984,7 +1798,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "df, expr, answer",
+    "df, expr",
     [
         pytest.param(
             pd.DataFrame(
@@ -2003,16 +1817,6 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                 }
             ),
             "TRUNC(D1, 2) :: VARCHAR",
-            pd.array(
-                [
-                    "648.29",
-                    "-152.58",
-                    "-0.15",
-                    "0.52",
-                    "0.00",
-                    None,
-                ],
-            ),
             id="positive_scale",
         ),
         pytest.param(
@@ -2032,16 +1836,6 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                 }
             ),
             "TRUNC(D1) :: VARCHAR",
-            pd.array(
-                [
-                    "648",
-                    "-152",
-                    "0",
-                    "0",
-                    "0",
-                    None,
-                ],
-            ),
             id="no_scale",
         ),
         pytest.param(
@@ -2061,16 +1855,6 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                 }
             ),
             "TRUNC(D1, -2) :: VARCHAR",
-            pd.array(
-                [
-                    "600",
-                    "-100",
-                    "0",
-                    "0",
-                    "0",
-                    None,
-                ],
-            ),
             id="negative_scale",
         ),
         pytest.param(
@@ -2089,20 +1873,11 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                 }
             ),
             "CASE WHEN D1 IS NULL THEN '' ELSE TRUNC(D1, 2)::VARCHAR END",
-            pd.array(
-                [
-                    "999.99",
-                    "-999.99",
-                    "99999.99",
-                    "-99999.99",
-                    "",
-                ],
-            ),
             id="case",
         ),
     ],
 )
-def test_decimal_trunc(df, expr, answer, memory_leak_check):
+def test_decimal_trunc(df, expr, memory_leak_check):
     """
     Tests the correctness of decimal TRUNC with different scales.
     """
@@ -2113,9 +1888,9 @@ def test_decimal_trunc(df, expr, answer, memory_leak_check):
             query,
             ctx,
             None,
-            expected_output=pd.DataFrame({"RES": answer}),
             sort_output=False,
             check_dtype=False,
+            use_duckdb=True,
         )
 
 
@@ -3055,14 +2830,14 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
         ),
     ],
 )
-def test_decimal_median(df, expected, spark_info, memory_leak_check):
+def test_decimal_median(df, expected, memory_leak_check):
     query = "SELECT A, median(B) FROM TABLE1 GROUP BY A"
 
     with temp_config_override("bodo_use_decimal", True):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
             expected_output=expected,
@@ -3263,16 +3038,14 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_decimal_percentile_cont(
-    df, percentile, expected, spark_info, memory_leak_check
-):
+def test_decimal_percentile_cont(df, percentile, expected, memory_leak_check):
     query = f"SELECT A, (PERCENTILE_CONT({percentile}) WITHIN GROUP (ORDER BY B))::VARCHAR AS C FROM TABLE1 GROUP BY A"
 
     with temp_config_override("bodo_use_decimal", True):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
             expected_output=expected,
@@ -3413,19 +3186,17 @@ def test_decimal_percentile_cont(
         ),
     ],
 )
-def test_decimal_percentile_disc(
-    df, percentile, expected, spark_info, memory_leak_check
-):
+def test_decimal_percentile_disc(df, percentile, expected, memory_leak_check):
     query = f"SELECT A, (PERCENTILE_DISC({percentile}) WITHIN GROUP (ORDER BY B))::VARCHAR AS C FROM TABLE1 GROUP BY A"
 
     with temp_config_override("bodo_use_decimal", True):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
-            expected_output=expected,
+            use_duckdb=True,
         )
 
 
@@ -3494,7 +3265,7 @@ def test_decimal_percentile_disc(
         ),
     ],
 )
-def test_decimal_median_error(arr, error_msg, spark_info):
+def test_decimal_median_error(arr, error_msg):
     query = "SELECT A, median(B) FROM TABLE1 GROUP BY A"
 
     with temp_config_override("bodo_use_decimal", True):
@@ -3502,9 +3273,10 @@ def test_decimal_median_error(arr, error_msg, spark_info):
             check_query(
                 query,
                 {"TABLE1": arr},
-                spark_info,
+                None,
                 check_names=False,
                 check_dtype=False,
+                use_duckdb=True,
             )
 
 

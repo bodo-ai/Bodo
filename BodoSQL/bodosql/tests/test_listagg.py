@@ -54,7 +54,7 @@ FROM table1\n"""
     )
 
 
-def test_listagg_no_withing_group_no_sep(listagg_data, spark_info, memory_leak_check):
+def test_listagg_no_within_group_no_sep(listagg_data, spark_info, memory_leak_check):
     """Simple listagg test without sorting."""
 
     spark_equiv_query = """SELECT array_join(collect_list(table1.group_constant_str_col), '') FROM table1 group by key_col"""
@@ -69,7 +69,7 @@ def test_listagg_no_withing_group_no_sep(listagg_data, spark_info, memory_leak_c
 
 
 @pytest.mark.slow
-def test_listagg_no_withing_group_with_sep(listagg_data, spark_info, memory_leak_check):
+def test_listagg_no_within_group_with_sep(listagg_data, spark_info, memory_leak_check):
     spark_equiv_query = """SELECT array_join(collect_list(table1.group_constant_str_col), ', ') FROM table1 group by key_col"""
     check_query(
         "SELECT listagg(group_constant_str_col, ', ') FROM table1 group by key_col",
@@ -82,35 +82,26 @@ def test_listagg_no_withing_group_with_sep(listagg_data, spark_info, memory_leak
 
 
 @pytest.mark.slow
-def test_listagg_no_within_group_with_other_aggregates(
-    listagg_data, spark_info, memory_leak_check
-):
-    spark_equiv_query = """SELECT MAX(group_constant_str_col), key_col, array_join(collect_list(table1.group_constant_str_col), ''), MAX(group_constant_str_col2), array_join(collect_list(table1.group_constant_str_col2), 'å´îøü') FROM table1 group by key_col"""
+def test_listagg_no_within_group_with_other_aggregates(listagg_data, memory_leak_check):
     check_query(
         "SELECT MAX(group_constant_str_col), key_col, listagg(group_constant_str_col), MAX(group_constant_str_col2), listagg(group_constant_str_col2, 'å´îøü') FROM table1 group by key_col",
         listagg_data,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_equiv_query,
+        use_duckdb=True,
     )
 
 
 def test_listagg_within_group_sorting_simple(listagg_data, memory_leak_check):
     """tests a simple withing group sorting with only one call"""
-    expected = pd.DataFrame(
-        {
-            "agg_output_col": ["F, D, B, A, C, E"] * 3,
-        }
-    )
-
     check_query(
         "SELECT listagg(non_constant_str_col, ', ') WITHIN GROUP (ORDER BY order_col_1 DESC NULLS LAST, order_col_2 ASC NULLS FIRST) as agg_output_col FROM table1 group by key_col",
         listagg_data,
-        None,  # Spark info
+        None,
         check_names=False,
         check_dtype=False,
-        expected_output=expected,
+        use_duckdb=True,
     )
 
 
@@ -122,7 +113,7 @@ def test_listagg_within_group_sorting_simple(listagg_data, memory_leak_check):
         pytest.param(False, id="groupby-no_having"),
     ],
 )
-def test_listagg_withing_group_sorting_complex(
+def test_listagg_within_group_sorting_complex(
     listagg_data, with_having, memory_leak_check
 ):
     """Full E2E test for listagg with groupby and with different sorting options"""

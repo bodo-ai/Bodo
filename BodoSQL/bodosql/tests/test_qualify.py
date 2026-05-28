@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
+from bodosql.tests.utils import check_query
 
 # [BE-3894] TODO: refactor this file like how test_rows.py was refactored
 # for window fusion
@@ -42,7 +42,7 @@ pytestmark = pytest_slow_unless_window
         pytest.param("LAG(N, 1, 0) IGNORE NULLS", " > 0", False, id="lag_ignore_nulls"),
     ],
 )
-def test_qualify_no_bounds(func, cmp, use_dummy_frame, spark_info, memory_leak_check):
+def test_qualify_no_bounds(func, cmp, use_dummy_frame, memory_leak_check):
     """
     A test to ensure qualify works for window functions that do not have specified bounds.
 
@@ -74,8 +74,6 @@ def test_qualify_no_bounds(func, cmp, use_dummy_frame, spark_info, memory_leak_c
     if use_dummy_frame:
         order_term += " ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
     bodosql_query = f"SELECT P, O, I from table1 QUALIFY {func} OVER (PARTITION BY P {order_term}) {cmp}"
-    spark_subquery = f"SELECT P, O, I, {func} OVER (PARTITION BY P {order_term}) as window_val from table1"
-    spark_query = f"SELECT P, O, I from ({spark_subquery}) where window_val {cmp}"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -100,11 +98,11 @@ def test_qualify_no_bounds(func, cmp, use_dummy_frame, spark_info, memory_leak_c
     check_query(
         bodosql_query,
         ctx,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
@@ -123,7 +121,7 @@ def test_qualify_no_bounds(func, cmp, use_dummy_frame, spark_info, memory_leak_c
         pytest.param("LAST_VALUE(S)", " IS NOT NULL", "sliding", id="last-string"),
     ],
 )
-def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
+def test_qualify_with_bounds(func, cmp, frame, memory_leak_check):
     """
     A test to ensure qualify works for window functions using window frame bounds.
     Specifically, tests with one of 3 common window frame patterns:
@@ -160,8 +158,6 @@ def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
     elif frame == "sliding":
         order_term += " ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING"
     bodosql_query = f"SELECT P, O from table1 QUALIFY {func} OVER (PARTITION BY P {order_term}) {cmp}"
-    spark_subquery = f"SELECT P, O, {func} OVER (PARTITION BY P {order_term}) as window_val from table1"
-    spark_query = f"SELECT P, O from ({spark_subquery}) where window_val {cmp}"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -182,11 +178,11 @@ def test_qualify_with_bounds(func, cmp, frame, spark_info, memory_leak_check):
     check_query(
         bodosql_query,
         ctx,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
@@ -207,16 +203,16 @@ def test_qualify_timedelta(
         }
     )
     ctx = {"TABLE1": df}
-    answer = df.iloc[[6, 11, 12, 13], [0, 1]]
+    df.iloc[[6, 11, 12, 13], [0, 1]]
 
     check_query(
         query,
         ctx,
         None,
-        expected_output=answer,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
@@ -238,7 +234,7 @@ def test_qualify_timedelta(
 """
 
 
-def test_QUALIFY_eval_order_WHERE(spark_info, memory_leak_check):
+def test_QUALIFY_eval_order_WHERE(memory_leak_check):
     """Ensures that WHERE is evaluated before QUALIFY"""
     df = pd.DataFrame(
         {
@@ -254,24 +250,18 @@ def test_QUALIFY_eval_order_WHERE(spark_info, memory_leak_check):
     # = 2 everywhere
     query = "SELECT A from table1 where A < 3 QUALIFY MAX(A) OVER (PARTITION BY B) = 3"
 
-    expected_output = pd.DataFrame(
-        {
-            "A": [],
-        }
-    )
-
     check_query(
         query,
         ctx,
-        spark_info,
-        expected_output=expected_output,
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
-def test_QUALIFY_eval_order_GROUP_BY_HAVING(spark_info, memory_leak_check):
+def test_QUALIFY_eval_order_GROUP_BY_HAVING(memory_leak_check):
     """Ensures that Group by and HAVING are evaluated before QUALIFY"""
     df = pd.DataFrame(
         {
@@ -289,25 +279,19 @@ def test_QUALIFY_eval_order_GROUP_BY_HAVING(spark_info, memory_leak_check):
     # (GROUP BY A, B HAVING MAX(A) > 3) is just a fancy way of doing WHERE A > 3 in this case
     query = "SELECT A from table1 GROUP BY A, B HAVING MAX(A) > 3 QUALIFY MAX(A) OVER (PARTITION BY B) = 3"
 
-    expected_output = pd.DataFrame(
-        {
-            "A": [],
-        }
-    )
-
     check_query(
         query,
         ctx,
-        spark_info,
-        expected_output=expected_output,
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_QUALIFY_eval_order_DISTINCT(spark_info, memory_leak_check):
+def test_QUALIFY_eval_order_DISTINCT(memory_leak_check):
     """Ensures that DISTINCT is evaluated after QUALIFY"""
     df = pd.DataFrame(
         {
@@ -335,20 +319,18 @@ def test_QUALIFY_eval_order_DISTINCT(spark_info, memory_leak_check):
 
     query = "SELECT DISTINCT A from table1 QUALIFY COUNT(A) OVER (PARTITION BY B) > 3"
 
-    expected_output = pd.DataFrame({"A": [1, 2, 3]})
-
     check_query(
         query,
         ctx,
-        spark_info,
-        expected_output=expected_output,
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
-def test_QUALIFY_eval_order_LIMIT(spark_info, memory_leak_check):
+def test_QUALIFY_eval_order_LIMIT(memory_leak_check):
     """Ensures that LIMIT is evaluated after QUALIFY"""
     df = pd.DataFrame(
         {
@@ -376,21 +358,19 @@ def test_QUALIFY_eval_order_LIMIT(spark_info, memory_leak_check):
     """
     query = "SELECT A from table1 QUALIFY COUNT(A) OVER (PARTITION BY B) <= 3"
 
-    expected_output = pd.DataFrame({"A": [4, 5, 6]})
-
     check_query(
         query,
         ctx,
-        spark_info,
-        expected_output=expected_output,
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_QUALIFY_nested_queries(spark_info, memory_leak_check):
+def test_QUALIFY_nested_queries(memory_leak_check):
     """stress test to ensure that qualify works with nested subqueries"""
 
     table1 = pd.DataFrame(
@@ -407,19 +387,15 @@ def test_QUALIFY_nested_queries(spark_info, memory_leak_check):
     bodosql_query2 = f"SELECT MAX(A) over (PARTITION BY C ORDER BY B, C, A) as x FROM table1 QUALIFY x in ({bodosql_query1})"
     bodosql_query = bodosql_query2
 
-    spark_query_1 = "SELECT * FROM (SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C, B, A) as w FROM table1) WHERE w < 10"
-    spark_query_2 = f"SELECT * FROM (SELECT MAX(A) over (PARTITION BY C ORDER BY B, C, A) as x FROM table1 ) WHERE x in ({spark_query_1})"
-    spark_query = spark_query_2
-
     check_query(
         bodosql_query,
         ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
@@ -480,10 +456,4 @@ def test_qualify_tz_aware(memory_leak_check):
     # Now apply the qualify filter
     filter = py_output["X"] > py_output["A"]
     py_output = py_output[filter]
-    check_query(
-        query,
-        ctx,
-        None,
-        expected_output=py_output,
-        only_jit_1DVar=True,
-    )
+    check_query(query, ctx, None, only_jit_1DVar=True, expected_output=py_output)
