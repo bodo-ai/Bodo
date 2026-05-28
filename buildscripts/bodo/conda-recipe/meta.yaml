@@ -1,3 +1,24 @@
+# Platform requires PyArrow 22 for compatibility with PyDough,
+# https://github.com/bodo-ai/PyDough/blob/85214a31a9212a9ca503751ee62a84a5eaf59f22/pyproject.toml#L24
+{% set pyarrow_version = "22.0" if is_platform else "23.0" %}
+{% if win %}
+    {% set mpi_impl = "impi" %}
+    {% set mpi_build_pkg = "impi-devel" %}
+    {% set mpi_run_pkg = "impi_rt" %}
+{% elif osx %}
+    {% set mpi_impl = "openmpi" %}
+    {% set mpi_build_pkg = "openmpi" %}
+    {% set mpi_run_pkg = "openmpi" %}
+{% elif gpu and not is_platform %}
+    {% set mpi_impl = "openmpi" %}
+    {% set mpi_build_pkg = "openmpi" %}
+    {% set mpi_run_pkg = "openmpi" %}
+{% else %}
+    {% set mpi_impl = "mpich" %}
+    {% set mpi_build_pkg = "mpich" %}
+    {% set mpi_run_pkg = "mpich" %}
+{% endif %}
+
 package:
   name: bodo
   version: {{ BODO_VERSION }}
@@ -48,22 +69,18 @@ requirements:
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24
-    - libarrow =23.0
-    - pyarrow =23.0
+    - libarrow ={{ pyarrow_version }}  # [not win]
+    - pyarrow ={{ pyarrow_version }}
     - libboost-headers          # [not win]
     - libboost-devel            # [win]
     # Corresponding dependency is automatically added in reqs/run.
     - aws-sdk-cpp
     - zstd
 
-    - hdf5 * *mpi_mpich_*       # [not gpu and linux]
-    - hdf5 * *mpi_openmpi_*     # [gpu or osx]
-    - hdf5 * *mpi_impi_*        # [not gpu and win]
+    - hdf5 * *mpi_{{ mpi_impl }}_*
     - h5py
 
-    - mpich                 # [not gpu and linux]
-    - openmpi               # [gpu or osx]
-    - impi-devel            # [not gpu and win]
+    - {{mpi_build_pkg}}
 
     # GPU dependencies
     # This pin is necessary to avoid compatibility issues with 26.02
@@ -80,12 +97,10 @@ requirements:
     - pandas >=2.2
     - fsspec >=2021.09
     - mpi4py >=4.0
-    - pyarrow =23.0
+    - pyarrow ={{ pyarrow_version }}
     - numba >=0.62,<0.66
 
-    - mpich                 # [not gpu and linux]
-    - openmpi               # [gpu or osx]
-    - impi_rt               # [not gpu and win]
+    - {{ mpi_run_pkg }}
 
     - requests
     - zstd
