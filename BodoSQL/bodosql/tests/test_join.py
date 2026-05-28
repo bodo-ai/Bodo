@@ -70,6 +70,7 @@ def test_join(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
     """tests selecting from multiple tables based upon a where clause"""
     if any(
@@ -88,6 +89,7 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_join_alias(join_dataframes, spark_info, memory_leak_check):
     """
     Test that checks that joining two tables that share a column name
@@ -139,6 +141,7 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_and_join(join_dataframes, spark_info, memory_leak_check):
     """
     Query that demonstrates that a join with an AND expression
@@ -161,6 +164,7 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_or_join(join_dataframes, spark_info, memory_leak_check):
     """
     Query that demonstrates that a join with an OR expression and common conds
@@ -231,6 +235,7 @@ def test_join_different_size_tables(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nested_join(join_dataframes, spark_info, memory_leak_check):
     """tests that nested joins work properly"""
 
@@ -266,6 +271,7 @@ def test_nested_join(join_dataframes, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
     """tests that nested joins work with implicit joins using 'or'"""
 
@@ -356,6 +362,7 @@ def test_multi_key_join_types(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_trimmed_multi_key_cond_inner_join(
     join_dataframes, spark_info, memory_leak_check
 ):
@@ -418,6 +425,7 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     check_query(query, ctx, spark_info, check_names=False, check_dtype=False)
 
 
+@pytest.mark.bodosql_cpp
 def test_tz_aware_join(representative_tz, memory_leak_check):
     """
     Test join, including non-equality, on tz_aware data
@@ -500,6 +508,7 @@ def test_join_pow(spark_info, join_type, memory_leak_check):
     check_query(query2, ctx, spark_info, check_dtype=False, check_names=False)
 
 
+@pytest.mark.bodosql_cpp
 def test_interval_join_compilation(memory_leak_check):
     """
     Tests that the Interval Join detection code correctly determines that
@@ -541,6 +550,7 @@ def test_interval_join_compilation(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_join_div(spark_info, join_type, memory_leak_check):
     """
     Make sure div operation works inside join conditions
@@ -583,6 +593,7 @@ def test_join_invalid_condition(memory_leak_check):
 @pytest.mark.skipif(
     "AGENT_NAME" in os.environ, reason="Assertion fails on Azure only [BSE-3585]"
 )
+@pytest.mark.bodosql_cpp
 def test_join_broadcast_hint(memory_leak_check, capfd):
     """
     Test that providing a broadcast hint for a join provides
