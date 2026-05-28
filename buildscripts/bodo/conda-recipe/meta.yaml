@@ -1,6 +1,6 @@
 # Platform requires PyArrow 22 for compatibility with PyDough,
 # https://github.com/bodo-ai/PyDough/blob/85214a31a9212a9ca503751ee62a84a5eaf59f22/pyproject.toml#L24
-{% set pyarrow_version = "22.0" if is_platform else "23.0" %}
+{% set pyarrow_version = "22.0" if is_platform == 'true' else "23.0" %}
 {% if win %}
     {% set mpi_impl = "impi" %}
     {% set mpi_build_pkg = "impi-devel" %}
@@ -9,7 +9,7 @@
     {% set mpi_impl = "openmpi" %}
     {% set mpi_build_pkg = "openmpi" %}
     {% set mpi_run_pkg = "openmpi" %}
-{% elif gpu and not is_platform %}
+{% elif gpu == 'true' and is_platform == 'false' %}
     {% set mpi_impl = "openmpi" %}
     {% set mpi_build_pkg = "openmpi" %}
     {% set mpi_run_pkg = "openmpi" %}
