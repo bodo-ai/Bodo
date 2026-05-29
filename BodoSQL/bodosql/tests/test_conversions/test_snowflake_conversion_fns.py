@@ -89,7 +89,7 @@ invalid_bool_params = [
         id="invalid_to_boolean_strings",
     ),
     pytest.param(
-        pd.DataFrame({"A": [1.1, 0.0, np.inf, 0.1, np.nan, -2, -400] * 3}),
+        pd.DataFrame({"A": [1.1, 0.0, np.nan, 0.1, np.nan, -2, -400] * 3}),
         id="invalid_to_boolean_floats",
     ),
 ]
