@@ -222,7 +222,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
         ):
             if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
-                cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+                # Integers are assumed in seconds in BodoSQL
+                cast_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(
+                        pa.timestamp("s" if is_int_type(operand_type) else "ns")
+                    )
+                )
                 in_expr = CastExpression(
                     cast_empty_data,
                     in_expr,
