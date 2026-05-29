@@ -8,8 +8,8 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 default =      { features = ["py314", "rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
 azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
-platform =     { features = ["py314", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
-platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
+platform =     { features = ["py314", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "platform" }
+platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "platform" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
@@ -207,18 +207,6 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 [system-requirements]
 macos = "12.0"
 
-[feature.cpu.pypi-dependencies]
-# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
-pyiceberg = ">=0.11"
-# Snowflake (Added to PyPi to ignore Pandas <3 constraint)
-snowflake-connector-python = "*"
-# Following dependencies are added to PyPi to be compatible with Platform conda environments.
-matplotlib = "*"
-psycopg2-binary = "*"
-
-[feature.cpu.pypi-options.dependency-overrides]
-pandas = ">=3.0.0"
-
 [dependencies]
 pip = "*"
 # Core Python Deps
@@ -266,8 +254,19 @@ libutf8proc = "*"
 [feature.py314.dependencies]
 python = "3.14.*"
 
+
 [feature.cpu.dependencies]
 pandas = ">=3.0.0"
+
+[feature.cpu.pypi-dependencies]
+# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
+pyiceberg = ">=0.11"
+# Snowflake (Added to PyPi to ignore Pandas <3 constraint)
+snowflake-connector-python = "*"
+
+[feature.cpu.pypi-options.dependency-overrides]
+pandas = ">=3.0.0"
+
 
 [feature.cudf]
 platforms = ["linux-64"]
@@ -285,6 +284,8 @@ cudf = ">=26.04"
 pandas = ">=2.2.0"
 nvidia-ml-py = "*"
 ucx = "*"
+pyiceberg = ">=0.11"
+snowflake-connector-python = "*"
 
 [feature.open-mpi.dependencies]
 openmpi = { version = "*" }
@@ -311,12 +312,6 @@ hdf5 = { version = "*", build = "*mpi_openmpi_*" }
 hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
 hdf5 = { version = "*", build = "*mpi_impi_*" }
-
-
-# Added to PyPi to ignore Pandas <3 constraint
-[feature.dev.pypi-dependencies]
-# Snowflake Testing
-snowflake-sqlalchemy = "*"
 
 
 [feature.dev.dependencies]
@@ -399,6 +394,10 @@ openai = "*"
 # - pip:
 #   - horovod
 
+[feature.dev.pypi-dependencies]
+# Add matplotlib to PyPi dependencies to avoid conflicts with hdf5 + boost-cpp
+matplotlib = "*"
+
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
 gcc_linux-64 = ">=9"
@@ -422,6 +421,7 @@ clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
 clang-tools = "=19"
 
+
 [feature.platform]
 platforms = ["linux-64"]
 channels = ["conda-forge"]
@@ -434,6 +434,12 @@ jupyter_client = "==8.6.1"
 uvicorn = "*"
 fastapi = "*"
 httpie = "*"
+
+[feature.platform.target.linux-64.pypi-dependencies]
+# Following dependencies are added to PyPi to avoid conflicts with hdf5 + boost-cpp
+matplotlib = "*"
+psycopg2-binary = "*"
+
 
 # MPI Handling
 [feature.local-mpi.target.osx.dependencies]
@@ -451,6 +457,7 @@ platforms = ["linux-64"]
 [feature.platform-mpi.dependencies]
 mpich = { version = "5.*", channel = "conda-forge/label/mpi-external" }
 
+
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
 # Adding clang =19 to prevent build errors from upgrading zstd
@@ -461,6 +468,7 @@ clangxx_osx-64 = "=19"
 [feature.pip.target.osx-arm64.dependencies]
 clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
+
 
 # Azure CI
 [feature.azure.dependencies]
