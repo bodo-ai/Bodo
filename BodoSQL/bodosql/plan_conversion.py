@@ -379,6 +379,19 @@ def java_call_to_python_call(java_call, input_plan):
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
         )
 
+    if operator_class_name == "SqlNullPolicyFunction":
+        # Map Calcite basic functions to Bodo expressions
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
+        # function name as string (e.g., "POWER", "SQRT")
+        func_name = op.getName().upper()
+
+        if func_name == "POW" and len(op_exprs) == 2:
+            left = op_exprs[0]
+            right = op_exprs[1]
+            out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
+            return ArithOpExpression(out_empty, left, right, "__pow__")
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
