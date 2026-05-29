@@ -681,15 +681,13 @@ def test_filter_datetime(datapath, op):
             {"items": []},
             None,
             0,
-            marks=pytest.mark.skip(reason="Existing minor Bodo difference"),
+            marks=pytest.mark.skip(
+                reason="Bodo does not currently retain indices when there are no columns"
+            ),
         ),
-        pytest.param(
-            {"items": [], "axis": 1},
-            None,
-            1,
-            marks=pytest.mark.skip(reason="Currently crashes"),
-        ),
-        pytest.param({"items": ["A1", "2-A"], "axis": 1}, None, 1),
+        pytest.param({"items": ["A1", "2-A"], "axis": 1}, None, 0),
+        pytest.param({"items": ["A_3", "A1"], "axis": "columns"}, None, 0),
+        pytest.param({"items": [2, 5, 1], "axis": 0}, None, 1),
     ],
 )
 def test_filter_method(kwargs, error, epc):

@@ -1477,14 +1477,19 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             self._plan, empty_series, "apply", (func,), apply_kwargs
         )
 
-    @check_args_fallback(supported=["items", "like", "regex"])
+    @check_args_fallback(unsupported="none")
     def filter(
         self,
         items=None,
         like: str | None = None,
         regex: str | None = None,
-        axis: Axis | None = None,
+        axis: Axis | None = None,  # only column axis (1) is supported
     ) -> BodoDataFrame | None:
+        if axis not in [None, 1, "columns"]:
+            raise BodoLibNotImplementedException(
+                "Only filtering columns (axis=1) is supported"
+            )
+
         if sum(x is not None for x in [items, like, regex]) > 1:
             raise TypeError(
                 "Keyword arguments `items`, `like`, or `regex` are mutually exclusive"

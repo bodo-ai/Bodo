@@ -14,7 +14,7 @@ Subset the BodoDataFrame according to the specified (column) labels. This does n
 
 : Exactly one of the above parameters must be provided, else a `TypeError` will be raised.
 
-: Setting the `axis` parameter will trigger a fallback to [`pandas.DataFrame.filter`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.filter.html) if a value other than `None` (representing the column axis) is provided.
+: Setting the `axis` parameter will trigger a fallback to [`pandas.DataFrame.filter`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.filter.html) if a value other than `None`, `1`, or `"columns"` is provided.
 
 <p class="api-header">Returns</p>
 
