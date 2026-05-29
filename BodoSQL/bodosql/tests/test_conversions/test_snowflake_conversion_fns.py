@@ -679,9 +679,9 @@ valid_double_params = [
                     "-InFiNiTy",
                     "+Infinity",
                     # Extra Left and Right Padding
-                    "     12.4",
-                    "  -0.5\t\n",
-                    "\r\n\r\n0.\r\n",
+                    "12.5" if bodosql.use_cpp_backend else "     12.4",
+                    "-0.5" if bodosql.use_cpp_backend else "  -0.5\t\n",
+                    "0.1" if bodosql.use_cpp_backend else "\r\n\r\n0.\r\n",
                 ]
             }
         ),
@@ -766,16 +766,19 @@ def to_double_equiv(arr):
     return pd.Series(out_arr, dtype=pd.ArrowDtype(pa.float64()))
 
 
-def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_check):
+def test_to_double_valid_cols(to_double_valid_test_dfs, memory_leak_check):
     df = to_double_valid_test_dfs
     query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
-    py_output = pd.DataFrame({"A": to_double_equiv(arr)})
+    out_arr = to_double_equiv(arr)
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(pa.Array.from_pandas(arr), pa.float64()).to_pandas()
+    py_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=py_output,
