@@ -522,6 +522,18 @@ def java_join_to_python_join(ctx, java_join):
                 java_expr_to_python_expr(e, planJoinOrCross),
                 "__and__",
             )
+        # We convert a Calcite join with non-equi conditions into an equi join
+        # plus a filter for a few reasons.  First, the dataframe join side does
+        # not have an API that can create a join with non-equi conditions.
+        # Those are only created by the duckdb optimizer so it doesn't hurt to
+        # create the filter on top and left duckdb merge them.  Moreover, in
+        # the CPU backend we convert joins with non-equi conditions back to a
+        # join plus a filter so it is no big deal if duckdb doesn't merge the
+        # join and this filter.  Also, this approach is a nicer match to the
+        # architecture in this file and Calcite as the non-equi conditions
+        # reference the joined table whereas our infrastructure would require
+        # them to reference the build and probe side that is more tedious
+        # work to do the mapping.
         planFilter = LogicalFilter(empty_join_out, planJoinOrCross, non_equi_exprs)
         return planFilter
 
