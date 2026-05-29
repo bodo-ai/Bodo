@@ -302,7 +302,6 @@ hdf5 = { version = "*", build = "*mpi_openmpi_*" }
 zstd = "*"
 boost-cpp = "*"
 aws-sdk-cpp = "*"
-aws-crt-cpp = "*"
 
 [feature.rcpp.target.osx.dependencies]
 hdf5 = { version = "*", build = "*mpi_openmpi_*" }
