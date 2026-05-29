@@ -68,6 +68,7 @@ def test_join(join_dataframes, join_type, comparison_ops, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_multitable_join_cond(join_dataframes, memory_leak_check):
     """tests selecting from multiple tables based upon a where clause"""
     if any(
@@ -87,6 +88,7 @@ def test_multitable_join_cond(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_join_alias(join_dataframes, memory_leak_check):
     """
     Test that checks that joining two tables that share a column name
@@ -139,6 +141,7 @@ def test_natural_join(join_dataframes, join_type, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_and_join(join_dataframes, memory_leak_check):
     """
     Query that demonstrates that a join with an AND expression
@@ -162,6 +165,7 @@ def test_and_join(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_or_join(join_dataframes, memory_leak_check):
     """
     Query that demonstrates that a join with an OR expression and common conds
@@ -233,6 +237,7 @@ def test_join_different_size_tables(join_dataframes, join_type, memory_leak_chec
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nested_join(join_dataframes, memory_leak_check):
     """tests that nested joins work properly"""
 
@@ -269,6 +274,7 @@ def test_nested_join(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nested_or_join(join_dataframes, memory_leak_check):
     """tests that nested joins work with implicit joins using 'or'"""
 
@@ -360,6 +366,7 @@ def test_multi_key_join_types(join_dataframes, join_type, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_trimmed_multi_key_cond_inner_join(join_dataframes, memory_leak_check):
     """test that with inner join, equality conditions that are used in AND become keys and don't appear in the filter."""
     query = "select C, D from table1 inner join table2 on table1.A = table2.A and table1.B < table2.B"
@@ -427,6 +434,7 @@ def test_nonascii_in_implicit_join(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_tz_aware_join(representative_tz, memory_leak_check):
     """
     Test join, including non-equality, on tz_aware data
@@ -520,6 +528,7 @@ def test_join_pow(join_type, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_interval_join_compilation(memory_leak_check):
     """
     Tests that the Interval Join detection code correctly determines that
@@ -561,6 +570,7 @@ def test_interval_join_compilation(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_join_div(join_type, memory_leak_check):
     """
     Make sure div operation works inside join conditions

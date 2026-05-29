@@ -1361,6 +1361,12 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 get_py_isin_arg_as_arrow_array(scalar_func_data.args);
             arrow::compute::SetLookupOptions opts(values_array);
             result = do_arrow_compute_unary(res, "is_in", &opts);
+        } else if (scalar_func_data.arrow_func_name == "assume_timezone") {
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+            arrow::compute::AssumeTimezoneOptions opts(c_str);
+            result = do_arrow_compute_unary(res, "assume_timezone", &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
