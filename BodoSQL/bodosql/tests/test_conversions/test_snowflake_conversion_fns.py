@@ -370,8 +370,19 @@ def test_to_char_scalars(spark_info, func):
     query = f"SELECT CASE WHEN c THEN {func}(a + b) ELSE {func}(d) END FROM table1"
     py_output = (
         (df["A"] + df["B"])
-        .apply(lambda x: np.nan if pd.isna(x) else "inf" if np.isnan(x) else f"{x:.6f}")
-        .where(df["C"], df["D"].apply(lambda x: np.nan if pd.isna(x) else str(x)))
+        .apply(
+            lambda x: np.nan
+            if pd.isna(x)
+            else "inf"
+            if np.isnan(x)
+            else (f"{x}" if bodosql.use_cpp_backend else f"{x:.6f}")
+        )
+        .where(
+            df["C"],
+            pc.cast(pa.Array.from_pandas(df["D"]), pa.string()).to_pandas()
+            if bodosql.use_cpp_backend
+            else df["D"].apply(lambda x: np.nan if pd.isna(x) else str(x)),
+        )
     )
     check_query(
         query,
