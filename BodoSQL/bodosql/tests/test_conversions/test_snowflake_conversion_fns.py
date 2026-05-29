@@ -423,7 +423,10 @@ def test_timestamp_to_char(memory_leak_check):
         "2022/1/1", periods=30, freq="6D5h15min45s", unit="ns"
     ).to_series()
     df = pd.DataFrame({"A": dt_series})
-    expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
+    out_arr = dt_series.dt.strftime("%Y-%m-%d %X%z")
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(pa.Array.from_pandas(dt_series), pa.string()).to_pandas()
+    expected_output = pd.DataFrame({"A": out_arr})
 
     ctx = {"TABLE1": df}
     check_query(
