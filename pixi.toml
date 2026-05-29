@@ -397,6 +397,9 @@ openai = "*"
 [feature.dev.pypi-dependencies]
 # Add matplotlib to PyPi dependencies to avoid conflicts with hdf5 + boost-cpp
 matplotlib = "*"
+# Added to PyPi to ignore Pandas <3 constraint
+# Snowflake Testing
+snowflake-sqlalchemy = "*"
 
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
