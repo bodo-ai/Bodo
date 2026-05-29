@@ -99,7 +99,8 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
         exprs = [
-            java_expr_to_python_expr(e, input_plan) for e in java_plan.getProjects()
+            java_expr_to_python_expr(ctx, e, input_plan)
+            for e in java_plan.getProjects()
         ]
         names = list(java_plan.getRowType().getFieldNames())
         new_schema = pa.schema(
@@ -135,7 +136,7 @@ def java_plan_to_python_plan(ctx, java_plan):
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
-def java_expr_to_python_expr(java_expr, input_plan):
+def java_expr_to_python_expr(ctx, java_expr, input_plan):
     """Convert a BodoSQL Java expression to a DataFrame library expression
     (bodo.pandas.plan.Expression).
     """
@@ -146,15 +147,15 @@ def java_expr_to_python_expr(java_expr, input_plan):
         return make_col_ref_exprs([col_index], input_plan)[0]
 
     if java_class_name == "RexCall":
-        return java_call_to_python_call(java_expr, input_plan)
+        return java_call_to_python_call(ctx, java_expr, input_plan)
 
     if java_class_name == "RexLiteral":
-        return java_literal_to_python_literal(java_expr, input_plan)
+        return java_literal_to_python_literal(ctx, java_expr, input_plan)
 
     raise NotImplementedError(f"Expression {java_class_name} not supported yet")
 
 
-def java_call_to_python_call(java_call, input_plan):
+def java_call_to_python_call(ctx, java_call, input_plan):
     """Convert a BodoSQL Java call expression to a DataFrame library expression
     (bodo.pandas.plan.Expression).
     """
@@ -164,46 +165,92 @@ def java_call_to_python_call(java_call, input_plan):
     if operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator"):
         operands = java_call.getOperands()
         # Calcite may add more than 2 operand for the same binary operator
-        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         kind = op.getKind()
-        return java_binop_to_python_expr(kind, op_exprs)
+        return java_binop_to_python_expr(ctx, kind, op_exprs)
 
     if operator_class_name == "SqlCastFunction" and len(java_call.getOperands()) == 1:
         operand = java_call.getOperands()[0]
         operand_type = operand.getType()
         target_type = java_call.getType()
         SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+        in_expr = java_expr_to_python_expr(ctx, operand, input_plan)
         # TODO[BSE-5154]: support all Calcite casts
 
         # No-op casts
         if operand_type.getSqlTypeName().equals(target_type.getSqlTypeName()):
-            return java_expr_to_python_expr(operand, input_plan)
+            return in_expr
 
         if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
             operand_type
         ):
             # Cast of int to DECIMAL is unnecessary in C++ backend
-            return java_expr_to_python_expr(operand, input_plan)
+            return in_expr
 
         if operand_type.getSqlTypeName().equals(
             SqlTypeName.VARCHAR
         ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
             # No-op cast of VARCHAR (could be different lengths but sometimes equal
             # which seems like a Calcite gap)
-            return java_expr_to_python_expr(operand, input_plan)
+            return in_expr
 
         if operand_type.getSqlTypeName().equals(
             SqlTypeName.DATE
         ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
             # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
-            return java_expr_to_python_expr(operand, input_plan)
+            return in_expr
 
         empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(operand_type.getSqlTypeName()))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type.getSqlTypeName()))
         )
+
+        # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
+        # local_timestamp() function of Arrow (not cast)
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+            return ArrowScalarFuncExpression(
+                empty_data,
+                [in_expr],
+                "local_timestamp",
+                (),
+            )
+
+        # TO_TIMESTAMP_LTZ adds local time zone which is same as assume_timezone()
+        # function of Arrow (not cast)
+        if target_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+        ):
+            if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+                cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+                in_expr = CastExpression(
+                    cast_empty_data,
+                    in_expr,
+                )
+
+            # BodoSQL uses UTC if timezone is not specified
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz)))
+            return ArrowScalarFuncExpression(
+                empty_data,
+                [in_expr],
+                "assume_timezone",
+                (tz,),
+            )
+
+        # Integers are assumed in seconds in BodoSQL
+        if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP
+        ):
+            cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
+            in_expr = CastExpression(
+                cast_empty_data,
+                in_expr,
+            )
+
         return CastExpression(
             empty_data,
-            java_expr_to_python_expr(operand, input_plan),
+            in_expr,
         )
 
     if (
@@ -211,7 +258,7 @@ def java_call_to_python_call(java_call, input_plan):
         and len(java_call.getOperands()) == 1
     ):
         operands = java_call.getOperands()
-        input = java_expr_to_python_expr(operands[0], input_plan)
+        input = java_expr_to_python_expr(ctx, operands[0], input_plan)
         kind = op.getKind()
         SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
@@ -235,11 +282,11 @@ def java_call_to_python_call(java_call, input_plan):
             "Expected CASE operator, got " + kind.toString()
         )
 
-        return java_case_to_python_case(operands, input_plan)
+        return java_case_to_python_case(ctx, operands, input_plan)
 
     if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
         operands = java_call.getOperands()
-        input = java_expr_to_python_expr(operands[0], input_plan)
+        input = java_expr_to_python_expr(ctx, operands[0], input_plan)
         kind = op.getKind()
         SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
@@ -256,7 +303,7 @@ def java_call_to_python_call(java_call, input_plan):
         and len(java_call.getOperands()) == 1
     ):
         operands = java_call.getOperands()
-        input = java_expr_to_python_expr(operands[0], input_plan)
+        input = java_expr_to_python_expr(ctx, operands[0], input_plan)
         func_name = op.getName().upper()
 
         if func_name == "YEAR":
@@ -269,7 +316,7 @@ def java_call_to_python_call(java_call, input_plan):
 
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
-        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         # Unify data types to match output type of coalesce (e.g. int8 + int32 -> int32)
         out_col_name = op_exprs[0].empty_data.columns[0]
         in_schemas = [
@@ -309,7 +356,7 @@ def java_call_to_python_call(java_call, input_plan):
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
         operands = java_call.getOperands()
-        op_exprs = [java_expr_to_python_expr(o, input_plan) for o in operands]
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         # function name as string (e.g., "POWER", "SQRT")
         func_name = op.getName().upper()
 
@@ -366,7 +413,7 @@ def java_call_to_python_call(java_call, input_plan):
 
         if func_name == "IFF" and len(op_exprs) == 3:
             # IFF is equivalent to CASE with single WHEN
-            return java_case_to_python_case(operands, input_plan)
+            return java_case_to_python_case(ctx, operands, input_plan)
 
         if func_name == "NULLIF" and len(op_exprs) == 2:
             return ArrowScalarFuncExpression(
@@ -384,14 +431,14 @@ def java_call_to_python_call(java_call, input_plan):
     )
 
 
-def java_binop_to_python_expr(kind, op_exprs):
+def java_binop_to_python_expr(ctx, kind, op_exprs):
     """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
 
     left = op_exprs[0]
 
     # Calcite may add more than 2 operand for the same binary operator
     if len(op_exprs) > 2:
-        right = java_binop_to_python_expr(kind, op_exprs[1:])
+        right = java_binop_to_python_expr(ctx, kind, op_exprs[1:])
     else:
         right = op_exprs[1]
 
@@ -448,19 +495,19 @@ def java_binop_to_python_expr(kind, op_exprs):
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
-def java_case_to_python_case(operands, input_plan):
+def java_case_to_python_case(ctx, operands, input_plan):
     """Convert a BodoSQL Java CASE operator call to a DataFrame library CaseExpression.
     operands has the form [when1, then1, when2, then2, ..., else].
     """
     assert len(operands) >= 3, "CASE operator should have at least 3 operands"
     assert len(operands) % 2 == 1, "CASE operator should have an odd number of operands"
-    when_expr = java_expr_to_python_expr(operands[0], input_plan)
-    then_expr = java_expr_to_python_expr(operands[1], input_plan)
+    when_expr = java_expr_to_python_expr(ctx, operands[0], input_plan)
+    then_expr = java_expr_to_python_expr(ctx, operands[1], input_plan)
 
     if len(operands) > 3:
-        else_expr = java_case_to_python_case(operands[2:], input_plan)
+        else_expr = java_case_to_python_case(ctx, operands[2:], input_plan)
     else:
-        else_expr = java_expr_to_python_expr(operands[2], input_plan)
+        else_expr = java_expr_to_python_expr(ctx, operands[2], input_plan)
 
     return CaseExpression(then_expr.empty_data, when_expr, then_expr, else_expr)
 
@@ -564,11 +611,11 @@ def java_rtjf_to_python_rtjf(ctx, java_plan):
 def java_filter_to_python_filter(ctx, java_filter):
     """Convert a BodoSQL Java filter plan to a Python filter plan."""
     input_plan = java_plan_to_python_plan(ctx, java_filter.getInput())
-    condition = java_expr_to_python_expr(java_filter.getCondition(), input_plan)
+    condition = java_expr_to_python_expr(ctx, java_filter.getCondition(), input_plan)
     return LogicalFilter(input_plan.empty_data, input_plan, condition)
 
 
-def java_literal_to_python_literal(java_literal, input_plan):
+def java_literal_to_python_literal(ctx, java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type = java_literal.getType()
@@ -578,7 +625,7 @@ def java_literal_to_python_literal(java_literal, input_plan):
 
     if java_literal.getTypeName().equals(SqlTypeName.NULL):
         dummy_empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type_name))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, lit_type_name))
         )
         return NullExpression(dummy_empty_data, input_plan, 0)
 
@@ -639,7 +686,7 @@ def java_literal_to_python_literal(java_literal, input_plan):
         or lit_type_name.equals(SqlTypeName.BIGINT)
     ):
         dummy_empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(lit_type_name))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, lit_type_name))
         )
         return ConstantExpression(
             dummy_empty_data, input_plan, java_literal.getValue2()
@@ -907,9 +954,11 @@ def java_values_to_python_values(ctx, java_plan):
 
     data = []
     for row in rows:
-        data.append([java_literal_to_python_literal(e, None).value for e in row])
+        data.append([java_literal_to_python_literal(ctx, e, None).value for e in row])
 
-    pa_schema = pa.schema([java_field_to_pa_field(f) for f in row_type.getFieldList()])
+    pa_schema = pa.schema(
+        [java_field_to_pa_field(ctx, f) for f in row_type.getFieldList()]
+    )
 
     df = pd.DataFrame()
     for i, name in enumerate(pa_schema.names):
@@ -921,16 +970,16 @@ def java_values_to_python_values(ctx, java_plan):
     return bd.from_pandas(df)._plan
 
 
-def java_field_to_pa_field(java_field):
+def java_field_to_pa_field(ctx, java_field):
     """Convert a Calcite RelDataTypeField to a PyArrow field."""
     name = java_field.getName()
     java_type = java_field.getType()
     type_name = java_type.getSqlTypeName()
 
-    return pa.field(name, sql_type_to_pa_type(type_name))
+    return pa.field(name, sql_type_to_pa_type(ctx, type_name))
 
 
-def sql_type_to_pa_type(sql_type_name):
+def sql_type_to_pa_type(ctx, sql_type_name):
     """Convert a Calcite SqlTypeName to a PyArrow data type."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
 
@@ -955,10 +1004,9 @@ def sql_type_to_pa_type(sql_type_name):
     if sql_type_name.equals(SqlTypeName.TIMESTAMP):
         return pa.timestamp("ns")
     if sql_type_name.equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE):
-        # BodoSQL doesn't preserve time zone info for TIMESTAMP_WITH_LOCAL_TIME_ZONE, so
-        # we treat it the same as TIMESTAMP in C++ backend and handle time zones using
-        # other information if needed.
-        return pa.timestamp("ns")
+        # BodoSQL uses UTC if timezone is not specified
+        tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+        return pa.timestamp("ns", tz=tz)
     if sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
         return pa.duration("ns")
     if sql_type_name.equals(SqlTypeName.BOOLEAN):
