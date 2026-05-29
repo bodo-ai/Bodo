@@ -317,7 +317,11 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
     arr = df["A"]
     if is_float_dtype(arr):
         py_output = arr.apply(
-            lambda x: np.nan if pd.isna(x) else "inf" if np.isnan(x) else f"{x:.6f}"
+            lambda x: np.nan
+            if pd.isna(x)
+            else "inf"
+            if np.isnan(x)
+            else (f"{x}" if bodosql.use_cpp_backend else f"{x:.6f}")
         )
     elif is_bool_dtype(arr):
         py_output = arr.apply(
