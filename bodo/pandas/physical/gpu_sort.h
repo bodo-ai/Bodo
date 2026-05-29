@@ -108,8 +108,9 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
             }
             auto& bce =
                 order.expression->Cast<duckdb::BoundColumnRefExpression>();
-            key_indices.push_back(static_cast<cudf::size_type>(col_ref_map[{
-                bce.binding.table_index, bce.binding.column_index}]));
+            key_indices.push_back(static_cast<cudf::size_type>(
+                col_ref_map_lookup(col_ref_map, bce.binding.table_index,
+                                   bce.binding.column_index)));
         }
 
         this->cuda_sort_state = std::make_unique<CudaSortState>(

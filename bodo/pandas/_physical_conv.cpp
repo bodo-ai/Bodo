@@ -952,16 +952,41 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
         this->active_pipeline->getPrevOpOutputSchema();
 
 #ifdef USE_CUDF
-    std::shared_ptr<PhysicalGPUJoin> physical_join;
-    physical_join = std::make_shared<PhysicalGPUJoin>(op, build_table_schema,
-                                                      probe_table_schema);
+    std::variant<std::shared_ptr<PhysicalJoin>,
+                 std::shared_ptr<PhysicalGPUJoin>>
+        physical_join;
+    if (node_run_on_gpu(op)) {
+        physical_join = std::make_shared<PhysicalGPUJoin>(
+            op, build_table_schema, probe_table_schema);
+    } else {
+        physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
+                                                       probe_table_schema);
+    }
 #else   // USE_CUDF
     auto physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
                                                         probe_table_schema);
 #endif  // USE_CUDF
-    std::shared_ptr<Pipeline> done_pipeline =
-        rhs_builder.active_pipeline->Build(physical_join);
+
+    std::shared_ptr<Pipeline> done_pipeline;
+#ifdef USE_CUDF
+    std::visit(
+        [&](auto& vop) {
+            done_pipeline = rhs_builder.active_pipeline->Build(vop);
+        },
+        physical_join);
+#else   // USE_CUDF
+    done_pipeline = rhs_builder.active_pipeline->Build(physical_join);
+#endif  // USE_CUDF
+    if (!done_pipeline) {
+        throw std::runtime_error("done_pipeline null in CrossProduct.");
+    }
+
+#ifdef USE_CUDF
+    std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
+               physical_join);
+#else   // USE_CUDF
     this->active_pipeline->AddOperator(physical_join);
+#endif  // USE_CUDF
     // Build side pipeline runs before probe side.
     this->active_pipeline->addRunBefore(done_pipeline);
 }
