@@ -250,6 +250,12 @@ rich = "<15.0"
 [target.linux-64.dependencies]
 libutf8proc = "*"
 
+[pypi-dependencies]
+# Added to PyPi to ignore Pandas <3 constraint
+snowflake-connector-python = "*"
+# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
+pyiceberg = ">=0.11"
+
 # Features
 [feature.py314.dependencies]
 python = "3.14.*"
@@ -284,8 +290,6 @@ cudf = ">=26.04"
 pandas = ">=2.2.0"
 nvidia-ml-py = "*"
 ucx = "*"
-pyiceberg = ">=0.11"
-snowflake-connector-python = "*"
 
 [feature.open-mpi.dependencies]
 openmpi = { version = "*" }
