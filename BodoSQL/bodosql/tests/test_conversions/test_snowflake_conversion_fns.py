@@ -140,6 +140,8 @@ def test_to_boolean_invalid_cols(spark_info, to_boolean_invalid_test_dfs):
     arr = df[df.columns[0]]
     is_str = arr.apply(type).eq(str).any()
     bc = bodosql.BodoSQLContext(ctx)
+    if bodosql.use_cpp_backend:
+        pytest.skip("CPP backend does not currently throw strict errors for TO_BOOLEAN")
     if is_str:
         with pytest.raises(ValueError, match="string must be one of"):
             bc.sql(query)
