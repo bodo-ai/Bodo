@@ -5,6 +5,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      bodo-version:
+        description: 'The Bodo version e.g. 2026.5.1'
+        required: false
+        default: ''
   pull_request:
     paths:
       - 'pixi.lock'
@@ -32,6 +37,7 @@ jobs:
       python-version: ${{ matrix.python-version }}
       is-release: ${{ github.event_name == 'release' }}
       arm: false
+      bodo-version: ${{ inputs.bodo-version }}
     secrets: inherit
   bodo-conda-linux-arm:
     strategy:
@@ -45,6 +51,7 @@ jobs:
       python-version: ${{ matrix.python-version }}
       is-release: ${{ github.event_name == 'release' }}
       arm: true
+      bodo-version: ${{ inputs.bodo-version }}
     secrets: inherit
   bodo-conda-mac-and-windows:
     strategy:
@@ -77,6 +84,7 @@ jobs:
       platform-build: true
       arm: false
       is-release: ${{ github.event_name == 'release' }}
+      bodo-version: ${{ inputs.bodo-version }}
     secrets: inherit
   bodo-conda-platform-gpu:
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
@@ -86,6 +94,7 @@ jobs:
       gpu-build: true
       arm: false
       is-release: ${{ github.event_name == 'release' }}
+      bodo-version: ${{ inputs.bodo-version }}
     secrets: inherit
 
   iceberg-conda:
