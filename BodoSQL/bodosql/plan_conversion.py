@@ -560,13 +560,13 @@ def java_join_to_python_join(ctx, java_join):
     if len(nonEquiConds) == 0:
         return planJoinOrCross
     else:
-        non_equi_exprs = java_expr_to_python_expr(nonEquiConds[0], planJoinOrCross)
+        non_equi_exprs = java_expr_to_python_expr(ctx, nonEquiConds[0], planJoinOrCross)
         # And all the conditions together with the first one above.
         for e in nonEquiConds[1:]:
             non_equi_exprs = ConjunctionOpExpression(
                 non_equi_exprs.empty_data,
                 non_equi_exprs,
-                java_expr_to_python_expr(e, planJoinOrCross),
+                java_expr_to_python_expr(ctx, e, planJoinOrCross),
                 "__and__",
             )
         # We convert a Calcite join with non-equi conditions into an equi join
