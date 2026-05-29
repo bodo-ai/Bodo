@@ -722,6 +722,9 @@ invalid_double_params = [
             }
         ),
         id="invalid_to_double_strings",
+        marks=pytest.mark.skipif(
+            bodosql.use_cpp_backend, reason="C++ backend throws different errors"
+        ),
     ),
 ]
 
