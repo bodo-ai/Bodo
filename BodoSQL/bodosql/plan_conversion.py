@@ -253,6 +253,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 in_expr,
             )
 
+        # Parsing strings to binary not supported yet
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.VARCHAR
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.VARBINARY):
+            raise NotImplementedError(
+                "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
+            )
+
         return CastExpression(
             empty_data,
             in_expr,
