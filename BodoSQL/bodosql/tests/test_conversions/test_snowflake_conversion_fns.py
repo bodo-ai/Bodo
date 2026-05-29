@@ -5,8 +5,9 @@ import datetime
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
-from pandas.api.types import is_bool_dtype, is_float_dtype
+from pandas.api.types import is_bool_dtype, is_datetime64_any_dtype, is_float_dtype
 
 import bodosql
 from bodo.types import Time
@@ -327,6 +328,8 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
         py_output = arr.apply(
             lambda x: np.nan if pd.isna(x) else ("true" if x else "false")
         )
+    elif is_datetime64_any_dtype(arr) and bodosql.use_cpp_backend:
+        py_output = pc.cast(pa.Array.from_pandas(arr), pa.string()).to_pandas()
     else:
         py_output = (
             arr.astype(str)
