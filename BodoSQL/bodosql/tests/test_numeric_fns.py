@@ -142,29 +142,33 @@ def double_op_numeric_fn_info(request):
 def test_single_op_numeric_fns_cols(
     single_op_numeric_fn_info,
     bodosql_negative_numeric_types,
+    spark_info,
     memory_leak_check,
 ):
     """tests the behavior of numeric functions with a single argument on columns"""
+    # Have to use Spark since case [single_op_numeric_fn_info4-bodosql_negative_numeric_types6] fails with DuckDB
     fn_name = single_op_numeric_fn_info[0]
-    single_op_numeric_fn_info[1]
+    spark_fn_name = single_op_numeric_fn_info[1]
     arg1 = single_op_numeric_fn_info[2]
     query = f"SELECT {fn_name}({arg1}) from table1"
     if fn_name == "SQUARE":
         if arg1[-5:] == "_INTS" and any(
             bodosql_negative_numeric_types["TABLE1"].dtypes == np.int8
         ):
-            pass
+            spark_query = (
+                f"SELECT CAST({spark_fn_name}({arg1}, 2) AS DOUBLE) from table1"
+            )
         else:
-            pass
+            spark_query = f"SELECT {spark_fn_name}({arg1}, 2) from table1"
     else:
-        pass
+        spark_query = f"SELECT {spark_fn_name}({arg1}) from table1"
     check_query(
         query,
         bodosql_negative_numeric_types,
-        None,
+        spark_info,
         check_names=False,
         check_dtype=False,
-        use_duckdb=True,
+        equivalent_spark_query=spark_query,
     )
 
 
@@ -178,8 +182,6 @@ def test_double_op_numeric_fns_cols(
     arg1 = double_op_numeric_fn_info[2]
     arg2 = double_op_numeric_fn_info[3]
     query = f"SELECT {fn_name}({arg1}, {arg2}) from table1"
-    if fn_name == "TRUNC" or fn_name == "TRUNCATE":
-        pass
     check_query(
         query,
         bodosql_negative_numeric_types,
@@ -204,7 +206,7 @@ def test_double_op_numeric_fns_cols(
         ),
     ],
 )
-def test_width_bucket_cols(query_args, memory_leak_check):
+def test_width_bucket_cols(query_args, spark_info, memory_leak_check):
     t0 = pd.DataFrame(
         {
             "A": [-1, -0.5, 0, 0.5, 1, 2.5, None, 10, 15, 200],
@@ -219,14 +221,13 @@ def test_width_bucket_cols(query_args, memory_leak_check):
     check_query(
         query,
         ctx,
-        None,
+        spark_info,
         check_names=False,
         check_dtype=False,
-        use_duckdb=True,
     )
 
 
-def test_width_bucket_scalars(memory_leak_check):
+def test_width_bucket_scalars(spark_info, memory_leak_check):
     t0 = pd.DataFrame(
         {
             "A": [-1, -0.5, 0, 0.5, 1, 2.5, None, -2, 15, 200],
@@ -240,10 +241,9 @@ def test_width_bucket_scalars(memory_leak_check):
     check_query(
         query,
         ctx,
-        None,
+        spark_info,
         check_names=False,
         check_dtype=False,
-        use_duckdb=True,
     )
 
 
@@ -473,30 +473,32 @@ def test_haversine_calc(memory_leak_check):
 def test_single_op_numeric_fns_scalars(
     single_op_numeric_fn_info,
     bodosql_negative_numeric_types,
+    spark_info,
     memory_leak_check,
 ):
     """tests the behavior of numeric functions with a single argument on scalar values"""
+    # Have to use Spark since case [single_op_numeric_fn_info4-bodosql_negative_numeric_types6] fails with DuckDB
     fn_name = single_op_numeric_fn_info[0]
-    single_op_numeric_fn_info[1]
+    spark_fn_name = single_op_numeric_fn_info[1]
     arg1 = single_op_numeric_fn_info[2]
     if fn_name == "SQUARE":
         if arg1[-5:] == "_INTS" and any(
             bodosql_negative_numeric_types["TABLE1"].dtypes == np.int8
         ):
-            pass
+            spark_query = f"SELECT CASE WHEN CAST({spark_fn_name}({arg1}, 2) AS DOUBLE) = 0 THEN 1 ELSE CAST({spark_fn_name}({arg1}, 2)  AS DOUBLE) END FROM table1"
         else:
-            pass
+            spark_query = f"SELECT CASE WHEN {spark_fn_name}({arg1}, 2) = 0 THEN 1 ELSE {spark_fn_name}({arg1}, 2) END FROM table1"
     else:
-        pass
+        spark_query = f"SELECT CASE WHEN {spark_fn_name}({arg1}) = 0 THEN 1 ELSE {spark_fn_name}({arg1}) END FROM table1"
 
     query = f"SELECT CASE WHEN {fn_name}({arg1}) = 0 THEN 1 ELSE {fn_name}({arg1}) END FROM table1"
     check_query(
         query,
         bodosql_negative_numeric_types,
-        None,
+        spark_info,
         check_names=False,
         check_dtype=False,
-        use_duckdb=True,
+        equivalent_spark_query=spark_query,
     )
 
 
@@ -508,13 +510,10 @@ def test_double_op_numeric_fns_scalars(
 ):
     """tests the behavior of numeric functions with two arguments on scalar values"""
     fn_name = double_op_numeric_fn_info[0]
-    double_op_numeric_fn_info[1]
     arg1 = double_op_numeric_fn_info[2]
     arg2 = double_op_numeric_fn_info[3]
     query = f"SELECT CASE WHEN {fn_name}({arg1}, {arg2}) = 0 THEN -1 ELSE {fn_name}({arg1}, {arg2}) END FROM table1"
-    if fn_name == "TRUNC" or fn_name == "TRUNCATE":
-        pass
-    elif fn_name == "MOD":
+    if fn_name == "MOD":
         # MOD may return null depending on value passed, so EQUAL_NULL should be used, which properly handles null values, unlike '='.
         query = f"SELECT CASE WHEN EQUAL_NULL(MOD({arg1}, {arg2}), 0) THEN -1 ELSE {fn_name}({arg1}, {arg2}) END FROM table1"
     check_query(
@@ -581,24 +580,9 @@ def test_uniform_distribution(is_integer, use_case, memory_leak_check):
     n = 10**6
     ctx = {"TABLE1": pd.DataFrame({"A": np.arange(n)})}
     if is_integer:
-        expected_distinct = 100
-        expected_min = 0
-        expected_max = 99
+        pass
     else:
-        expected_distinct = n
-        expected_min = 0.0
-        expected_max = 99.0
-    pd.DataFrame(
-        {
-            "MIN": expected_min,
-            "MAX": expected_max,
-            "DISTINCT": expected_distinct,
-            "MEAN": 49.5,
-            "STDV": 28.5788,
-            "SKEW": 0.0,
-        },
-        index=np.arange(1),
-    )
+        pass
     np.random.seed(42)
     check_query(
         query,
@@ -623,7 +607,6 @@ def test_uniform_determinism(memory_leak_check):
     """
     query = "SELECT UNIFORM(0, 100, A) FROM table1"
     ctx = {"TABLE1": pd.DataFrame({"A": [1, 2, 3, 1000] * 10})}
-    pd.DataFrame({0: [37, 40, 24, 51] * 10})
     check_query(
         query,
         ctx,
@@ -739,17 +722,6 @@ def test_div0_scalars():
     )
     ctx = {"TABLE1": df}
 
-    def _py_output(df):
-        a, b = df["A"], df["B"]
-        ret = np.empty(a.size)
-        sum_ = a + b
-        ret[a > b] = ((a - b) / sum_)[a > b]
-        ret[b > a] = ((b - a) / sum_)[b > a]
-        ret[pd.isna(a) | pd.isna(b)] = np.nan
-        ret[sum_ == 0] = 0
-        return pd.DataFrame({"OUT": ret})
-
-    _py_output(df)
     query = (
         "SELECT CASE WHEN A > B THEN DIV0(A-B, A+B) ELSE DIV0(B-A, A+B) END FROM table1"
     )
@@ -946,8 +918,8 @@ def test_to_number_scalar(fn_name, values, expected_output, use_case):
         query,
         ctx,
         None,
+        expected_output=pd.DataFrame({"A": [expected_output]}),
         check_dtype=False,
-        use_duckdb=True,
     )
 
 
@@ -980,8 +952,8 @@ def test_to_number_columns(fn_name):
         query,
         ctx,
         None,
+        expected_output=df.astype("int64"),
         check_dtype=False,
-        use_duckdb=True,
     )
 
 
@@ -1034,7 +1006,7 @@ def test_to_number_columns_with_scale(fn_name):
         }
     )
 
-    float_series_out = pd.Series(
+    pd.Series(
         [
             123.456,
             10.3,
@@ -1048,27 +1020,12 @@ def test_to_number_columns_with_scale(fn_name):
             1234567.124,
         ]
     )
-    pd.DataFrame(
-        {
-            "A": df["A"].astype(pd.Int32Dtype()),
-            "B": df["B"].astype(pd.Int16Dtype()),
-            "C": float_series_out,
-            "D": float_series_out,
-        }
-    )
 
     ctx = {"TABLE1": df}
     check_query(
         query,
         ctx,
         None,
-        # From manual inspection, output df.dtypes == expected_output.dtypes,
-        # but I still get a dtypes error from somewhere in _test_equal_guard:
-        # Attributes of DataFrame.iloc[:, 0] (column name="A") are different
-        # Attribute "dtype" are different
-        # [left]:  object
-        # [right]: Int32
-        # For right now, I'm just going to keep check_dtype=False
         check_dtype=False,
         use_duckdb=True,
     )
@@ -1089,7 +1046,7 @@ def test_to_number_optional(fn_name):
             FROM table1 """
 
     df = pd.DataFrame({"A": [str(i) for i in (1, 22, 3, 99, 44, 5, 0)]})
-    pd.DataFrame(
+    expected_output = pd.DataFrame(
         {
             "ORIGIN_ZIP_TYPE": [
                 "USA",
@@ -1108,7 +1065,7 @@ def test_to_number_optional(fn_name):
         query,
         ctx,
         None,
-        use_duckdb=True,
+        expected_output=expected_output,
     )
 
 
@@ -1126,7 +1083,7 @@ def test_to_number_optional_invalid_str(fn_name):
             FROM table1 """
 
     df = pd.DataFrame({"A": [str(i) for i in (1, "$$", 3, 99, 44, 5, "-4#")]})
-    pd.DataFrame(
+    expected_output = pd.DataFrame(
         {
             "ORIGIN_ZIP_TYPE": [
                 "USA",
@@ -1145,7 +1102,7 @@ def test_to_number_optional_invalid_str(fn_name):
             query,
             ctx,
             None,
-            use_duckdb=True,
+            expected_output=expected_output,
         )
     else:
         with pytest.raises(ValueError, match="unable to convert string literal"):
@@ -1188,8 +1145,10 @@ def test_to_number_invalid(fn_name, invalid_str):
             query,
             ctx,
             None,
+            expected_output=pd.DataFrame(
+                {"A": pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
+            ),
             check_dtype=False,
-            use_duckdb=True,
         )
     else:
         with pytest.raises(ValueError, match="unable to convert string literal"):
@@ -1225,7 +1184,15 @@ def test_to_number_out_of_bounds(fn_name, invalid_str):
     query = f"SELECT {fn_name}('{invalid_str}', 4) as A"
     ctx = {}
     if "TRY" in fn_name:
-        check_query(query, ctx, None, check_dtype=False, use_duckdb=True)
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame(
+                {"A": pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
+            ),
+            check_dtype=False,
+        )
     else:
         with pytest.raises(
             ValueError, match="too many digits to the left of the decimal"
@@ -1390,14 +1357,6 @@ def test_floor_ceil(memory_leak_check):
             {"X": [2.71828] * 3 + [123.456] * 3, "P": [1, -1, 3] * 2}
         )
     }
-    pd.DataFrame(
-        {
-            0: [2.0] * 3 + [123.0] * 3,
-            1: [3.0] * 3 + [124.0] * 3,
-            2: [2.7, 0.0, 2.718, 123.4, 120.0, 123.456],
-            3: [2.8, 10.0, 2.719, 123.5, 130.0, 123.456],
-        }
-    )
     check_query(
         query,
         ctx,
@@ -1441,7 +1400,7 @@ def test_random(use_case, memory_leak_check):
         FROM table2
     """
     ctx = {"TABLE1": pd.DataFrame({"A": np.arange(n)})}
-    pd.DataFrame(
+    answer = pd.DataFrame(
         {
             "MIN": True,
             "MAX": True,
@@ -1458,9 +1417,9 @@ def test_random(use_case, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
+        expected_output=answer,
         atol=0.1,
         is_out_distributed=False,
-        use_duckdb=True,
     )
 
 
@@ -1471,7 +1430,7 @@ def test_trunc_truncate_single_arg(memory_leak_check):
     t0 = pd.DataFrame({"A": [100, 100.123, 100.5, -100.5, -100.123, -100]})
     ctx = {"TABLE0": t0}
     query = "SELECT TRUNC(A) as trunc_out, TRUNCATE(A) as truncate_out from table0"
-    pd.DataFrame(
+    expected_output = pd.DataFrame(
         {
             "TRUNC_OUT": [100, 100, 100, -100, -100, -100],
             "TRUNCATE_OUT": [100, 100, 100, -100, -100, -100],
@@ -1483,5 +1442,5 @@ def test_trunc_truncate_single_arg(memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        use_duckdb=True,
+        expected_output=expected_output,
     )

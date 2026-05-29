@@ -1436,20 +1436,6 @@ def test_sha2_columns(query, memory_leak_check):
             }
         )
     }
-    pd.DataFrame(
-        {
-            "A": pd.Series(
-                [
-                    "76b99ab4be8521d78b19bcff7d1078aabeb477bd134f404094c92cd39f051c3e",
-                    None,
-                    "90babc4e5405e215a4bbdfaf13def1687ef0f00ad152705250890400b7a097a3",
-                    "0dc95e29e0583513cb4a75409bcdf9cee72eb647d0ee7f43fa47832b4efd4c23",
-                    "b3af10a334d34a4c6dee44530efd39a1b2564b443d5e617d209cb8921c642f7e",
-                ]
-                * 4,
-            )
-        }
-    )
     check_query(
         query,
         ctx,

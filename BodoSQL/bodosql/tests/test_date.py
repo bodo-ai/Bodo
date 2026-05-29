@@ -73,7 +73,6 @@ def test_date_to_date_scalar(fn_name, scalar, expected, memory_leak_check):
 def test_date_to_date_invalid(fn_name, scalar):
     query = f"select {fn_name}({scalar}) as A"
     ctx = {}
-    bc = bodosql.BodoSQLContext()
     if scalar == "'1999-54-01'":
         # Simplifying scalars now throws an exception at compile time
         error_type = BodoError
@@ -95,7 +94,6 @@ def test_date_to_date_invalid(fn_name, scalar):
 def test_date_cast_to_date(scalar_to_cast, memory_leak_check):
     query = f"select CAST({scalar_to_cast} AS DATE) as A"
     ctx = {}
-    pd.DataFrame({"A": [datetime.date(1999, 1, 1)]})
     check_query(
         query,
         ctx,
@@ -114,7 +112,6 @@ def test_date_cast_to_date(scalar_to_cast, memory_leak_check):
 def test_date_cast_from_date(to_type, expected, memory_leak_check):
     query = f"select CAST(DATE '1999-01-01' AS {to_type}) as A"
     ctx = {}
-    pd.DataFrame({"A": [expected]})
     check_query(
         query,
         ctx,
@@ -243,7 +240,6 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
         ):
             bc.sql(query)
     else:
-        pd.DataFrame({"U": answer})
         check_query(
             query,
             ctx,
@@ -492,16 +488,15 @@ def test_datediff_upcasting(func, unit, answer, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "func_name,expected",
+    "func_name",
     [
-        pytest.param("NEXT_DAY", datetime.date(1999, 1, 3), id="next_day"),
-        pytest.param("PREVIOUS_DAY", datetime.date(1998, 12, 27), id="prev_day"),
+        pytest.param("NEXT_DAY", id="next_day"),
+        pytest.param("PREVIOUS_DAY", id="prev_day"),
     ],
 )
-def test_date_next_day(func_name, expected, memory_leak_check):
+def test_date_next_day(func_name, memory_leak_check):
     query = f"select {func_name}(TO_DATE('1999-01-01'), 'Sunday') as A"
     ctx = {}
-    pd.DataFrame({"A": [expected]})
     check_query(
         query,
         ctx,

@@ -355,10 +355,6 @@ def test_having_repeat_datetime(bodosql_datetime_types, memory_leak_check):
 @pytest.mark.bodosql_cpp
 def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
     """test having clause in datetime queries"""
-    expected_output = bodosql_interval_types["TABLE1"].groupby("A")["B"].count()
-    expected_output = (
-        expected_output[expected_output > 2].to_frame().reset_index(drop=True)
-    )
     check_query(
         "select count(B) from table1 group by a having count(b) > 2",
         bodosql_interval_types,
@@ -492,7 +488,12 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
         query,
         bodosql_interval_types,
         None,
-        use_duckdb=True,
+        expected_output=bodosql_interval_types["TABLE1"]
+        .groupby("A")["B"]
+        .max()
+        .to_frame()
+        .reset_index(drop=True)
+        .rename(columns={"B": "OUTPUT"}),
     )
 
 
@@ -525,7 +526,7 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
     ],
 )
 # @pytest.mark.bodosql_cpp   # agg OTHER_FUNCTION not supported, SqlPostfixOperator not supported IS NULL
-def test_count_if(query, memory_leak_check):
+def test_count_if(query, spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -542,10 +543,9 @@ def test_count_if(query, memory_leak_check):
     check_query(
         query,
         ctx,
-        None,
+        spark_info,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
     )
 
 
@@ -754,7 +754,9 @@ def test_no_group_or_agg(groupby_extension_table, memory_leak_check):
 @pytest.mark.skip(
     reason="Incorrect null handling: https://bodo.atlassian.net/browse/BSE-1972"
 )
-def test_nested_grouping_clauses(groupby_extension_table, memory_leak_check):
+def test_nested_grouping_clauses(
+    groupby_extension_table, spark_info, memory_leak_check
+):
     """
     Tests having nested grouping clauses in groupby. This is not valid SNOWFLAKE
     Syntax, but calcite supports it, so we might as well.
@@ -763,15 +765,19 @@ def test_nested_grouping_clauses(groupby_extension_table, memory_leak_check):
     bodosql_query = (
         "select * from table1 GROUP BY GROUPING SETS ((), rollup(A, D), cube(C, B))"
     )
+    # SparkSQL doesn't allow nested grouping sets
+    # These grouping sets are the expanded version of the above
+    # Note the duplicate grouping sets ARE required for correct behavior
+    spark_query = "select * from table1 GROUP BY GROUPING SETS ((), (A, D), (A), (), (), (C), (B), (C, B))"
 
     check_query(
         bodosql_query,
         groupby_extension_table,
-        None,
+        spark_info,
+        equivalent_spark_query=spark_query,
         check_dtype=False,
         check_names=False,
         sort_output=True,
-        use_duckdb=True,
     )
 
 
@@ -932,14 +938,16 @@ def test_any_value(agg_col, memory_leak_check):
 
     query = f"SELECT K, ANY_VALUE({agg_col}) FROM table1 GROUP BY K"
 
+    answer = ctx["TABLE1"].groupby("K", as_index=False, dropna=False)[agg_col].first()
+
     check_query(
         query,
         ctx,
         None,
+        expected_output=answer,
         check_dtype=False,
         check_names=False,
         convert_columns_to_pandas=True,
-        use_duckdb=True,
     )
 
 
@@ -1125,7 +1133,6 @@ def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
             }
         )
     }
-    pd.DataFrame({0: pd.Series(res, dtype="boolean")})
 
     check_query(
         query,
@@ -1144,7 +1151,6 @@ def test_booland_agg_having(memory_leak_check):
     query = (
         "SELECT G, boolor_agg(B) FROM table1 GROUP BY G HAVING booland_agg(B = True)"
     )
-    pd.DataFrame({"0: ": [4, 5, 6], "1: ": [True, True, True]})
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -1241,7 +1247,7 @@ def test_boolor_agg_output_type(memory_leak_check):
             }
         )
     }
-    pd.DataFrame(
+    expected_output = pd.DataFrame(
         {
             "TOTALS": pd.Series([2], dtype="Int64"),
         }
@@ -1251,8 +1257,8 @@ def test_boolor_agg_output_type(memory_leak_check):
         ctx,
         None,  # Spark info
         check_dtype=False,
+        expected_output=expected_output,
         is_out_distributed=False,
-        use_duckdb=True,
     )
 
 
@@ -1272,7 +1278,7 @@ def test_max_min_tz_aware(memory_leak_check):
     )
     df = pd.DataFrame({"A": S, "ID": ["a", "b", "c", "a", "d"] * 7})
     ctx = {"TABLE1": df}
-    pd.DataFrame(
+    py_output = pd.DataFrame(
         {"OUTPUT1": df.groupby("ID").max()["A"], "OUTPUT2": df.groupby("ID").min()["A"]}
     )
     query = "Select max(A) as output1, min(A) as output2 from table1 group by id"
@@ -1280,7 +1286,7 @@ def test_max_min_tz_aware(memory_leak_check):
         query,
         ctx,
         None,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -1300,7 +1306,7 @@ def test_count_tz_aware(memory_leak_check):
     )
     df = pd.DataFrame({"A": S, "ID": ["a", "b", "c", "a", "d"] * 7})
     ctx = {"TABLE1": df}
-    pd.DataFrame(
+    py_output = pd.DataFrame(
         {"OUTPUT1": df.groupby("ID").count()["A"], "OUTPUT2": df.groupby("ID").size()}
     )
     query = "Select count(A) as output1, Count(*) as output2 from table1 group by id"
@@ -1308,7 +1314,7 @@ def test_count_tz_aware(memory_leak_check):
         query,
         ctx,
         None,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -1334,13 +1340,13 @@ def test_any_value_tz_aware(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    pd.DataFrame({"OUTPUT1": df.groupby("ID").head(1)["A"]})
+    py_output = pd.DataFrame({"OUTPUT1": df.groupby("ID").head(1)["A"]})
     query = "Select ANY_VALUE(A) as output1 from table1 group by id"
     check_query(
         query,
         ctx,
         None,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -1364,13 +1370,13 @@ def test_tz_aware_key(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    pd.DataFrame({"OUTPUT1": df.groupby("A").sum()["VAL"]})
+    py_output = pd.DataFrame({"OUTPUT1": df.groupby("A").sum()["VAL"]})
     query = "Select SUM(val) as output1 from table1 group by A"
     check_query(
         query,
         ctx,
         None,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -1422,7 +1428,7 @@ def test_tz_aware_having(memory_leak_check):
         query,
         ctx,
         None,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -1439,7 +1445,7 @@ def test_all_nulls_1(memory_leak_check):
             "C": pd.Series([False] + [None] * 29, dtype="boolean"),
         }
     )
-    pd.DataFrame(
+    py_output = pd.DataFrame(
         {
             "A": [1, 2, 3, 4, 5],
             "OUT1": pd.Series([1, None, None, None, None], dtype="Int64"),
@@ -1465,13 +1471,7 @@ def test_all_nulls_1(memory_leak_check):
         BOOLOR_AGG(C) AS out8
     from table1 group by A
     """
-    check_query(
-        query,
-        ctx,
-        None,
-        check_dtype=False,
-        use_duckdb=True,
-    )
+    check_query(query, ctx, None, check_dtype=False, expected_output=py_output)
 
 
 # @pytest.mark.bodosql_cpp   # Call operator SqlCastFunction not supported yet
@@ -1514,7 +1514,7 @@ def test_all_nulls_2(memory_leak_check):
         }
     )
 
-    pd.DataFrame(
+    expected = pd.DataFrame(
         {
             "K": [0],
             "VP": pd.Series([None], dtype=pd.Int32Dtype()),
@@ -1545,9 +1545,9 @@ def test_all_nulls_2(memory_leak_check):
         query,
         {"TABLE1": df},
         None,
+        expected_output=expected,
         check_dtype=False,
         sort_output=False,
-        use_duckdb=True,
     )
 
 
@@ -1618,13 +1618,15 @@ def test_kurtosis_skew(agg_cols, memory_leak_check):
             i += 1
         return result
 
+    answer = kurt_skew_refsol(agg_cols)
+
     check_query(
         query,
         ctx,
         None,
+        expected_output=answer,
         check_names=False,
         check_dtype=False,
-        use_duckdb=True,
     )
 
 
@@ -1690,10 +1692,6 @@ def test_decimal_sum():
     query = "SELECT A, sum(B) FROM table1 GROUP BY A"
     B = pd.array(
         pa.array(["0.01", "0.03", None] * 10).cast(pa.decimal128(38, 37)),
-        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
-    )
-    pd.array(
-        pa.array(["0.1", "0.3", None]).cast(pa.decimal128(38, 37)),
         dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
     )
     ctx = {"TABLE1": pd.DataFrame({"A": [1, 2, 3] * 10, "B": B})}
@@ -1913,14 +1911,23 @@ def test_object_agg(value_pool, dtype, val_arrow_type, nullable, memory_leak_che
                     j_data[k] = v
         pairs.append(j_data)
 
+    answer = pd.DataFrame(
+        {
+            "G": unique_keys.values,
+            "J": pd.Series(
+                pairs, dtype=pd.ArrowDtype(pa.map_(pa.string(), val_arrow_type))
+            ),
+        }
+    )
+
     check_query(
         query,
         ctx,
         None,
+        expected_output=answer,
         check_names=False,
         check_dtype=False,
         convert_columns_to_pandas=True,
-        use_duckdb=True,
     )
 
 
@@ -1978,8 +1985,8 @@ def test_array_unique_agg(call, expected, memory_leak_check):
         query,
         ctx,
         None,
+        expected_output=expected,
         convert_columns_to_pandas=True,
-        use_duckdb=True,
     )
 
 
@@ -2006,7 +2013,7 @@ def test_mixed_nested_agg(memory_leak_check):
             }
         )
     }
-    pd.DataFrame(
+    expected = pd.DataFrame(
         {
             "A": [1, 2, 3, 4, 5],
             "EXPR$1": [(x + (x + 5)) / 2 for x in range(5)],
@@ -2019,9 +2026,9 @@ def test_mixed_nested_agg(memory_leak_check):
         query,
         ctx,
         None,
+        expected_output=expected,
         convert_columns_to_pandas=True,
         check_dtype=False,
-        use_duckdb=True,
     )
 
 
@@ -2040,16 +2047,6 @@ def test_mixed_nested_agg_keys(memory_leak_check):
             }
         )
     }
-    pd.DataFrame(
-        {
-            "A": ["1", "2", "2", "4"],
-            "B": pd.array(
-                [["1"], ["2"], ["3"], ["4"]],
-                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
-            ),
-            "C": [3, 3, 4, 10],
-        }
-    )
     # use_dict_encoded_strings must be set to false or hash_arrow_array will
     # panic as the underlying string array will unexpectedly be dict encoded.
     check_query(

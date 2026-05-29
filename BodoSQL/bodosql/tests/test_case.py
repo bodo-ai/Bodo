@@ -506,13 +506,9 @@ def test_nested_case(memory_leak_check):
         {"A": [3, 3, 3, 3, 4] * 3, "B": [1, 6, 1, 6, 1] * 3, "C": [2, 4, 4, 2, 4] * 3}
     )
     ctx = {"TABLE1": df}
-    check_query(
-        query,
-        ctx,
-        None,
-        check_dtype=False,
-        use_duckdb=True,
-    )
+    # Needed because DuckDB will name the column "res" vs. Bodo's "RES"
+    py_output = pd.DataFrame({"RES": [1, 1, 0, 2, -1] * 3})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 def test_null_array_to_timezone_aware(memory_leak_check):
@@ -591,6 +587,22 @@ def test_case_proper_character_escape_regex(memory_leak_check):
     df = pd.DataFrame({"WEB_URL": orig_web_url_list})
     ctx = {"TABLE1": df}
 
+    expected_out = df = pd.DataFrame(
+        {
+            "WEB_URL": orig_web_url_list,
+            "EXTRACTED_VALUE": [
+                None,
+                "2523",
+                "2583",
+                None,
+                None,
+                None,
+                None,
+            ]
+            * 5,
+        }
+    )
+
     query = """
     SELECT
         WEB_URL,
@@ -602,8 +614,8 @@ def test_case_proper_character_escape_regex(memory_leak_check):
         query,
         ctx,
         None,
+        expected_output=expected_out,
         check_names=False,
-        use_duckdb=True,
     )
 
 

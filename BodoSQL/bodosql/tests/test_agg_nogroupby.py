@@ -195,6 +195,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
         use_duckdb=True,
     )
     check_query(
@@ -299,7 +300,6 @@ def test_count_numeric_alias(bodosql_numeric_types, memory_leak_check):
     )
 
 
-@pytest.mark.skip("[BS-81]")
 def test_max_string(bodosql_string_types, memory_leak_check):
     """
     Simple test to ensure that max is working on string types
@@ -315,6 +315,7 @@ def test_max_string(bodosql_string_types, memory_leak_check):
         bodosql_string_types,
         None,
         check_names=False,
+        is_out_distributed=False,
         use_duckdb=True,
     )
 
@@ -355,7 +356,9 @@ def test_max_interval_types(bodosql_interval_types, memory_leak_check):
         bodosql_interval_types,
         None,
         is_out_distributed=False,
-        use_duckdb=True,
+        expected_output=pd.DataFrame(
+            {"OUTPUT": [bodosql_interval_types["TABLE1"]["A"].max()]}
+        ),
     )
 
 
@@ -371,7 +374,7 @@ def test_max_literal(basic_df, memory_leak_check):
         None,
         # Max outputs a nullable output by default to handle empty Series values
         check_dtype=False,
-        use_duckdb=True,
+        expected_output=pd.DataFrame({"A": basic_df["TABLE1"]["A"], "SCALAR_MAX": 1}),
     )
 
 
@@ -581,7 +584,9 @@ def test_any_value_nulls(memory_leak_check):
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
-        use_duckdb=True,
+        expected_output=pd.DataFrame(
+            {0: pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
+        ),
     )
 
 
@@ -604,14 +609,16 @@ def test_max_min_tz_aware(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    pd.DataFrame({"OUTPUT1": S.max(), "OUTPUT2": S.min()}, index=pd.RangeIndex(0, 1, 1))
+    py_output = pd.DataFrame(
+        {"OUTPUT1": S.max(), "OUTPUT2": S.min()}, index=pd.RangeIndex(0, 1, 1)
+    )
     query = "Select max(A) as output1, min(A) as output2 from table1"
     check_query(
         query,
         ctx,
         None,
         is_out_distributed=False,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -634,7 +641,7 @@ def test_count_tz_aware(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    pd.DataFrame(
+    py_output = pd.DataFrame(
         {"OUTPUT1": S.count(), "OUTPUT2": len(S)}, index=pd.RangeIndex(0, 1, 1)
     )
     query = "Select count(A) as output1, Count(*) as output2 from table1"
@@ -643,7 +650,7 @@ def test_count_tz_aware(memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -666,7 +673,7 @@ def test_any_value_tz_aware(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    pd.DataFrame({"OUTPUT1": S.iloc[0]}, index=pd.RangeIndex(0, 1, 1))
+    py_output = pd.DataFrame({"OUTPUT1": S.iloc[0]}, index=pd.RangeIndex(0, 1, 1))
     # Note: We also output the first value although this is not strictly defined.
     query = "Select ANY_VALUE(A) as output1 from table1"
     check_query(
@@ -674,7 +681,7 @@ def test_any_value_tz_aware(memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -712,15 +719,9 @@ def test_tz_aware_having(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    pd.DataFrame({"OUTPUT1": df.A.min()}, index=pd.RangeIndex(0, 1, 1))
+    py_output = pd.DataFrame({"OUTPUT1": df.A.min()}, index=pd.RangeIndex(0, 1, 1))
     query = "Select MIN(A) as output1 from table1 HAVING MAX(A) > min(B)"
-    check_query(
-        query,
-        ctx,
-        None,
-        is_out_distributed=False,
-        use_duckdb=True,
-    )
+    check_query(query, ctx, None, is_out_distributed=False, expected_output=py_output)
 
 
 @pytest.fixture
@@ -748,7 +749,7 @@ def test_max_min_timestamptz(timestamptz_data, memory_leak_check):
     """
     df = pd.DataFrame({"A": timestamptz_data})
     ctx = {"TABLE1": df}
-    pd.DataFrame(
+    py_output = pd.DataFrame(
         {
             "OUT1": bodo.types.TimestampTZ.fromUTC("2022-01-02 01:02:03.123456789", 0),
             "OUT2": bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0),
@@ -761,7 +762,7 @@ def test_max_min_timestamptz(timestamptz_data, memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -771,7 +772,7 @@ def test_count_timestamptz(timestamptz_data, memory_leak_check):
     """
     df = pd.DataFrame({"A": timestamptz_data})
     ctx = {"TABLE1": df}
-    pd.DataFrame(
+    py_output = pd.DataFrame(
         {"OUTPUT1": 6, "OUTPUT2": 10},
         index=pd.RangeIndex(0, 1, 1),
     )
@@ -781,7 +782,7 @@ def test_count_timestamptz(timestamptz_data, memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -794,7 +795,7 @@ def test_anyvalue_timestamptz(timestamptz_data, memory_leak_check):
     # see what the values being compared are
     df = pd.DataFrame({"A": timestamptz_data})
     ctx = {"TABLE1": df}
-    pd.DataFrame(
+    py_output = pd.DataFrame(
         {"OUTPUT": bodo.types.TimestampTZ.fromUTC("2022-01-01 00:00:00", 0)},
         index=pd.RangeIndex(0, 1),
     )
@@ -804,7 +805,7 @@ def test_anyvalue_timestamptz(timestamptz_data, memory_leak_check):
         ctx,
         None,
         is_out_distributed=False,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -894,7 +895,8 @@ def test_single_value_error():
                 check_dtype=False,
                 # ensure_single_value() makes input replicated, causing error for dist arg
                 only_jit_seq=True,
-                use_duckdb=True,
+                # dummy output to avoid Spark errors
+                expected_output=1,
             )
 
 
@@ -1056,29 +1058,34 @@ def test_boolor_booland_boolxor_agg(func, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "col",
+    "col, expected",
     [
         pytest.param(
             pd.Series([None] * 20, dtype=pd.Int32Dtype()),
+            (None, None, None),
             id="all_null",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([1, 2, 4, 63, 4, None, 20], dtype=pd.Int32Dtype()),
+            (63, 0, 40),
             id="ints",
         ),
         pytest.param(
             pd.Series([10, 253, 253, None, 42], dtype=pd.UInt8Dtype()),
+            (255, 8, 32),
             id="unsigned",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([0, 2, 62, 60, 20, 16, 4], dtype=pd.Int32Dtype()),
+            (62, 0, 0),
             id="ints-xor",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([-64, 1, 4, 8, 1, 4], dtype=pd.Int32Dtype()),
+            (-51, 0, -56),
             id="neg_ints",
             marks=pytest.mark.slow,
         ),
@@ -1086,26 +1093,30 @@ def test_boolor_booland_boolxor_agg(func, memory_leak_check):
             pd.Series(
                 [3625133335, 7285961799, 4755749177, 7850278502], dtype=pd.Int64Dtype()
             ),
+            (8522825599, 268443648, 7026152975),
             id="big_ints",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([2.0, 50.5, None, 602.4, 61.6], dtype=pd.Float32Dtype()),
+            (639, 2, 597),
             id="floats",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series(["2", "50.5", "601.5", None, "2"]),
+            (635, 2, 617),
             id="strings",
         ),
     ],
 )
-def test_bit_agg(col, memory_leak_check):
+def test_bit_agg(col, expected, memory_leak_check):
     """Tests the BITOR_AGG, BITAND_AGG, and BITXOR_AGG aggregation functions
     without groupby on string data.
 
     Args:
         col (pd.Series): Input column
+        expected (int): Expected output
         memory_leak_check (): Fixture, see `conftest.py`.
     """
     ctx = {
@@ -1118,14 +1129,23 @@ def test_bit_agg(col, memory_leak_check):
 
     query = "SELECT bitor_agg(A), bitand_agg(A), bitxor_agg(A) from table1"
 
+    expected_df = pd.DataFrame(
+        {
+            0: expected[0],
+            1: expected[1],
+            2: expected[2],
+        },
+        index=np.arange(1),
+    )
+
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
         check_names=False,
+        expected_output=expected_df,
         is_out_distributed=False,
-        use_duckdb=True,
     )
 
 
@@ -1174,12 +1194,43 @@ def test_all_null(memory_leak_check):
         }
     )
 
+    expected = pd.DataFrame(
+        {
+            # [BSE-2183]
+            # "SU": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "MI": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "MA": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "V": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "VP": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "S": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "SP": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "SK": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "KU": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "ME": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "AP": pd.Series([None], dtype=pd.Int32Dtype()),
+            # "AV": pd.Series([None], dtype=pd.Int32Dtype()),
+            "CS": pd.Series([10], dtype=pd.Int32Dtype()),
+            "C": pd.Series([0], dtype=pd.Int32Dtype()),
+            "CI": pd.Series([0], dtype=pd.Int32Dtype()),
+            "BO": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BA": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BX": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIO": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIA": pd.Series([None], dtype=pd.Int32Dtype()),
+            "BIX": pd.Series([None], dtype=pd.Int32Dtype()),
+            # [BSE-2184]
+            # "LA": pd.Series([""]),
+            "PC": pd.Series([None], dtype=pd.Int32Dtype()),
+            "PD": pd.Series([None], dtype=pd.Int32Dtype()),
+        }
+    )
+
     check_query(
         query,
         {"TABLE1": df},
         None,
+        expected_output=expected,
         check_dtype=False,
         sort_output=False,
         is_out_distributed=False,
-        use_duckdb=True,
     )

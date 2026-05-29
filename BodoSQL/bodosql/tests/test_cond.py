@@ -512,6 +512,7 @@ def test_if_scalar(basic_df, memory_leak_check):
 def test_if_dt(memory_leak_check):
     """Checks if function with datetime values"""
     query = "Select IF(YEAR(A) < 2010, makedate(2010, 1), A) FROM table1"
+    duckdb_query = "Select IF(YEAR(A) < 2010, make_date(2010, 1, 1), A) FROM table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -532,6 +533,7 @@ def test_if_dt(memory_leak_check):
         ctx,
         None,
         check_names=False,
+        equivalent_spark_query=duckdb_query,
         use_duckdb=True,
     )
 
@@ -838,8 +840,6 @@ def test_nullif_time(memory_leak_check):
 @pytest.mark.slow
 def test_nullif_case(bodosql_nullable_numeric_types, memory_leak_check):
     """Checks nullif function inside a case statement"""
-    import copy
-
     # making a minor change, to ensure that we have an index where A == C to check correctness
     bodosql_nullable_numeric_types = copy.deepcopy(bodosql_nullable_numeric_types)
     bodosql_nullable_numeric_types["TABLE1"].loc[0, "A"] = (

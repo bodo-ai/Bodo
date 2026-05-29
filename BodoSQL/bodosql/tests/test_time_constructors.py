@@ -16,9 +16,7 @@ pytestmark = pytest_slow_unless_codegen
 
 @pytest.fixture(
     params=[
-        pytest.param(
-            "time", marks=pytest.mark.skip(reason="waiting for calcite support")
-        ),
+        "time",
         "to_time",
         "try_to_time",
     ],
@@ -205,7 +203,6 @@ def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_che
         query = f"SELECT {to_time_fn}(S) as A FROM table1"
     else:
         query = f"SELECT CASE WHEN B THEN {to_time_fn}(S) END AS A FROM table1"
-    ctx = ctx
     expected_output = pd.DataFrame({"A": result})
     check_query(query, ctx, None, expected_output=expected_output)
 
