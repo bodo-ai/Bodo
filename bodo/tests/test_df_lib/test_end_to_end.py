@@ -2404,41 +2404,6 @@ def test_series_filter_series(datapath, file_path, op, mode):
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize(
-    "kwargs, error",
-    [
-        pytest.param({}, TypeError),
-        pytest.param({"items": [], "like": "A"}, TypeError),
-        pytest.param({"items": ["2B2", "2B2", "not_a_column", "3C_A"]}, None),
-        pytest.param({"items": {"1-A", "A1", "3C_"}}, None),
-        pytest.param({"like": "_"}, None),
-        pytest.param({"regex": "A$"}, None),
-        pytest.param({"items": []}, None),
-        pytest.param({"items": ["A1", "2B2"], "axis": 0}, None),
-        pytest.param({"items": [], "axis": 1}, ValueError),
-    ],
-)
-def test_series_filter_method(kwargs, error):
-    """Basic test for Series.filter()"""
-    pds = pd.Series(data=[1, 4, 3, 9, 1], index=["A1", "1-A", "2B2", "3C_", "3C_A"])
-    bds = bd.Series(pds)
-
-    if error:
-        with pytest.raises(error):
-            pds_filtered = pds.filter(**kwargs)
-        with assert_executed_plan_count(0):
-            with pytest.raises(error):
-                bds_filtered = bds.filter(**kwargs)
-    else:
-        with assert_executed_plan_count(1):
-            pds_filtered = pds.filter(**kwargs)
-            bds_filtered = bds.filter(**kwargs)
-        _test_equal(
-            bds_filtered, pds_filtered, check_pandas_types=False, reset_index=True
-        )
-
-
-@pytest.mark.gpu
 def test_filter_source_matching():
     """Test for matching expression source dataframes in filter"""
     with assert_executed_plan_count(0):
