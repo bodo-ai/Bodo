@@ -9,13 +9,14 @@ default =      { features = ["py314", "rcpp", "dev", "local-mpi", "cpu"],       
 azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
 platform =     { features = ["py314", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "platform" }
-platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "platform" }
+platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "platform-dev" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
 default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
-platform-cuda =      { features = ["py314", "rcpp", "dev", "platform", "platform-mpi", "cudf", "mpich-build-vars"],          solve-group = "platform-gpu" }
+platform-cuda-dev =      { features = ["py314", "rcpp", "dev", "platform-mpi", "cudf", "mpich-build-vars"], solve-group = "platform-gpu-dev" }
+platform-cuda =      { features = ["py314", "rcpp", "platform", "platform-mpi", "cudf", "mpich-build-vars"], solve-group = "platform-gpu" }
 
 [activation.env]
 # Avoid using system cmake during build-config step
@@ -434,6 +435,8 @@ jupyter_client = "==8.6.1"
 uvicorn = "*"
 fastapi = "*"
 httpie = "*"
+# For compatibility with PyDough (TODO: remove when unnecessary)
+pyarrow = "22.0.*"
 
 [feature.platform.target.linux-64.pypi-dependencies]
 # Following dependencies are added to PyPi to avoid conflicts with hdf5 + boost-cpp
