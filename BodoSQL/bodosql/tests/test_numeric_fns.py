@@ -175,6 +175,7 @@ def test_single_op_numeric_fns_cols(
 def test_double_op_numeric_fns_cols(
     double_op_numeric_fn_info,
     bodosql_negative_numeric_types,
+    spark_info,
     memory_leak_check,
 ):
     """tests the behavior of numeric functions with two arguments on columns"""
@@ -182,12 +183,18 @@ def test_double_op_numeric_fns_cols(
     arg1 = double_op_numeric_fn_info[2]
     arg2 = double_op_numeric_fn_info[3]
     query = f"SELECT {fn_name}({arg1}, {arg2}) from table1"
+    spark_query = query
+    if fn_name == "TRUNC" or fn_name == "TRUNCATE":
+        inner_case = f"(CASE WHEN {arg1} > 0 THEN FLOOR({arg1} * POW(10, {arg2})) / POW(10, {arg2}) ELSE CEIL({arg1} * POW(10, {arg2})) / POW(10, {arg2}) END)"
+        spark_query = f"SELECT {inner_case} from table1"
     check_query(
         query,
         bodosql_negative_numeric_types,
         None,
+        # spark_info,
         check_names=False,
         check_dtype=False,
+        equivalent_spark_query=spark_query,
         convert_expected_output_to_nullable_float=False,
         use_duckdb=True,
     )
@@ -324,12 +331,14 @@ def test_haversine_cols(query_args, memory_leak_check):
     }
     LAT1, LON1, LAT2, LON2 = query_args
     query = f"select haversine({LAT1}, {LON1}, {LAT2}, {LON2}) from table0"
+    equiv_query = f"SELECT 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS({LAT2}) - RADIANS({LAT1})) / 2),2) + (COS(RADIANS({LAT1})) * COS(RADIANS({LAT2})) * POW(SIN((RADIANS({LON2}) - RADIANS({LON1})) / 2),2)))) FROM table0"
     check_query(
         query,
         ctx,
         None,
         check_names=False,
         check_dtype=False,
+        equivalent_spark_query=equiv_query,
         use_duckdb=True,
     )
 
@@ -393,12 +402,14 @@ def test_haversine_scalars(memory_leak_check):
     query = (
         "select case when A < 0.0 then haversine(A, B, C, D) else 0.0 end from table0"
     )
+    equiv_query = "SELECT CASE WHEN A < 0.0 THEN 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS(C) - RADIANS(A)) / 2),2) + (COS(RADIANS(A)) * COS(RADIANS(C)) * POW(SIN((RADIANS(D) - RADIANS(B)) / 2),2)))) ELSE 0.0 END FROM table0"
     check_query(
         query,
         ctx,
         None,
         check_names=False,
         check_dtype=False,
+        equivalent_spark_query=equiv_query,
         use_duckdb=True,
     )
 
@@ -459,12 +470,14 @@ def test_haversine_calc(memory_leak_check):
         )
     }
     query = "select haversine(A + B, B - C, C + D, D - A) from table0"
+    equiv_query = "SELECT 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS(C + D) - RADIANS(A + B)) / 2),2) + (COS(RADIANS(A + B)) * COS(RADIANS(C + D)) * POW(SIN((RADIANS(D - A) - RADIANS(B - C)) / 2),2)))) FROM table0"
     check_query(
         query,
         ctx,
         None,
         check_names=False,
         check_dtype=False,
+        equivalent_spark_query=equiv_query,
         use_duckdb=True,
     )
 
@@ -580,9 +593,24 @@ def test_uniform_distribution(is_integer, use_case, memory_leak_check):
     n = 10**6
     ctx = {"TABLE1": pd.DataFrame({"A": np.arange(n)})}
     if is_integer:
-        pass
+        expected_distinct = 100
+        expected_min = 0
+        expected_max = 99
     else:
-        pass
+        expected_distinct = n
+        expected_min = 0.0
+        expected_max = 99.0
+    answer = pd.DataFrame(
+        {
+            "MIN": expected_min,
+            "MAX": expected_max,
+            "DISTINCT": expected_distinct,
+            "MEAN": 49.5,
+            "STDV": 28.5788,
+            "SKEW": 0.0,
+        },
+        index=np.arange(1),
+    )
     np.random.seed(42)
     check_query(
         query,
@@ -590,10 +618,10 @@ def test_uniform_distribution(is_integer, use_case, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
+        expected_output=answer,
         atol=0.1,
         rtol=0.1,
         is_out_distributed=False,
-        use_duckdb=True,
     )
 
 
@@ -607,31 +635,31 @@ def test_uniform_determinism(memory_leak_check):
     """
     query = "SELECT UNIFORM(0, 100, A) FROM table1"
     ctx = {"TABLE1": pd.DataFrame({"A": [1, 2, 3, 1000] * 10})}
+    answer = pd.DataFrame({0: [37, 40, 24, 51] * 10})
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=answer,
     )
 
 
-def test_conv_columns(bodosql_conv_df, memory_leak_check):
+def test_conv_columns(bodosql_conv_df, spark_info, memory_leak_check):
     """tests that the CONV function works as intended for columns"""
     query = "SELECT CONV(A, 2, 10), CONV(B, 8, 2), CONV(C, 10, 10), CONV(D, 16, 8) from table1"
     check_query(
         query,
         bodosql_conv_df,
-        None,
+        spark_info,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_conv_scalars(bodosql_conv_df, memory_leak_check):
+def test_conv_scalars(bodosql_conv_df, spark_info, memory_leak_check):
     """tests that the CONV function works as intended for scalars"""
     query = (
         "SELECT CASE WHEN A > B THEN CONV(A, 2, 10) ELSE CONV(B, 8, 10) END from table1"
@@ -639,10 +667,9 @@ def test_conv_scalars(bodosql_conv_df, memory_leak_check):
     check_query(
         query,
         bodosql_conv_df,
-        None,
+        spark_info,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
     )
 
 
@@ -666,14 +693,16 @@ def test_log_hybrid(query, memory_leak_check):
             {"A": [1.0, 2.0, 0.5, 64.0, 100.0], "B": [2.0, 3.0, 4.0, 5.0, 10.0]}
         )
     }
-    # Spark switches the order of the arguments
+    # Spark/DuckDB switches the order of the arguments
     lhs, rest = query.split("(")
     args, rhs = rest.split(")")
     arg0, arg1 = args.split(", ")
+    duckdb_query = f"{lhs}({arg1}, {arg0}){rhs}"
     check_query(
         query,
         ctx,
         None,
+        equivalent_spark_query=duckdb_query,
         check_dtype=False,
         check_names=False,
         sort_output=False,
@@ -799,10 +828,10 @@ def test_div0null_cols(df, ans, request):
         query,
         ctx,
         None,
+        expected_output=pd.DataFrame({"RES": ans}),
         check_dtype=False,
         check_names=False,
         sort_output=False,
-        use_duckdb=True,
     )
 
 

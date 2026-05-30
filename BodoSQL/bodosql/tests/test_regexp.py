@@ -217,7 +217,7 @@ def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_che
         None,
         check_names=False,
         check_dtype=False,
-        use_duckdb=True,
+        expected_output=answer,
     )
 
 

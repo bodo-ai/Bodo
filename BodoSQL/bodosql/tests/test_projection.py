@@ -119,7 +119,6 @@ def test_select_all_numerics(bodosql_numeric_types, memory_leak_check):
     )
 
 
-@pytest.mark.skip("[BS-45]")
 def test_select_all_large_numerics(bodosql_large_numeric_types, memory_leak_check):
     """
     Simplest query possible on large numeric types.

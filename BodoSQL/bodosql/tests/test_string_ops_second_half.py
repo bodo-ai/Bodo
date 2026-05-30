@@ -1405,7 +1405,7 @@ def test_sha2_scalars(query, output, memory_leak_check):
         None,
         check_names=False,
         is_out_distributed=False,
-        expected_output=output,
+        expected_output=pd.DataFrame({"A": pd.Series([output])}),
     )
 
 

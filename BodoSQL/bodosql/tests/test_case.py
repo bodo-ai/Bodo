@@ -310,12 +310,10 @@ def test_tz_aware_case_null(representative_tz, memory_leak_check):
     )
     query = "Select Case WHEN B THEN A END as output FROM table1"
     ctx = {"TABLE1": df}
+    expected_output = pd.DataFrame({"OUTPUT": df["A"].copy()})
+    expected_output = expected_output.where(df.B, None)
     check_query(
-        query,
-        ctx,
-        None,
-        session_tz=representative_tz,
-        use_duckdb=True,
+        query, ctx, None, expected_output=expected_output, session_tz=representative_tz
     )
 
 
@@ -472,12 +470,8 @@ def test_case_indent_limit(memory_leak_check):
     """
     df = pd.DataFrame({"A": ["er ", "a ", " el2    ", " f2 "] * 5})
     ctx = {"TABLE1": df}
-    check_query(
-        query,
-        ctx,
-        None,
-        use_duckdb=True,
-    )
+    py_output = pd.DataFrame({"SENSITIVE_WORD": ["er", "a", "el2", "f2"] * 5})
+    check_query(query, ctx, None, expected_output=py_output)
 
 
 def test_nested_case(memory_leak_check):

@@ -667,9 +667,6 @@ def test_ifnull_scalar(basic_df, ifnull_equivalent_fn, memory_leak_check):
 def test_ifnull_mixed(
     bodosql_nullable_numeric_types, ifnull_equivalent_fn, memory_leak_check
 ):
-    if bodosql_nullable_numeric_types["TABLE1"].A.dtype.name == "UInt64":
-        pytest.skip("Currently a bug in fillna for Uint64, see BE-1380")
-
     """Checks ifnull function with a mix of scalar and column values"""
     query = f"Select {ifnull_equivalent_fn}(A, 0) from table1"
     check_query(

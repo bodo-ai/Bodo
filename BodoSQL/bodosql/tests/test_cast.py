@@ -8,6 +8,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+import bodo
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
@@ -566,13 +567,14 @@ def test_tz_aware_datetime_to_char_cast(
     else:
         query = "SELECT CAST(A as VARCHAR) as A from table1"
 
+    expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].astype(str)})
     check_query(
         query,
         tz_aware_df,
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=expected_output,
     )
 
 
@@ -708,6 +710,7 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
             (
                 "VARCHAR",
                 pd.Series(["", "kafae", None, "!@$$#", "1999-12-31"] * 4),
+                pd.Series(["", "kafae", None, "!@$$#", "1999-12-31"] * 4),
             ),
             id="VARCHAR",
         ),
@@ -715,6 +718,7 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
             (
                 "DOUBLE",
                 pd.Series(["634.234", "425", "asda", None, "-0.1251"] * 4),
+                pd.Series([634.234, 425.0, None, None, -0.1251] * 4),
             ),
             id="DOUBLE",
         ),
@@ -722,6 +726,7 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
             (
                 "FLOAT",
                 pd.Series(["-435.392", None, "-999", "1rfw43te", "0.0001"] * 4),
+                pd.Series([-435.392, None, -999.0, None, 0.0001] * 4),
             ),
             id="FLOAT",
         ),
@@ -729,6 +734,7 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
             (
                 "NUMBER",
                 pd.Series(["734", "-103", "105+106", "58.47", None] * 4),
+                pd.Series([734, -103, None, 58, None] * 4),
             ),
             id="NUMBER",
         ),
@@ -736,6 +742,7 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
             (
                 "INTEGER",
                 pd.Series(["0", "-49.36", "1999-12-31", None, "482"] * 4),
+                pd.Series([0, -49, None, None, 482] * 4),
             ),
             id="INTEGER",
         ),
@@ -744,6 +751,16 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
                 "DATE",
                 pd.Series(
                     ["2014-02-25", "97/52/63", None, "1942-04-30", "2019-10-03"] * 4
+                ),
+                pd.Series(
+                    [
+                        datetime.date(2014, 2, 25),
+                        None,
+                        None,
+                        datetime.date(1942, 4, 30),
+                        datetime.date(2019, 10, 3),
+                    ]
+                    * 4
                 ),
             ),
             id="DATE",
@@ -758,6 +775,16 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
                         "1942-04-30",
                         "20:39:47.876",
                         "19:57:28.082374912",
+                    ]
+                    * 4
+                ),
+                pd.Series(
+                    [
+                        bodo.types.Time(3, 24, 55),
+                        None,
+                        None,
+                        bodo.types.Time(20, 39, 47, 876),
+                        bodo.types.Time(19, 57, 28, 82, 374, 912),
                     ]
                     * 4
                 ),
@@ -777,6 +804,17 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
                     ]
                     * 4
                 ),
+                pd.Series(
+                    [
+                        None,
+                        pd.Timestamp("2014-02-25"),
+                        None,
+                        pd.Timestamp("1942-04-30 03:24:55"),
+                        pd.Timestamp("2019-10-03 19:57:28.082374912"),
+                    ]
+                    * 4,
+                    dtype="datetime64[ns]",
+                ),
             ),
             id="TIMESTAMP",
         ),
@@ -789,16 +827,17 @@ def try_cast_argument(request):
 
 def test_try_cast(try_cast_argument, memory_leak_check):
     """Tests TRY_CAST behaves as expected"""
-    type, data = try_cast_argument
+    type, data, answer = try_cast_argument
     query = f"SELECT TRY_CAST(A AS {type}) from table1"
     ctx = {"TABLE1": pd.DataFrame({"A": data})}
+    expected_output = pd.DataFrame({"A": answer})
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=expected_output,
     )
 
 
@@ -834,6 +873,7 @@ def test_try_cast(try_cast_argument, memory_leak_check):
 def test_cast_to_variant(query, data):
     df = pd.DataFrame({"X": data})
     ctx = {"TABLE1": df}
+    expected_output = pd.DataFrame({0: data})
     check_query(
         query,
         ctx,
@@ -841,5 +881,5 @@ def test_cast_to_variant(query, data):
         sort_output=False,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=expected_output,
     )

@@ -2851,12 +2851,14 @@ def test_subdate_scalar_int_arg1(
 
     # Spark's date_add seems to truncate everything after the day in the scalar case, so we use normalized timestamps for bodosql
     query = f"SELECT CASE WHEN {subdate_equiv_fns}({timestamp_date_string_cols}, positive_integers) < TIMESTAMP '1970-01-01' THEN TIMESTAMP '1970-01-01' ELSE TO_DATE(SUBDATE({timestamp_date_string_cols}, positive_integers)) END from table1"
+    test_query = f"SELECT CASE WHEN ({timestamp_date_string_cols}::DATE - INTERVAL (positive_integers) DAY < TIMESTAMP_NS '1970-01-01') THEN TIMESTAMP_NS '1970-01-01' ELSE ({timestamp_date_string_cols}::DATE - INTERVAL (positive_integers) DAY)::TIMESTAMP_NS END from table1"
 
     check_query(
         query,
         dt_fn_dataframe,
         None,
         check_names=False,
+        equivalent_spark_query=test_query,
         use_duckdb=True,
     )
 

@@ -82,14 +82,17 @@ def test_listagg_no_within_group_with_sep(listagg_data, spark_info, memory_leak_
 
 
 @pytest.mark.slow
-def test_listagg_no_within_group_with_other_aggregates(listagg_data, memory_leak_check):
+def test_listagg_no_within_group_with_other_aggregates(
+    listagg_data, spark_info, memory_leak_check
+):
+    spark_equiv_query = """SELECT MAX(group_constant_str_col), key_col, array_join(collect_list(table1.group_constant_str_col), ''), MAX(group_constant_str_col2), array_join(collect_list(table1.group_constant_str_col2), 'å´îøü') FROM table1 group by key_col"""
     check_query(
         "SELECT MAX(group_constant_str_col), key_col, listagg(group_constant_str_col), MAX(group_constant_str_col2), listagg(group_constant_str_col2, 'å´îøü') FROM table1 group by key_col",
         listagg_data,
-        None,
+        spark_info,
         check_names=False,
         check_dtype=False,
-        use_duckdb=True,
+        equivalent_spark_query=spark_equiv_query,
     )
 
 
