@@ -431,6 +431,18 @@ std::tuple<int64_t, int64_t, int64_t> get_py_slice_args(PyObject *args);
  */
 std::shared_ptr<arrow::Array> get_py_isin_arg_as_arrow_array(PyObject *args);
 
+/**
+ * @brief Lookup entry in col_ref_map.  Raise exception if not found.
+ *
+ * @param table the bound table index
+ * @param column the bound column index within that table
+ * @return size_t the raw column index for that table and column in the internal
+ * table
+ */
+size_t col_ref_map_lookup(
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
+    duckdb::idx_t table, duckdb::idx_t column);
+
 #ifdef USE_CUDF
 
 #include <cstdint>

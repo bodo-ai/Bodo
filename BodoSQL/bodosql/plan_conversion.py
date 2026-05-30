@@ -22,6 +22,7 @@ from bodo.pandas.plan import (
     ConstantExpression,
     LogicalAggregate,
     LogicalComparisonJoin,
+    LogicalCrossProduct,
     LogicalDistinct,
     LogicalFilter,
     LogicalJoinFilter,
@@ -534,10 +535,9 @@ def java_join_to_python_join(ctx, java_join):
     )
 
     join_info = java_join.analyzeCondition()
-
-    # TODO[BSE-5149]: support non-equi joins
-    if not join_info.isEqui():
-        raise NotImplementedError("Only equi-joins are supported")
+    join_info_cls = join_info.getClass()
+    field = join_info_cls.getField("nonEquiConditions")
+    nonEquiConds = field.get(join_info)
 
     left_keys, right_keys = join_info.keys()
     key_indices = list(zip(left_keys, right_keys))
@@ -557,16 +557,45 @@ def java_join_to_python_join(ctx, java_join):
     empty_join_out = pd.concat([left_plan.empty_data, right_plan.empty_data], axis=1)
     empty_join_out.columns = java_join.getRowType().getFieldNames()
 
-    # TODO[BSE-5150]: support broadcast join flag
-    planComparisonJoin = LogicalComparisonJoin(
-        empty_join_out,
-        left_plan,
-        right_plan,
-        join_type,
-        key_indices,
-        java_join.getJoinFilterID(),
-    )
-    return planComparisonJoin
+    if len(key_indices) > 0:
+        # TODO[BSE-5150]: support broadcast join flag
+        planJoinOrCross = LogicalComparisonJoin(
+            empty_join_out,
+            left_plan,
+            right_plan,
+            join_type,
+            key_indices,
+            java_join.getJoinFilterID(),
+        )
+    else:
+        planJoinOrCross = LogicalCrossProduct(empty_join_out, left_plan, right_plan)
+
+    if len(nonEquiConds) == 0:
+        return planJoinOrCross
+    else:
+        non_equi_exprs = java_expr_to_python_expr(ctx, nonEquiConds[0], planJoinOrCross)
+        # And all the conditions together with the first one above.
+        for e in nonEquiConds[1:]:
+            non_equi_exprs = ConjunctionOpExpression(
+                non_equi_exprs.empty_data,
+                non_equi_exprs,
+                java_expr_to_python_expr(ctx, e, planJoinOrCross),
+                "__and__",
+            )
+        # We convert a Calcite join with non-equi conditions into an equi join
+        # plus a filter for a few reasons.  First, the dataframe join side does
+        # not have an API that can create a join with non-equi conditions.
+        # Those are only created by the duckdb optimizer so it doesn't hurt to
+        # create the filter on top and left duckdb merge them.  Moreover, in
+        # the CPU backend we convert joins with non-equi conditions back to a
+        # join plus a filter so it is no big deal if duckdb doesn't merge the
+        # join and this filter.  Also, this approach is a nicer match to the
+        # architecture in this file and Calcite as the non-equi conditions
+        # reference the joined table whereas our infrastructure would require
+        # them to reference the build and probe side that is more tedious
+        # work to do the mapping.
+        planFilter = LogicalFilter(empty_join_out, planJoinOrCross, non_equi_exprs)
+        return planFilter
 
 
 def java_rtjf_to_python_rtjf(ctx, java_plan):
