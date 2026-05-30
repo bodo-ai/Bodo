@@ -15,8 +15,8 @@ pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = tr
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
 default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
-platform-cuda-dev =      { features = ["py314", "rcpp", "dev", "platform-mpi", "cudf", "mpich-build-vars"], solve-group = "platform-gpu-dev" }
-platform-cuda =      { features = ["py314", "rcpp", "platform", "platform-mpi", "cudf", "mpich-build-vars"], solve-group = "platform-gpu" }
+platform-cuda-dev =      { features = ["py314", "rcpp", "dev", "platform-mpi", "platform-hwloc", "cudf", "mpich-build-vars"], solve-group = "platform-gpu-dev" }
+platform-cuda =      { features = ["py314", "rcpp", "platform", "platform-mpi", "platform-hwloc", "cudf", "mpich-build-vars"], solve-group = "platform-gpu" }
 
 [activation.env]
 # Avoid using system cmake during build-config step
@@ -442,6 +442,11 @@ pyarrow = "22.0.*"
 # Following dependencies are added to PyPi to avoid conflicts with hdf5 + boost-cpp
 matplotlib = "*"
 psycopg2-binary = "*"
+
+
+[feature.platform-hwloc.target.linux-64.dependencies]
+# Needed for building MPICH MPI from source on platform
+libhwloc = "*"
 
 
 # MPI Handling
