@@ -627,7 +627,13 @@ def test_tz_aware_datetime_to_char_cast(
 
     spark_query = "SELECT CAST(A as VARCHAR) as A from table1"
 
-    expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].astype(str)})
+    out_arr = tz_aware_df["TABLE1"]["A"].astype(str)
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(
+            pa.Array.from_pandas(tz_aware_df["TABLE1"]["A"]),
+            pa.string(),
+        ).to_pandas()
+    expected_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
         tz_aware_df,
