@@ -163,6 +163,10 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             auto time_type = arrow::time64(arrow::TimeUnit::NANO);
             return arrow::MakeNullScalar(time_type);
         } break;
+        case duckdb::LogicalTypeId::INTERVAL: {
+            auto interval_type = arrow::duration(arrow::TimeUnit::NANO);
+            return arrow::MakeNullScalar(interval_type);
+        } break;
         default:
             throw std::runtime_error(
                 "getDefaultValueForDuckdbValueType unhandled type." +

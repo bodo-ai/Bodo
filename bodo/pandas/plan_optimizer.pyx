@@ -351,6 +351,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_number_expr[T](object arrow_schema, T val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
+    cdef unique_ptr[CExpression] make_const_date_offset_expr(int32_t months, int64_t nanos) except +
     cdef unique_ptr[CExpression] make_const_date32_expr(int32_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
@@ -742,6 +743,8 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
         return move(make_const_timestamp_ns_expr(val.value))
     elif isinstance(val, pd.Timedelta):
         return move(make_const_timedelta_ns_expr(val.value))
+    elif isinstance(val, pd.DateOffset):
+        return move(make_const_date_offset_expr(val.months, val.nanos))
     elif isinstance(val, (datetime.datetime, datetime.date)):
         return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):

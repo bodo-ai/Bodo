@@ -568,6 +568,36 @@ def java_filter_to_python_filter(ctx, java_filter):
     return LogicalFilter(input_plan.empty_data, input_plan, condition)
 
 
+def _is_interval_type(sql_type_name):
+    """Check if a SqlTypeName is any interval subtype."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    return (
+        sql_type_name.equals(SqlTypeName.INTERVAL_YEAR)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_MONTH)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_YEAR_MONTH)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_DAY)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_HOUR)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_MINUTE)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_SECOND)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_DAY_HOUR)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_DAY_MINUTE)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_HOUR_MINUTE)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_HOUR_SECOND)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_MINUTE_SECOND)
+    )
+
+
+def _is_year_month_interval(sql_type_name):
+    """Check if a SqlTypeName is a year/month interval subtype."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    return (
+        sql_type_name.equals(SqlTypeName.INTERVAL_YEAR)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_MONTH)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_YEAR_MONTH)
+    )
+
+
 def java_literal_to_python_literal(java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
@@ -626,10 +656,21 @@ def java_literal_to_python_literal(java_literal, input_plan):
         val = pd.Timestamp(java_literal.getValue2(), unit="ms")
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
-    if lit_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
+    if _is_year_month_interval(lit_type_name):
+        # getValue() returns a BigDecimal representing total months
+        months = int(java_literal.getValue())
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-        # getValue2() returns an integer representing milliseconds
-        val = pd.to_timedelta(int(java_literal.getValue2()), unit="ms")
+        val = pd.DateOffset(months=months)
+        return ConstantExpression(dummy_empty_data, input_plan, val)
+
+    if _is_interval_type(lit_type_name):
+        # Day/second subtypes: getValue2() returns a BigDecimal (Py4J converts to
+        # decimal.Decimal) representing milliseconds. Use float() to handle
+        # sub-millisecond intervals (e.g., 1 microsecond = 0.001 ms).
+        millis = float(str(java_literal.getValue2()))
+        nanos = int(millis * 1_000_000)
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+        val = pd.Timedelta(nanos, unit="ns")
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
     if (
@@ -959,7 +1000,7 @@ def sql_type_to_pa_type(sql_type_name):
         # we treat it the same as TIMESTAMP in C++ backend and handle time zones using
         # other information if needed.
         return pa.timestamp("ns")
-    if sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
+    if _is_interval_type(sql_type_name):
         return pa.duration("ns")
     if sql_type_name.equals(SqlTypeName.BOOLEAN):
         return pa.bool_()

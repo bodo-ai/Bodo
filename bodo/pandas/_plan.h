@@ -331,6 +331,17 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
     int64_t val);
 
 /**
+ * @brief Create an expression from a constant date offset (INTERVAL with
+ * months).
+ *
+ * @param months - the number of months for the date offset
+ * @param nanos - the nanoseconds portion (truncated to microsecond precision)
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const interval expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
+    int32_t months, int64_t nanos);
+
+/**
  * @brief Create an expression from a constant date32.
  *
  * @param val - the constant date for the expression in days since epoch

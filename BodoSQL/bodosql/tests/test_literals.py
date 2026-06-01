@@ -26,13 +26,18 @@ pytestmark = pytest_slow_unless_codegen
 # test - we should also consider testing all the different abbreviations as well
 @pytest.fixture(
     params=[
-        ("1 DAY", pd.Timedelta(1, "D")),
-        ("1 HOUR", pd.Timedelta(1, "h")),
-        ("1 MINUTE", pd.Timedelta(1, "m")),
-        ("1 SECOND", pd.Timedelta(1, "s")),
-        ("'1 MILLISECOND'", pd.Timedelta(1, "ms")),
-        ("'1 MICROSECOND'", pd.Timedelta(1, "us")),
-        ("'1 NANOSECOND'", pd.Timedelta(1, "ns")),
+        pytest.param("1 DAY", pd.Timedelta(1, "D"), marks=pytest.mark.bodosql_cpp),
+        pytest.param("1 HOUR", pd.Timedelta(1, "h"), marks=pytest.mark.bodosql_cpp),
+        pytest.param("1 MINUTE", pd.Timedelta(1, "m"), marks=pytest.mark.bodosql_cpp),
+        pytest.param("1 SECOND", pd.Timedelta(1, "s")),
+        pytest.param(
+            "'1 MILLISECOND'", pd.Timedelta(1, "ms"), marks=pytest.mark.bodosql_cpp
+        ),
+        pytest.param(
+            "'1 MICROSECOND'", pd.Timedelta(1, "us"), marks=pytest.mark.bodosql_cpp
+        ),
+        # Duckdb does not support nanosecond intervals, neither does snowflake
+        pytest.param("'1 NANOSECOND'", pd.Timedelta(1, "ns")),
     ]
 )
 def timedelta_equivalent_values(request):
