@@ -136,6 +136,15 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
     const duckdb::LogicalType &type);
 
 /**
+ * @brief Convert arrow type to duckdb type.
+ *
+ * @param type - the arrow type to convert
+ * @return the converted type
+ */
+duckdb::LogicalType arrowTypeToDuckDB(
+    const std::shared_ptr<arrow::DataType> &type);
+
+/**
  * @brief UDF plan node data to pass around in DuckDB plans in
  * BoundFunctionExpression.
  *

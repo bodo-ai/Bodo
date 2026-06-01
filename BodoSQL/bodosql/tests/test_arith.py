@@ -544,13 +544,19 @@ def test_subtraction_between_dates(bodosql_date_types, memory_leak_check):
 
 
 def test_subtraction_between_dates_case(bodosql_date_types, memory_leak_check):
-    """Tests - on two date columns with case. The output in SQL is an integer."""
+    """Tests - on two date columns with case. The output in SQL is an integer for JIT
+    backend but duration in C++ backend.
+    """
 
     query = "select CASE WHEN A > B THEN A - B ELSE B - A END as col1 from table1"
     # Spark doesn't support date arithmetic with integers
     table1 = bodosql_date_types["TABLE1"]
-    S1 = (table1.A - table1.B).map(lambda a: pd.NA if pd.isna(a) else a.days)
-    S2 = (table1.B - table1.A).map(lambda a: pd.NA if pd.isna(a) else a.days)
+    S1 = (table1.A - table1.B).map(
+        lambda a: pd.NA if pd.isna(a) else (a if bodosql.use_cpp_backend else a.days)
+    )
+    S2 = (table1.B - table1.A).map(
+        lambda a: pd.NA if pd.isna(a) else (a if bodosql.use_cpp_backend else a.days)
+    )
     expected_output = pd.DataFrame({"COL1": S1})
     # Replace S1 with S2 when not A > B
     filter1 = ~(table1.A > table1.B)
