@@ -211,8 +211,8 @@ def box_cat_dtype(typ, val, c):
 
 @overload_attribute(PDCategoricalDtype, "nbytes")
 def pd_categorical_nbytes_overload(A):
-    return lambda A: A.categories.nbytes + bodo.io.np_io.get_dtype_size(
-        types.bool_
+    return lambda A: (
+        A.categories.nbytes + bodo.io.np_io.get_dtype_size(types.bool_)
     )  # pragma: no cover
 
 
