@@ -528,7 +528,6 @@ def java_case_to_python_case(ctx, operands, input_plan):
 
 def java_join_to_python_join(ctx, java_join):
     """Convert a BodoSQL Java join plan to a Python join plan."""
-    from bodo.ext import plan_optimizer
 
     ctx.join_filter_info[java_join.getJoinFilterID()] = (
         java_join.getOriginalJoinFilterKeyLocations()
@@ -541,15 +540,7 @@ def java_join_to_python_join(ctx, java_join):
 
     left_keys, right_keys = join_info.keys()
     key_indices = list(zip(left_keys, right_keys))
-    is_left = java_join.getJoinType().generatesNullsOnLeft()
-    is_right = java_join.getJoinType().generatesNullsOnRight()
-    join_type = plan_optimizer.CJoinType.INNER
-    if is_left and is_right:
-        join_type = plan_optimizer.CJoinType.OUTER
-    elif is_left:
-        join_type = plan_optimizer.CJoinType.LEFT
-    elif is_right:
-        join_type = plan_optimizer.CJoinType.RIGHT
+    join_type = JavaJoinTypeToDuckDB(java_join.getJoinType())
 
     left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
@@ -1342,4 +1333,26 @@ def java_literal_to_pyiceberg_literal(java_literal):
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet in java_literal_to_pyiceberg_literal"
+    )
+
+
+def JavaJoinTypeToDuckDB(java_join_type):
+    from bodo.ext import plan_optimizer
+
+    JoinRelType = gateway.jvm.org.apache.calcite.rel.core.JoinRelType
+
+    if java_join_type.equals(JoinRelType.INNER):
+        return plan_optimizer.CJoinType.INNER
+
+    if java_join_type.equals(JoinRelType.LEFT):
+        return plan_optimizer.CJoinType.LEFT
+
+    if java_join_type.equals(JoinRelType.RIGHT):
+        return plan_optimizer.CJoinType.RIGHT
+
+    if java_join_type.equals(JoinRelType.FULL):
+        return plan_optimizer.CJoinType.OUTER
+
+    raise NotImplementedError(
+        f"Join type {java_join_type.toString()} not supported yet"
     )
