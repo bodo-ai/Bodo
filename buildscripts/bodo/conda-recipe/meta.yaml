@@ -1,7 +1,7 @@
-# Platform requires PyArrow 22 for compatibility with PyDough,
-# https://github.com/bodo-ai/PyDough/blob/85214a31a9212a9ca503751ee62a84a5eaf59f22/pyproject.toml#L24
 {% set gpu_enabled = gpu == "true" %}
 {% set platform_enabled = is_platform == "true" %}
+# Platform requires PyArrow 22 for compatibility with PyDough,
+# https://github.com/bodo-ai/PyDough/blob/85214a31a9212a9ca503751ee62a84a5eaf59f22/pyproject.toml#L24
 {% set pyarrow_version = "22.0" if platform_enabled else "23.0" %}
 {% if win %}
     {% set mpi_impl = "impi" %}

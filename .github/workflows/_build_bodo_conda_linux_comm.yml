@@ -65,8 +65,6 @@ jobs:
           conda activate bodo_build
           cd buildscripts/bodo/conda-recipe
 
-          gpu_variant=${{ inputs.gpu-build && 'true' || 'false' }}
-          platform_variant=${{ inputs.platform-build && 'true' || 'false' }}
           # --no-verify because it doesn't work for Conda v2 packages
           # --no-anaconda-upload because we'll upload ourselves
           # Sccache works when the files are located in the same path.
@@ -77,7 +75,7 @@ jobs:
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
             --python '${{ inputs.python-version }}' \
-            --variants "{gpu: ${gpu_variant}, is_platform: ${platform_variant}}"
+            --variants "{gpu: ${{ inputs.gpu-build }}, is_platform: ${{ inputs.platform-build }}}"
         env:
           CONDA_SOLVER: libmamba
           # Sccache Creds
