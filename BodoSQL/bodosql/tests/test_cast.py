@@ -587,7 +587,7 @@ def test_datetime_scalar_to_datetime(
 
 
 def test_timestamp_col_to_str(
-    bodosql_datetime_types, use_sf_cast_syntax, spark_info, memory_leak_check
+    bodosql_datetime_types, use_sf_cast_syntax, memory_leak_check
 ):
     """Tests casting datetime columns to string types"""
     if use_sf_cast_syntax:
@@ -595,14 +595,22 @@ def test_timestamp_col_to_str(
     else:
         query = "SELECT CAST(A AS VARCHAR) FROM TABLE1"
 
-    spark_query = "SELECT CAST(A AS STRING) FROM TABLE1"
+    out_arr = bodosql_datetime_types["TABLE1"]["A"].apply(lambda x: str(x))
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(
+            pa.Array.from_pandas(
+                bodosql_datetime_types["TABLE1"]["A"].astype("datetime64[ns]")
+            ),
+            pa.string(),
+        ).to_pandas()
+    expected_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        expected_output=expected_output,
     )
 
 
