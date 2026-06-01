@@ -17,6 +17,7 @@ Bodo DataFrames supports Pandas DataFrame methods and accessors that are listed 
 ## Reindexing / selection / label manipulation
 - [`bodo.pandas.BodoDataFrame.get`][bododfget]
 - [`bodo.pandas.BodoDataFrame.head`][bododfhead]
+- [`bodo.pandas.BodoDataFrame.filter`][bododffilter]
 - [`bodo.pandas.BodoDataFrame.reset_index`][bododfresetindex]
 ___
 
@@ -37,6 +38,7 @@ ___
 [bododfresetindex]: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.reset_index.html
 
 [bododfhead]: ../dataframe/head.md
+[bododffilter]: ../dataframe/filter.md
 [bododfapply]: ../dataframe/apply.md
 [bododfmappartitions]: ../dataframe/map_partitions.md
 [bododfsortvalues]: ../dataframe/sort_values.md
