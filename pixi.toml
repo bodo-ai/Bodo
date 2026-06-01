@@ -440,7 +440,7 @@ pyarrow = "22.0.*"
 [feature.platform.target.linux-64.pypi-dependencies]
 # Following dependencies are added to PyPi to avoid conflicts with hdf5 + boost-cpp
 matplotlib = "*"
-psycopg2-binary = "*"
+psycopg2 = "*"
 
 
 [feature.platform-hwloc.target.linux-64.dependencies]
