@@ -60,8 +60,9 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
 
         if (expr->type == duckdb::ExpressionType::BOUND_COLUMN_REF) {
             auto& colref = expr->Cast<duckdb::BoundColumnRefExpression>();
-            size_t col_idx = col_ref_map[{colref.binding.table_index,
-                                          colref.binding.column_index}];
+            size_t col_idx =
+                col_ref_map_lookup(col_ref_map, colref.binding.table_index,
+                                   colref.binding.column_index);
             std::unique_ptr<bodo::DataType> col_type =
                 input_schema->column_types[col_idx]->copy();
             output_schema->append_column(std::move(col_type));

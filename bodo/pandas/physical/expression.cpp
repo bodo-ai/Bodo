@@ -381,7 +381,7 @@ arrow::Datum do_arrow_compute_unary(
             arrow::compute::CallFunction("is_null", {src1}, func_options);
         if (!is_null_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_array_compute_unary: Error in Arrow compute: " +
+                "do_arrow_compute_unary: Error in Arrow compute: " +
                 is_null_res.status().message());
         }
 
@@ -390,7 +390,7 @@ arrow::Datum do_arrow_compute_unary(
             arrow::compute::CallFunction("invert", {is_null_res.ValueOrDie()});
         if (!invert_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_array_compute_unary: Error in Arrow compute Invert: " +
+                "do_arrow_compute_unary: Error in Arrow compute Invert: " +
                 invert_res.status().message());
         }
         return invert_res.ValueOrDie();
@@ -404,7 +404,7 @@ arrow::Datum do_arrow_compute_unary(
             "coalesce", {src1, arrow_false}, func_options);
         if (!is_true_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_array_compute_unary: Error in Arrow compute: " +
+                "do_arrow_compute_unary: Error in Arrow compute: " +
                 is_true_res.status().message());
         }
         return is_true_res.ValueOrDie();
@@ -414,7 +414,7 @@ arrow::Datum do_arrow_compute_unary(
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_unary: Error in Arrow compute: " +
+            "do_arrow_compute_unary: Error in Arrow compute: " +
             cmp_res.status().message());
     }
 
@@ -549,8 +549,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             // type.
             auto& bce = expr.Cast<duckdb::BoundColumnRefExpression>();
             duckdb::ColumnBinding binding = bce.binding;
-            size_t col_idx =
-                col_ref_map[{binding.table_index, binding.column_index}];
+            size_t col_idx = col_ref_map_lookup(
+                col_ref_map, binding.table_index, binding.column_index);
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalColumnRefExpression>(col_idx, binding,
                                                               bce.GetName()));

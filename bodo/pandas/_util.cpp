@@ -167,6 +167,11 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             auto interval_type = arrow::duration(arrow::TimeUnit::NANO);
             return arrow::MakeNullScalar(interval_type);
         } break;
+        case duckdb::LogicalTypeId::TIMESTAMP_TZ: {
+            auto timestamp_type =
+                arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
+            return arrow::MakeNullScalar(timestamp_type);
+        } break;
         default:
             throw std::runtime_error(
                 "getDefaultValueForDuckdbValueType unhandled type." +
@@ -489,6 +494,8 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::large_utf8();
         case duckdb::LogicalTypeId::DATE:
             return arrow::date32();
+        case duckdb::LogicalTypeId::TIMESTAMP_SEC:
+            return arrow::timestamp(arrow::TimeUnit::SECOND);
         case duckdb::LogicalTypeId::TIMESTAMP_NS:
             return arrow::timestamp(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::TIME:
@@ -503,6 +510,8 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::int64();
         case duckdb::LogicalTypeId::UHUGEINT:
             return arrow::uint64();
+        case duckdb::LogicalTypeId::TIMESTAMP_TZ:
+            return arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +
@@ -1175,6 +1184,17 @@ std::shared_ptr<arrow::Array> get_py_isin_arg_as_arrow_array(PyObject *args) {
             result.status().ToString());
     }
     return result.ValueOrDie();
+}
+
+size_t col_ref_map_lookup(
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
+    duckdb::idx_t table, duckdb::idx_t column) {
+    auto iter = col_ref_map.find({table, column});
+    if (iter == col_ref_map.end()) {
+        throw std::runtime_error(
+            "Did not find table and column indices in col_ref_map");
+    }
+    return iter->second;
 }
 
 #ifdef USE_CUDF
