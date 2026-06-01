@@ -6,9 +6,11 @@ import datetime
 
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
@@ -506,7 +508,6 @@ def test_timestamp_scalar_to_str(
     bodosql_datetime_types,
     use_sf_cast_syntax,
     cast_str_typename,
-    spark_info,
     memory_leak_check,
 ):
     """Tests casting datetime scalars (from columns) to string types"""
@@ -514,14 +515,30 @@ def test_timestamp_scalar_to_str(
         query = f"SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN A::{cast_str_typename} ELSE 'OTHER' END FROM TABLE1"
     else:
         query = f"SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN CAST(A AS {cast_str_typename}) ELSE 'OTHER' END FROM TABLE1"
-    spark_query = "SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN CAST(A AS STRING) ELSE 'OTHER' END FROM TABLE1"
+
+    df = bodosql_datetime_types["TABLE1"]
+    S = (
+        pc.cast(
+            pa.Array.from_pandas(df["A"].astype("datetime64[ns]")), pa.string()
+        ).to_pandas()
+        if bodosql.use_cpp_backend
+        else df["A"].apply(lambda x: str(x))
+    )
+    py_output = pd.DataFrame(
+        {
+            "OUTPUT": S.where(
+                df["B"] > pd.Timestamp("2010-01-01"),
+                "OTHER",
+            )
+        }
+    )
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        expected_output=py_output,
     )
 
 
