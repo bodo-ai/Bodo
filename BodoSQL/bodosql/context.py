@@ -496,7 +496,14 @@ class BodoSQLContext:
             globalsDict[varname] = locs["value"]
         return func_text_or_err_msg, globalsDict
 
-    def sql(self, sql, params_dict=None, dynamic_params_list=None, **jit_options):
+    def sql(
+        self,
+        sql,
+        params_dict=None,
+        dynamic_params_list=None,
+        use_jit=False,
+        **jit_options,
+    ):
         import bodosql
         from bodo.spawn.spawner import SpawnDispatcher
 
@@ -519,7 +526,8 @@ class BodoSQLContext:
             # Just execute DDL operations directly and return the DataFrame.
             return self.execute_ddl(sql, generator)
         elif (
-            bodosql.use_cpp_backend
+            not use_jit
+            and bodosql.use_cpp_backend
             and (
                 output := self.execute_cpp_backend(
                     sql, generator, dynamic_params_list, params_dict

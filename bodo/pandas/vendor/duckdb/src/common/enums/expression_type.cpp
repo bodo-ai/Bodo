@@ -154,6 +154,8 @@ string ExpressionTypeToString(ExpressionType type) {
 	// Bodo change: added new operator
 	case ExpressionType::OPERATOR_IS_TRUE:
 		return "IS_TRUE";
+	case ExpressionType::OPERATOR_NEG:
+		return "NEG";
 	case ExpressionType::INVALID:
 		break;
 	}

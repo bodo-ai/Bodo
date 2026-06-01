@@ -642,8 +642,13 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
                 "CPUtoGPUExchange::operator(): Received non-empty batch after "
                 "exchange was marked finished");
         }
-        return std::make_tuple(convertTableToGPU(input_batch, se),
-                               OperatorResult::FINISHED);
+        if (is_gpu_rank()) {
+            return std::make_tuple(convertTableToGPU(input_batch, se),
+                                   OperatorResult::FINISHED);
+        } else {
+            auto output_batch = GPU_DATA(nullptr, nullptr, nullptr);
+            return std::make_tuple(output_batch, OperatorResult::FINISHED);
+        }
     }
 
     if (!this->shuffle_state) {
@@ -661,15 +666,28 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
     }
     // Determine whether we need more input, have more output, or are finished
     // with the exchange.
-    bool request_input = !(this->shuffle_state->BuffersFull() &&
-                           (gpu_batch_generator->collected_rows >
-                            (2 * gpu_batch_generator->out_batch_size)));
+    bool request_input;
+    if (!is_gpu_rank()) {
+        request_input = true;
+    } else {
+        request_input = !(this->shuffle_state->BuffersFull() &&
+                          (gpu_batch_generator->collected_rows >
+                           (2 * gpu_batch_generator->out_batch_size)));
+    }
+
     bool local_is_last = prev_op_result == OperatorResult::FINISHED &&
                          (this->shuffle_state->SendRecvEmpty());
-    auto output_batch = gpu_batch_generator->next(se, local_is_last);
+
+    GPU_DATA output_batch;
+    if (is_gpu_rank()) {
+        output_batch = gpu_batch_generator->next(se, local_is_last);
+    } else {
+        output_batch = GPU_DATA(nullptr, nullptr, nullptr);
+    }
     finished = static_cast<bool>(sync_is_last_non_blocking(
                    is_last_state.get(), static_cast<int32_t>(local_is_last))) &&
-               gpu_batch_generator->collected_rows == 0;
+               (gpu_batch_generator ? (gpu_batch_generator->collected_rows == 0)
+                                    : true);
 
     if (finished) {
         this->shuffle_state->Finalize();
@@ -683,10 +701,14 @@ std::tuple<GPU_DATA, OperatorResult> CPUtoGPUExchange::operator()(
 
 void CPUtoGPUExchange::Initialize(std::shared_ptr<table_info> input_batch,
                                   std::shared_ptr<StreamAndEvent> se) {
-    // Initialize GPU batch generator
-    auto dummy_gpu_data = convertTableToGPU(alloc_table_like(input_batch), se);
-    gpu_batch_generator = std::make_unique<GPUBatchGenerator>(
-        dummy_gpu_data, static_cast<size_t>(get_gpu_streaming_batch_size()));
+    if (is_gpu_rank()) {
+        // Initialize GPU batch generator
+        auto dummy_gpu_data =
+            convertTableToGPU(alloc_table_like(input_batch), se);
+        gpu_batch_generator = std::make_unique<GPUBatchGenerator>(
+            dummy_gpu_data,
+            static_cast<size_t>(get_gpu_streaming_batch_size()));
+    }
 
     // Initialize Shuffle State
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;

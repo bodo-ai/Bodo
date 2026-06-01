@@ -87,6 +87,9 @@ public:
 			return "(" + entry.children[0]->ToString() + " IS NULL)";
 		case ExpressionType::OPERATOR_IS_NOT_NULL:
 			return "(" + entry.children[0]->ToString() + " IS NOT NULL)";
+		// Bodo change: add new operator
+		case ExpressionType::OPERATOR_NEG:
+			return "(-" + entry.children[0]->ToString() + ")";
 		case ExpressionType::ARRAY_EXTRACT:
 			return entry.children[0]->ToString() + "[" + entry.children[1]->ToString() + "]";
 		case ExpressionType::ARRAY_SLICE: {

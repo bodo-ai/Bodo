@@ -188,11 +188,12 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
                 cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
             auto& right_bce =
                 cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
-            probe_keys.push_back(left_col_ref_map[{
-                left_bce.binding.table_index, left_bce.binding.column_index}]);
-            build_keys.push_back(
-                right_col_ref_map[{right_bce.binding.table_index,
-                                   right_bce.binding.column_index}]);
+            probe_keys.push_back(col_ref_map_lookup(
+                left_col_ref_map, left_bce.binding.table_index,
+                left_bce.binding.column_index));
+            build_keys.push_back(col_ref_map_lookup(
+                right_col_ref_map, right_bce.binding.table_index,
+                right_bce.binding.column_index));
         }
 
         // Get the indices of kept build columns
@@ -258,13 +259,19 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
                 bododuckdb::JoinCondition::CreateExpression(std::move(cond)));
         }
 
-        rmm::cuda_stream_view stream = cudf::get_default_stream();
-        std::unique_ptr<CudfASTOwner> physExprTree =
-            duckdb_exprs.size()
-                ? std::make_unique<CudfASTOwner>(
-                      build_mixed_join_predicate(duckdb_exprs, left_col_ref_map,
-                                                 right_col_ref_map, stream))
-                : nullptr;
+        rmm::cuda_stream_view stream;
+        std::unique_ptr<CudfASTOwner> physExprTree;
+
+        if (is_gpu_rank()) {
+            stream = cudf::get_default_stream();
+
+            physExprTree =
+                duckdb_exprs.size()
+                    ? std::make_unique<CudfASTOwner>(build_mixed_join_predicate(
+                          duckdb_exprs, left_col_ref_map, right_col_ref_map,
+                          stream))
+                    : nullptr;
+        }
 
         bool build_table_outer =
             (logical_join.join_type == duckdb::JoinType::RIGHT) ||

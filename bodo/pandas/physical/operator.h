@@ -150,7 +150,7 @@ struct GPUBatchGenerator {
  */
 class CPUtoGPUExchange : public RankDataExchange {
    public:
-    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {};
+    CPUtoGPUExchange(int64_t op_id_) : RankDataExchange(op_id_) {}
 
     /**
      * @brief Send data from all ranks to GPUs.
@@ -179,7 +179,7 @@ class CPUtoGPUExchange : public RankDataExchange {
     void Initialize(std::shared_ptr<table_info> input_batch,
                     std::shared_ptr<StreamAndEvent> se);
 
-    std::unique_ptr<GPUBatchGenerator> gpu_batch_generator;
+    std::unique_ptr<GPUBatchGenerator> gpu_batch_generator = nullptr;
 };
 
 /**
