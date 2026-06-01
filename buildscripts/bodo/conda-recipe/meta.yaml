@@ -7,11 +7,7 @@
     {% set mpi_impl = "impi" %}
     {% set mpi_build_pkg = "impi-devel" %}
     {% set mpi_run_pkg = "impi_rt" %}
-{% elif osx %}
-    {% set mpi_impl = "openmpi" %}
-    {% set mpi_build_pkg = "openmpi" %}
-    {% set mpi_run_pkg = "openmpi" %}
-{% elif gpu_enabled and not platform_enabled %}
+{% elif osx or (gpu_enabled and not platform_enabled) %}
     {% set mpi_impl = "openmpi" %}
     {% set mpi_build_pkg = "openmpi" %}
     {% set mpi_run_pkg = "openmpi" %}
