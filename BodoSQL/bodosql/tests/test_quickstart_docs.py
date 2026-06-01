@@ -30,4 +30,4 @@ def test_quickstart_local_sql():
             out_df = bc.sql("SELECT SUM(A) as SUM_OF_COLUMN_A FROM TABLE1 WHERE B > 4")
 
             answer_df = pd.DataFrame({"SUM_OF_COLUMN_A": [28890]})
-            pd.testing.assert_frame_equal(answer_df, out_df, check_dtype=False)
+            pd.testing.assert_frame_equal(out_df, answer_df, check_dtype=False)

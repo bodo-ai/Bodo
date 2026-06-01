@@ -95,8 +95,9 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
             }
             auto& bce =
                 order.expression->Cast<duckdb::BoundColumnRefExpression>();
-            keys.push_back(col_ref_map[{bce.binding.table_index,
-                                        bce.binding.column_index}]);
+            keys.push_back(col_ref_map_lookup(col_ref_map,
+                                              bce.binding.table_index,
+                                              bce.binding.column_index));
         }
 
         // Establish table reordering so key are at beginning.

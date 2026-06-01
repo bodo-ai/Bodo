@@ -91,12 +91,12 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                     cond.GetLHS().Cast<duckdb::BoundColumnRefExpression>();
                 auto& right_bce =
                     cond.GetRHS().Cast<duckdb::BoundColumnRefExpression>();
-                left_keys.push_back(
-                    left_col_ref_map[{left_bce.binding.table_index,
-                                      left_bce.binding.column_index}]);
-                right_keys.push_back(
-                    right_col_ref_map[{right_bce.binding.table_index,
-                                       right_bce.binding.column_index}]);
+                left_keys.push_back(col_ref_map_lookup(
+                    left_col_ref_map, left_bce.binding.table_index,
+                    left_bce.binding.column_index));
+                right_keys.push_back(col_ref_map_lookup(
+                    right_col_ref_map, right_bce.binding.table_index,
+                    right_bce.binding.column_index));
             } else {
                 has_non_equi_cond = true;
             }
