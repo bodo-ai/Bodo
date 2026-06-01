@@ -90,7 +90,7 @@ invalid_bool_params = [
         id="invalid_to_boolean_strings",
     ),
     pytest.param(
-        pd.DataFrame({"A": [1.1, 0.0, np.nan, 0.1, np.nan, -2, -400] * 3}),
+        pd.DataFrame({"A": [1.1, 0.0, np.inf, 0.1, np.nan, -2, -400] * 3}),
         id="invalid_to_boolean_floats",
     ),
 ]
@@ -198,6 +198,9 @@ def test_to_boolean_scalars(spark_info, memory_leak_check):
 
 def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_check):
     df = to_boolean_all_test_dfs
+    if bodosql.use_cpp_backend:
+        # Arrow backend handles inf values differently
+        df = df.replace(np.inf, np.nan)
     query = "SELECT TRY_TO_BOOLEAN(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
