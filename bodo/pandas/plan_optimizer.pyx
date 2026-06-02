@@ -754,8 +754,8 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
         py_val = val.as_py()
         return move(make_const_date_offset_expr(
             py_val.months, py_val.days, py_val.nanoseconds))
-    elif isinstance(val, tuple) and len(val) == 4 and val[0] == "MonthDayNanoInterval"  and all(isinstance(x, int) for x in val):
-        return move(make_const_date_offset_expr(val[0], val[1], val[2]))
+    elif isinstance(val, tuple) and len(val) == 4 and val[0] == "MonthDayNanoInterval":
+        return move(make_const_date_offset_expr(val[1], val[2], val[3]))
     elif isinstance(val, (datetime.datetime, datetime.date)):
         return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):
