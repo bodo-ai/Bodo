@@ -257,7 +257,8 @@ libutf8proc = "*"
 [pypi-dependencies]
 # Added to PyPi to ignore Pandas <3 constraint
 snowflake-connector-python = "*"
-# Add matplotlib to PyPi dependencies to avoid conflicts with hdf5 + boost-cpp
+# The following dependencies were added to PyPi to avoid conflicts with hdf5 + boost-cpp
+matplotlib = "*"
 # Using psycopg2-binary to avoid issues locking pixi environment on MacOS
 # https://www.psycopg.org/docs/install.html#psycopg-vs-psycopg-binary
 psycopg2-binary = "*"
@@ -397,8 +398,6 @@ openai = "*"
 #   - horovod
 
 [feature.dev.pypi-dependencies]
-# Add matplotlib to PyPi dependencies to avoid conflicts with hdf5 + boost-cpp
-matplotlib = "*"
 # Added to PyPi to ignore Pandas <3 constraint
 # Snowflake Testing
 snowflake-sqlalchemy = "*"
@@ -443,10 +442,6 @@ fastapi = "*"
 httpie = "*"
 # For compatibility with PyDough (TODO: remove when unnecessary)
 pyarrow = "22.0.*"
-
-[feature.platform.target.linux-64.pypi-dependencies]
-# Add matplotlib to PyPi dependencies to avoid conflicts with hdf5 + boost-cpp
-matplotlib = "*"
 
 
 [feature.platform-hwloc.target.linux-64.dependencies]
