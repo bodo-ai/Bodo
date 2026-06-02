@@ -373,6 +373,10 @@ ipython = "*"
 # Generation/Embedding Tests
 openai = "*"
 
+# Necessary to avoid regression in GCS I/O tests.
+# TOOD [BSE-XXXX] Fix tests with newer version and remove.
+libgoogle-cloud-storage = "<=2.39.0"
+
 # TODO: Enable when PyTorch is available on Python 3.14
 # pytorch = ">=2.0"
 
