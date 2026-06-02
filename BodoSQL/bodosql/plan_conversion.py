@@ -738,13 +738,15 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         if _is_year_month_interval(lit_type_name):
             # getValue() returns a BigDecimal representing total months
             months = int(java_literal.getValue())
-            val = pa.scalar((months, 0, 0), type=interval_type)
+            # cloudpickle can't serialize pyarrow month_day_nano_interval objects so we pass the values as integers and construct the interval in the C++ backend
+            val = ("MonthDayNanoInterval", months, 0, 0)
         else:
             # Day/second subtypes: getValue2() returns a BigDecimal (Py4J
             # converts to decimal.Decimal) representing milliseconds.
             millis = float(str(java_literal.getValue2()))
             nanos = int(millis * 1_000_000)
-            val = pa.scalar((0, 0, nanos), type=interval_type)
+            # cloudpickle can't serialize pyarrow month_day_nano_interval objects so we pass the values as integers and construct the interval in the C++ backend
+            val = ("MonthDayNanoInterval", 0, 0, nanos)
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
     if (
