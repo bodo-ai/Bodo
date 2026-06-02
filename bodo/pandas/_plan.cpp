@@ -356,6 +356,12 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     if (started_transaction) {
         client_context->transaction.Rollback({});
     }
+
+    // DuckDB may assign a different return type to the expression than the one
+    // our runtime creates so override it (e.g. date subtraction is integer in
+    // DuckDB but duration in Arrow). See
+    // BodoSQL/bodosql/tests/test_arith.py::test_subtraction_between_dates_case
+    result->return_type = arrowTypeToDuckDB(out_schema->field(0)->type());
     return result;
 }
 

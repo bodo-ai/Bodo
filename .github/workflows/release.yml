@@ -78,6 +78,15 @@ jobs:
       arm: false
       is-release: ${{ github.event_name == 'release' }}
     secrets: inherit
+  bodo-conda-platform-gpu:
+    uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
+    with:
+      python-version: '3.14'
+      platform-build: true
+      gpu-build: true
+      arm: false
+      is-release: ${{ github.event_name == 'release' }}
+    secrets: inherit
 
   iceberg-conda:
     uses: ./.github/workflows/_build_iceberg_conda.yml

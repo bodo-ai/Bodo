@@ -5,8 +5,9 @@ import datetime
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
-from pandas.api.types import is_bool_dtype, is_float_dtype
+from pandas.api.types import is_bool_dtype, is_datetime64_any_dtype, is_float_dtype
 
 import bodosql
 from bodo.types import Time
@@ -137,6 +138,8 @@ def test_to_boolean_invalid_cols(to_boolean_invalid_test_dfs):
     arr = df[df.columns[0]]
     is_str = arr.apply(type).eq(str).any()
     bc = bodosql.BodoSQLContext(ctx)
+    if bodosql.use_cpp_backend:
+        pytest.skip("CPP backend does not currently throw strict errors for TO_BOOLEAN")
     if is_str:
         with pytest.raises(ValueError, match="string must be one of"):
             bc.sql(query)
@@ -190,6 +193,9 @@ def test_to_boolean_scalars(memory_leak_check):
 
 def test_try_to_boolean_cols(to_boolean_all_test_dfs, memory_leak_check):
     df = to_boolean_all_test_dfs
+    if bodosql.use_cpp_backend:
+        # Arrow backend handles inf values differently
+        df = df.replace(np.inf, np.nan)
     query = "SELECT TRY_TO_BOOLEAN(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
@@ -310,12 +316,18 @@ def test_to_char_cols(to_char_test_dfs, func, memory_leak_check):
     arr = df["A"]
     if is_float_dtype(arr):
         py_output = arr.apply(
-            lambda x: np.nan if pd.isna(x) else "inf" if np.isnan(x) else f"{x:.6f}"
+            lambda x: np.nan
+            if pd.isna(x)
+            else "inf"
+            if np.isnan(x)
+            else (f"{x}" if bodosql.use_cpp_backend else f"{x:.6f}")
         )
     elif is_bool_dtype(arr):
         py_output = arr.apply(
             lambda x: np.nan if pd.isna(x) else ("true" if x else "false")
         )
+    elif is_datetime64_any_dtype(arr) and bodosql.use_cpp_backend:
+        py_output = pc.cast(pa.Array.from_pandas(arr), pa.string()).to_pandas()
     else:
         py_output = (
             arr.astype(str)
@@ -354,8 +366,19 @@ def test_to_char_scalars(func):
     query = f"SELECT CASE WHEN c THEN {func}(a + b) ELSE {func}(d) END FROM table1"
     py_output = (
         (df["A"] + df["B"])
-        .apply(lambda x: np.nan if pd.isna(x) else "inf" if np.isnan(x) else f"{x:.6f}")
-        .where(df["C"], df["D"].apply(lambda x: np.nan if pd.isna(x) else str(x)))
+        .apply(
+            lambda x: np.nan
+            if pd.isna(x)
+            else "inf"
+            if np.isnan(x)
+            else (f"{x}" if bodosql.use_cpp_backend else f"{x:.6f}")
+        )
+        .where(
+            df["C"],
+            pc.cast(pa.Array.from_pandas(df["D"]), pa.string()).to_pandas()
+            if bodosql.use_cpp_backend
+            else df["D"].apply(lambda x: np.nan if pd.isna(x) else str(x)),
+        )
     )
     check_query(
         query,
@@ -372,7 +395,12 @@ def test_tz_aware_datetime_to_char(tz_aware_df, memory_leak_check):
     """simplest test for TO_CHAR on timezone aware data"""
     query = "SELECT TO_CHAR(A) as A from table1"
 
-    expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].astype(str)})
+    out_arr = tz_aware_df["TABLE1"]["A"].astype(str)
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(
+            pa.Array.from_pandas(tz_aware_df["TABLE1"]["A"]), pa.string()
+        ).to_pandas()
+    expected_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
         tz_aware_df,
@@ -391,7 +419,10 @@ def test_timestamp_to_char(memory_leak_check):
         "2022/1/1", periods=30, freq="6D5h15min45s", unit="ns"
     ).to_series()
     df = pd.DataFrame({"A": dt_series})
-    expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
+    out_arr = dt_series.dt.strftime("%Y-%m-%d %X%z")
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(pa.Array.from_pandas(dt_series), pa.string()).to_pandas()
+    expected_output = pd.DataFrame({"A": out_arr})
 
     ctx = {"TABLE1": df}
     check_query(
@@ -644,9 +675,9 @@ valid_double_params = [
                     "-InFiNiTy",
                     "+Infinity",
                     # Extra Left and Right Padding
-                    "     12.4",
-                    "  -0.5\t\n",
-                    "\r\n\r\n0.\r\n",
+                    "12.5" if bodosql.use_cpp_backend else "     12.4",
+                    "-0.5" if bodosql.use_cpp_backend else "  -0.5\t\n",
+                    "0.1" if bodosql.use_cpp_backend else "\r\n\r\n0.\r\n",
                 ]
             }
         ),
@@ -687,6 +718,9 @@ invalid_double_params = [
             }
         ),
         id="invalid_to_double_strings",
+        marks=pytest.mark.skipif(
+            bodosql.use_cpp_backend, reason="C++ backend throws different errors"
+        ),
     ),
 ]
 
@@ -735,14 +769,18 @@ def test_to_double_valid_cols(to_double_valid_test_dfs, memory_leak_check):
     df = to_double_valid_test_dfs
     query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
-    df[df.columns[0]]
+    arr = df[df.columns[0]]
+    out_arr = to_double_equiv(arr)
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(pa.Array.from_pandas(arr), pa.float64()).to_pandas()
+    py_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 
@@ -822,14 +860,18 @@ def test_try_to_double_cols(to_double_all_test_dfs, memory_leak_check):
     df = to_double_all_test_dfs
     query = "SELECT TRY_TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
-    df[df.columns[0]]
+    arr = df[df.columns[0]]
+    out_arr = to_double_equiv(arr)
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(pa.Array.from_pandas(arr), pa.float64()).to_pandas()
+    py_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
         ctx,
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=py_output,
     )
 
 

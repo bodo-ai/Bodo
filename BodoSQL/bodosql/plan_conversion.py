@@ -223,7 +223,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
         ):
             if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
-                cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+                # Integers are assumed in seconds in BodoSQL
+                cast_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(
+                        pa.timestamp("s" if is_int_type(operand_type) else "ns")
+                    )
+                )
                 in_expr = CastExpression(
                     cast_empty_data,
                     in_expr,
@@ -247,6 +252,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             in_expr = CastExpression(
                 cast_empty_data,
                 in_expr,
+            )
+
+        # Parsing strings to binary not supported yet
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.VARCHAR
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.VARBINARY):
+            raise NotImplementedError(
+                "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
             )
 
         return CastExpression(
@@ -515,7 +528,6 @@ def java_case_to_python_case(ctx, operands, input_plan):
 
 def java_join_to_python_join(ctx, java_join):
     """Convert a BodoSQL Java join plan to a Python join plan."""
-    from bodo.ext import plan_optimizer
 
     ctx.join_filter_info[java_join.getJoinFilterID()] = (
         java_join.getOriginalJoinFilterKeyLocations()
@@ -528,15 +540,7 @@ def java_join_to_python_join(ctx, java_join):
 
     left_keys, right_keys = join_info.keys()
     key_indices = list(zip(left_keys, right_keys))
-    is_left = java_join.getJoinType().generatesNullsOnLeft()
-    is_right = java_join.getJoinType().generatesNullsOnRight()
-    join_type = plan_optimizer.CJoinType.INNER
-    if is_left and is_right:
-        join_type = plan_optimizer.CJoinType.OUTER
-    elif is_left:
-        join_type = plan_optimizer.CJoinType.LEFT
-    elif is_right:
-        join_type = plan_optimizer.CJoinType.RIGHT
+    join_type = JavaJoinTypeToDuckDB(java_join.getJoinType())
 
     left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
@@ -560,13 +564,13 @@ def java_join_to_python_join(ctx, java_join):
     if len(nonEquiConds) == 0:
         return planJoinOrCross
     else:
-        non_equi_exprs = java_expr_to_python_expr(nonEquiConds[0], planJoinOrCross)
+        non_equi_exprs = java_expr_to_python_expr(ctx, nonEquiConds[0], planJoinOrCross)
         # And all the conditions together with the first one above.
         for e in nonEquiConds[1:]:
             non_equi_exprs = ConjunctionOpExpression(
                 non_equi_exprs.empty_data,
                 non_equi_exprs,
-                java_expr_to_python_expr(e, planJoinOrCross),
+                java_expr_to_python_expr(ctx, e, planJoinOrCross),
                 "__and__",
             )
         # We convert a Calcite join with non-equi conditions into an equi join
@@ -1329,4 +1333,26 @@ def java_literal_to_pyiceberg_literal(java_literal):
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet in java_literal_to_pyiceberg_literal"
+    )
+
+
+def JavaJoinTypeToDuckDB(java_join_type):
+    from bodo.ext import plan_optimizer
+
+    JoinRelType = gateway.jvm.org.apache.calcite.rel.core.JoinRelType
+
+    if java_join_type.equals(JoinRelType.INNER):
+        return plan_optimizer.CJoinType.INNER
+
+    if java_join_type.equals(JoinRelType.LEFT):
+        return plan_optimizer.CJoinType.LEFT
+
+    if java_join_type.equals(JoinRelType.RIGHT):
+        return plan_optimizer.CJoinType.RIGHT
+
+    if java_join_type.equals(JoinRelType.FULL):
+        return plan_optimizer.CJoinType.OUTER
+
+    raise NotImplementedError(
+        f"Join type {java_join_type.toString()} not supported yet"
     )
