@@ -732,21 +732,19 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         val = pd.Timestamp(java_literal.getValue2(), unit="ms")
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
-    if _is_year_month_interval(lit_type_name):
-        # getValue() returns a BigDecimal representing total months
-        months = int(java_literal.getValue())
-        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-        val = pd.DateOffset(months=months)
-        return ConstantExpression(dummy_empty_data, input_plan, val)
-
     if _is_interval_type(lit_type_name):
-        # Day/second subtypes: getValue2() returns a BigDecimal (Py4J converts to
-        # decimal.Decimal) representing milliseconds. Use float() to handle
-        # sub-millisecond intervals (e.g., 1 microsecond = 0.001 ms).
-        millis = float(str(java_literal.getValue2()))
-        nanos = int(millis * 1_000_000)
-        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-        val = pd.Timedelta(nanos, unit="ns")
+        interval_type = pa.month_day_nano_interval()
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(interval_type))
+        if _is_year_month_interval(lit_type_name):
+            # getValue() returns a BigDecimal representing total months
+            months = int(java_literal.getValue())
+            val = pa.scalar((months, 0, 0), type=interval_type)
+        else:
+            # Day/second subtypes: getValue2() returns a BigDecimal (Py4J
+            # converts to decimal.Decimal) representing milliseconds.
+            millis = float(str(java_literal.getValue2()))
+            nanos = int(millis * 1_000_000)
+            val = pa.scalar((0, 0, nanos), type=interval_type)
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
     if (
@@ -1078,7 +1076,7 @@ def sql_type_to_pa_type(ctx, sql_type_name):
         tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
         return pa.timestamp("ns", tz=tz)
     if _is_interval_type(sql_type_name):
-        return pa.duration("ns")
+        return pa.month_day_nano_interval()
     if sql_type_name.equals(SqlTypeName.BOOLEAN):
         return pa.bool_()
     if sql_type_name.equals(SqlTypeName.CHAR):

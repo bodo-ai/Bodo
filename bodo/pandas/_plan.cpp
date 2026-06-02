@@ -165,10 +165,10 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
-    int32_t months, int64_t nanos) {
+    int32_t months, int32_t days, int64_t nanos) {
     duckdb::interval_t interval_val;
     interval_val.months = months;
-    interval_val.days = 0;
+    interval_val.days = days;
     interval_val.micros = nanos / 1000;
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::INTERVAL(interval_val));

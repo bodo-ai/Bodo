@@ -104,11 +104,14 @@ extractValue(const duckdb::Value &value) {
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
         } break;
         case duckdb::LogicalTypeId::INTERVAL: {
-            auto interval_type = arrow::duration(arrow::TimeUnit::NANO);
+            auto interval_type = arrow::month_day_nano_interval();
             duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
             return arrow::MakeScalar(
                        interval_type,
-                       duckdb::Interval::GetMicro(extracted) * 1000)
+                       arrow::MonthDayNanoIntervalType::MonthDayNanos{
+                           extracted.months, extracted.days,
+                           extracted.micros *
+                               duckdb::Interval::NANOS_PER_MICRO})
                 .ValueOrDie();
         } break;
         default:
@@ -164,7 +167,7 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             return arrow::MakeNullScalar(time_type);
         } break;
         case duckdb::LogicalTypeId::INTERVAL: {
-            auto interval_type = arrow::duration(arrow::TimeUnit::NANO);
+            auto interval_type = arrow::month_day_nano_interval();
             return arrow::MakeNullScalar(interval_type);
         } break;
         case duckdb::LogicalTypeId::TIMESTAMP_TZ: {

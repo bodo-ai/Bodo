@@ -351,7 +351,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_number_expr[T](object arrow_schema, T val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
-    cdef unique_ptr[CExpression] make_const_date_offset_expr(int32_t months, int64_t nanos) except +
+    cdef unique_ptr[CExpression] make_const_date_offset_expr(int32_t months, int32_t days, int64_t nanos) except +
     cdef unique_ptr[CExpression] make_const_date32_expr(int32_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
@@ -744,7 +744,16 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
     elif isinstance(val, pd.Timedelta):
         return move(make_const_timedelta_ns_expr(val.value))
     elif isinstance(val, pd.DateOffset):
-        return move(make_const_date_offset_expr(val.months, val.nanos))
+        nanos = 0
+        try:
+            nanos = val.nanos
+        except (AttributeError, ValueError):
+            raise NotImplementedError("Only DateOffsets with a fixed frequency are supported as constants, if a variable frequency is needed use pyarrow's MonthDayNanoInterval type instead.")
+        return move(make_const_date_offset_expr(0, 0, nanos))
+    elif isinstance(val, pa.MonthDayNanoIntervalScalar):
+        py_val = val.as_py()
+        return move(make_const_date_offset_expr(
+            py_val.months, py_val.days, py_val.nanoseconds))
     elif isinstance(val, (datetime.datetime, datetime.date)):
         return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):
