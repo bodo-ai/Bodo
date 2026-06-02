@@ -562,16 +562,14 @@ def java_join_to_python_join(ctx, java_join):
                 tmp = left_df.merge(matched_left, on=left_keys, how="left")
 
                 # unmatched rows are those with _matched NaN
-                unmatched_left = tmp[tmp[new_test_col].isna()].drop(
-                    columns=[new_test_col]
-                )
+                unmatched_left = tmp[tmp[new_test_col].isna()]
 
                 # add right-only columns as NA
                 for c, dtype in zip(right_df.columns, right_df.dtypes):
-                    unmatched_left[c] = bd.Series(bd.NA, dtype=dtype)
+                    unmatched_left.new_na_col(c, dtype)
 
                 return bd.concat(
-                    [filtered, unmatched_left]
+                    [filtered, unmatched_left.drop(columns=[new_test_col])]
                 )  # this originally had ignore_index=True
 
             if len(left_keys) == 0:
@@ -597,7 +595,7 @@ def java_join_to_python_join(ctx, java_join):
 
                 # add right-only columns as NA
                 for c, dtype in zip(left_df.columns, left_df.dtypes):
-                    unmatched_right[c] = bd.Series(bd.NA, dtype=dtype)
+                    unmatched_right.new_na_col(c, dtype)
                 unmatched_right_reorder = unmatched_right[
                     list(left_df.columns) + list(right_df.columns)
                 ]
