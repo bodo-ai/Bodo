@@ -75,6 +75,8 @@ duckdb::device_mapping_t partition_to_gpu(
  */
 class Executor {
    private:
+    static bool running;
+
     std::vector<std::shared_ptr<Pipeline>> pipelines;
     /*
      * @brief Do topological sort and fill in the pipelines vector.
@@ -128,7 +130,6 @@ class Executor {
         }
         return false;
     }
-    std::shared_ptr<QueryProfileCollector> my_collector;
 
    public:
     // Holds table_index to PhysicalCTE mapping during physical plan
@@ -140,8 +141,11 @@ class Executor {
    public:
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
                       std::shared_ptr<arrow::Schema> out_schema) {
-        my_collector = std::make_shared<QueryProfileCollector>();
-        my_collector->Init();
+        if (running) {
+            throw std::runtime_error("Recursive Executors not allowed.");
+        }
+        running = true;
+        QueryProfileCollector::Default().Init();
         // Partition between CPU and GPU.
         run_on_gpu = partition_to_gpu(plan);
         // Convert the logical plan to a physical plan
@@ -162,6 +166,8 @@ class Executor {
         fillPipelinesTopoSort(root_pipeline);
     }
 
+    ~Executor() { running = false; }
+
     /**
      * @brief Execute the plan and return the result.
      */
@@ -180,7 +186,7 @@ class Executor {
         DEBUG_PIPELINE_CONTENTS(rank, pipelines, out);
 
         for (size_t i = 0; i < pipelines.size(); ++i) {
-            my_collector->StartPipeline(i);
+            QueryProfileCollector::Default().StartPipeline(i);
             DEBUG_PIPELINE_PRE_EXECUTE(rank, out);
             uint64_t batches_processed = pipelines[i]->Execute(rank, out);
 
@@ -191,9 +197,9 @@ class Executor {
             }
 
             DEBUG_PIPELINE_POST_EXECUTE(rank, out);
-            my_collector->EndPipeline(i, batches_processed);
+            QueryProfileCollector::Default().EndPipeline(i, batches_processed);
         }
-        my_collector->Finalize(0);
+        QueryProfileCollector::Default().Finalize(0);
         std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
                      std::variant<GPU_DATA, PyObject *>>
             gr_res = pipelines.back()->GetResult();

@@ -1096,3 +1096,5 @@ duckdb::device_mapping_t partition_to_gpu(
     partition_internal(*plan, run_on_gpu);
     return run_on_gpu;
 }
+
+bool Executor::running = false;
