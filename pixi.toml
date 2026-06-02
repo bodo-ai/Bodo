@@ -248,7 +248,7 @@ pyzmq = "*"
 # Setting explicitly since Conda solve sets a newer version but PyIceberg installed from pip wants <15.0 (TODO: remove when unnecessary)
 rich = "<15.0"
 # Necessary to avoid regression in GCS I/O tests.
-# TOOD [BSE-5450] Fix tests with newer version and remove.
+# TODO(BSE-5450): Fix tests with newer version and remove.
 libgoogle-cloud-storage = "<=2.39.0"
 
 [target.linux-64.dependencies]
