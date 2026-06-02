@@ -20,6 +20,7 @@ from bodo.pandas.plan import (
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
+    LazyPlan,
     LogicalAggregate,
     LogicalComparisonJoin,
     LogicalCrossProduct,
@@ -33,6 +34,7 @@ from bodo.pandas.plan import (
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
+from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
 
@@ -462,6 +464,18 @@ def java_binop_to_python_expr(kind, op_exprs):
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
+def gen_plan_via_bodo_dataframe(func, *args, **kwargs):
+    args = [arg if not isinstance(arg, LazyPlan) else wrap_plan(arg) for arg in args]
+    kwargs = {
+        k: (arg if not isinstance(arg, LazyPlan) else wrap_plan(arg))
+        for k, arg in kwargs.items()
+    }
+    output_dataframe = func(*args, **kwargs)
+    assert isinstance(output_dataframe, bodo.pandas.DataFrame)
+    assert output_dataframe.is_lazy_plan()
+    return output_dataframe._plan
+
+
 def java_case_to_python_case(operands, input_plan):
     """Convert a BodoSQL Java CASE operator call to a DataFrame library CaseExpression.
     operands has the form [when1, then1, when2, then2, ..., else].
@@ -536,6 +550,68 @@ def java_join_to_python_join(ctx, java_join):
                 "__and__",
             )
         planFilter = LogicalFilter(empty_join_out, planJoinOrCross, non_equi_exprs)
+        if join_type == plan_optimizer.CJoinType.RIGHT:
+
+            def right_fix_na(filtered, left_keys, left_df, right_df):
+                new_test_col = "_plan_conversion_right"
+                # matched_left as unique left rows that appeared in filtered
+                matched_left = filtered[left_keys].drop_duplicates()
+                matched_left[new_test_col] = 1
+
+                # merge matched_left back to left_df; rows that did not match will have NaN in columns from matched_left
+                tmp = left_df.merge(matched_left, on=left_keys, how="left")
+
+                # unmatched rows are those with _matched NaN
+                unmatched_left = tmp[tmp[new_test_col].isna()].drop(
+                    columns=[new_test_col]
+                )
+
+                # add right-only columns as NA
+                for c, dtype in zip(right_df.columns, right_df.dtypes):
+                    unmatched_left[c] = bd.Series(bd.NA, dtype=dtype)
+
+                return bd.concat(
+                    [filtered, unmatched_left]
+                )  # this originally had ignore_index=True
+
+            if len(left_keys) == 0:
+                left_keys = list(left_plan.empty_data.columns)
+            planFilter = gen_plan_via_bodo_dataframe(
+                right_fix_na, planFilter, left_keys, left_plan, right_plan
+            )
+        elif join_type == plan_optimizer.CJoinType.LEFT:
+
+            def left_fix_na(filtered, right_keys, left_df, right_df):
+                new_test_col = "_plan_conversion_left"
+                # matched_left as unique left rows that appeared in filtered
+                matched_right = filtered[right_keys].drop_duplicates()
+                matched_right[new_test_col] = 1
+
+                # merge matched_left back to left_df; rows that did not match will have NaN in columns from matched_left
+                tmp = right_df.merge(matched_right, on=right_keys, how="left")
+
+                # unmatched rows are those with _matched NaN
+                unmatched_right = tmp[tmp[new_test_col].isna()].drop(
+                    columns=[new_test_col]
+                )
+
+                # add right-only columns as NA
+                for c, dtype in zip(left_df.columns, left_df.dtypes):
+                    unmatched_right[c] = bd.Series(bd.NA, dtype=dtype)
+                unmatched_right_reorder = unmatched_right[
+                    list(left_df.columns) + list(right_df.columns)
+                ]
+
+                return bd.concat(
+                    [filtered, unmatched_right_reorder]
+                )  # this originally had ignore_index=True
+
+            if len(right_keys) == 0:
+                right_keys = list(right_plan.empty_data.columns)
+            planFilter = gen_plan_via_bodo_dataframe(
+                left_fix_na, planFilter, right_keys, left_plan, right_plan
+            )
+
         return planFilter
 
 
