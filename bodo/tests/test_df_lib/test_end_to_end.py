@@ -667,6 +667,58 @@ def test_filter_datetime(datapath, op):
     )
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "kwargs, error, epc",
+    [
+        pytest.param({}, TypeError, 0),
+        pytest.param({"items": [], "like": "A"}, TypeError, 0),
+        pytest.param({"items": ["A_3", "2-A", "2-A", "not_a_column"]}, None, 0),
+        pytest.param({"items": {"1AA", "B-", "A_3"}}, None, 0),
+        pytest.param({"like": "A"}, None, 0),
+        pytest.param({"regex": ".*[-4].*"}, None, 0),
+        pytest.param(
+            {"items": []},
+            None,
+            0,
+            marks=pytest.mark.skip(
+                reason="Bodo does not currently retain indices when there are no columns"
+            ),
+        ),
+        pytest.param({"items": ["A1", "2-A"], "axis": 1}, None, 0),
+        pytest.param({"items": ["A_3", "A1"], "axis": "columns"}, None, 0),
+        pytest.param({"items": [2, 5, 1], "axis": 0}, None, 1),
+    ],
+)
+def test_filter_method(kwargs, error, epc):
+    """Basic test for DataFrame.filter()"""
+    with assert_executed_plan_count(epc):
+        df = pd.DataFrame(
+            {
+                "A1": [1, 2, 3, 4, 5],
+                "1AA": [10, 9, 8, 7, 6],
+                "2-A": [5, 5.9, -0.13, 1, 1],
+                "B-": [1, 10, 2, 9, 3],
+                "A_3": [8.2, 1.43, 7.3, 9.7, 8.21],
+                4: [2.5, 3, 3.5, 4, 4.02],
+            }
+        )
+        bdf = bd.from_pandas(df)
+
+        if error:
+            with pytest.raises(error):
+                df_filtered = df.filter(**kwargs)
+            with pytest.raises(error):
+                bdf_filtered = bdf.filter(**kwargs)
+        else:
+            df_filtered = df.filter(**kwargs)
+            bdf_filtered = bdf.filter(**kwargs)
+    if not error:
+        _test_equal(
+            bdf_filtered, df_filtered, check_pandas_types=False, reset_index=True
+        )
+
+
 @pytest.mark.gpu(allow_fallback=True)  # fallback count-star
 def test_head_pushdown(datapath):
     """Test for head pushed down to read parquet."""

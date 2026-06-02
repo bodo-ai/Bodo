@@ -36,7 +36,9 @@ find_program(SCCACHE_EXECUTABLE "sccache")
 if ((NOT DEFINED ENV{DISABLE_CCACHE}) AND CCACHE_EXECUTABLE)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
 elseif ((NOT DEFINED ENV{DISABLE_SCCACHE}) AND SCCACHE_EXECUTABLE)
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE sccache)
+    set(CMAKE_C_COMPILER_LAUNCHER sccache)
+    set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
+    # Avoid setting CUDA launcher due to CUDA 13.3 + sccache fatbinary/PTX issues
 endif()
 
 # ---------------------------- Enable C++ Linting ----------------------------
