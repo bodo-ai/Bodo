@@ -769,7 +769,7 @@ def test_log(args):
                 )
             ),
             id="vector_uint8",
-            makrks=pytest.mark.weekly,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.Series(
