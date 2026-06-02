@@ -484,12 +484,13 @@ duckdb::unique_ptr<duckdb::Expression> make_case_expr(
 
 duckdb::unique_ptr<duckdb::LogicalCrossProduct> make_cross_product(
     std::unique_ptr<duckdb::LogicalOperator> &left,
-    std::unique_ptr<duckdb::LogicalOperator> &right) {
+    std::unique_ptr<duckdb::LogicalOperator> &right, bool force_broadcast) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto left_duck = to_duckdb(left);
     auto right_duck = to_duckdb(right);
     auto logical_cp = duckdb::make_uniq<duckdb::LogicalCrossProduct>(
         std::move(left_duck), std::move(right_duck));
+    logical_cp->force_broadcast = force_broadcast;
 
     return logical_cp;
 }
@@ -1223,7 +1224,8 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
-    std::vector<std::pair<int, int>> &cond_vec, int join_id) {
+    std::vector<std::pair<int, int>> &cond_vec, int join_id,
+    bool force_broadcast) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
@@ -1260,6 +1262,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     }
 
     comp_join->join_id = join_id;
+    comp_join->force_broadcast = force_broadcast;
     return comp_join;
 }
 

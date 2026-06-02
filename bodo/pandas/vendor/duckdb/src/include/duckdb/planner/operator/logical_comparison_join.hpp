@@ -41,6 +41,7 @@ public:
 
 	// Bodo change: keep track of join id for join filters (only used in BodoSQL C++ backend and doesn't go through DuckDB optimizer)
 	int join_id = -1;
+	bool force_broadcast = false;
 
 public:
 	InsertionOrderPreservingMap<string> ParamsToString() const override;

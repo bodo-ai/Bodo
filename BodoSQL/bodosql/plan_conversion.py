@@ -541,6 +541,7 @@ def java_join_to_python_join(ctx, java_join):
     left_keys, right_keys = join_info.keys()
     key_indices = list(zip(left_keys, right_keys))
     join_type = JavaJoinTypeToDuckDB(java_join.getJoinType())
+    force_broadcast = java_join.getBroadcastBuildSide()
 
     left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
@@ -557,9 +558,12 @@ def java_join_to_python_join(ctx, java_join):
             join_type,
             key_indices,
             java_join.getJoinFilterID(),
+            force_broadcast,
         )
     else:
-        planJoinOrCross = LogicalCrossProduct(empty_join_out, left_plan, right_plan)
+        planJoinOrCross = LogicalCrossProduct(
+            empty_join_out, left_plan, right_plan, force_broadcast
+        )
 
     if len(nonEquiConds) == 0:
         return planJoinOrCross
