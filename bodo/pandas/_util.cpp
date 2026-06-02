@@ -8,6 +8,7 @@
 #include <arrow/scalar.h>
 #include <arrow/table.h>
 #include <arrow/type_fwd.h>
+#include <arrow/util/decimal.h>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "duckdb/common/types.hpp"
@@ -515,10 +516,94 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::uint64();
         case duckdb::LogicalTypeId::TIMESTAMP_TZ:
             return arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
+        case duckdb::LogicalTypeId::INTERVAL:
+            // NOTE: using ns by default but DuckDB interval type loses
+            // precision in Arrow type roundtrips
+            return arrow::duration(arrow::TimeUnit::NANO);
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +
                 std::to_string(static_cast<int>(type.id())));
+    }
+}
+
+duckdb::LogicalType arrowTypeToDuckDB(
+    const std::shared_ptr<arrow::DataType> &type) {
+    switch (type->id()) {
+        case arrow::Type::INT8:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::TINYINT);
+        case arrow::Type::INT16:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::SMALLINT);
+        case arrow::Type::INT32:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::INTEGER);
+        case arrow::Type::INT64:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::BIGINT);
+        case arrow::Type::UINT8:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::UTINYINT);
+        case arrow::Type::UINT16:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::USMALLINT);
+        case arrow::Type::UINT32:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::UINTEGER);
+        case arrow::Type::UINT64:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::UBIGINT);
+        case arrow::Type::FLOAT:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::FLOAT);
+        case arrow::Type::DOUBLE:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::DOUBLE);
+        case arrow::Type::BOOL:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::BOOLEAN);
+        case arrow::Type::STRING:
+        case arrow::Type::LARGE_STRING:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::VARCHAR);
+        case arrow::Type::DATE32:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::DATE);
+        case arrow::Type::BINARY:
+        case arrow::Type::LARGE_BINARY:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::BLOB);
+        case arrow::Type::TIME64:
+            return duckdb::LogicalType(duckdb::LogicalTypeId::TIME);
+        case arrow::Type::TIMESTAMP: {
+            auto ts_type = std::static_pointer_cast<arrow::TimestampType>(type);
+            if (!ts_type->timezone().empty()) {
+                return duckdb::LogicalType(duckdb::LogicalTypeId::TIMESTAMP_TZ);
+            }
+            switch (ts_type->unit()) {
+                case arrow::TimeUnit::SECOND:
+                    return duckdb::LogicalType(
+                        duckdb::LogicalTypeId::TIMESTAMP_SEC);
+                case arrow::TimeUnit::MILLI:
+                    return duckdb::LogicalType(
+                        duckdb::LogicalTypeId::TIMESTAMP_MS);
+                case arrow::TimeUnit::MICRO:
+                    return duckdb::LogicalType(
+                        duckdb::LogicalTypeId::TIMESTAMP);
+                case arrow::TimeUnit::NANO:
+                    return duckdb::LogicalType(
+                        duckdb::LogicalTypeId::TIMESTAMP_NS);
+                default:
+                    throw std::runtime_error(
+                        "arrowTypeToDuckDB unsupported Arrow timestamp unit " +
+                        std::to_string(static_cast<int>(ts_type->unit())));
+            }
+        }
+        case arrow::Type::DURATION: {
+            auto dur_type = std::static_pointer_cast<arrow::DurationType>(type);
+            switch (dur_type->unit()) {
+                case arrow::TimeUnit::SECOND:
+                case arrow::TimeUnit::MILLI:
+                case arrow::TimeUnit::MICRO:
+                case arrow::TimeUnit::NANO:
+                    return duckdb::LogicalType(duckdb::LogicalTypeId::INTERVAL);
+                default:
+                    throw std::runtime_error(
+                        "arrowTypeToDuckDB unsupported Arrow duration unit " +
+                        std::to_string(static_cast<int>(dur_type->unit())));
+            }
+        } break;
+        default:
+            throw std::runtime_error(
+                "arrowTypeToDuckDB unsupported Arrow type conversion " +
+                type->ToString());
     }
 }
 
