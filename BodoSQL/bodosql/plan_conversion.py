@@ -163,7 +163,44 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     op = java_call.getOperator()
     operator_class_name = op.getClass().getSimpleName()
 
-    if operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator"):
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+    if (
+        operator_class_name == "SqlNullPolicyFunction"
+        and len(java_call.getOperands()) == 2
+    ):
+        func_name = op.getName().upper()
+        if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
+            # DATE_ADD(date, interval) → date + interval
+            return java_binop_to_python_expr(
+                ctx,
+                SqlKind.PLUS,
+                [
+                    java_expr_to_python_expr(
+                        ctx, java_call.getOperands()[i], input_plan
+                    )
+                    for i in range(len(java_call.getOperands()))
+                ],
+            )
+        if func_name in ("DATE_SUB", "SUBDATE"):
+            # DATE_SUB(date, interval) → date - interval
+            return java_binop_to_python_expr(
+                ctx,
+                SqlKind.MINUS,
+                [
+                    java_expr_to_python_expr(
+                        ctx, java_call.getOperands()[i], input_plan
+                    )
+                    for i in range(len(java_call.getOperands()))
+                ],
+            )
+
+    if operator_class_name in (
+        "SqlMonotonicBinaryOperator",
+        "SqlBinaryOperator",
+        "SqlDatetimePlusOperator",
+        "SqlDatetimeSubtractionOperator",
+    ):
         operands = java_call.getOperands()
         # Calcite may add more than 2 operand for the same binary operator
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
@@ -360,6 +397,37 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         # function name as string (e.g., "POWER", "SQRT")
         func_name = op.getName().upper()
+
+        # COMBINE_INTERVALS combines multiple interval literals into a single
+        # interval constant. Accumulate months (from DateOffset) and nanoseconds
+        # (from Timedelta) separately since pd.DateOffset does not support
+        # arithmetic with other DateOffsets or Timedeltas.
+        if func_name == "COMBINE_INTERVALS":
+            total_months = 0
+            total_nanos = 0
+            for expr in op_exprs:
+                val = expr.value
+                if isinstance(val, tuple) and len(val) == 2:
+                    total_months += val[0]
+                    total_nanos += val[1]
+                elif isinstance(val, pd.DateOffset):
+                    total_months += val.months
+                elif isinstance(val, pd.Timedelta):
+                    total_nanos += val.value
+                else:
+                    raise ValueError(
+                        f"Unexpected interval type in COMBINE_INTERVALS: {type(val)}"
+                    )
+            if total_nanos % 1000 != 0:
+                raise ValueError(
+                    "Sub-microsecond intervals not supported in C++ backend"
+                )
+            if total_months != 0:
+                combined_val = (total_months, total_nanos)
+            else:
+                combined_val = pd.Timedelta(nanoseconds=total_nanos)
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+            return ConstantExpression(dummy_empty_data, input_plan, combined_val)
 
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
@@ -739,12 +807,14 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         val = pd.DateOffset(months=months)
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
-    if _is_interval_type(lit_type_name):
+    if _is_interval_type(lit_type_name) and not _is_year_month_interval(lit_type_name):
         # Day/second subtypes: getValue2() returns a BigDecimal (Py4J converts to
         # decimal.Decimal) representing milliseconds. Use float() to handle
         # sub-millisecond intervals (e.g., 1 microsecond = 0.001 ms).
         millis = float(str(java_literal.getValue2()))
         nanos = int(millis * 1_000_000)
+        if nanos % 1000 != 0:
+            raise ValueError("Sub-microsecond intervals not supported in C++ backend")
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
         val = pd.Timedelta(nanos, unit="ns")
         return ConstantExpression(dummy_empty_data, input_plan, val)

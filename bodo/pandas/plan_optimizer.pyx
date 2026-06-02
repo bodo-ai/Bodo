@@ -744,7 +744,10 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
     elif isinstance(val, pd.Timedelta):
         return move(make_const_timedelta_ns_expr(val.value))
     elif isinstance(val, pd.DateOffset):
-        return move(make_const_date_offset_expr(val.months, val.nanos))
+        return move(make_const_date_offset_expr(val.months, 0))
+    elif isinstance(val, tuple) and len(val) == 2:
+        # Combined interval (months, nanos) from COMBINE_INTERVALS
+        return move(make_const_date_offset_expr(int(val[0]), int(val[1])))
     elif isinstance(val, (datetime.datetime, datetime.date)):
         return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):

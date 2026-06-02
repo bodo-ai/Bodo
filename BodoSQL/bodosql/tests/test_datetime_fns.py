@@ -447,29 +447,32 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
         pytest.param(
             "SELECT A, DATEFN from table1",
             id="no_case-just_getdate",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT A, DATEFN - interval '6' months from table1",
             id="no_case-minus_interval-month",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT A, DATEFN + interval '5' weeks from table1",
             id="no_case-plus_interval-week",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT A, DATEFN - interval '8 weeks' from table1",
             id="no_case-minus_interval-week-sf-syntax",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT A, DATEFN - interval '8' weeks from table1",
             id="no_case-minus_interval-week",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT A, DATEFN + interval '5' days from table1",
             id="no_case-plus_interval-day",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT A, CASE WHEN EXTRACT(MONTH from DATEFN) = A then 'y' ELSE 'n' END from table1",
@@ -2711,6 +2714,7 @@ def date_add_sub_date_df():
                 pd.DataFrame({"OUTPUTS": [pd.Timestamp("2020-10-14 16:00:00")]}),
             ),
             id="DATE_ADD-scalar_time_interval",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2731,6 +2735,7 @@ def date_add_sub_date_df():
                 ),
             ),
             id="ADDDATE-vector_time_interval_with_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2786,6 +2791,7 @@ def date_add_sub_date_df():
                 pd.DataFrame({"OUTPUTS": [pd.Timestamp("2011-1-17 22:40:00")]}),
             ),
             id="DATE_SUB-scalar_time_interval",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2806,6 +2812,7 @@ def date_add_sub_date_df():
                 ),
             ),
             id="SUBDATE-vector_time_interval",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2813,6 +2820,7 @@ def date_add_sub_date_df():
                 pd.DataFrame({"OUTPUTS": [datetime.date(1999, 12, 22)]}),
             ),
             id="SUBDATE-scalar_date_interval",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2840,6 +2848,7 @@ def date_add_sub_date_df():
                 pd.DataFrame({"OUTPUTS": [datetime.date(1990, 10, 24)]}),
             ),
             id="date_minus_date_interval",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (

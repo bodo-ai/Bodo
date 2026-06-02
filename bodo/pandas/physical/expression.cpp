@@ -1,6 +1,7 @@
 #include "expression.h"
 #include <arrow/type_fwd.h>
 #include "_util.h"
+#include "duckdb/common/types/interval.hpp"
 
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr) {
@@ -689,6 +690,40 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                                 bfe.function.name));
                     } break;
                     case 2: {
+                        // Check for month-bearing calendar interval constants
+                        // that Arrow's duration-based add cannot handle.
+                        for (int ci = 0; ci < 2; ci++) {
+                            if (bfe.children[ci]->GetExpressionClass() ==
+                                duckdb::ExpressionClass::BOUND_CONSTANT) {
+                                auto& const_expr =
+                                    bfe.children[ci]
+                                        ->Cast<
+                                            duckdb::BoundConstantExpression>();
+                                if (!const_expr.value.IsNull() &&
+                                    const_expr.value.type().id() ==
+                                        duckdb::LogicalTypeId::INTERVAL) {
+                                    duckdb::interval_t interval =
+                                        const_expr.value
+                                            .GetValue<duckdb::interval_t>();
+                                    if (interval.months != 0) {
+                                        int date_child_idx = 1 - ci;
+                                        bool is_sub =
+                                            (bfe.function.name == "subtract" ||
+                                             bfe.function.name == "-");
+                                        return std::static_pointer_cast<
+                                            PhysicalExpression>(
+                                            std::make_shared<
+                                                PhysicalCalendarIntervalExpression>(
+                                                buildPhysicalExprTree(
+                                                    bfe.children
+                                                        [date_child_idx],
+                                                    col_ref_map, no_scalars),
+                                                interval, ci == 0, is_sub,
+                                                result_type));
+                                    }
+                                }
+                            }
+                        }
                         return std::static_pointer_cast<PhysicalExpression>(
                             std::make_shared<PhysicalBinaryExpression>(
                                 buildPhysicalExprTree(bfe.children[0],
@@ -1082,4 +1117,126 @@ void EnsureModRegistered() {
         auto* registry = arrow::compute::GetFunctionRegistry();
         RegisterMod(registry);
     });
+}
+
+std::shared_ptr<ExprResult> PhysicalCalendarIntervalExpression::ProcessBatch(
+    std::shared_ptr<table_info> input_batch) {
+    auto child_res = date_child->ProcessBatch(input_batch);
+
+    duckdb::interval_t effective_interval = calendar_interval;
+    if (is_subtract) {
+        effective_interval = duckdb::Interval::Invert(effective_interval);
+    }
+
+    auto child_arr = std::dynamic_pointer_cast<ArrayExprResult>(child_res);
+    auto child_scalar = std::dynamic_pointer_cast<ScalarExprResult>(child_res);
+
+    std::shared_ptr<arrow::Array> arrow_arr;
+    bool is_scalar = false;
+    if (child_arr) {
+        arrow_arr = prepare_arrow_compute(child_arr->result);
+    } else if (child_scalar) {
+        arrow_arr = prepare_arrow_compute(child_scalar->result);
+        is_scalar = true;
+    } else {
+        throw std::runtime_error(
+            "PhysicalCalendarIntervalExpression: child is neither array "
+            "nor scalar");
+    }
+
+    int64_t num_rows = arrow_arr->length();
+    auto arrow_type = arrow_arr->type();
+
+    if (arrow_type->id() == arrow::Type::TIMESTAMP) {
+        auto ts_arr =
+            std::static_pointer_cast<arrow::TimestampArray>(arrow_arr);
+        auto ts_unit =
+            std::static_pointer_cast<arrow::TimestampType>(arrow_type)->unit();
+        auto nanos_per_unit = [](arrow::TimeUnit::type unit) -> int64_t {
+            switch (unit) {
+                case arrow::TimeUnit::SECOND:
+                    return 1000000000LL;
+                case arrow::TimeUnit::MILLI:
+                    return 1000000LL;
+                case arrow::TimeUnit::MICRO:
+                    return 1000LL;
+                case arrow::TimeUnit::NANO:
+                    return 1LL;
+                default:
+                    throw std::runtime_error("Unknown time unit");
+            }
+        };
+        int64_t mult = nanos_per_unit(ts_unit);
+        arrow::TimestampBuilder ts_builder(
+            arrow::timestamp(arrow::TimeUnit::NANO),
+            arrow::default_memory_pool());
+        for (int64_t i = 0; i < num_rows; i++) {
+            if (ts_arr->IsNull(i)) {
+                (void)ts_builder.AppendNull();
+            } else {
+                int64_t ns_val = ts_arr->Value(i) * mult;
+                duckdb::timestamp_t ts(ns_val / 1000);
+                duckdb::timestamp_t result =
+                    duckdb::Interval::Add(ts, effective_interval);
+                (void)ts_builder.Append(result.value * 1000);
+            }
+        }
+        arrow::Result<std::shared_ptr<arrow::Array>> res_arr =
+            ts_builder.Finish();
+        if (!res_arr.ok()) {
+            throw std::runtime_error(res_arr.status().ToString());
+        }
+        auto bodo_arr = arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                            bodo::BufferPool::DefaultPtr());
+        if (is_scalar) {
+            return std::make_shared<ScalarExprResult>(std::move(bodo_arr));
+        }
+        return std::make_shared<ArrayExprResult>(std::move(bodo_arr),
+                                                 "CalendarInterval");
+    } else if (arrow_type->id() == arrow::Type::DATE32) {
+        auto date_arr = std::static_pointer_cast<arrow::Date32Array>(arrow_arr);
+        // DATE + year/month interval produces TIMESTAMP in DuckDB.
+        // Convert date_t result to nanosecond timestamp at midnight.
+        arrow::TimestampBuilder ts_builder(
+            arrow::timestamp(arrow::TimeUnit::NANO),
+            arrow::default_memory_pool());
+        for (int64_t i = 0; i < num_rows; i++) {
+            if (date_arr->IsNull(i)) {
+                (void)ts_builder.AppendNull();
+            } else {
+                int32_t days = date_arr->Value(i);
+                duckdb::date_t date(days);
+                duckdb::date_t date_res =
+                    duckdb::Interval::Add(date, effective_interval);
+                // days → nanoseconds
+                int64_t ts_ns = int64_t(date_res.days) * 86400000000000LL;
+                (void)ts_builder.Append(ts_ns);
+            }
+        }
+        arrow::Result<std::shared_ptr<arrow::Array>> res_arr =
+            ts_builder.Finish();
+        if (!res_arr.ok()) {
+            throw std::runtime_error(res_arr.status().ToString());
+        }
+        auto bodo_arr = arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                            bodo::BufferPool::DefaultPtr());
+        if (is_scalar) {
+            return std::make_shared<ScalarExprResult>(std::move(bodo_arr));
+        }
+        return std::make_shared<ArrayExprResult>(std::move(bodo_arr),
+                                                 "CalendarInterval");
+    }
+
+    throw std::runtime_error(
+        "PhysicalCalendarIntervalExpression: unsupported input type " +
+        arrow_type->ToString());
+}
+
+arrow::Datum PhysicalCalendarIntervalExpression::join_expr_internal(
+    array_info** left_table, array_info** right_table, void** left_data,
+    void** right_data, void** left_null_bitmap, void** right_null_bitmap,
+    int64_t left_index, int64_t right_index) {
+    throw std::runtime_error(
+        "PhysicalCalendarIntervalExpression::join_expr_internal not "
+        "implemented");
 }

@@ -392,6 +392,7 @@ def test_wraparound_unsigned_numerics(bodosql_numeric_types, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_add_sub_intervals(bodosql_datetime_types, memory_leak_check, interval):
     """
     Tests support for + and - with various intervals.

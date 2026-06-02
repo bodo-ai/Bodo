@@ -496,6 +496,10 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::date32();
         case duckdb::LogicalTypeId::TIMESTAMP_SEC:
             return arrow::timestamp(arrow::TimeUnit::SECOND);
+        case duckdb::LogicalTypeId::TIMESTAMP_MS:
+            return arrow::timestamp(arrow::TimeUnit::MILLI);
+        case duckdb::LogicalTypeId::TIMESTAMP:
+            return arrow::timestamp(arrow::TimeUnit::MICRO);
         case duckdb::LogicalTypeId::TIMESTAMP_NS:
             return arrow::timestamp(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::TIME:
@@ -512,6 +516,8 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::uint64();
         case duckdb::LogicalTypeId::TIMESTAMP_TZ:
             return arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
+        case duckdb::LogicalTypeId::INTERVAL:
+            return arrow::duration(arrow::TimeUnit::NANO);
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +

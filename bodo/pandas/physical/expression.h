@@ -95,7 +95,8 @@ enum class PhysicalExpressionType {
     BINARY,
     CASE,
     UDF,
-    ARROW
+    ARROW,
+    CALENDAR_INTERVAL
 };
 
 arrow::Datum fill_null(arrow::Datum &src, const arrow::Datum &val);
@@ -979,6 +980,45 @@ class PhysicalBinaryExpression : public PhysicalExpression {
 
    protected:
     std::string comparator;
+    const std::shared_ptr<arrow::DataType> result_type;
+};
+
+#include "duckdb/common/types/interval.hpp"
+
+/**
+ * @brief Physical expression tree node for calendar-aware interval arithmetic
+ * (year/month offsets) that Arrow's duration-based add cannot handle.
+ * Uses DuckDB's Interval::Add() for month-end clamping.
+ *
+ */
+class PhysicalCalendarIntervalExpression : public PhysicalExpression {
+   public:
+    PhysicalCalendarIntervalExpression(
+        std::shared_ptr<PhysicalExpression> date_child,
+        duckdb::interval_t interval, bool interval_is_left, bool is_subtract,
+        std::shared_ptr<arrow::DataType> result_type)
+        : PhysicalExpression(PhysicalExpressionType::CALENDAR_INTERVAL),
+          date_child(std::move(date_child)),
+          calendar_interval(interval),
+          interval_is_left(interval_is_left),
+          is_subtract(is_subtract),
+          result_type(std::move(result_type)) {}
+
+    virtual ~PhysicalCalendarIntervalExpression() = default;
+
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch);
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index);
+
+   private:
+    std::shared_ptr<PhysicalExpression> date_child;
+    duckdb::interval_t calendar_interval;
+    bool interval_is_left;
+    bool is_subtract;
     const std::shared_ptr<arrow::DataType> result_type;
 };
 
