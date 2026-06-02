@@ -110,7 +110,10 @@ def test_approx_percentile(data, memory_leak_check):
 
 @pytest.mark.parametrize(
     "use_default",
-    [pytest.param(True, id="with_default"), pytest.param(False, id="no_default")],
+    [
+        pytest.param(True, id="with_default"),
+        pytest.param(False, id="no_default", marks=pytest.mark.slow),
+    ],
 )
 @pytest.mark.parametrize(
     "shift, answer",
@@ -262,7 +265,7 @@ def test_null_ignoring_shift(
                 pd.Series([0, 1, 2, 3, 4, 5, 6, 7]),
             ),
             id="int8_sorted_no_null_no_duplicates",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (
@@ -273,7 +276,7 @@ def test_null_ignoring_shift(
                 pd.Series([0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 3]),
             ),
             id="uint16_sorted_with_null_with_duplicates",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (
@@ -281,7 +284,7 @@ def test_null_ignoring_shift(
                 pd.Series([0, 0, 1, 2, 3, 4]),
             ),
             id="int16_sorted_with_null_no_duplicates",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (
@@ -292,7 +295,7 @@ def test_null_ignoring_shift(
                 pd.Series([0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 5, 5]),
             ),
             id="uint32_unsorted_no_null_with_duplicates",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (
@@ -300,7 +303,7 @@ def test_null_ignoring_shift(
                 pd.Series([0, 1, 2, 3, 4]),
             ),
             id="int32_unsorted_no_null_no_duplicates",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (
@@ -318,7 +321,7 @@ def test_null_ignoring_shift(
                 pd.Series([0, 1, 2, 2, 3, 4]),
             ),
             id="int64_unsorted_with_null_no_duplicates",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (

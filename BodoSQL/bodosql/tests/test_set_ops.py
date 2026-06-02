@@ -151,19 +151,27 @@ def make_tz_aware_df(tz):
     "numeric_dfs",
     [
         # Integer
-        {
-            "TABLE1": pd.DataFrame({"A": pd.Series([3, 1, 2, 2, 3, 4], dtype="int32")}),
-            "TABLE2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int8")}),
-        },
+        pytest.param(
+            {
+                "TABLE1": pd.DataFrame(
+                    {"A": pd.Series([3, 1, 2, 2, 3, 4], dtype="int32")}
+                ),
+                "TABLE2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int8")}),
+            },
+            marks=pytest.mark.weekly,
+        ),
         # Float
-        {
-            "TABLE1": pd.DataFrame(
-                {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
-            ),
-            "TABLE2": pd.DataFrame(
-                {"B": pd.Series([5.0, 1.0, 2.0, 2.0], dtype="Float32")}
-            ),
-        },
+        pytest.param(
+            {
+                "TABLE1": pd.DataFrame(
+                    {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
+                ),
+                "TABLE2": pd.DataFrame(
+                    {"B": pd.Series([5.0, 1.0, 2.0, 2.0], dtype="Float32")}
+                ),
+            },
+            marks=pytest.mark.weekly,
+        ),
         # Float <-> Integer
         {
             "TABLE1": pd.DataFrame(
@@ -172,58 +180,64 @@ def make_tz_aware_df(tz):
             "TABLE2": pd.DataFrame({"B": pd.Series([5, 1, 2, 2], dtype="Int64")}),
         },
         # Decimal
-        {
-            "TABLE1": pd.DataFrame(
-                {
-                    "A": np.array(
-                        [
-                            Decimal("1.6"),
-                            None,
-                            Decimal("-0.222"),
-                            Decimal("1111.316"),
-                            Decimal("1234.00046"),
-                            Decimal("5.1"),
-                            Decimal("-11131.0056"),
-                            Decimal("0.0"),
-                        ]
-                    )
-                }
-            ),
-            "TABLE2": pd.DataFrame(
-                {
-                    "B": np.array(
-                        [
-                            Decimal("1.6"),
-                            None,
-                            Decimal("200.78"),
-                            Decimal("-0.222"),
-                            Decimal("-15.78"),
-                            Decimal("1111.316"),
-                        ]
-                    )
-                }
-            ),
-        },
+        pytest.param(
+            {
+                "TABLE1": pd.DataFrame(
+                    {
+                        "A": np.array(
+                            [
+                                Decimal("1.6"),
+                                None,
+                                Decimal("-0.222"),
+                                Decimal("1111.316"),
+                                Decimal("1234.00046"),
+                                Decimal("5.1"),
+                                Decimal("-11131.0056"),
+                                Decimal("0.0"),
+                            ]
+                        )
+                    }
+                ),
+                "TABLE2": pd.DataFrame(
+                    {
+                        "B": np.array(
+                            [
+                                Decimal("1.6"),
+                                None,
+                                Decimal("200.78"),
+                                Decimal("-0.222"),
+                                Decimal("-15.78"),
+                                Decimal("1111.316"),
+                            ]
+                        )
+                    }
+                ),
+            },
+            marks=pytest.mark.weekly,
+        ),
         # Decimal <-> Float
-        {
-            "TABLE1": pd.DataFrame(
-                {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
-            ),
-            "TABLE2": pd.DataFrame(
-                {
-                    "B": np.array(
-                        [
-                            Decimal("1.6"),
-                            None,
-                            Decimal("200.78"),
-                            Decimal("3.000"),
-                            Decimal("-15.78"),
-                            Decimal("1111.316"),
-                        ]
-                    )
-                }
-            ),
-        },
+        pytest.param(
+            {
+                "TABLE1": pd.DataFrame(
+                    {"A": pd.Series([3.0, 1.0, 2.0, 2.0, 3.0, 4.0], dtype="float64")}
+                ),
+                "TABLE2": pd.DataFrame(
+                    {
+                        "B": np.array(
+                            [
+                                Decimal("1.6"),
+                                None,
+                                Decimal("200.78"),
+                                Decimal("3.000"),
+                                Decimal("-15.78"),
+                                Decimal("1111.316"),
+                            ]
+                        )
+                    }
+                ),
+            },
+            marks=pytest.mark.weekly,
+        ),
         # Decimal <-> Integer
         {
             "TABLE1": pd.DataFrame(
