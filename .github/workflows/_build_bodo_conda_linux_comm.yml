@@ -16,6 +16,11 @@ on:
         required: false
         type: boolean
         default: false
+      gpu-build:
+        description: 'Build GPU Version of Bodo'
+        required: false
+        type: boolean
+        default: false
       arm:
         description: 'Is this an ARM build'
         required: true
@@ -23,7 +28,8 @@ on:
 
 jobs:
   build-bodo:
-    runs-on: ${{ inputs.arm && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    # Use self-hosted runner for GPU builds to avoid running out of disk space.
+    runs-on: ${{ inputs.gpu-build && 'self-hosted-medium' || (inputs.arm && 'ubuntu-24.04-arm' || 'ubuntu-latest') }}
     container: ${{ inputs.arm && 'condaforge/linux-anvil-aarch64:alma8' || 'condaforge/linux-anvil-x86_64:alma8' }}
     permissions:
       id-token: write
@@ -65,23 +71,24 @@ jobs:
           # Conda-Build normally uses a random path. Setting these args disables that.
           # --croot for consistent base directory path for sccache
           # --build-id-pat for consistent build directory path for sccache
-          conda build . -c conda-forge \
+          conda build . $EXTRA_CHANNELS -c conda-forge \
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
             --python '${{ inputs.python-version }}' \
-            --variants "{gpu: false}"
+            --variants "{gpu: ${{ inputs.gpu-build }}, is_platform: ${{ inputs.platform-build }}}"
         env:
           CONDA_SOLVER: libmamba
           # Sccache Creds
           AWS_ACCESS_KEY_ID: ${{ vars.SCCACHE_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SCCACHE_AWS_SECRET_ACCESS_KEY }}
+          EXTRA_CHANNELS: ${{ (inputs.gpu-build == true) && '-c rapidsai -c nvidia' || '' }}
           IS_BODO_PLATFORM: ${{ (inputs.platform-build == true) && '1' || '0' }}
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
 
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
-          name: bodo-conda-${{ inputs.python-version }}-linux-${{ inputs.arm && 'arm' || 'x86' }}${{ inputs.platform-build && '-platform' || '' }}
+          name: bodo-conda-${{ inputs.python-version }}-linux-${{ inputs.arm && 'arm' || 'x86' }}${{ inputs.platform-build && '-platform' || '' }}${{ inputs.gpu-build && '-gpu' || '' }}
           path: /github/home/conda-bld/
 
       - name: Publish to Artifactory / Anaconda
