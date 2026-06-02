@@ -10,6 +10,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_mark_one_rank, temp_config_override
 from bodosql.tests.utils import check_query
 
@@ -2833,8 +2834,12 @@ def test_decimal_to_float_functions(df, expr, answer, memory_leak_check):
                     "0.12345678901234567890000000000000000000",
                     None,
                     "-0.12345678901234567890123456789012345678",
-                    "0.00000000000000000000000000000000000001",
-                    "-0.00000000000000000000000000000000000001",
+                    "1E-38"
+                    if bodosql.use_cpp_backend
+                    else "0.00000000000000000000000000000000000001",
+                    "-1E-38"
+                    if bodosql.use_cpp_backend
+                    else "-0.00000000000000000000000000000000000001",
                 ],
             ),
             id="large-scale-38-38",
