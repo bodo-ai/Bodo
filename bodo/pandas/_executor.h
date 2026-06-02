@@ -128,6 +128,7 @@ class Executor {
         }
         return false;
     }
+    std::shared_ptr<QueryProfileCollector> my_collector;
 
    public:
     // Holds table_index to PhysicalCTE mapping during physical plan
@@ -139,7 +140,8 @@ class Executor {
    public:
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
                       std::shared_ptr<arrow::Schema> out_schema) {
-        QueryProfileCollector::Default().Init();
+        my_collector = std::make_shared<QueryProfileCollector>();
+        my_collector->Init();
         // Partition between CPU and GPU.
         run_on_gpu = partition_to_gpu(plan);
         // Convert the logical plan to a physical plan
@@ -178,7 +180,7 @@ class Executor {
         DEBUG_PIPELINE_CONTENTS(rank, pipelines, out);
 
         for (size_t i = 0; i < pipelines.size(); ++i) {
-            QueryProfileCollector::Default().StartPipeline(i);
+            my_collector->StartPipeline(i);
             DEBUG_PIPELINE_PRE_EXECUTE(rank, out);
             uint64_t batches_processed = pipelines[i]->Execute(rank, out);
 
@@ -189,9 +191,9 @@ class Executor {
             }
 
             DEBUG_PIPELINE_POST_EXECUTE(rank, out);
-            QueryProfileCollector::Default().EndPipeline(i, batches_processed);
+            my_collector->EndPipeline(i, batches_processed);
         }
-        QueryProfileCollector::Default().Finalize(0);
+        my_collector->Finalize(0);
         std::variant<std::variant<std::shared_ptr<table_info>, PyObject *>,
                      std::variant<GPU_DATA, PyObject *>>
             gr_res = pipelines.back()->GetResult();
