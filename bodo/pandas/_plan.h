@@ -157,7 +157,8 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
-    std::vector<std::pair<int, int>> &cond_vec, int join_id);
+    std::vector<std::pair<int, int>> &cond_vec, int join_id,
+    std::vector<std::unique_ptr<duckdb::Expression>> &non_equi_exprs);
 
 /**
  * @brief Creates a LogicalJoinFilter node.

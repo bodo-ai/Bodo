@@ -127,6 +127,46 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
                physical_op);
 }
 
+#include <iomanip>  // for setw
+#include <iostream>
+#include <map>
+#include <utility>
+// include duckdb headers as needed for duckdb::idx_t
+// #include "duckdb/common/types.hpp"   // adjust to your project
+
+// Simple dump to an ostream
+void DumpColRefMapSimple(const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>,
+                                        size_t>& col_ref_map,
+                         std::ostream& os = std::cout) {
+    os << "col_ref_map.size() = " << col_ref_map.size() << '\n';
+    for (const auto& entry : col_ref_map) {
+        const auto& key = entry.first;
+        duckdb::idx_t left_idx = key.first;
+        duckdb::idx_t right_idx = key.second;
+        size_t count = entry.second;
+        os << "(" << left_idx << ", " << right_idx << ") -> " << count << '\n';
+    }
+}
+
+// Pretty table with column headers and fixed widths
+void DumpColRefMapTable(const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>,
+                                       size_t>& col_ref_map,
+                        std::ostream& os) {
+    const int w1 = 12, w2 = 12, w3 = 12;
+    os << "Total entries: " << col_ref_map.size() << '\n';
+    os << std::left << std::setw(w1) << "left_idx" << std::left << std::setw(w2)
+       << "right_idx" << std::left << std::setw(w3) << "count" << '\n';
+    os << std::string(w1 + w2 + w3, '-') << '\n';
+
+    for (const auto& kv : col_ref_map) {
+        const auto& [left_idx, right_idx] = kv.first;  // structured binding
+        size_t count = kv.second;
+        os << std::left << std::setw(w1) << left_idx << std::left
+           << std::setw(w2) << right_idx << std::left << std::setw(w3) << count
+           << '\n';
+    }
+}
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     // Process the source of this filter.
     this->Visit(*op.children[0]);
@@ -137,6 +177,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
         getColRefMap(source_cols);
 
+    std::cout << "Visit LogicalFilter" << std::endl;
+    DumpColRefMapTable(col_ref_map, std::cout);
     // Duckdb can produce empty filters.
     if (op.expressions.size() == 0) {
         return;
@@ -574,6 +616,19 @@ duckdb::vector<duckdb::idx_t> gen_split_filter_projection_map(
     return ret;
 }
 
+extern void DumpColRefMapTable(
+    const std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
+        col_ref_map,
+    std::ostream& os);
+
+void dump_table_indices(const duckdb::LogicalOperator* op) {
+    auto indices = op->GetTableIndex();
+    std::cout << "dump_table_indices" << std::endl;
+    for (auto& i : indices) {
+        std::cout << "    " << i << std::endl;
+    }
+}
+
 /**
  * @brief Split a join node with non-equi join conditions into a filter node
  *        followed by a join with only equi-conditions or a cross_product.
@@ -592,11 +647,16 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     duckdb::vector<duckdb::JoinCondition> non_equi_exprs =
         extractNonEquiConditions(comp_join.conditions, num_equi_conds);
 
+    std::cout << "SplitNonEquiFromComparisonJoin " << num_equi_conds << " "
+              << non_equi_exprs.size() << std::endl;
     // If there are no non-equi conditions, nothing to do
     if (non_equi_exprs.empty()) {
         return nullptr;
     }
 
+    for (auto& nee : non_equi_exprs) {
+        std::cout << "nee " << nee.GetJoinExpression().ToString() << std::endl;
+    }
     // Convert the JoinCondition to an Expression usable by a filter node.
     duckdb::unique_ptr<duckdb::Expression> combined_pred =
         duckdb::JoinCondition::CreateExpression(std::move(non_equi_exprs));
@@ -609,6 +669,11 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
         probe_col_ref_map = getColRefMap(probe_bindings);
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
         build_col_ref_map = getColRefMap(build_bindings);
+
+    std::cout << "probe_col_ref" << std::endl;
+    DumpColRefMapTable(probe_col_ref_map, std::cout);
+    std::cout << "build_col_ref" << std::endl;
+    DumpColRefMapTable(build_col_ref_map, std::cout);
 
     auto probe_proj_map_copy = comp_join.left_projection_map;
     auto build_proj_map_copy = comp_join.right_projection_map;
@@ -641,6 +706,12 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
         build_proj_map_copy, mbr.missing_in_build, build_col_ref_map);
 
     duckdb::unique_ptr<duckdb::LogicalOperator> new_op;
+    std::cout << "comp_join table indices: " << std::endl;
+    dump_table_indices(&comp_join);
+    std::cout << "probe side child table index: " << std::endl;
+    dump_table_indices(comp_join.children[0].get());
+    std::cout << "build side child table index: " << std::endl;
+    dump_table_indices(comp_join.children[1].get());
     // There might only be non-equi conditions and if so make a cross-product
     // node else the normal case of making a replacement join node with the
     // equi conditions.
@@ -659,6 +730,9 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
             std::move(comp_join.children[0]), std::move(comp_join.children[1]));
         new_op = std::move(new_op_cross);
     }
+    new_op->ResolveOperatorTypes();
+    std::cout << "new_op table index " << std::endl;
+    dump_table_indices(new_op.get());
 
     // Create the new filter node and give it the expression to test.
     auto filter =
@@ -668,7 +742,11 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     filter->projection_map = gen_split_filter_projection_map(
         probe_proj_map_copy, new_probe_proj_map, build_proj_map_copy,
         new_build_proj_map);
+    filter->ResolveOperatorTypes();
+    std::cout << "new filter table index " << std::endl;
+    dump_table_indices(filter.get());
 
+    std::cout << "SplitNonEquiFromComparisonJoin done" << std::endl;
     return std::move(filter);
 }
 

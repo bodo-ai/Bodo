@@ -1223,7 +1223,8 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
-    std::vector<std::pair<int, int>> &cond_vec, int join_id) {
+    std::vector<std::pair<int, int>> &cond_vec, int join_id,
+    std::vector<std::unique_ptr<duckdb::Expression>> &non_equi_exprs) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
@@ -1245,6 +1246,11 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
                 rhs_duck->GetColumnBindings()[cond_pair.second]),
             duckdb::ExpressionType::COMPARE_EQUAL);
         // Add the join condition to the join node.
+        comp_join->conditions.push_back(std::move(cond));
+    }
+    for (auto &non_equi_expr : non_equi_exprs) {
+        auto non_equi_duck = to_duckdb(non_equi_expr);
+        duckdb::JoinCondition cond(std::move(non_equi_duck));
         comp_join->conditions.push_back(std::move(cond));
     }
     // Add the sources to be joined.
