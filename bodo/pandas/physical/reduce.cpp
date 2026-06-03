@@ -3,9 +3,15 @@
 #include "../libs/_shuffle.h"
 
 void ReductionFunction::ConsumeBatch(
-    std::shared_ptr<arrow::Array> in_arrow_array) {
+    std::shared_ptr<arrow::Table> in_arrow_table) {
     arrow::ScalarVector reductions;
     std::shared_ptr<arrow::Scalar> out_scalar_batch;
+    if (in_arrow_table->column(input_col_idx)->num_chunks() != 1) {
+        throw std::runtime_error(
+            "ReductionFunction::ConsumeBatch: input Arrow array has more than "
+            "one chunk, which is not supported");
+    }
+    auto in_arrow_array = in_arrow_table->column(input_col_idx)->chunk(0);
     for (const auto& function_name : this->function_names) {
         if (function_name == "sum_of_squares") {
             // Special case for sum_of_squares since Arrow does not have this
@@ -137,13 +143,9 @@ void ReductionFunction::Finalize() {
 OperatorResult PhysicalReduce::ConsumeBatch(
     std::shared_ptr<table_info> input_batch, OperatorResult prev_op_result) {
     time_pt start_consume_time = start_timer();
-    // Convert to Arrow array
-    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    std::shared_ptr<arrow::Array> in_arrow_array = bodo_array_to_arrow(
-        bodo::BufferPool::DefaultPtr(), input_batch->columns[0],
-        false /*convert_timedelta_to_int64*/, "", time_unit,
-        false, /*downcast_time_ns_to_us*/
-        bodo::default_buffer_memory_manager());
+    // Convert to Arrow table
+    std::shared_ptr<arrow::Table> in_arrow_table =
+        bodo_table_to_arrow(input_batch);
 
     if (iter == 0) {
         // Initialize reduction functions on first batch, we need to wait until
@@ -151,24 +153,28 @@ OperatorResult PhysicalReduce::ConsumeBatch(
         // scalar.
         for (size_t i = 0; i < this->function_names.size(); i++) {
             const std::string func_name = this->function_names[i];
+            const int input_col_idx = this->input_column_indices[i];
             if (func_name == "max") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionMax>());
+                    std::make_unique<ReductionFunctionMax>(input_col_idx));
 
             } else if (func_name == "min") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionMin>());
+                    std::make_unique<ReductionFunctionMin>(input_col_idx));
             } else if (func_name == "sum") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionSum>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "product") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionProduct>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "count") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionCount>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "size") {
                 reduction_functions.push_back(
@@ -176,13 +182,13 @@ OperatorResult PhysicalReduce::ConsumeBatch(
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "mean") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionMean>());
+                    std::make_unique<ReductionFunctionMean>(input_col_idx));
             } else if (func_name == "std") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionStd>(1));
+                    std::make_unique<ReductionFunctionStd>(input_col_idx, 1));
             } else if (func_name == "std_pop") {
                 reduction_functions.push_back(
-                    std::make_unique<ReductionFunctionStd>(0));
+                    std::make_unique<ReductionFunctionStd>(input_col_idx, 0));
             } else {
                 throw std::runtime_error("Unsupported reduction function: " +
                                          func_name);
@@ -191,7 +197,7 @@ OperatorResult PhysicalReduce::ConsumeBatch(
     }
 
     for (auto& reduction_function : reduction_functions) {
-        reduction_function->ConsumeBatch(in_arrow_array);
+        reduction_function->ConsumeBatch(in_arrow_table);
     }
 
     iter++;
