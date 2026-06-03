@@ -778,8 +778,8 @@ def java_agg_to_python_agg(ctx, java_plan):
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
         if func_name == "size":
-            assert len(arg_cols) in [0, 1], (
-                "Size aggregations arg len not in [0,1] are not supported"
+            assert len(arg_cols) == 0, (
+                "Size aggregations with non-zero arg len not supported"
             )
             out_type = pa.int64()
         elif func_name == "count":
