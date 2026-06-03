@@ -1117,9 +1117,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         )
         zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
+        expr_empty_out = pd.Series([], dtype=pd.ArrowDtype(pa.float64()))
         exprs = [
             AggregateExpression(
-                zero_size_self,
+                expr_empty_out,
                 self._plan,
                 func_name,
                 None,  # udf_args
@@ -1344,9 +1345,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         new_arrow_schema = pa.schema([pa.field(f"{val}", pa.float64()) for val in q])
         zero_size_self = arrow_to_empty_df(new_arrow_schema)
 
+        expr_empty_out = pd.Series([], dtype=pd.ArrowDtype(pa.float64()))
         exprs = [
             AggregateExpression(
-                zero_size_self,
+                expr_empty_out,
                 self._plan,
                 func_name,
                 None,  # udf_args
@@ -2643,14 +2645,14 @@ def _compute_series_reduce(bodo_series: BodoSeries, func_names: list[str]):
 
     exprs = [
         AggregateExpression(
-            zero_size_self,
+            pd.Series([], dtype=pd.ArrowDtype(new_arrow_schema.field(i).type)),
             bodo_series._plan,
             func_name,
             None,  # udf_args
             [0],
             True,  # dropna
         )
-        for func_name in func_names
+        for i, func_name in enumerate(func_names)
     ]
 
     plan = LogicalAggregate(
