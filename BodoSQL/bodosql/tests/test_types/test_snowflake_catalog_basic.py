@@ -120,9 +120,15 @@ def test_snowflake_catalog_constructor(memory_leak_check):
     "conn_str",
     [
         # Basic Connection Str
-        "snowflake://myusername:mypassword@myaccount/mydatabase?warehouse=mywarehouse",
+        pytest.param(
+            "snowflake://myusername:mypassword@myaccount/mydatabase?warehouse=mywarehouse",
+            marks=pytest.mark.weekly,
+        ),
         # With Schema
-        "snowflake://myusername:mypassword@myaccount/mydatabase/myschema?warehouse=mywarehouse",
+        pytest.param(
+            "snowflake://myusername:mypassword@myaccount/mydatabase/myschema?warehouse=mywarehouse",
+            marks=pytest.mark.weekly,
+        ),
         # Additional Connection Param. Note, order of params matter for test
         "snowflake://myusername:mypassword@myaccount/mydatabase/myschema?role=USERADMIN&warehouse=mywarehouse",
         # Missing Password

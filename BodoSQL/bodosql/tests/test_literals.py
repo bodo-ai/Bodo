@@ -245,35 +245,58 @@ def test_interval_literals(
 @pytest.fixture(
     params=[
         ("1 day", lambda x: x + pd.DateOffset(days=1)),
-        ("2 month", lambda x: x + pd.DateOffset(months=2)),
-        ("3 year", lambda x: x + pd.DateOffset(years=3)),
-        ("1 quarter", lambda x: x + pd.DateOffset(months=3)),
-        ("10 seconds", lambda x: x + pd.Timedelta(seconds=10)),
+        pytest.param(
+            ("2 month", lambda x: x + pd.DateOffset(months=2)), marks=pytest.mark.weekly
+        ),
+        pytest.param(
+            ("3 year", lambda x: x + pd.DateOffset(years=3)), marks=pytest.mark.weekly
+        ),
+        pytest.param(
+            ("1 quarter", lambda x: x + pd.DateOffset(months=3)),
+            marks=pytest.mark.weekly,
+        ),
+        pytest.param(
+            ("10 seconds", lambda x: x + pd.Timedelta(seconds=10)),
+            marks=pytest.mark.weekly,
+        ),
         ("1 year, 1 quarter, 1 month", lambda x: x + pd.DateOffset(years=1, months=4)),
-        (
-            "1 year, 2 second",
-            lambda x: (x + pd.DateOffset(years=1)) + pd.Timedelta(seconds=2),
-        ),
-        (
-            "1 second, 2 year",
-            lambda x: (x + pd.DateOffset(years=2)) + pd.Timedelta(seconds=1),
-        ),
-        (
-            "1 year, 2 month, 3 second",
-            lambda x: (x + pd.DateOffset(years=1, months=2)) + pd.Timedelta(seconds=3),
-        ),
-        (
-            "1 days, 2 hrs, 3 mins, 4s, 5ms, 6us, 7ns",
-            lambda x: x
-            + pd.Timedelta(
-                days=1,
-                hours=2,
-                minutes=3,
-                seconds=4,
-                milliseconds=5,
-                microseconds=6,
-                nanoseconds=7,
+        pytest.param(
+            (
+                "1 year, 2 second",
+                lambda x: (x + pd.DateOffset(years=1)) + pd.Timedelta(seconds=2),
             ),
+            marks=pytest.mark.weekly,
+        ),
+        pytest.param(
+            (
+                "1 second, 2 year",
+                lambda x: (x + pd.DateOffset(years=2)) + pd.Timedelta(seconds=1),
+            ),
+            marks=pytest.mark.weekly,
+        ),
+        pytest.param(
+            (
+                "1 year, 2 month, 3 second",
+                lambda x: (x + pd.DateOffset(years=1, months=2))
+                + pd.Timedelta(seconds=3),
+            ),
+            marks=pytest.mark.weekly,
+        ),
+        pytest.param(
+            (
+                "1 days, 2 hrs, 3 mins, 4s, 5ms, 6us, 7ns",
+                lambda x: x
+                + pd.Timedelta(
+                    days=1,
+                    hours=2,
+                    minutes=3,
+                    seconds=4,
+                    milliseconds=5,
+                    microseconds=6,
+                    nanoseconds=7,
+                ),
+            ),
+            marks=pytest.mark.weekly,
         ),
         (
             "1 months, 2 days, 3 hrs, 4 mins, 5s, 6ms, 7us, 8ns",

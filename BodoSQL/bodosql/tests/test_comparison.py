@@ -31,23 +31,34 @@ def between_clause(request):
 @pytest.fixture(
     params=[
         pytest.param(
-            ([None, 1, 2, 4, 8, 127, 128, 255, 0], pd.UInt8Dtype()), id="uint8"
+            ([None, 1, 2, 4, 8, 127, 128, 255, 0], pd.UInt8Dtype()),
+            id="uint8",
+            marks=pytest.mark.weekly,
         ),
-        pytest.param(([None, 1, 2, 4, 8, 127, -128, -1, 0], pd.Int8Dtype()), id="int8"),
+        pytest.param(
+            ([None, 1, 2, 4, 8, 127, -128, -1, 0], pd.Int8Dtype()),
+            id="int8",
+            marks=pytest.mark.weekly,
+        ),
         pytest.param(
             ([None, 1, 2, 65535, 32767, 127, 128, 255, 0], pd.UInt16Dtype()),
             id="uint16",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
-            ([None, 1, 2, -32768, 32767, 127, -128, -1, 0], pd.Int16Dtype()), id="int16"
+            ([None, 1, 2, -32768, 32767, 127, -128, -1, 0], pd.Int16Dtype()),
+            id="int16",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             ([None, 1, 7, 4, 8, 4294967295, 1234567890, 255, 0], pd.UInt32Dtype()),
             id="uint32",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             ([None, 1, 2, 13, 8, 2147483647, -2147483647, -1, 0], pd.Int32Dtype()),
             id="int32",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (
@@ -65,6 +76,7 @@ def between_clause(request):
                 pd.UInt64Dtype(),
             ),
             id="uint64",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (

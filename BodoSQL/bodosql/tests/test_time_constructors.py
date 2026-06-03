@@ -20,7 +20,7 @@ pytestmark = pytest_slow_unless_codegen
             "time", marks=pytest.mark.skip(reason="waiting for calcite support")
         ),
         "to_time",
-        "try_to_time",
+        pytest.param("try_to_time", marks=pytest.mark.slow),
     ],
 )
 def to_time_fn(request):

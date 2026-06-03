@@ -344,7 +344,7 @@ def to_date_td_vals(request):
 
 @pytest.fixture(
     params=[
-        pytest.param("try_to_date", id="try_to_date"),
+        pytest.param("try_to_date", id="try_to_date", marks=pytest.mark.slow),
         pytest.param("to_date", id="to_date"),
     ]
 )
@@ -355,7 +355,7 @@ def to_date_kernel(request):
 @pytest.fixture(
     params=[
         pytest.param("to_timestamp", id="to_timestamp"),
-        pytest.param("try_to_timestamp", id="try_to_timestamp"),
+        pytest.param("try_to_timestamp", id="try_to_timestamp", marks=pytest.mark.slow),
     ]
 )
 def to_timestamp_kernel(request):

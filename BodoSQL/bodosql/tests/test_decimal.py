@@ -535,6 +535,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int8",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.array([1, 20, 30, 0, 50], dtype=pd.Int16Dtype()),
@@ -543,6 +544,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int16",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.array([1, -125, 300, 0, 131072], dtype=pd.Int32Dtype()),
@@ -551,6 +553,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int32",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.array([1, 2, 3, 0, 987654321], dtype=pd.Int64Dtype()),
@@ -567,6 +570,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint8",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.array([1, 20, 300, 0, 5000], dtype=pd.UInt16Dtype()),
@@ -575,6 +579,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint16",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.array([1, 21, 321, 0, 54321], dtype=pd.UInt32Dtype()),
@@ -583,6 +588,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint32",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.array([1, 54321, 654321, 0, 7654321], dtype=pd.UInt64Dtype()),
@@ -1577,6 +1583,7 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 ],
             ),
             id="array-negative-round-case",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1604,6 +1611,7 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 ],
             ),
             id="array-round-negative_scale-case",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1631,6 +1639,7 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 ],
             ),
             id="array-negative-round-negative_scale-case",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1658,6 +1667,7 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 ],
             ),
             id="array-no_change-case",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1685,6 +1695,7 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
                 ],
             ),
             id="array-round-propagate-case",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -3116,6 +3127,7 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
                 }
             ),
             id="twenty-row-group",
+            marks=pytest.mark.weekly,
         ),
         # 15-row group
         pytest.param(
@@ -3136,6 +3148,7 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
                 }
             ),
             id="fifteen-row-group",
+            marks=pytest.mark.weekly,
         ),
         # 17-row group
         pytest.param(
@@ -3156,6 +3169,7 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
                 }
             ),
             id="seventeen-row-group",
+            marks=pytest.mark.weekly,
         ),
         # Large numbers
         pytest.param(
@@ -3196,6 +3210,7 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
                 }
             ),
             id="exact-first",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.DataFrame(
@@ -3234,6 +3249,7 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
                 }
             ),
             id="exact-last",
+            marks=pytest.mark.slow,
         ),
         # Multiple groups
         pytest.param(
@@ -3384,6 +3400,7 @@ def test_decimal_percentile_cont(
                 }
             ),
             id="fifteen-row-group",
+            marks=pytest.mark.slow,
         ),
         # Multiple groups
         pytest.param(
@@ -3476,6 +3493,7 @@ def test_decimal_percentile_disc(
             ),
             "too large for MEDIAN operation",
             id="overflow_2",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.DataFrame(
