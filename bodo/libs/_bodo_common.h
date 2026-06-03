@@ -355,6 +355,7 @@ struct Bodo_CTypes {
         COMPLEX128 = 22,
         MAP = 23,
         TIMESTAMPTZ = 24,  // Used to raise errors in other code locations
+        MONTH_DAY_NANO_INTERVAL = 25,  // Arrow MonthDayNanoInterval type
         _numtypes
     };
 };

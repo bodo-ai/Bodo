@@ -46,6 +46,7 @@ const std::vector<size_t> numpy_item_size({
     sizeof(std::complex<double>),  // COMPLEX128
     0,                             // MAP
     sizeof(int64_t),               // TIMESTAMPTZ data1
+    16,                            // MONTH_DAY_NANO_INTERVAL (4+4+8 bytes)
 });
 
 void bodo_common_init() {
@@ -195,6 +196,8 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             return Bodo_CTypes::_BOOL;
         case arrow::Type::DURATION:
             return Bodo_CTypes::TIMEDELTA;
+        case arrow::Type::INTERVAL_MONTH_DAY_NANO:
+            return Bodo_CTypes::MONTH_DAY_NANO_INTERVAL;
         default: {
             // TODO: Construct the type from the id
             throw std::runtime_error("arrow_to_bodo_type");
@@ -332,6 +335,11 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
             }
             [[fallthrough]];
         }
+        case arrow::Type::INTERVAL_MONTH_DAY_NANO: {
+            return std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL,
+                arrow_to_bodo_type(arrow_type->id()));
+        }
         default:
             throw std::runtime_error(
                 "arrow_type_to_bodo_data_type(): Arrow type " +
@@ -412,6 +420,8 @@ static const char* dtype_to_str(Bodo_CTypes::CTypeEnum dtype) {
         return "DECIMAL";
     } else if (dtype == Bodo_CTypes::INT128) {
         return "INT128";
+    } else if (dtype == Bodo_CTypes::MONTH_DAY_NANO_INTERVAL) {
+        return "MONTH_DAY_NANO_INTERVAL";
     } else if (dtype == Bodo_CTypes::DATE) {
         return "DATE";
     } else if (dtype == Bodo_CTypes::DATETIME) {
@@ -678,6 +688,9 @@ std::shared_ptr<::arrow::Field> DataType::ToArrowType(std::string& name) const {
             break;
         case Bodo_CTypes::DECIMAL:
             dtype = arrow::decimal128(precision, scale);
+            break;
+        case Bodo_CTypes::MONTH_DAY_NANO_INTERVAL:
+            dtype = arrow::month_day_nano_interval();
             break;
         default: {
             throw std::runtime_error("ToArrowType: unsupported dtype " +

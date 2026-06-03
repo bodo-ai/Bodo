@@ -173,6 +173,10 @@ get_data_type_from_bodo_fixed_width_array(
                 type = arrow::duration(arrow::TimeUnit::NANO);
             }
             break;
+        case Bodo_CTypes::MONTH_DAY_NANO_INTERVAL:
+            in_num_bytes = 16 * array->length;
+            type = arrow::month_day_nano_interval();
+            break;
         case Bodo_CTypes::DATETIME:
             // input from Bodo uses int64 for datetime values
             // (datetime64[ns])
@@ -1547,6 +1551,13 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
                     src_pool);
             }
             [[fallthrough]];
+        }
+        case arrow::Type::INTERVAL_MONTH_DAY_NANO: {
+            return arrow_numeric_array_to_bodo<
+                arrow::MonthDayNanoIntervalArray>(
+                std::static_pointer_cast<arrow::MonthDayNanoIntervalArray>(
+                    arrow_arr),
+                Bodo_CTypes::MONTH_DAY_NANO_INTERVAL, src_pool);
         }
         default:
             throw std::runtime_error("arrow_array_to_bodo(): Array type " +

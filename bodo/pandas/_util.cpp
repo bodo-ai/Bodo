@@ -105,15 +105,13 @@ extractValue(const duckdb::Value &value) {
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
         } break;
         case duckdb::LogicalTypeId::INTERVAL: {
-            auto interval_type = arrow::month_day_nano_interval();
             duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
-            return arrow::MakeScalar(
-                       interval_type,
-                       arrow::MonthDayNanoIntervalType::MonthDayNanos{
-                           extracted.months, extracted.days,
-                           extracted.micros *
-                               duckdb::Interval::NANOS_PER_MICRO})
-                .ValueOrDie();
+            // Convert to nanoseconds total, dropping month/day information
+            int64_t total_nanos =
+                (extracted.months * 30 + extracted.days) * 86'400'000'000'000 +
+                extracted.micros * 1'000;
+            auto dur_type = arrow::duration(arrow::TimeUnit::NANO);
+            return arrow::MakeScalar(dur_type, total_nanos).ValueOrDie();
         } break;
         default:
             throw std::runtime_error("extractValue unhandled type." +
@@ -168,8 +166,8 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             return arrow::MakeNullScalar(time_type);
         } break;
         case duckdb::LogicalTypeId::INTERVAL: {
-            auto interval_type = arrow::month_day_nano_interval();
-            return arrow::MakeNullScalar(interval_type);
+            auto dur_type = arrow::duration(arrow::TimeUnit::NANO);
+            return arrow::MakeNullScalar(dur_type);
         } break;
         case duckdb::LogicalTypeId::TIMESTAMP_TZ: {
             auto timestamp_type =
@@ -517,8 +515,6 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
         case duckdb::LogicalTypeId::TIMESTAMP_TZ:
             return arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
         case duckdb::LogicalTypeId::INTERVAL:
-            // NOTE: using ns by default but DuckDB interval type loses
-            // precision in Arrow type roundtrips
             return arrow::duration(arrow::TimeUnit::NANO);
         default:
             throw std::runtime_error(

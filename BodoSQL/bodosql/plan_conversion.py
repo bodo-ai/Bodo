@@ -737,8 +737,7 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
     if _is_interval_type(lit_type_name):
-        interval_type = pa.month_day_nano_interval()
-        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(interval_type))
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
         if _is_year_month_interval(lit_type_name):
             # getValue() returns a BigDecimal representing total months
             months = int(java_literal.getValue())
@@ -1082,7 +1081,7 @@ def sql_type_to_pa_type(ctx, sql_type_name):
         tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
         return pa.timestamp("ns", tz=tz)
     if _is_interval_type(sql_type_name):
-        return pa.month_day_nano_interval()
+        return pa.duration("ns")
     if sql_type_name.equals(SqlTypeName.BOOLEAN):
         return pa.bool_()
     if sql_type_name.equals(SqlTypeName.CHAR):

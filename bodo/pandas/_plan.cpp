@@ -169,7 +169,9 @@ duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
     duckdb::interval_t interval_val;
     interval_val.months = months;
     interval_val.days = days;
-    interval_val.micros = nanos / 1000;
+    // Round to nearest microsecond (DuckDB INTERVAL only supports
+    // microsecond precision)
+    interval_val.micros = (nanos + 500LL) / 1000LL;
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::INTERVAL(interval_val));
 }
