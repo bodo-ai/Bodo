@@ -575,6 +575,28 @@ def java_join_to_python_join(ctx, java_join):
     empty_join_out = pd.concat([left_plan.empty_data, right_plan.empty_data], axis=1)
     empty_join_out.columns = java_join.getRowType().getFieldNames()
 
+    non_equi_exprs = java_expr_to_python_expr(
+        ctx, nonEquiConds[0], (left_plan, right_plan)
+    )
+    # And all the conditions together with the first one above.
+    for e in nonEquiConds[1:]:
+        non_equi_exprs = ConjunctionOpExpression(
+            non_equi_exprs.empty_data,
+            non_equi_exprs,
+            java_expr_to_python_expr(ctx, e, (left_plan, right_plan)),
+            "__and__",
+        )
+    planJoinOrCross = LogicalComparisonJoin(
+        empty_join_out,
+        left_plan,
+        right_plan,
+        join_type,
+        key_indices,
+        java_join.getJoinFilterID(),
+        [non_equi_exprs],
+    )
+    return planJoinOrCross
+
     if len(key_indices) > 0:
         # TODO[BSE-5150]: support broadcast join flag
         planJoinOrCross = LogicalComparisonJoin(

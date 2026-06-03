@@ -28,6 +28,8 @@
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
 
+#define DEBUG_CPU_EXPRESSIONS  // define to debug CPU expressions
+
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
  *        Physical expression tree.
@@ -36,6 +38,7 @@ std::shared_ptr<arrow::Array> prepare_arrow_compute(
 class ExprResult {
    public:
     virtual ~ExprResult() = default;
+    virtual void Print(std::ostream &os) = 0;
 };
 
 /**
@@ -48,6 +51,7 @@ class TableExprResult : public ExprResult {
     TableExprResult(std::shared_ptr<table_info> val) : result(val) {}
     virtual ~TableExprResult() = default;
     const std::shared_ptr<table_info> result;
+    virtual void Print(std::ostream &os) { DEBUG_PrintTable(os, result, true); }
 };
 
 /**
@@ -62,6 +66,7 @@ class ArrayExprResult : public ExprResult {
     virtual ~ArrayExprResult() = default;
     const std::shared_ptr<array_info> result;
     const std::string column_name;
+    virtual void Print(std::ostream &os) { DEBUG_PrintColumn(os, result); }
 };
 
 /**
@@ -78,6 +83,7 @@ class ScalarExprResult : public ExprResult {
     }
     virtual ~ScalarExprResult() = default;
     const std::shared_ptr<array_info> result;
+    virtual void Print(std::ostream &os) { DEBUG_PrintColumn(os, result); }
 };
 
 /**
@@ -285,6 +291,13 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             std::dynamic_pointer_cast<ScalarExprResult>(left_res);
         auto right_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(right_res);
+#ifdef DEBUG_CPU_EXPRESSIONS
+        std::cout << "PhysicalComparisonExpression::ProcessBatch " << comparator
+                  << "\n";
+        left_res->Print(std::cout);
+        right_res->Print(std::cout);
+        DEBUG_PrintColumn(std::cout, result);
+#endif  // DEBUG_CPU_EXPRESSIONS
         if (left_as_scalar && right_as_scalar) {
             return std::make_shared<ScalarExprResult>(result);
         }
@@ -304,6 +317,13 @@ class PhysicalComparisonExpression : public PhysicalExpression {
             right_null_bitmap, left_index, right_index);
         arrow::Datum ret =
             do_arrow_compute_binary(left_datum, right_datum, comparator);
+#ifdef DEBUG_CPU_EXPRESSIONS
+        std::cout << "PhysicalComparisonExpression::join_expr_internal "
+                  << comparator << "\n";
+        std::cout << left_datum.ToString() << std::endl;
+        std::cout << right_datum.ToString() << std::endl;
+        std::cout << ret.ToString() << std::endl;
+#endif  // DEBUG_CPU_EXPRESSIONS
         // Pandas if either is NULL then result is false.
         if (!ret.scalar()->is_valid) {
             ret = arrow::Datum(std::make_shared<arrow::BooleanScalar>(false));

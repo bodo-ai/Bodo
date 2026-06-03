@@ -33,11 +33,21 @@
 #include "physical/sort.h"
 #include "physical/union_all.h"
 
+void dump_table_indices(const duckdb::LogicalOperator* op) {
+    auto indices = op->GetTableIndex();
+    std::cout << "dump_table_indices" << std::endl;
+    for (auto& i : indices) {
+        std::cout << "    " << i << std::endl;
+    }
+}
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     // Get selected columns from LogicalGet to pass to physical
     // operators
     std::vector<int> selected_columns;
 
+    std::cout << "visit logicalget" << std::endl;
+    dump_table_indices(&op);
     // DuckDB sets projection_ids when there are columns used in pushed down
     // filters that are not used anywhere else in the query.
     auto& column_ids = op.GetColumnIds();
@@ -621,14 +631,6 @@ extern void DumpColRefMapTable(
         col_ref_map,
     std::ostream& os);
 
-void dump_table_indices(const duckdb::LogicalOperator* op) {
-    auto indices = op->GetTableIndex();
-    std::cout << "dump_table_indices" << std::endl;
-    for (auto& i : indices) {
-        std::cout << "    " << i << std::endl;
-    }
-}
-
 /**
  * @brief Split a join node with non-equi join conditions into a filter node
  *        followed by a join with only equi-conditions or a cross_product.
@@ -817,6 +819,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_operator.cpp#L196
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/operator/join/physical_join.cpp#L31
 
+    std::cout << "visit comparisonjoin" << std::endl;
+    dump_table_indices(&op);
 #ifdef USE_CUDF
     std::variant<std::shared_ptr<PhysicalJoin>,
                  std::shared_ptr<PhysicalGPUJoin>>
@@ -825,6 +829,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
         physical_join = std::make_shared<PhysicalGPUJoin>(op);
         (*this->join_on_gpu).insert({op.join_id, true});
     } else {
+#if 0
         // Move non-equi join conditions into a filter node.
         std::unique_ptr<duckdb::LogicalOperator> split =
             SplitNonEquiFromComparisonJoin(op);
@@ -834,6 +839,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
             Visit(*split);
             return;
         }
+#endif
 
         physical_join = std::make_shared<PhysicalJoin>(op);
         (*this->join_on_gpu).insert({op.join_id, false});

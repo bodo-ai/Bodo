@@ -134,11 +134,23 @@ class LazyPlan:
                     queue.append(node.args[0])
         return None
 
-    def generate_duckdb(self, cache=None, cte_ref=None, do_cte_check=True):
+    def generate_duckdb(
+        self, cache=None, cte_ref=None, do_cte_check=True, leaf_cache=None
+    ):
         from bodo.ext import plan_optimizer
 
         if cache is None:
             cache = {}
+        if leaf_cache is None:
+            leaf_cache = {}
+
+        print(
+            "start generate_duckdb",
+            self.plan_class,
+            id(self),
+            cache.keys(),
+            isinstance(self, Expression),
+        )
 
         def recursive_check(x, use_cache, cte_ref, do_cte_check):
             """Recursively convert LazyPlans but return other types unmodified."""
@@ -147,6 +159,7 @@ class LazyPlan:
                     cache=cache if use_cache else None,
                     cte_ref=cte_ref,
                     do_cte_check=do_cte_check,
+                    leaf_cache=leaf_cache,
                 )
                 return ret
             elif isinstance(x, (tuple, list)):
@@ -215,19 +228,21 @@ class LazyPlan:
                 cte_ref_plan.pa_schema, cte_ref[1]
             )
             cache[id(self)] = ret
-            return ret
+            # return ret
         elif cte_node is not None:
             # We just started processing a plan that has a duplicate node.
             if id(self) in cache:
                 raise Exception("Should never find cache re-use for cte_node.")
             # Generate the duckdb plan starting from the duplicated node.
-            duplicate = cte_node[0].generate_duckdb(cache=cache)
+            duplicate = cte_node[0].generate_duckdb(cache=cache, leaf_cache=leaf_cache)
             # Generate the duckdb plan starting from the same top-level node
             # but with cte_ref set so that when the duplicate cte node is
             # encountered while processing the plan tree that we replace it
             # with a CTE ref node instead of generating the sub-tree plan again
             # as we did on the previous line above.
-            uses_duplicate = self.generate_duckdb(cache=cache, cte_ref=cte_node)
+            uses_duplicate = self.generate_duckdb(
+                cache=cache, cte_ref=cte_node, leaf_cache=leaf_cache
+            )
             # The duckdb plan node we will generate is a materialized CTE node
             # instead of the type of self.  We processed ourself again in the
             # above line and uses_duplicate becomes part of the materialized
@@ -242,7 +257,7 @@ class LazyPlan:
                 cte_plan.pa_schema, duplicate, uses_duplicate, cte_node[1]
             )
             cache[id(self)] = ret
-            return ret
+            # return ret
         else:
             # Sometimes the same LazyPlan object is encountered twice during the same
             # query so we use the cache dict to only convert it once.
@@ -253,6 +268,10 @@ class LazyPlan:
             if not isinstance(self, Expression) and id(self) in cache:
                 return cache[id(self)]
 
+            if not isinstance(self, Expression) and id(self) in leaf_cache:
+                print("got node from leaf_cache ", self.plan_class)
+                return leaf_cache[id(self)]
+
             # NOTE: Caching is necessary to make sure source operators which have table
             # indexes and are reused in various nodes (e.g. expressions) are not re-created
             # with different table indexes.
@@ -260,6 +279,8 @@ class LazyPlan:
             # be reused across right and left sides (e.g. self-join) leading to unique_ptr
             # errors.
             use_cache = should_use_cache(self)
+
+            leaf_node = not any(isinstance(x, LazyPlan) for x in self.args)
 
             # Convert any LazyPlan in the args.
             # We do this in reverse order because we expect the first arg to be
@@ -276,10 +297,16 @@ class LazyPlan:
             args.reverse()
 
             # Create real duckdb class.
+            print("before plan_optimizer", self.plan_class, id(self))
             ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args)
+            print("after plan_optimizer", self.plan_class)
             # Add to cache so we don't convert it again.
             cache[id(self)] = ret
-            return ret
+            if leaf_node:
+                leaf_cache[id(self)] = ret
+            # return ret
+        print("end generate_duckdb", self.plan_class)
+        return ret
 
     def get_cte_count(self):
         start_cte = CTECreatedCounter.get()
@@ -1057,7 +1084,9 @@ def execute_plan(plan: LazyPlan, optimize=True):
 
         if bodo.get_rank() == 0:
             start_time = time.perf_counter()
+        print("before generate_duckdb")
         duckdb_plan = plan.generate_duckdb()
+        print("after generate_duckdb")
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time gen", time.perf_counter() - start_time)
 
@@ -1250,13 +1279,24 @@ def make_col_ref_exprs(key_indices, src_plan):
     source plan.
     """
 
+    if not isinstance(src_plan, (list, tuple)):
+        src_plan = [src_plan]
     exprs = []
     for k in key_indices:
         # Using Arrow schema instead of zero_size_self.iloc to handle Index
         # columns correctly.
-        empty_data = arrow_to_empty_df(pa.schema([src_plan.pa_schema[k]]))
-        p = ColRefExpression(empty_data, src_plan, k)
-        exprs.append(p)
+        # empty_data = arrow_to_empty_df(pa.schema([src_plan.pa_schema[k]]))
+        # p = ColRefExpression(empty_data, src_plan, k)
+        # exprs.append(p)
+
+        for next_plan in src_plan:
+            if k < len(next_plan.empty_data.columns):
+                empty_data = arrow_to_empty_df(pa.schema([next_plan.pa_schema[k]]))
+                p = ColRefExpression(empty_data, next_plan, k)
+                exprs.append(p)
+                break
+            else:
+                k -= len(next_plan.empty_data.columns)
 
     return exprs
 
