@@ -90,6 +90,12 @@ struct ReductionFunctionCount : public ReductionFunction {
                             {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
 };
 
+struct ReductionFunctionSize : public ReductionFunction {
+    ReductionFunctionSize(std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction({"size"}, {"add"}, {ReductionType::AGGREGATION},
+                            {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
+};
+
 struct ReductionFunctionMean : public ReductionFunction {
     ReductionFunctionMean()
         : ReductionFunction(

@@ -22,6 +22,9 @@ void ReductionFunction::ConsumeBatch(
             CHECK_ARROW(sum_res.status(),
                         "Error in Arrow compute sum for sum_of_squares");
             out_scalar_batch = sum_res.ValueOrDie().scalar();
+        } else if (function_name == "size") {
+            out_scalar_batch = arrow::MakeScalar(
+                static_cast<int64_t>(in_arrow_array->length()));
         } else {
             // Reduce Arrow array using compute function
             arrow::Result<arrow::Datum> cmp_res =
@@ -166,6 +169,10 @@ OperatorResult PhysicalReduce::ConsumeBatch(
             } else if (func_name == "count") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionCount>(
+                        this->out_schema->column_types[i]->ToArrowDataType()));
+            } else if (func_name == "size") {
+                reduction_functions.push_back(
+                    std::make_unique<ReductionFunctionSize>(
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "mean") {
                 reduction_functions.push_back(
