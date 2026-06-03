@@ -107,9 +107,7 @@ extractValue(const duckdb::Value &value) {
         case duckdb::LogicalTypeId::INTERVAL: {
             duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
             // Convert to nanoseconds total, dropping month/day information
-            int64_t total_nanos =
-                (extracted.months * 30 + extracted.days) * 86'400'000'000'000 +
-                extracted.micros * 1'000;
+            int64_t total_nanos = duckdb::Interval::GetNanoseconds(extracted);
             auto dur_type = arrow::duration(arrow::TimeUnit::NANO);
             return arrow::MakeScalar(dur_type, total_nanos).ValueOrDie();
         } break;
@@ -515,6 +513,8 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
         case duckdb::LogicalTypeId::TIMESTAMP_TZ:
             return arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
         case duckdb::LogicalTypeId::INTERVAL:
+            // NOTE: using ns by default but DuckDB interval type loses
+            // precision in Arrow type roundtrips
             return arrow::duration(arrow::TimeUnit::NANO);
         default:
             throw std::runtime_error(
