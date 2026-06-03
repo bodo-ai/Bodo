@@ -541,6 +541,7 @@ def java_join_to_python_join(ctx, java_join):
     left_keys, right_keys = join_info.keys()
     key_indices = list(zip(left_keys, right_keys))
     join_type = JavaJoinTypeToDuckDB(java_join.getJoinType())
+    force_broadcast = java_join.getBroadcastBuildSide()
 
     left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
@@ -557,9 +558,12 @@ def java_join_to_python_join(ctx, java_join):
             join_type,
             key_indices,
             java_join.getJoinFilterID(),
+            force_broadcast,
         )
     else:
-        planJoinOrCross = LogicalCrossProduct(empty_join_out, left_plan, right_plan)
+        planJoinOrCross = LogicalCrossProduct(
+            empty_join_out, left_plan, right_plan, force_broadcast
+        )
 
     if len(nonEquiConds) == 0:
         return planJoinOrCross
@@ -774,8 +778,8 @@ def java_agg_to_python_agg(ctx, java_plan):
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
         if func_name == "size":
-            assert len(arg_cols) in [0, 1], (
-                "Size aggregations arg len not in [0,1] are not supported"
+            assert len(arg_cols) == 0, (
+                "Size aggregations with non-zero arg len not supported"
             )
             out_type = pa.int64()
         elif func_name == "count":

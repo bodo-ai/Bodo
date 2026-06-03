@@ -35,16 +35,19 @@ struct PhysicalReduceMetrics {
 };
 
 struct ReductionFunction {
+    int input_col_idx;
     std::vector<std::string> function_names;
     std::vector<std::string> reduction_names;
     std::vector<ReductionType> reduction_types;
     arrow::ScalarVector results;
     arrow::DataTypeVector result_types;
-    ReductionFunction(std::vector<std::string> function_names,
+    ReductionFunction(int input_col_idx,
+                      std::vector<std::string> function_names,
                       std::vector<std::string> reduction_names,
                       std::vector<ReductionType> reduction_types,
                       arrow::ScalarVector initial_results)
-        : function_names(std::move(function_names)),
+        : input_col_idx(input_col_idx),
+          function_names(std::move(function_names)),
           reduction_names(std::move(reduction_names)),
           reduction_types(std::move(reduction_types)),
           results(std::move(initial_results)) {
@@ -54,55 +57,66 @@ struct ReductionFunction {
         assert(!this->function_names.empty());
     }
     virtual void Finalize();
-    void ConsumeBatch(std::shared_ptr<arrow::Array> in_arrow_array);
+    void ConsumeBatch(std::shared_ptr<arrow::Table> in_arrow_table);
     virtual void CombineResults(const arrow::ScalarVector& other_results);
     virtual ~ReductionFunction() = default;
 };
 
 struct ReductionFunctionMax : public ReductionFunction {
-    ReductionFunctionMax()
-        : ReductionFunction({"max"}, {"greater"}, {ReductionType::COMPARISON},
-                            {nullptr}) {}
+    ReductionFunctionMax(int input_col_idx)
+        : ReductionFunction(input_col_idx, {"max"}, {"greater"},
+                            {ReductionType::COMPARISON}, {nullptr}) {}
 };
 
 struct ReductionFunctionMin : public ReductionFunction {
-    ReductionFunctionMin()
-        : ReductionFunction({"min"}, {"less"}, {ReductionType::COMPARISON},
-                            {nullptr}) {}
+    ReductionFunctionMin(int input_col_idx)
+        : ReductionFunction(input_col_idx, {"min"}, {"less"},
+                            {ReductionType::COMPARISON}, {nullptr}) {}
 };
 
 struct ReductionFunctionSum : public ReductionFunction {
-    ReductionFunctionSum(std::shared_ptr<arrow::DataType> dt)
-        : ReductionFunction({"sum"}, {"add"}, {ReductionType::AGGREGATION},
+    ReductionFunctionSum(int input_col_idx, std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction(input_col_idx, {"sum"}, {"add"},
+                            {ReductionType::AGGREGATION},
                             {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
 };
 
 struct ReductionFunctionProduct : public ReductionFunction {
-    ReductionFunctionProduct(std::shared_ptr<arrow::DataType> dt)
-        : ReductionFunction({"product"}, {"multiply"},
+    ReductionFunctionProduct(int input_col_idx,
+                             std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction(input_col_idx, {"product"}, {"multiply"},
                             {ReductionType::AGGREGATION},
                             {arrow::MakeScalar(dt, 1).ValueOrDie()}) {}
 };
 
 struct ReductionFunctionCount : public ReductionFunction {
-    ReductionFunctionCount(std::shared_ptr<arrow::DataType> dt)
-        : ReductionFunction({"count"}, {"add"}, {ReductionType::AGGREGATION},
+    ReductionFunctionCount(int input_col_idx,
+                           std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction(input_col_idx, {"count"}, {"add"},
+                            {ReductionType::AGGREGATION},
+                            {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
+};
+
+struct ReductionFunctionSize : public ReductionFunction {
+    ReductionFunctionSize(std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction(0, {"size"}, {"add"}, {ReductionType::AGGREGATION},
                             {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
 };
 
 struct ReductionFunctionMean : public ReductionFunction {
-    ReductionFunctionMean()
+    ReductionFunctionMean(int input_col_idx)
         : ReductionFunction(
-              {"sum", "count"}, {"add", "add"},
+              input_col_idx, {"sum", "count"}, {"add", "add"},
               {ReductionType::AGGREGATION, ReductionType::AGGREGATION},
               {nullptr, nullptr}) {}
     void Finalize() override;
 };
 
 struct ReductionFunctionStd : public ReductionFunction {
-    ReductionFunctionStd(int _ddof)
+    ReductionFunctionStd(int input_col_idx, int _ddof)
         : ReductionFunction(
-              {"sum", "count", "sum_of_squares"}, {"add", "add", "add"},
+              input_col_idx, {"sum", "count", "sum_of_squares"},
+              {"add", "add", "add"},
               {ReductionType::AGGREGATION, ReductionType::AGGREGATION,
                ReductionType::AGGREGATION},
               {nullptr, nullptr, nullptr}),
@@ -119,10 +133,12 @@ struct ReductionFunctionStd : public ReductionFunction {
 class PhysicalReduce : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalReduce(std::shared_ptr<bodo::Schema> out_schema,
-                            std::vector<std::string> function_names)
+                            std::vector<std::string> function_names,
+                            std::vector<int> input_column_indices)
         // Drop Index columns since not necessary in output
         : out_schema(std::move(out_schema)),
-          function_names(std::move(function_names)) {}
+          function_names(std::move(function_names)),
+          input_column_indices(std::move(input_column_indices)) {}
 
     virtual ~PhysicalReduce() = default;
 
@@ -203,6 +219,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> out_schema;
     std::vector<std::unique_ptr<ReductionFunction>> reduction_functions;
     std::vector<std::string> function_names;
+    std::vector<int> input_column_indices;
 
     int64_t iter = 0;
     PhysicalReduceMetrics metrics;

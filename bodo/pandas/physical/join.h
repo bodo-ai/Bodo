@@ -251,8 +251,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             // No equality keys, so we do a nested loop join.
             this->join_state_ = std::make_shared<NestedLoopJoinState>(
                 build_table_schema, probe_table_schema, build_table_outer,
-                probe_table_outer, std::vector<int64_t>(), false, join_func,
-                true, true, get_streaming_batch_size(), -1, getOpId());
+                probe_table_outer, std::vector<int64_t>(),
+                logical_join.force_broadcast, join_func, true, true,
+                get_streaming_batch_size(), -1, getOpId());
         } else {
             if (has_non_equi_cond) {
                 join_func = PhysicalExpression::join_expr;
@@ -260,8 +261,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             this->join_state_ = std::make_shared<HashJoinState>(
                 build_table_schema_reordered, probe_table_schema_reordered,
                 this->left_keys.size(), build_table_outer, probe_table_outer,
-                // TODO: support forcing broadcast by the planner
-                false, join_func, true, true, get_streaming_batch_size(), -1,
+                logical_join.force_broadcast, join_func, true, true,
+                get_streaming_batch_size(), -1,
                 //  TODO: support query profiling
                 getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
                 /*is_na_equal*/ true, is_mark_join);
@@ -360,9 +361,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         time_pt start_init = start_timer();
         this->join_state_ = std::make_shared<NestedLoopJoinState>(
             build_table_schema, probe_table_schema, false, false,
-            std::vector<int64_t>(),
-            // TODO: support forcing broadcast by the planner
-            false, nullptr, true, true, get_streaming_batch_size(), -1, -1);
+            std::vector<int64_t>(), logical_join.force_broadcast, nullptr, true,
+            true, get_streaming_batch_size(), -1, -1);
 
         // Cross join doesn't have any keys, so we keep all columns.
         for (uint64_t i = 0; i < probe_table_schema->ncols(); i++) {

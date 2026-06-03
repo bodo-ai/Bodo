@@ -19,6 +19,9 @@ class LogicalCrossProduct : public LogicalUnconditionalJoin {
 public:
 	static constexpr const LogicalOperatorType TYPE = LogicalOperatorType::LOGICAL_CROSS_PRODUCT;
 
+	// Bodo change: force_broadcast is only used in BodoSQL C++ backend and doesn't go through DuckDB optimizer
+	bool force_broadcast = false;
+
 public:
 	LogicalCrossProduct(unique_ptr<LogicalOperator> left, unique_ptr<LogicalOperator> right);
 
