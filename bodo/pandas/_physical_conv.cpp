@@ -196,6 +196,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                     expr->ToString());
             }
             if (agg_expr.function.name == "size") {
+                // size doesn't need an input column but we add a column to use
+                // the same infrastructure as other reductions
                 input_column_indices.push_back(0);
             } else {
                 auto& child_expr = agg_expr.children[0];
