@@ -36,71 +36,30 @@ def bitwise_df():
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT BITAND(A, B) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [0, 1, 32, 0, 0, None],
-                            dtype=pd.Int32Dtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BITAND(A, B) FROM table1",
             id="all_vector_int32",
         ),
         pytest.param(
-            (
-                "SELECT BITAND(C, D) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [0, 0, 127, 128, 200, None],
-                            dtype=pd.Int32Dtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BITAND(C, D) FROM table1",
             id="all_vector_uint8",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT BITAND(E, F) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [127, 0, 42, 128, 8, None],
-                            dtype=pd.Int64Dtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BITAND(E, F) FROM table1",
             id="all_vector_mixed",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                # 6148914691236517205 = 0x5555555555555555
-                "SELECT CASE WHEN F IS NULL THEN -1 ELSE BITAND(F, 6148914691236517205) END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [6148914691236517205, 85, 0, 0, 5, -1],
-                            dtype=pd.Int64Dtype(),
-                        )
-                    }
-                ),
-            ),
+            # 6148914691236517205 = 0x5555555555555555
+            "SELECT CASE WHEN F IS NULL THEN -1 ELSE BITAND(F, 6148914691236517205) END FROM table1",
             id="vector_scalar_case",
         ),
     ],
 )
-def test_bitand(args, bitwise_df, memory_leak_check):
-    query, answer = args
+def test_bitand(query, bitwise_df, memory_leak_check):
     check_query(
         query,
         bitwise_df,
@@ -408,41 +367,24 @@ def test_bitshiftleft(args, bitwise_df, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT BITSHIFTRIGHT(A, 1) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [0, 0, 21, 1073741823, -1073741824, None],
-                            dtype=pd.Int32Dtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BITSHIFTRIGHT(A, 1) FROM table1",
             id="vector_scalar_int32",
         ),
         pytest.param(
-            (
-                "SELECT BITSHIFTRIGHT(C, 4) FROM table1",
-                pd.DataFrame({0: pd.Series([0, 0, 7, 8, 15, 0])}),
-            ),
+            "SELECT BITSHIFTRIGHT(C, 4) FROM table1",
             id="vector_scalar_uint8",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN F IS NULL THEN 0 ELSE BITSHIFTRIGHT(F, 7) END FROM table1",
-                pd.DataFrame({0: pd.Series([144115188075855871, 0, 0, 1, 0, 0])}),
-            ),
+            "SELECT CASE WHEN F IS NULL THEN 0 ELSE BITSHIFTRIGHT(F, 7) END FROM table1",
             id="vector_scalar_uint64_case",
         ),
     ],
 )
-def test_bitshiftright(args, bitwise_df, memory_leak_check):
-    query, answer = args
+def test_bitshiftright(query, bitwise_df, memory_leak_check):
     check_query(
         query,
         bitwise_df,

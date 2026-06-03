@@ -698,18 +698,14 @@ def test_ifnull_case(
 
 @pytest.mark.bodosql_cpp
 @pytest.mark.slow
-def test_ifnull_multitable(
-    join_dataframes, spark_info, ifnull_equivalent_fn, memory_leak_check
-):
+def test_ifnull_multitable(join_dataframes, ifnull_equivalent_fn, memory_leak_check):
     """Checks ifnull function with columns from multiple tables"""
     query = "Select IFNULL(table2.B, table1.B) from table1, table2"
-    # Have to use Spark since DuckDB doesn't support NVL on scalars
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
-        # equivalent_spark_query=spark_query,
         use_duckdb=True,
     )
 

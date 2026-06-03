@@ -248,9 +248,6 @@ def test_datediff_args3_multitable_columns_time(
 ):
     """
     Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF with time parts on columns behaves as expected.
-
-    Used https://kontext.tech/article/830/spark-date-difference-in-seconds-minutes-hours
-    for defining equivalent Spark queries
     """
     check_query(
         query,
@@ -379,15 +376,11 @@ def test_timestamp_from_utc_literal(timestamp_literal, memory_leak_check):
     """
     Checks that a timestamp can be created from a literal with a UTC offset
     """
-    pd.Timestamp(timestamp_literal).tz_convert("UTC").tz_localize(None)
+    value = pd.Timestamp(timestamp_literal).tz_convert("UTC").tz_localize(None)
     query = f"SELECT TIMESTAMP '{timestamp_literal}' AS ts"
     ctx = {}
-    check_query(
-        query,
-        ctx,
-        None,
-        use_duckdb=True,
-    )
+    expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
 def test_timestamp_cast_utc_literal(timestamp_literal, memory_leak_check):

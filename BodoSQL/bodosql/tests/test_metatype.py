@@ -12,7 +12,6 @@ def test_init_dataframe(basic_df, memory_leak_check):
     loc) column projections.
     """
     query = "select SUM(A) over (PARTITION BY B ORDER BY C ASC ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) from table1"
-    ("1 PRECEDING", "1 FOLLOWING")
     codegen = check_query(
         query,
         basic_df,

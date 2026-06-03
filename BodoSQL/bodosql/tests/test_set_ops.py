@@ -472,16 +472,6 @@ def test_union_tz_aware_cols(union_cmds, representative_tz, memory_leak_check):
     Tests that UNION [ALL/DISTINCT] works for tz_aware columns
     """
     df = make_tz_aware_df(representative_tz)
-    py_output = pd.DataFrame({"A": pd.concat((df["A"], df["B"]))})
-    if "ALL" in union_cmds:
-        # For UNION ALL, number of NA's should be A_na + B_na
-        num_na = df["A"].isna().sum() + df["B"].isna().sum()
-        py_output = py_output.dropna()
-        py_output = pd.DataFrame({"A": list(py_output["A"]) + [None] * num_na})
-    else:
-        # Drop duplicates for UNION [DISTINCT]
-        py_output = py_output.drop_duplicates()
-
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {union_cmds} SELECT B FROM table1"
     check_query(
@@ -498,16 +488,6 @@ def test_intersect_tz_aware_cols(intersect_cmds, representative_tz, memory_leak_
     Test that INTERSECT [ALL/DISTINCT] works for tz_aware columns
     """
     df = make_tz_aware_df(representative_tz)
-    py_output = df[["A"]].merge(df[["B"]].rename(columns={"B": "A"}), on="A")
-    if "ALL" in intersect_cmds:
-        # For INTERSECT ALL, number of NA's should be min(A_na, B_na)
-        num_na = min(df["A"].isna().sum(), df["B"].isna().sum())
-        py_output = py_output.dropna()
-        py_output = pd.DataFrame({"A": list(py_output["A"]) + [None] * num_na})
-    else:
-        # Drop duplicates for INTERSECT [DISTINCT]
-        py_output = py_output.drop_duplicates()
-
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {intersect_cmds} SELECT B FROM table1"
     check_query(
@@ -525,16 +505,6 @@ def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check)
     Tests that EXCEPT/MINUS [ALL] works for tz_aware columns
     """
     df = make_tz_aware_df(representative_tz)
-    py_output = pd.DataFrame({"A": list(set(df["A"]).difference(set(df["B"])))})
-    if "ALL" in except_cmds:
-        # For EXCEPT/MINUS ALL, number of NA's should be max(A_na - B_na, 0)
-        num_na = max(df["A"].isna().sum() - df["B"].isna().sum(), 0)
-        py_output = py_output.dropna()
-        py_output = pd.DataFrame({"A": list(py_output["A"]) + [None] * num_na})
-    else:
-        # Drop duplicates for EXCEPT/MINUS
-        py_output = py_output.drop_duplicates()
-
     ctx = {"TABLE1": df}
     query = f"SELECT A FROM table1 {except_cmds} SELECT B FROM table1"
     check_query(
@@ -548,72 +518,59 @@ def test_except_tz_aware_cols(except_cmds, representative_tz, memory_leak_check)
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "query, py_output",
+    "query",
     [
-        # [BS-381] These queries are not valid for spark
         pytest.param(
             "SELECT 1,2 UNION SELECT 1,2",
-            pd.DataFrame({"A": [1], "B": [2]}),
             id="union_op_same",
         ),
         pytest.param(
             "SELECT 1,2 UNION DISTINCT SELECT 1,3",
-            pd.DataFrame({"A": [1, 1], "B": [2, 3]}),
             id="union_distinct_diff",
         ),
         pytest.param(
             "SELECT 1,2 UNION ALL SELECT 1,2",
-            pd.DataFrame({"A": [1, 1], "B": [2, 2]}),
             id="union_all_same",
         ),
         pytest.param(
             "(SELECT 1,2 UNION ALL SELECT 1,2) UNION ALL SELECT 1,2",
-            pd.DataFrame({"A": [1, 1, 1], "B": [2, 2, 2]}),
             id="union_all_dup",
         ),
         pytest.param(
             "SELECT 1,2 INTERSECT SELECT 1,2",
-            pd.DataFrame({"A": [1], "B": [2]}),
             id="intersect_op_same",
         ),
         pytest.param(
             "SELECT 1,2 INTERSECT DISTINCT SELECT 2,3",
-            pd.DataFrame({"A": [], "B": []}),
             id="intersect_distinct_diff",
         ),
         pytest.param(
             "SELECT 1,2 INTERSECT ALL SELECT 1,2",
-            pd.DataFrame({"A": [1], "B": [2]}),
             id="intersect_all_same",
         ),
         pytest.param(
             "(SELECT 1,2 UNION ALL SELECT 1,2) INTERSECT ALL (SELECT 1,2 UNION ALL SELECT 1,2)",
-            pd.DataFrame({"A": [1, 1], "B": [2, 2]}),
             id="intersect_all_dup",
         ),
         pytest.param(
             "SELECT 1,2 EXCEPT SELECT 1,2",
-            pd.DataFrame({"A": [], "B": []}),
             id="except_op_same",
         ),
         pytest.param(
             "SELECT 1,2 MINUS SELECT 2,3",
-            pd.DataFrame({"A": [1], "B": [2]}),
             id="minus_op_diff",
         ),
         pytest.param(
             "SELECT 1,2 EXCEPT ALL SELECT 1,2",
-            pd.DataFrame({"A": [], "B": []}),
             id="except_all_same",
         ),
         pytest.param(
             "(SELECT 1,2 UNION ALL SELECT 1,2) MINUS ALL SELECT 1,2",
-            pd.DataFrame({"A": [1], "B": [2]}),
             id="minus_all_dup",
         ),
     ],
 )
-def test_set_ops_scalars(query, py_output, memory_leak_check):
+def test_set_ops_scalars(query, memory_leak_check):
     """
     Tests that set ops work for scalars
     """

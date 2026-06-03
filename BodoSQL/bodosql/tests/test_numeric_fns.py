@@ -175,7 +175,6 @@ def test_single_op_numeric_fns_cols(
 def test_double_op_numeric_fns_cols(
     double_op_numeric_fn_info,
     bodosql_negative_numeric_types,
-    spark_info,
     memory_leak_check,
 ):
     """tests the behavior of numeric functions with two arguments on columns"""
@@ -191,7 +190,6 @@ def test_double_op_numeric_fns_cols(
         query,
         bodosql_negative_numeric_types,
         None,
-        # spark_info,
         check_names=False,
         check_dtype=False,
         equivalent_spark_query=spark_query,
@@ -1033,21 +1031,6 @@ def test_to_number_columns_with_scale(fn_name):
             "C": float_series,
             "D": str_float_series,
         }
-    )
-
-    pd.Series(
-        [
-            123.456,
-            10.3,
-            1234567.123,
-            None,
-            -1234567.124,
-            1234567.123,
-            0.0,
-            None,
-            1.0,
-            1234567.124,
-        ]
     )
 
     ctx = {"TABLE1": df}

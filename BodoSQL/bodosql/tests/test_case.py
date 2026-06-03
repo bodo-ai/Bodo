@@ -581,7 +581,7 @@ def test_case_proper_character_escape_regex(memory_leak_check):
     df = pd.DataFrame({"WEB_URL": orig_web_url_list})
     ctx = {"TABLE1": df}
 
-    expected_out = df = pd.DataFrame(
+    expected_out = pd.DataFrame(
         {
             "WEB_URL": orig_web_url_list,
             "EXTRACTED_VALUE": [

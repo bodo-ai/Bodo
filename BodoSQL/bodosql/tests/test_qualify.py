@@ -203,7 +203,6 @@ def test_qualify_timedelta(
         }
     )
     ctx = {"TABLE1": df}
-    df.iloc[[6, 11, 12, 13], [0, 1]]
 
     check_query(
         query,
