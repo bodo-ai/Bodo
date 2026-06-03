@@ -181,9 +181,20 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             }
         }
         std::vector<std::string> function_names;
+        auto bodo_schema = std::make_shared<bodo::Schema>();
+        bodo_schema->metadata = std::make_shared<bodo::TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+        int i = 0;
         for (auto& expr : op.expressions) {
             auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
             function_names.emplace_back(agg_expr.function.name);
+            BodoAggFunctionData& bind_info =
+                agg_expr.bind_info->Cast<BodoAggFunctionData>();
+            auto col_schema = bind_info.out_schema;
+            auto bodo_col_schema = bodo::Schema::FromArrowSchema(col_schema);
+            bodo_schema->append_column(
+                bodo_col_schema->column_types[0]->copy());
+            bodo_schema->column_names.push_back(std::to_string(i++));
         }
 
         if (function_names[0] == "count_star") {
@@ -214,23 +225,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 #endif  // USE_CUDF
             return;
         }
-        // bind_info in every expression stores the same schema for the entire
-        // list, formatted on the Python side; therefore we only extract
-        // bind_info of first element.
-        auto& agg_expr =
-            op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
-        BodoAggFunctionData& bind_info =
-            agg_expr.bind_info->Cast<BodoAggFunctionData>();
-        auto bodo_schema = std::make_shared<bodo::Schema>();
-        auto col_schema = bind_info.out_schema;
-        auto bodo_col_schema = bodo::Schema::FromArrowSchema(col_schema);
-        for (size_t i = 0; i < bodo_col_schema->column_types.size(); i++) {
-            bodo_schema->append_column(
-                bodo_col_schema->column_types[i]->copy());
-            bodo_schema->column_names.push_back(std::to_string(i));
-        }
-        bodo_schema->metadata = std::make_shared<bodo::TableMetadata>(
-            std::vector<std::string>({}), std::vector<std::string>({}));
 
         // If function_names includes quantiles, create a PhysicalQuantile
         // operator. Function names for quantile evaluations are formatted as
