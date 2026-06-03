@@ -35,5 +35,9 @@ gpu:
   - false
   - true
 
+is_platform:
+  - false
+  - true
+
 cuda_compiler:
   - cuda-nvcc
