@@ -172,7 +172,7 @@ def test_grouping_sets_subset(grouping_sets_inputs, memory_leak_check):
         ),
     ],
 )
-def test_implicit_grouping_sets(query, spark_info, memory_leak_check):
+def test_implicit_grouping_sets(query, memory_leak_check):
     """
     Test use cases where a grouping set is implicitly generated because of
     multiple COUNT(DISTINCT)s.
@@ -200,7 +200,7 @@ def test_implicit_grouping_sets(query, spark_info, memory_leak_check):
     )
 
     ctx = {"TABLE1": input_df}
-    check_query(query, ctx, spark_info, check_dtype=False)
+    check_query(query, ctx, None, check_dtype=False, use_duckdb=True)
 
 
 def test_grouping_non_streaming(grouping_sets_inputs, memory_leak_check):

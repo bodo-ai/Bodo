@@ -7,7 +7,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
+from bodosql.tests.utils import check_query
 
 
 @pytest.fixture
@@ -135,7 +135,7 @@ def smoke_shipping_ctx():
 
 
 @pytest.mark.smoke
-def test_smoke_project(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_project(smoke_ctx, memory_leak_check):
     """
     Tests selecting a subset of the columns
     """
@@ -146,14 +146,15 @@ def test_smoke_project(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_functions(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_functions(smoke_ctx, memory_leak_check):
     """
     Tests calling several useful scalar functions
     """
@@ -169,14 +170,15 @@ def test_smoke_functions(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_case(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_case(smoke_ctx, memory_leak_check):
     """
     Tests using CASE statements
     """
@@ -190,14 +192,15 @@ def test_smoke_case(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_raw_select(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_raw_select(smoke_ctx, memory_leak_check):
     """
     Tests using SELECT without a table provided
     """
@@ -211,14 +214,15 @@ def test_smoke_raw_select(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_distinct(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_distinct(smoke_ctx, memory_leak_check):
     """
     Tests selecting a subset of the columns with SELECT DISTINCT
     """
@@ -229,14 +233,15 @@ def test_smoke_distinct(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_sort(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_sort(smoke_ctx, memory_leak_check):
     """
     Tests using an ORDER BY clause
     """
@@ -248,15 +253,16 @@ def test_smoke_sort(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         sort_output=False,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_limit(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_limit(smoke_ctx, memory_leak_check):
     """
     Tests using an LIMIT clause
     """
@@ -269,15 +275,16 @@ def test_smoke_limit(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         sort_output=False,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_join(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_join(smoke_ctx, memory_leak_check):
     """
     Tests using a simple JOIN clause
     """
@@ -290,14 +297,15 @@ def test_smoke_join(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_filter(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_filter(smoke_ctx, memory_leak_check):
     """
     Tests using a WHERE clause
     """
@@ -309,14 +317,15 @@ def test_smoke_filter(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_window(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_window(smoke_ctx, memory_leak_check):
     """
     Tests window functions
     """
@@ -328,16 +337,12 @@ def test_smoke_window(smoke_ctx, spark_info, memory_leak_check):
     FROM table1
     """
     check_query(
-        query,
-        smoke_ctx,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
+        query, smoke_ctx, None, check_names=False, check_dtype=False, use_duckdb=True
     )
 
 
 @pytest.mark.smoke
-def test_smoke_qualify(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_qualify(smoke_ctx, memory_leak_check):
     """
     Tests QUALIFY
     """
@@ -346,28 +351,18 @@ def test_smoke_qualify(smoke_ctx, spark_info, memory_leak_check):
     FROM table1
     QUALIFY MIN(D) OVER (PARTITION BY B ORDER BY A ASC NULLS FIRST, D ASC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) = D;
     """
-    spark_query = """
-    SELECT A, B, C, D
-    FROM (
-        SELECT
-            A, B, C, D,
-            MIN(D) OVER (PARTITION BY B ORDER BY A ASC NULLS FIRST, D ASC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS M
-        FROM table1
-    )
-   WHERE M = D
-    """
     check_query(
         query,
         smoke_ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_groupby_aggregation(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_groupby_aggregation(smoke_ctx, memory_leak_check):
     """
     Tests only groupby aggregation
     """
@@ -381,20 +376,19 @@ def test_smoke_groupby_aggregation(smoke_ctx, spark_info, memory_leak_check):
         "STDDEV_POP(D)",
     ]
     query = f"SELECT {', '.join(agg_terms)} FROM table1 GROUP BY A, C"
-    spark_query = get_equivalent_spark_agg_query(query)
     check_query(
         query,
         smoke_ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
 @pytest.mark.timeout(2000)
-def test_smoke_nogroup_aggregation(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_nogroup_aggregation(smoke_ctx, memory_leak_check):
     """
     Tests only no-groupby aggregation
     """
@@ -408,40 +402,36 @@ def test_smoke_nogroup_aggregation(smoke_ctx, spark_info, memory_leak_check):
         "MAX(D)",
     ]
     query = f"SELECT {', '.join(agg_terms)} FROM table1"
-    spark_query = get_equivalent_spark_agg_query(query)
     check_query(
         query,
         smoke_ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_grouping_set_aggregation(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_grouping_set_aggregation(smoke_ctx, memory_leak_check):
     """
     Tests a mix of concatenated groupby & no-groupby aggregation using GROUPING SETS.
     """
     agg_terms = ["A", "B", "COUNT(*)", "COUNT_IF(C)", "SUM(D)"]
-    query = f"SELECT {', '.join(agg_terms)} FROM table1"
-    spark_query = get_equivalent_spark_agg_query(query)
-    query += " GROUP BY ROLLUP(A, B)"
-    spark_query += " GROUP BY A, B WITH ROLLUP"
+    query = f"SELECT {', '.join(agg_terms)} FROM table1 GROUP BY ROLLUP(A, B)"
     check_query(
         query,
         smoke_ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_having(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_having(smoke_ctx, memory_leak_check):
     """
     Tests GROUP BY aggregation with a HAVING clause
     """
@@ -458,14 +448,15 @@ def test_smoke_having(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_pivot(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_pivot(smoke_ctx, memory_leak_check):
     """
     Tests using PIVOT aggregations
     """
@@ -477,14 +468,15 @@ def test_smoke_pivot(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_setops(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_setops(smoke_ctx, memory_leak_check):
     """
     Tests using UNION ALL, INTERSECT and EXCEPT
     """
@@ -502,14 +494,15 @@ def test_smoke_setops(smoke_ctx, spark_info, memory_leak_check):
     check_query(
         query,
         smoke_ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.smoke
-def test_smoke_subquery_ops(smoke_ctx, spark_info, memory_leak_check):
+def test_smoke_subquery_ops(smoke_ctx, memory_leak_check):
     """
     Tests using subquery operators ANY, ALL and IN
     """
@@ -528,30 +521,13 @@ def test_smoke_subquery_ops(smoke_ctx, spark_info, memory_leak_check):
         WHERE D::INTEGER IN (SELECT Z::INTEGER FROM table2)
     );
     """
-    # Note: Bodo cast from float -> int always uses ROUND HALF UP,
-    # so we match this in Spark explicitly.
-    spark_query = """
-    (
-        SELECT D, 'ALL'
-        FROM table1
-        WHERE D < (SELECT MIN(Z) FROM table2)
-    ) UNION ALL (
-        SELECT D, 'ANY'
-        FROM table1
-        WHERE D < (SELECT MAX(Z) FROM table2)
-    ) UNION ALL (
-        SELECT D, 'IN'
-        FROM table1
-        WHERE CAST(ROUND(D) AS INTEGER) IN (SELECT CAST(ROUND(Z) AS INTEGER) FROM table2)
-    )
-    """
     check_query(
         query,
         smoke_ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -579,204 +555,12 @@ def test_smoke_shipping_workload(smoke_shipping_ctx, memory_leak_check):
     AND STATE NOT IN ('OR', 'WA', 'CA')
     GROUP BY STATE, STORE_TYPE
     """
-    answer = pd.DataFrame(
-        {
-            "STATE": [
-                "GA",
-                "GA",
-                "GA",
-                "GA",
-                "GA",
-                "IL",
-                "IL",
-                "IL",
-                "IL",
-                "IL",
-                "MI",
-                "MI",
-                "MI",
-                "MI",
-                "MI",
-                "NJ",
-                "NJ",
-                "NJ",
-                "NJ",
-                "NJ",
-                "NY",
-                "NY",
-                "NY",
-                "NY",
-                "NY",
-                "PA",
-                "PA",
-                "PA",
-                "PA",
-                "PA",
-                "TX",
-                "TX",
-                "TX",
-                "TX",
-                "TX",
-            ],
-            "STORE_TYPE": [
-                "GROCERY",
-                "HEALTH",
-                "MANUFACTURING",
-                "SOFTWARE",
-                "TEXTILE",
-                "GROCERY",
-                "HEALTH",
-                "MANUFACTURING",
-                "SOFTWARE",
-                "TEXTILE",
-                "GROCERY",
-                "HEALTH",
-                "MANUFACTURING",
-                "SOFTWARE",
-                "TEXTILE",
-                "GROCERY",
-                "HEALTH",
-                "MANUFACTURING",
-                "SOFTWARE",
-                "TEXTILE",
-                "GROCERY",
-                "HEALTH",
-                "MANUFACTURING",
-                "SOFTWARE",
-                "TEXTILE",
-                "GROCERY",
-                "HEALTH",
-                "MANUFACTURING",
-                "SOFTWARE",
-                "TEXTILE",
-                "GROCERY",
-                "HEALTH",
-                "MANUFACTURING",
-                "SOFTWARE",
-                "TEXTILE",
-            ],
-            # TODO: Fix cast with decimal and revert total_shipping
-            "TOTAL_SHIPPING": pd.Series(
-                [
-                    7862256249.22,
-                    2115206460.08,
-                    6397246671.76,
-                    5044534824.56,
-                    3577084792.20,
-                    15484.72,
-                    4147.24,
-                    12593.94,
-                    10129.59,
-                    6951.75,
-                    3478345192.58,
-                    939270608.80,
-                    2830856662.50,
-                    2220187767.58,
-                    1586176358.19,
-                    1017297617.27,
-                    276399370.63,
-                    842198000.42,
-                    645098471.39,
-                    466698931.61,
-                    266503771.62,
-                    74201019.76,
-                    222603065.62,
-                    179602373.10,
-                    123701703.76,
-                    27806732.46,
-                    7701849.28,
-                    22005496.56,
-                    18904358.85,
-                    11503049.28,
-                    2086584328.56,
-                    558195808.56,
-                    1685087385.71,
-                    1333389961.65,
-                    946992900.22,
-                ],
-                dtype="Float64",
-            ),
-            "N_STORES": [
-                314,
-                85,
-                256,
-                200,
-                143,
-                313,
-                84,
-                255,
-                198,
-                142,
-                314,
-                85,
-                256,
-                201,
-                143,
-                312,
-                84,
-                253,
-                199,
-                141,
-                309,
-                84,
-                250,
-                197,
-                140,
-                308,
-                84,
-                254,
-                199,
-                141,
-                313,
-                85,
-                255,
-                200,
-                142,
-            ],
-            "N_PRODUCTS": [
-                24759,
-                17272,
-                23923,
-                22739,
-                20820,
-                9034,
-                3160,
-                7743,
-                6570,
-                4877,
-                19412,
-                9680,
-                17947,
-                16055,
-                13391,
-                9030,
-                3176,
-                7874,
-                6408,
-                4975,
-                6216,
-                2062,
-                5329,
-                4370,
-                3256,
-                7092,
-                2366,
-                6019,
-                4941,
-                3687,
-                13172,
-                5094,
-                11578,
-                9854,
-                7689,
-            ],
-        }
-    )
+
     check_query(
         query,
         smoke_shipping_ctx,
         None,
-        expected_output=answer,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )

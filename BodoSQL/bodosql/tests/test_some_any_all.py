@@ -12,6 +12,8 @@ from bodosql.tests.utils import check_query
 # Skip unless any codegen files were changed
 pytestmark = pytest_slow_unless_codegen
 
+# DuckDB doesn't seem to support the <=> comparison operator
+
 
 @pytest.fixture(
     params=[

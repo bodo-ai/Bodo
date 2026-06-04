@@ -77,7 +77,7 @@ def test_row_number_orderby(datapath, memory_leak_check, orderby_multiple_column
         pytest.param("W3 % 3 DESC, A ASC NULLS FIRST", id="combo"),
     ],
 )
-def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_check):
+def test_rank_fns(all_types_window_df, order_clause, memory_leak_check):
     """Tests rank, dense_rank, percent_rank, ntile and row_number at the same
     where the input dtype and different combinatons of asc/desc & nulls
     first/last are parametrized so that each test can have total
@@ -101,7 +101,7 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     check_query(
         query,
         all_types_window_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
@@ -111,7 +111,7 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     )
 
 
-def test_rank_ntile_mix(spark_info, memory_leak_check):
+def test_rank_ntile_mix(memory_leak_check):
     """
     Tests a mix of window functions that use the hash-based streaming window
     impl together.
@@ -143,9 +143,10 @@ def test_rank_ntile_mix(spark_info, memory_leak_check):
     check_query(
         query,
         {"TABLE1": df},
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -235,7 +236,7 @@ def test_min_row_number_filter_simple(
     )
 
 
-def test_min_row_number_filter_complex(memory_leak_check, spark_info):
+def test_min_row_number_filter_complex(memory_leak_check):
     """
     A variant of test_min_row_number_filter_simple with a more complex
     min row number filter with more involved column pruning behavior,
@@ -248,16 +249,6 @@ def test_min_row_number_filter_complex(memory_leak_check, spark_info):
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY A, I, G
         ORDER BY D ASC NULLS FIRST, B ASC NULLS LAST, F DESC NULLS FIRST, H DESC NULLS LAST) = 1
-    """
-    spark_query = """
-    SELECT A, B, D, E, G, H
-    FROM (
-        SELECT *, ROW_NUMBER() OVER (
-            PARTITION BY A, I, G
-            ORDER BY D ASC NULLS FIRST, B ASC NULLS LAST, F DESC NULLS FIRST, H DESC NULLS LAST) as rn
-        FROM table1
-    )
-    WHERE rn = 1
     """
     df = pd.DataFrame(
         {
@@ -286,9 +277,7 @@ def test_min_row_number_filter_complex(memory_leak_check, spark_info):
         }
     )
     ctx = {"TABLE1": df}
-    check_query(
-        query, ctx, spark_info, equivalent_spark_query=spark_query, check_dtype=False
-    )
+    check_query(query, ctx, None, check_dtype=False, use_duckdb=True)
 
 
 @pytest.mark.parametrize(
@@ -303,9 +292,7 @@ def test_min_row_number_filter_complex(memory_leak_check, spark_info):
         pytest.param(["B", "D", "H"], ["H DESC", "D ASC"], id="order_total_overlap"),
     ],
 )
-def test_mrnf_order_edgecases(
-    partition_cols, order_cols, spark_info, memory_leak_check
-):
+def test_mrnf_order_edgecases(partition_cols, order_cols, memory_leak_check):
     """
     Test that the MRNF output is correct when some or all of the orderby columns
     are also partition columns, and when there are no orderby columns.
@@ -345,7 +332,7 @@ def test_mrnf_order_edgecases(
         return x.sort_values(by=["C"], ascending=True, na_position="first").iloc[0]
 
     ctx = {"TABLE1": df}
-    check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
+    check_query(query, ctx, None, check_dtype=False, check_names=False, use_duckdb=True)
 
 
 def test_mrnf_all_ties(memory_leak_check):
@@ -742,10 +729,6 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "window_func, expected_df",
     [
@@ -782,9 +765,6 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
                 }
             ),
             id="percent_rank",
-            marks=pytest.mark.skip(
-                reason="Blocked until multiple window functions are allowed in streaming together"
-            ),
         ),
         pytest.param(
             "CUME_DIST()",
@@ -839,10 +819,6 @@ def test_partitionless_rank_fns(capfd, window_func, expected_df, memory_leak_che
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "window_func, expected_df, expected_log_message",
     [
@@ -913,9 +889,6 @@ def test_partitionless_rank_fns(capfd, window_func, expected_df, memory_leak_che
             ),
             "[DEBUG] WindowState::FinalizeBuild: Finished",
             id="percent_rank",
-            marks=pytest.mark.skip(
-                reason="Blocked until multiple window functions are allowed in streaming together"
-            ),
         ),
         pytest.param(
             "CUME_DIST()",
@@ -1013,7 +986,7 @@ SELECT {window_func} OVER (PARTITION BY B ORDER BY A) FROM TABLE1
         pytest.param("DENSE_RANK", id="dense_rank", marks=pytest.mark.slow),
     ],
 )
-def test_row_number_intense(func, spark_info, memory_leak_check):
+def test_row_number_intense(func, memory_leak_check):
     """
     Tests ROW_NUMBER on a larger set of data with a lot of skew between the partition sizes.
     """
@@ -1043,10 +1016,11 @@ def test_row_number_intense(func, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
@@ -1068,10 +1042,6 @@ def ntile_df():
     return df
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "n_bins",
     [
@@ -1109,7 +1079,7 @@ def ntile_df():
         ),
     ],
 )
-def test_ntile(ntile_df, capfd, spark_info, n_bins):
+def test_ntile(ntile_df, capfd, n_bins):
     from mpi4py import MPI
 
     from bodo.tests.utils import temp_env_override
@@ -1128,9 +1098,10 @@ def test_ntile(ntile_df, capfd, spark_info, n_bins):
         check_query(
             query,
             {"TABLE1": ntile_df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
+            use_duckdb=True,
         )
     _, err = capfd.readouterr()
     assert_success = expected_log_message in err
@@ -1139,11 +1110,7 @@ def test_ntile(ntile_df, capfd, spark_info, n_bins):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
-def test_multiple_rank_fns(spark_info, capfd, memory_leak_check):
+def test_multiple_rank_fns(capfd, memory_leak_check):
     """
     Tests that multiple rank functions can be computed together in the sort based impl
     """
@@ -1175,9 +1142,10 @@ def test_multiple_rank_fns(spark_info, capfd, memory_leak_check):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_dtype=False,
             check_names=False,
+            use_duckdb=True,
         )
         _, err = capfd.readouterr()
         assert_success = expected_log_message in err

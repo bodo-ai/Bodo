@@ -50,7 +50,7 @@ def test_from_days_scalar(spark_info, basic_df, memory_leak_check):
     )
 
 
-def test_to_seconds_cols(spark_info, bodosql_datetime_types, memory_leak_check):
+def test_to_seconds_cols(bodosql_datetime_types, memory_leak_check):
     """tests to_seconds function on column values"""
     query = "SELECT TO_SECONDS(A) AS A_OUT, TO_SECONDS(B) AS B_OUT, TO_SECONDS(C) AS C_OUT from table1"
 
@@ -76,13 +76,13 @@ def test_to_seconds_cols(spark_info, bodosql_datetime_types, memory_leak_check):
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_dtype=False,
         expected_output=expected_output,
     )
 
 
-def test_to_seconds_scalars(spark_info, bodosql_datetime_types, memory_leak_check):
+def test_to_seconds_scalars(bodosql_datetime_types, memory_leak_check):
     """tests to_seconds function on scalar values"""
     query = "SELECT CASE WHEN TO_SECONDS(A) = 1 THEN -1 ELSE TO_SECONDS(A) END AS A_OUT from table1"
 
@@ -99,13 +99,13 @@ def test_to_seconds_scalars(spark_info, bodosql_datetime_types, memory_leak_chec
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_dtype=False,
         expected_output=expected_output,
     )
 
 
-def test_to_days_cols(spark_info, bodosql_datetime_types, memory_leak_check):
+def test_to_days_cols(bodosql_datetime_types, memory_leak_check):
     """test_to_days on column values"""
     query = "SELECT TO_DAYS(A), TO_DAYS(B), TO_DAYS(C) from table1"
 
@@ -130,14 +130,14 @@ def test_to_days_cols(spark_info, bodosql_datetime_types, memory_leak_check):
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=expected_output,
     )
 
 
-def test_to_days_scalars(spark_info, bodosql_datetime_types, memory_leak_check):
+def test_to_days_scalars(bodosql_datetime_types, memory_leak_check):
     """test to_days on scalar values"""
     query = "SELECT CASE WHEN TO_DAYS(A) = 0 then -1 ELSE TO_DAYS(A) END from table1"
 
@@ -154,7 +154,7 @@ def test_to_days_scalars(spark_info, bodosql_datetime_types, memory_leak_check):
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=expected_output,

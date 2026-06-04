@@ -53,238 +53,118 @@ def numeric_truthy_df(request):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT BOOLAND(A, B) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [True, False, None, False, False, False, None, False, None],
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BOOLAND(A, B) FROM table1",
             id="all_vector",
         ),
         pytest.param(
-            (
-                "SELECT BOOLAND(A, 0.0) FROM table1",
-                pd.DataFrame({0: pd.Series([False] * 9, dtype=pd.BooleanDtype())}),
-            ),
+            "SELECT BOOLAND(A, 0.0) FROM table1",
             id="vector_scalar",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN A IS NULL AND B IS NULL THEN FALSE ELSE BOOLAND(A, B) END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                True,
-                                False,
-                                None,
-                                False,
-                                False,
-                                False,
-                                None,
-                                False,
-                                False,
-                            ],
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT CASE WHEN A IS NULL AND B IS NULL THEN FALSE ELSE BOOLAND(A, B) END FROM table1",
             id="all_scalar_with_case",
         ),
     ],
 )
-def test_booland(args, numeric_truthy_df, spark_info, memory_leak_check):
-    query, answer = args
+def test_booland(query, numeric_truthy_df, memory_leak_check):
     check_query(
         query,
         numeric_truthy_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT BOOLOR(A, B) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [True, True, True, True, False, None, True, None, None],
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BOOLOR(A, B) FROM table1",
             id="all_vector",
         ),
         pytest.param(
-            (
-                "SELECT BOOLOR(A, 0.0) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [True] * 3 + [False] * 3 + [None] * 3,
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BOOLOR(A, 0.0) FROM table1",
             id="vector_scalar",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN A IS NULL AND B IS NULL THEN FALSE ELSE BOOLOR(A, B) END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [True, True, True, True, False, None, None, True, False],
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT CASE WHEN A IS NULL AND B IS NULL THEN FALSE ELSE BOOLOR(A, B) END FROM table1",
             id="all_scalar_with_case",
         ),
     ],
 )
-def test_boolor(args, numeric_truthy_df, spark_info, memory_leak_check):
-    query, answer = args
+def test_boolor(query, numeric_truthy_df, memory_leak_check):
     check_query(
         query,
         numeric_truthy_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT BOOLXOR(A, B) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [False, True, None, True, False, None, None, None, None],
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BOOLXOR(A, B) FROM table1",
             id="all_vector",
         ),
         pytest.param(
-            (
-                "SELECT BOOLXOR(A, 0.0) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [True] * 3 + [False] * 3 + [None] * 3,
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BOOLXOR(A, 0.0) FROM table1",
             id="vector_scalar",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN A IS NULL AND B IS NULL THEN FALSE ELSE BOOLXOR(A, B) END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [False, True, None, True, False, None, None, None, False],
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT CASE WHEN A IS NULL AND B IS NULL THEN FALSE ELSE BOOLXOR(A, B) END FROM table1",
             id="all_scalar_with_case",
         ),
     ],
 )
-def test_boolxor(args, numeric_truthy_df, spark_info, memory_leak_check):
-    query, answer = args
+def test_boolxor(query, numeric_truthy_df, memory_leak_check):
     check_query(
         query,
         numeric_truthy_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT BOOLNOT(A) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [False] * 3 + [True] * 3 + [None] * 3,
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT BOOLNOT(A) FROM table1",
             id="all_vector",
         ),
         pytest.param(
-            (
-                "SELECT BOOLNOT(64) FROM table1",
-                pd.DataFrame({0: pd.Series([False] * 9, dtype=pd.BooleanDtype())}),
-            ),
+            "SELECT BOOLNOT(64) FROM table1",
             id="vector_scalar",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN B IS NULL THEN FALSE ELSE BOOLNOT(A) END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [False, False, False, True, True, False, None, None, False],
-                            dtype=pd.BooleanDtype(),
-                        )
-                    }
-                ),
-            ),
+            "SELECT CASE WHEN B IS NULL THEN FALSE ELSE BOOLNOT(A) END FROM table1",
             id="all_scalar_with_case",
         ),
     ],
 )
-def test_boolnot(args, numeric_truthy_df, spark_info, memory_leak_check):
-    query, answer = args
+def test_boolnot(query, numeric_truthy_df, memory_leak_check):
     check_query(
         query,
         numeric_truthy_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 

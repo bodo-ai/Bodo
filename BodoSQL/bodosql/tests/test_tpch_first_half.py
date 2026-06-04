@@ -863,7 +863,7 @@ def test_tpch_q10(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_tpch_q11(tpch_data, spark_info, memory_leak_check):
+def test_tpch_q11(tpch_data, memory_leak_check):
     NATION = "GERMANY"
     FRACTION = 0.0001
     tpch_query = f"""
@@ -899,7 +899,8 @@ def test_tpch_q11(tpch_data, spark_info, memory_leak_check):
     check_query(
         tpch_query,
         tpch_data,
-        spark_info,
+        None,
         check_dtype=False,
         sort_output=False,
+        use_duckdb=True,
     )
