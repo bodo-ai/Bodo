@@ -1,4 +1,4 @@
-name: Build Wheels
+name: Bodo Nightly CI
 
 on:
   workflow_dispatch:
