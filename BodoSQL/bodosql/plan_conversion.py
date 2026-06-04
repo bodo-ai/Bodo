@@ -410,6 +410,33 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return UnaryOpExpression(bool_empty_data, input, "__invert__")
 
     if (
+        operator_class_name == "SqlExtractFunction"
+        and len(java_call.getOperands()) == 2
+    ):
+        # EXTRACT(FLAG(MONTH), date) → month(date)
+        unit_str = str(java_call.getOperands()[0].toString()).upper()
+        input = java_expr_to_python_expr(ctx, java_call.getOperands()[1], input_plan)
+        # Strip "FLAG(" / ")" or "INTERVAL_" prefix from unit string
+        if "(" in unit_str:
+            unit_str = unit_str.split("(")[1].rstrip(")")
+        _DATE_PART_ARROW_FUNCS_EXTRA = {
+            "YEAR": "year",
+            "MONTH": "month",
+            "DAY": "day",
+            "HOUR": "hour",
+            "MINUTE": "minute",
+            "SECOND": "second",
+            "QUARTER": "quarter",
+            "WEEK": "iso_week",
+            "DOW": "day_of_week",
+            "DOY": "day_of_year",
+        }
+        arrow_func = _DATE_PART_ARROW_FUNCS_EXTRA.get(unit_str)
+        if arrow_func is None:
+            raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
+        empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+        return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+    if (
         operator_class_name == "SqlDatePartFunction"
         and len(java_call.getOperands()) == 1
     ):
