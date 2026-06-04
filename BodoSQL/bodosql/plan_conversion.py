@@ -194,6 +194,29 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
+        if func_name == "DATE_TRUNC" and num_operands == 2:
+            # DATE_TRUNC(FLAG(DAY), timestamp) → floor_temporal(timestamp, unit)
+            unit_raw = str(java_call.getOperands()[0].toString()).upper()
+            if "(" in unit_raw:
+                unit_raw = unit_raw.split("(")[1].rstrip(")")
+            _TRUNC_UNIT_MAP = {
+                "YEAR": "year",
+                "QUARTER": "quarter",
+                "MONTH": "month",
+                "WEEK": "week",
+                "DAY": "day",
+                "HOUR": "hour",
+                "MINUTE": "minute",
+                "SECOND": "second",
+            }
+            arrow_unit = _TRUNC_UNIT_MAP.get(unit_raw, unit_raw.lower())
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            return ArrowScalarFuncExpression(
+                input.empty_data, [input], "floor_temporal", (1, arrow_unit)
+            )
+
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
             # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
             # For 2 operands: (date, interval) → date + interval
@@ -531,12 +554,34 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # add plan caching
         return ConstantExpression(dummy_empty_data, input_plan, curr_date)
 
+    if operator_class_name == "SqlAbstractTimeFunction":
+        func_name = op.getName().upper()
+        if func_name in ("LOCALTIME", "CURRENT_TIME"):
+            curr_ts = pd.Timestamp.now()
+            dummy_empty_data = pd.Series(
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+            )
+            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         # function name as string (e.g., "POWER", "SQRT")
         func_name = op.getName().upper()
+
+        if func_name in (
+            "CURRENT_TIMESTAMP",
+            "GETDATE",
+            "LOCALTIMESTAMP",
+            "SYSTIMESTAMP",
+            "NOW",
+        ):
+            curr_ts = pd.Timestamp.now()
+            dummy_empty_data = pd.Series(
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+            )
+            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
 
         # COMBINE_INTERVALS combines multiple interval literals into a single
         # interval constant. Accumulate months (from DateOffset) and nanoseconds
