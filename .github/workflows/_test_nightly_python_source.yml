@@ -1,0 +1,90 @@
+on:
+  workflow_call:
+    inputs:
+      pytest_marker:
+        description: 'Pytest marker expression to select tests to run'
+        required: false
+        default: 'not weekly'
+        type: string
+      test-type:
+        type: string
+        # options:
+        #   - spawn
+        #   - compiler
+        #   - cache
+        #   - df_lib
+        #   - sql
+        #   - sql_spawn
+        #   - sql_cache
+        description: The kind of tests to run e.g. spawn tests
+        required: true
+      runner-id:
+        type: string
+        # options:
+        #   - ubuntu-latest
+        description: The kind of runner to use
+        required: true
+      batch:
+        type: string
+        description: 'Batch number for test selection'
+        required: true
+      job-total:
+        type: string
+        description: 'Total number of batches for test selection'
+        required: true
+
+jobs:
+  run:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ${{ inputs.runner-id }}
+    steps:
+      - name: Print Pytest Marker
+        run: echo "Running tests with PYTEST_MARKER=$PYTEST_MARKER"
+        env:
+          PYTEST_MARKER: "${{ inputs.pytest_marker || 'not weekly' }} and bodo_${{ inputs.batch }}of${{ inputs.job-total }}"
+      - uses: actions/checkout@v5
+      - name: Build from Source
+        uses: ./.github/actions/build-source
+        with:
+          build-iceberg: true
+          environment: "default"
+      - name: Clean Maven and Spark Ivy Cache
+        run: |
+          rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEnginePrCiSession
+          role-skip-session-tagging: true
+          role-duration-seconds: 14400 # Max duration: 4 hours
+      - name: Install Polaris
+        run: |
+            pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+      - name: Run Tests
+        run: |
+          python -m bodo.runtests "${{ runner.os }}" "1" --pyargs bodo -s -v -m "$PYTEST_MARKER"
+        env:
+          PYTEST_MARKER: "${{ inputs.pytest_marker || 'not weekly' }} and bodo_${{ inputs.batch }}of${{ inputs.job-total }}"
+          BODO_STREAMING_BATCH_SIZE: 4096 
+          BODO_SPAWN_MODE: "0"
+          BODO_BUFFER_POOL_REMOTE_MODE: "1"
+          BODO_BUFFER_POOL_DEBUG_MODE: "1"
+          BODO_SF_WRITE_DEBUG: "1"
+          # Testing credentials
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
+          SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
+          SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
+          AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+          AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+          BODO_TEST_SQL_DB_CREDENTIAL: ${{ secrets.BODO_TEST_SQL_DB_CREDENTIAL }}
+          BODO_TEST_ORACLE_DB_CREDENTIAL: ${{ secrets.BODO_TEST_ORACLE_DB_CREDENTIAL }}
+          AZURE_CLIENT_ID:  ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"

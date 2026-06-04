@@ -28,3 +28,4 @@ jobs:
       test-type: compiler
       runner-id: ubuntu-latest
       batch: ${{ matrix.batch }}
+      job-total: 30
