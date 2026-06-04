@@ -13,11 +13,10 @@ from bodosql.tests.utils import (
 )
 
 # Skip unless any codegen files were changed
-pytestmark = pytest_slow_unless_codegen
+pytestmark = pytest_slow_unless_codegen + [pytest.mark.bodosql_cpp]
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_basic_arithmetic_select(bodosql_numeric_types, memory_leak_check):
     """test select calls with an arithmetic expression"""
     check_query(
@@ -57,7 +56,6 @@ def test_basic_arithmetic_select(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_column_arithmetic_select(bodosql_numeric_types, memory_leak_check):
     """test select calls with an arithmetic expression"""
     check_query(
@@ -88,7 +86,6 @@ def test_column_arithmetic_select(bodosql_numeric_types, memory_leak_check):
         )
 
 
-@pytest.mark.bodosql_cpp
 def test_sum_arith_select(bodosql_numeric_types, memory_leak_check):
     """test sum on a call with an arithmetic expression"""
     check_query(
@@ -103,7 +100,6 @@ def test_sum_arith_select(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_nested_arithmetic_select(bodosql_numeric_types, memory_leak_check):
     """test select calls with an arithmetic expression"""
     check_query(
@@ -159,7 +155,6 @@ def test_nested_arithmetic_select(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_multicolumn_arithmetic_select(bodosql_numeric_types, memory_leak_check):
     """test select calls with an arithmetic expression"""
     check_query(
@@ -181,7 +176,6 @@ def test_multicolumn_arithmetic_select(bodosql_numeric_types, memory_leak_check)
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_select_col_arith(bodosql_numeric_types, memory_leak_check):
     """test selecting a single column and performing arithmetic
     on that columns
@@ -196,7 +190,6 @@ def test_select_col_arith(bodosql_numeric_types, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 def test_addition_constants(basic_df, memory_leak_check):
     """
     Tests that addition works on integer constants
@@ -205,7 +198,6 @@ def test_addition_constants(basic_df, memory_leak_check):
     check_query(query, basic_df, None, check_dtype=False, use_duckdb=True)
 
 
-@pytest.mark.bodosql_cpp
 def test_addition_columns(bodosql_numeric_types, memory_leak_check):
     """
     Tests that addition works on columns
@@ -221,7 +213,6 @@ def test_addition_columns(bodosql_numeric_types, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 def test_subtraction_constants(basic_df, memory_leak_check):
     """
     Tests that subtraction works on constants
@@ -230,7 +221,6 @@ def test_subtraction_constants(basic_df, memory_leak_check):
     check_query(query, basic_df, None, check_dtype=False, use_duckdb=True)
 
 
-@pytest.mark.bodosql_cpp
 def test_subtraction_columns(bodosql_numeric_types, memory_leak_check):
     """
     Tests that subtraction works on columns
@@ -246,7 +236,6 @@ def test_subtraction_columns(bodosql_numeric_types, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 def test_multiplication_constants(basic_df, memory_leak_check):
     """
     Tests that multiplication works on constants
@@ -257,7 +246,6 @@ def test_multiplication_constants(basic_df, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 def test_multiply_columns(bodosql_numeric_types, memory_leak_check):
     """
     Tests that multiplication works on columns
@@ -273,7 +261,6 @@ def test_multiply_columns(bodosql_numeric_types, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 def test_division_constants(basic_df, memory_leak_check):
     """
     Tests that division works on constants
@@ -284,7 +271,6 @@ def test_division_constants(basic_df, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 def test_division_columns(bodosql_numeric_types, memory_leak_check):
     """
     Tests that division works on columns
@@ -301,7 +287,6 @@ def test_division_columns(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_op_order(bodosql_numeric_types, memory_leak_check):
     """
     Tests that order of operations is correct
@@ -318,7 +303,6 @@ def test_op_order(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_op_order_cols(bodosql_numeric_types, memory_leak_check):
     """
     Tests that order of operations is correct on columns
@@ -335,7 +319,6 @@ def test_op_order_cols(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_arith_ops_between_tables(basic_df, memory_leak_check):
     """
     Tests that arith operations between tables work as intended
@@ -387,7 +370,6 @@ def test_wraparound_unsigned_numerics(bodosql_numeric_types, memory_leak_check):
         ),
     ],
 )
-@pytest.mark.bodosql_cpp
 def test_add_sub_intervals(bodosql_datetime_types, memory_leak_check, interval):
     """
     Tests support for + and - with various intervals.
@@ -442,7 +424,6 @@ def test_add_sub_intervals(bodosql_datetime_types, memory_leak_check, interval):
         ),
     ],
 )
-@pytest.mark.bodosql_cpp
 def test_negation(query, bodosql_numeric_types, memory_leak_check):
     """Tests unary negation"""
 

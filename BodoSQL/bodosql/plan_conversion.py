@@ -165,35 +165,78 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
-    if (
-        operator_class_name == "SqlNullPolicyFunction"
-        and len(java_call.getOperands()) == 2
-    ):
+    if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
+        num_operands = len(java_call.getOperands())
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
-            # DATE_ADD(date, interval) → date + interval
-            return java_binop_to_python_expr(
-                ctx,
-                SqlKind.PLUS,
-                [
-                    java_expr_to_python_expr(
-                        ctx, java_call.getOperands()[i], input_plan
-                    )
-                    for i in range(len(java_call.getOperands()))
-                ],
-            )
+            # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
+            # For 2 operands: (date, interval) → date + interval
+            # For 3 operands: (unit, amount, date) → date + (unit * amount)
+            if num_operands == 2:
+                return java_binop_to_python_expr(
+                    ctx,
+                    SqlKind.PLUS,
+                    [
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[i], input_plan
+                        )
+                        for i in range(num_operands)
+                    ],
+                )
+            elif num_operands == 3:
+                # DATEADD(unit_flag, amount, date) → date + timedelta(days=amount)
+                # In Snowflake, date + integer always means date + N days.
+                amount_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                date_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[2], input_plan
+                )
+                interval_val = pd.Timedelta(days=int(amount_expr.value))
+                dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+                interval_expr = ConstantExpression(
+                    dummy_empty_data, input_plan, interval_val
+                )
+                out_empty = (
+                    date_expr.empty_data.iloc[:, 0]
+                    + interval_expr.empty_data.iloc[:, 0]
+                )
+                return ArithOpExpression(out_empty, date_expr, interval_expr, "__add__")
+                dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+                interval_expr = ConstantExpression(
+                    dummy_empty_data, input_plan, interval_val
+                )
+                out_empty = (
+                    date_expr.empty_data.iloc[:, 0]
+                    + interval_expr.empty_data.iloc[:, 0]
+                )
+                return ArithOpExpression(out_empty, date_expr, interval_expr, "__add__")
         if func_name in ("DATE_SUB", "SUBDATE"):
-            # DATE_SUB(date, interval) → date - interval
-            return java_binop_to_python_expr(
-                ctx,
-                SqlKind.MINUS,
-                [
-                    java_expr_to_python_expr(
-                        ctx, java_call.getOperands()[i], input_plan
-                    )
-                    for i in range(len(java_call.getOperands()))
-                ],
-            )
+            # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
+            if num_operands == 2:
+                return java_binop_to_python_expr(
+                    ctx,
+                    SqlKind.MINUS,
+                    [
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[i], input_plan
+                        )
+                        for i in range(num_operands)
+                    ],
+                )
+            elif num_operands == 3:
+                return java_binop_to_python_expr(
+                    ctx,
+                    SqlKind.MINUS,
+                    [
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[2], input_plan
+                        ),
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[1], input_plan
+                        ),
+                    ],
+                )
 
     if operator_class_name in (
         "SqlMonotonicBinaryOperator",
