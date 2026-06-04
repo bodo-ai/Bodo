@@ -1,7 +1,7 @@
 on:
   workflow_call:
     inputs:
-      pytest_marker:
+      pytest-marker:
         description: 'Pytest marker expression to select tests to run'
         required: false
         default: 'not weekly'
@@ -32,9 +32,13 @@ on:
         type: string
         description: 'Total number of batches for test selection'
         required: true
+      num-workers:
+        type: string
+        description: 'Number of workers to test'
+        required: false
 
 jobs:
-  run:
+  run-tests:
     permissions:
       id-token: write
       contents: read
@@ -43,7 +47,7 @@ jobs:
       - name: Print Pytest Marker
         run: echo "Running tests with PYTEST_MARKER=$PYTEST_MARKER"
         env:
-          PYTEST_MARKER: "${{ inputs.pytest_marker || 'not weekly' }} and bodo_${{ inputs.batch }}of${{ inputs.job-total }}"
+          PYTEST_MARKER: "${{ inputs.pytest-marker || 'not weekly' }} and bodo_${{ inputs.batch }}of${{ inputs.job-total }}"
       - uses: actions/checkout@v5
       - name: Build from Source
         uses: ./.github/actions/build-source
@@ -66,9 +70,9 @@ jobs:
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
       - name: Run Tests
         run: |
-          python -m bodo.runtests "${{ runner.os }}" "1" --pyargs bodo -s -v -m "$PYTEST_MARKER"
+          python -m bodo.runtests "${{ runner.os }}" "${{ inputs.num-workers }}" --pyargs bodo -s -v -m "$PYTEST_MARKER"
         env:
-          PYTEST_MARKER: "${{ inputs.pytest_marker || 'not weekly' }} and bodo_${{ inputs.batch }}of${{ inputs.job-total }}"
+          PYTEST_MARKER: "${{ inputs.pytest-marker || 'not weekly' }} and bodo_${{ inputs.batch }}of${{ inputs.job-total }}"
           BODO_STREAMING_BATCH_SIZE: 4096 
           BODO_SPAWN_MODE: "0"
           BODO_BUFFER_POOL_REMOTE_MODE: "1"

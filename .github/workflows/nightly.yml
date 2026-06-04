@@ -3,7 +3,7 @@ name: Bodo Nightly CI
 on:
   workflow_dispatch:
     inputs:
-      pytest_marker:
+      pytest-marker:
         description: 'Additional pytest marker to select tests to run'
         required: false
         default: ""
@@ -24,8 +24,9 @@ jobs:
       fail-fast: false
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
-      pytest_marker: ${{ inputs.pytest_marker }}
+      pytest-marker: ${{ inputs.pytest-marker }}
       test-type: compiler
       runner-id: ubuntu-latest
       batch: ${{ matrix.batch }}
       job-total: 30
+      num-workers: 1

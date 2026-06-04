@@ -11,6 +11,11 @@ inputs:
     required: false
     default: false
     type: 'boolean'
+  build-bodosql:
+    description: 'Whether to build BodoSQL connector (only applies if build-all is false)'
+    required: false
+    default: false
+    type: 'boolean'
   environment:
     description: 'The environment to build in/activate (default or default-cuda)'
     required: false
@@ -50,7 +55,7 @@ runs:
           DISABLE_CCACHE: 1
 
       - name: Build BodoSQL
-        if: inputs.build-all == 'true'
+        if: inputs.build-all == 'true' || inputs.build-bodosql == 'true'
         shell: bash
         run: |
           pixi run build-bodosql

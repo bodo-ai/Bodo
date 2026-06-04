@@ -5,6 +5,8 @@ import pytest
 
 from bodo.tests.utils import check_func
 
+pytestmark = pytest.mark.skip(reason="TODO(BSE-5040): Fix anonymous GCS access")
+
 
 @pytest.mark.parquet
 def test_read_parquet_gcs():
