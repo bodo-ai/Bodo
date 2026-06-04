@@ -22,6 +22,10 @@ jobs:
       matrix:
         batch: [1, 2, 3]
       fail-fast: false
+    permissions:
+      id-token: write
+      contents: read
+
     steps:
       - uses: actions/checkout@v5
       - name: Build from Source
