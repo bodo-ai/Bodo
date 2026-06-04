@@ -52,7 +52,7 @@ jobs:
         run: |
           python -m bodo.runtests "${{ runner.os }}" "1" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
         env:
-          PYTEST_MARKER: ${{ inputs.pytest_marker || 'not weekly' }} and bodo_${{ matrix.batch }}of${{ strategy.job-total }}
+          PYTEST_MARKER: ${{ inputs.pytest_marker || 'not weekly' }} and bodo_${{ matrix.batch }}of30 # ${{ strategy.job-total }}
           BODO_STREAMING_BATCH_SIZE: 4096 
           BODO_SPAWN_MODE: "0"
           BODO_BUFFER_POOL_REMOTE_MODE: "1"
