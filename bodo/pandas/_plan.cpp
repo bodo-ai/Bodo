@@ -165,11 +165,13 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
-    int32_t months, int64_t nanos) {
+    int32_t months, int32_t days, int64_t nanos) {
     duckdb::interval_t interval_val;
     interval_val.months = months;
-    interval_val.days = 0;
-    interval_val.micros = nanos / 1000;
+    interval_val.days = days;
+    // Round to nearest microsecond (DuckDB INTERVAL only supports
+    // microsecond precision)
+    interval_val.micros = (nanos + 500LL) / 1000LL;
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::INTERVAL(interval_val));
 }
@@ -361,6 +363,12 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     if (started_transaction) {
         client_context->transaction.Rollback({});
     }
+
+    // DuckDB may assign a different return type to the expression than the one
+    // our runtime creates so override it (e.g. date subtraction is integer in
+    // DuckDB but duration in Arrow). See
+    // BodoSQL/bodosql/tests/test_arith.py::test_subtraction_between_dates_case
+    result->return_type = arrowTypeToDuckDB(out_schema->field(0)->type());
     return result;
 }
 

@@ -331,15 +331,18 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
     int64_t val);
 
 /**
- * @brief Create an expression from a constant date offset (INTERVAL with
- * months).
+ * @brief Create an expression from a constant calendar-aware interval
+ * (month_day_nano_interval) using DuckDB's INTERVAL type. DuckDB INTERVAL
+ * supports months, days, and microseconds fields, which map directly to
+ * Arrow's month_day_nano_interval type.
  *
- * @param months - the number of months for the date offset
- * @param nanos - the nanoseconds portion (truncated to microsecond precision)
+ * @param months - the months component of the interval
+ * @param days - the days component of the interval
+ * @param nanos - the nanoseconds component (truncated to microsecond precision)
  * @return duckdb::unique_ptr<duckdb::Expression> - the const interval expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
-    int32_t months, int64_t nanos);
+    int32_t months, int32_t days, int64_t nanos);
 
 /**
  * @brief Create an expression from a constant date32.

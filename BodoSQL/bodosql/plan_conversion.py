@@ -260,7 +260,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
         ):
             if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
-                cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+                # Integers are assumed in seconds in BodoSQL
+                cast_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(
+                        pa.timestamp("s" if is_int_type(operand_type) else "ns")
+                    )
+                )
                 in_expr = CastExpression(
                     cast_empty_data,
                     in_expr,
@@ -284,6 +289,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             in_expr = CastExpression(
                 cast_empty_data,
                 in_expr,
+            )
+
+        # Parsing strings to binary not supported yet
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.VARCHAR
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.VARBINARY):
+            raise NotImplementedError(
+                "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
             )
 
         return CastExpression(
@@ -583,7 +596,6 @@ def java_case_to_python_case(ctx, operands, input_plan):
 
 def java_join_to_python_join(ctx, java_join):
     """Convert a BodoSQL Java join plan to a Python join plan."""
-    from bodo.ext import plan_optimizer
 
     ctx.join_filter_info[java_join.getJoinFilterID()] = (
         java_join.getOriginalJoinFilterKeyLocations()
@@ -596,15 +608,7 @@ def java_join_to_python_join(ctx, java_join):
 
     left_keys, right_keys = join_info.keys()
     key_indices = list(zip(left_keys, right_keys))
-    is_left = java_join.getJoinType().generatesNullsOnLeft()
-    is_right = java_join.getJoinType().generatesNullsOnRight()
-    join_type = plan_optimizer.CJoinType.INNER
-    if is_left and is_right:
-        join_type = plan_optimizer.CJoinType.OUTER
-    elif is_left:
-        join_type = plan_optimizer.CJoinType.LEFT
-    elif is_right:
-        join_type = plan_optimizer.CJoinType.RIGHT
+    join_type = JavaJoinTypeToDuckDB(java_join.getJoinType())
 
     left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
@@ -800,23 +804,20 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         val = pd.Timestamp(java_literal.getValue2(), unit="ms")
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
-    if _is_year_month_interval(lit_type_name):
-        # getValue() returns a BigDecimal representing total months
-        months = int(java_literal.getValue())
+    if _is_interval_type(lit_type_name):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-        val = pd.DateOffset(months=months)
-        return ConstantExpression(dummy_empty_data, input_plan, val)
-
-    if _is_interval_type(lit_type_name) and not _is_year_month_interval(lit_type_name):
-        # Day/second subtypes: getValue2() returns a BigDecimal (Py4J converts to
-        # decimal.Decimal) representing milliseconds. Use float() to handle
-        # sub-millisecond intervals (e.g., 1 microsecond = 0.001 ms).
-        millis = float(str(java_literal.getValue2()))
-        nanos = int(millis * 1_000_000)
-        if nanos % 1000 != 0:
-            raise ValueError("Sub-microsecond intervals not supported in C++ backend")
-        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-        val = pd.Timedelta(nanos, unit="ns")
+        if _is_year_month_interval(lit_type_name):
+            # getValue() returns a BigDecimal representing total months
+            months = int(java_literal.getValue())
+            # cloudpickle can't serialize pyarrow month_day_nano_interval objects so we pass the values as integers and construct the interval in the C++ backend
+            val = ("MonthDayNanoInterval", months, 0, 0)
+        else:
+            # Day/second subtypes: getValue2() returns a BigDecimal (Py4J
+            # converts to decimal.Decimal) representing milliseconds.
+            millis = float(str(java_literal.getValue2()))
+            nanos = int(millis * 1_000_000)
+            # cloudpickle can't serialize pyarrow month_day_nano_interval objects so we pass the values as integers and construct the interval in the C++ backend
+            val = ("MonthDayNanoInterval", 0, 0, nanos)
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
     if (
@@ -1440,4 +1441,26 @@ def java_literal_to_pyiceberg_literal(java_literal):
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet in java_literal_to_pyiceberg_literal"
+    )
+
+
+def JavaJoinTypeToDuckDB(java_join_type):
+    from bodo.ext import plan_optimizer
+
+    JoinRelType = gateway.jvm.org.apache.calcite.rel.core.JoinRelType
+
+    if java_join_type.equals(JoinRelType.INNER):
+        return plan_optimizer.CJoinType.INNER
+
+    if java_join_type.equals(JoinRelType.LEFT):
+        return plan_optimizer.CJoinType.LEFT
+
+    if java_join_type.equals(JoinRelType.RIGHT):
+        return plan_optimizer.CJoinType.RIGHT
+
+    if java_join_type.equals(JoinRelType.FULL):
+        return plan_optimizer.CJoinType.OUTER
+
+    raise NotImplementedError(
+        f"Join type {java_join_type.toString()} not supported yet"
     )
