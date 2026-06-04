@@ -165,6 +165,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
+    _DOW_NAMES = {"DAYOFWEEK", "WEEKDAY", "DOW"}
+
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
         num_operands = len(java_call.getOperands())
@@ -192,7 +194,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             arrow_func = _DATE_PART_ARROW_FUNCS[func_name]
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+            raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+            if func_name in _DOW_NAMES:
+                # Arrow: 0=Monday. Snowflake: 0=Sunday → (dow+1)%7
+                one = ConstantExpression(empty_data, input_plan, 1)
+                seven = ConstantExpression(empty_data, input_plan, 7)
+                raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
+                raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+            return raw_expr
 
         if func_name == "DAYNAME" and num_operands == 1:
             input = java_expr_to_python_expr(
@@ -268,7 +277,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     ],
                 )
             elif num_operands == 3:
-                # DATEADD(unit_flag, amount, date) → date + timedelta(days=amount)
+                # DATEADD(FLAG(unit), amount, date) from date + int arithmetic.
+                # Only handle when first operand is an interval qualifier (FLAG).
+                first_op_str = str(java_call.getOperands()[0].toString())
+                if not first_op_str.startswith("FLAG"):
+                    raise NotImplementedError(
+                        "DATEADD with 3 string operands not supported in "
+                        "C++ backend yet"
+                    )
                 # In Snowflake, date + integer always means date + N days.
                 amount_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[1], input_plan
@@ -276,16 +292,42 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 date_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[2], input_plan
                 )
-                interval_val = pd.Timedelta(days=int(amount_expr.value))
-                dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-                interval_expr = ConstantExpression(
-                    dummy_empty_data, input_plan, interval_val
+                if hasattr(amount_expr, "value"):
+                    interval_val = pd.Timedelta(days=int(amount_expr.value))
+                    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+                    interval_expr = ConstantExpression(
+                        dummy_empty_data, input_plan, interval_val
+                    )
+                else:
+                    one_day = pd.Timedelta(days=1)
+                    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+                    one_day_expr = ConstantExpression(
+                        dummy_empty_data, input_plan, one_day
+                    )
+                    interval_expr = ArithOpExpression(
+                        dummy_empty_data, amount_expr, one_day_expr, "__mul__"
+                    )
+                out_empty = (
+                    date_expr.empty_data.iloc[:, 0]
+                    + interval_expr.empty_data.iloc[:, 0]
                 )
                 out_empty = (
                     date_expr.empty_data.iloc[:, 0]
                     + interval_expr.empty_data.iloc[:, 0]
                 )
-                return ArithOpExpression(out_empty, date_expr, interval_expr, "__add__")
+                result = ArithOpExpression(
+                    out_empty, date_expr, interval_expr, "__add__"
+                )
+                # Cast back to date32 if input was date (date+duration → timestamp)
+                result_type = result.empty_data.iloc[:, 0].dtype
+                if hasattr(result_type, "pyarrow_dtype") and pa.types.is_timestamp(
+                    result_type.pyarrow_dtype
+                ):
+                    date32_empty = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+                    result = ArrowScalarFuncExpression(
+                        date32_empty, [result], "cast", (pa.date32(),)
+                    )
+                return result
         if func_name in ("DATE_SUB", "SUBDATE"):
             # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
             if num_operands == 2:
@@ -484,6 +526,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "HOUR": "hour",
             "MINUTE": "minute",
             "SECOND": "second",
+            "MICROSECOND": "microsecond",
+            "NANOSECOND": "nanosecond",
             "QUARTER": "quarter",
             "WEEK": "iso_week",
             "DOW": "day_of_week",
@@ -493,7 +537,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if arrow_func is None:
             raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
         empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-        return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+        raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+        if unit_str in _DOW_NAMES:
+            # Arrow: 0=Monday. Snowflake: 0=Sunday → (dow+1)%7
+            one = ConstantExpression(empty_data, input_plan, 1)
+            seven = ConstantExpression(empty_data, input_plan, 7)
+            raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
+            raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+        return raw_expr
     if (
         operator_class_name == "SqlDatePartFunction"
         and len(java_call.getOperands()) == 1
@@ -546,9 +597,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
-        if func_name in ("DAYOFWEEK", "WEEKDAY"):
+        if func_name in ("DAYOFWEEK", "WEEKDAY", "DOW"):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+            dow_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+            # Arrow: 0=Monday. Snowflake: 0=Sunday. Convert: (dow+1)%7
+            one_const = ConstantExpression(empty_data, input_plan, 1)
+            seven_const = ConstantExpression(empty_data, input_plan, 7)
+            plus_one = ArithOpExpression(empty_data, dow_expr, one_const, "__add__")
+            return ArithOpExpression(empty_data, plus_one, seven_const, "__mod__")
 
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
