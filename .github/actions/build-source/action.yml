@@ -6,6 +6,11 @@ inputs:
     required: false
     default: false
     type: 'boolean'
+  build-iceberg:
+    description: 'Whether to build iceberg connector (only applies if build-all is false)'
+    required: false
+    default: false
+    type: 'boolean'
   environment:
     description: 'The environment to build in/activate (default or default-cuda)'
     required: false
@@ -44,9 +49,14 @@ runs:
           # We should just use sccache directly on CI
           DISABLE_CCACHE: 1
 
-      - name: Build Remaining
+      - name: Build BodoSQL
         if: inputs.build-all == 'true'
         shell: bash
         run: |
           pixi run build-bodosql
+
+      - name: Build Iceberg Connector
+        if: inputs.build-all == 'true' || inputs.build-iceberg == 'true'
+        shell: bash
+        run: |
           pixi run build-iceberg
