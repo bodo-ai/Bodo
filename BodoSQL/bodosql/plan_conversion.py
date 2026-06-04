@@ -168,6 +168,32 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
         num_operands = len(java_call.getOperands())
+
+        # Date part functions wrapped in SqlNullPolicyFunction (e.g. WEEKDAY($0))
+        _DATE_PART_ARROW_FUNCS = {
+            "YEAR": "year",
+            "MONTH": "month",
+            "DAY": "day",
+            "DAYOFMONTH": "day",
+            "HOUR": "hour",
+            "MINUTE": "minute",
+            "SECOND": "second",
+            "QUARTER": "quarter",
+            "WEEK": "iso_week",
+            "WEEKOFYEAR": "iso_week",
+            "WEEKISO": "iso_week",
+            "DAYOFYEAR": "day_of_year",
+            "DAYOFWEEK": "day_of_week",
+            "WEEKDAY": "day_of_week",
+        }
+        if func_name in _DATE_PART_ARROW_FUNCS and num_operands == 1:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            arrow_func = _DATE_PART_ARROW_FUNCS[func_name]
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
             # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
             # For 2 operands: (date, interval) → date + interval
@@ -193,15 +219,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     ctx, java_call.getOperands()[2], input_plan
                 )
                 interval_val = pd.Timedelta(days=int(amount_expr.value))
-                dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-                interval_expr = ConstantExpression(
-                    dummy_empty_data, input_plan, interval_val
-                )
-                out_empty = (
-                    date_expr.empty_data.iloc[:, 0]
-                    + interval_expr.empty_data.iloc[:, 0]
-                )
-                return ArithOpExpression(out_empty, date_expr, interval_expr, "__add__")
                 dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
                 interval_expr = ConstantExpression(
                     dummy_empty_data, input_plan, interval_val
@@ -400,13 +417,53 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         input = java_expr_to_python_expr(ctx, operands[0], input_plan)
         func_name = op.getName().upper()
 
-        if func_name == "YEAR":
-            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], "year", ())
+        # Map Calcite function names to Arrow compute function names
+        _DATE_PART_ARROW_FUNCS = {
+            "YEAR": "year",
+            "MONTH": "month",
+            "DAY": "day",
+            "DAYOFMONTH": "day",
+            "HOUR": "hour",
+            "MINUTE": "minute",
+            "SECOND": "second",
+            "QUARTER": "quarter",
+            "MICROSECOND": "microsecond",
+            "NANOSECOND": "nanosecond",
+            "WEEK": "iso_week",
+            "WEEKOFYEAR": "iso_week",
+            "WEEKISO": "iso_week",
+            "DAYOFYEAR": "day_of_year",
+            "DAYOFWEEK": "day_of_week",
+            "WEEKDAY": "day_of_week",
+        }
+        arrow_func = _DATE_PART_ARROW_FUNCS.get(func_name, func_name.lower())
 
-        if func_name == "HOUR":
+        if func_name in (
+            "YEAR",
+            "MONTH",
+            "DAY",
+            "DAYOFMONTH",
+            "HOUR",
+            "MINUTE",
+            "SECOND",
+            "QUARTER",
+            "MICROSECOND",
+            "NANOSECOND",
+        ):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], "hour", ())
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+
+        if func_name in ("WEEK", "WEEKOFYEAR", "WEEKISO"):
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+
+        if func_name == "DAYOFYEAR":
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+
+        if func_name in ("DAYOFWEEK", "WEEKDAY"):
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
