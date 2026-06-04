@@ -399,13 +399,18 @@ def test_decimal_arr_nbytes(memory_leak_check):
     "value",
     [
         # int32 array
-        pd.array([1, -1, 3, 4, -2, 0, None, 4], "Int32"),
+        pytest.param(
+            pd.array([1, -1, 3, 4, -2, 0, None, 4], "Int32"), marks=pytest.mark.weekly
+        ),
         # int64 array
         pd.array([5, -1, 0, None, -2, 10, None, 12], "Int64"),
         # numpy array
         np.array([5, -21131, 0, 7, -2, 10, 12340, 12]),
         # float32 array
-        pd.array([5.1, -1.1, 0.54, None, -2.1, 101.1, None, 1.234], "Float32"),
+        pytest.param(
+            pd.array([5.1, -1.1, 0.54, None, -2.1, 101.1, None, 1.234], "Float32"),
+            marks=pytest.mark.weekly,
+        ),
         # float64 array
         pd.array(
             [1.111, -1.12, 1000000.54, None, -2000.1, -101.1, None, 1.234], "Float64"
@@ -424,11 +429,11 @@ def test_decimal_arr_nbytes(memory_leak_check):
             ]
         ),
         # int32 scalar
-        np.int32(1),
+        pytest.param(np.int32(1), marks=pytest.mark.weekly),
         # int64 scalar
         -1,
         # float32 scalar
-        np.float32(1.4),
+        pytest.param(np.float32(1.4), marks=pytest.mark.weekly),
         # float64 scalar
         -0.4,
         # decimal scalar
@@ -3336,6 +3341,7 @@ def test_round_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 2),
             ),
             id="scalar-positive_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(
@@ -3372,6 +3378,7 @@ def test_round_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(
@@ -3408,6 +3415,7 @@ def test_round_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         # Array tests
         pytest.param(
@@ -3461,6 +3469,7 @@ def test_round_decimal_overflow(arg, round_scale):
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
             id="array-stress_test",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -3563,6 +3572,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 2),
             ),
             id="scalar-positive_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(
@@ -3599,6 +3609,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(
@@ -3635,6 +3646,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         # Array tests
         pytest.param(
@@ -3688,6 +3700,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
             id="array-stress_test",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -3792,6 +3805,7 @@ def test_floor_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 2),
             ),
             id="scalar-positive_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(
@@ -3828,6 +3842,7 @@ def test_floor_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(
@@ -3864,6 +3879,7 @@ def test_floor_decimal_overflow(arg, round_scale):
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-close_to_zero",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(
@@ -3929,6 +3945,7 @@ def test_floor_decimal_overflow(arg, round_scale):
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
             id="array-stress_test",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -4798,6 +4815,7 @@ def test_decimal_array_float_division(arg1, arg2, expected, memory_leak_check):
                 dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
             ),
             id="array-decimal_first",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(Decimal("1.5"), pa.decimal128(38, 2)),
@@ -4893,6 +4911,7 @@ def test_decimal_int_multiplication(arg1, arg2, expected):
                 dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
             ),
             id="array-decimal_first",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(Decimal("1.5"), pa.decimal128(38, 2)),
@@ -4988,6 +5007,7 @@ def test_decimal_int_division(arg1, arg2, expected):
                 dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
             ),
             id="array-decimal_first",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(Decimal("3.25"), pa.decimal128(38, 2)),
@@ -5085,6 +5105,7 @@ def test_decimal_int_addition(arg1, arg2, expected):
                 dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
             ),
             id="array-decimal_first",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pa.scalar(Decimal("3.25"), pa.decimal128(38, 2)),
@@ -5290,6 +5311,7 @@ def test_decimal_int_subtraction(arg1, arg2, expected):
                 dtype=pd.Float64Dtype(),
             ),
             id="max_values",
+            marks=pytest.mark.weekly,
         ),
     ],
 )
@@ -5894,6 +5916,7 @@ def test_decimal_median(df, expected, memory_leak_check):
             ),
             "too large for MEDIAN operation",
             id="overflow_2",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.DataFrame(

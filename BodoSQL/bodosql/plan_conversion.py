@@ -223,7 +223,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
         ):
             if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
-                cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+                # Integers are assumed in seconds in BodoSQL
+                cast_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(
+                        pa.timestamp("s" if is_int_type(operand_type) else "ns")
+                    )
+                )
                 in_expr = CastExpression(
                     cast_empty_data,
                     in_expr,
@@ -247,6 +252,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             in_expr = CastExpression(
                 cast_empty_data,
                 in_expr,
+            )
+
+        # Parsing strings to binary not supported yet
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.VARCHAR
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.VARBINARY):
+            raise NotImplementedError(
+                "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
             )
 
         return CastExpression(
@@ -515,7 +528,6 @@ def java_case_to_python_case(ctx, operands, input_plan):
 
 def java_join_to_python_join(ctx, java_join):
     """Convert a BodoSQL Java join plan to a Python join plan."""
-    from bodo.ext import plan_optimizer
 
     ctx.join_filter_info[java_join.getJoinFilterID()] = (
         java_join.getOriginalJoinFilterKeyLocations()
@@ -528,15 +540,8 @@ def java_join_to_python_join(ctx, java_join):
 
     left_keys, right_keys = join_info.keys()
     key_indices = list(zip(left_keys, right_keys))
-    is_left = java_join.getJoinType().generatesNullsOnLeft()
-    is_right = java_join.getJoinType().generatesNullsOnRight()
-    join_type = plan_optimizer.CJoinType.INNER
-    if is_left and is_right:
-        join_type = plan_optimizer.CJoinType.OUTER
-    elif is_left:
-        join_type = plan_optimizer.CJoinType.LEFT
-    elif is_right:
-        join_type = plan_optimizer.CJoinType.RIGHT
+    join_type = JavaJoinTypeToDuckDB(java_join.getJoinType())
+    force_broadcast = java_join.getBroadcastBuildSide()
 
     left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
@@ -553,9 +558,12 @@ def java_join_to_python_join(ctx, java_join):
             join_type,
             key_indices,
             java_join.getJoinFilterID(),
+            force_broadcast,
         )
     else:
-        planJoinOrCross = LogicalCrossProduct(empty_join_out, left_plan, right_plan)
+        planJoinOrCross = LogicalCrossProduct(
+            empty_join_out, left_plan, right_plan, force_broadcast
+        )
 
     if len(nonEquiConds) == 0:
         return planJoinOrCross
@@ -770,8 +778,8 @@ def java_agg_to_python_agg(ctx, java_plan):
         func_name = _agg_to_func_name(func)
         arg_cols = list(func.getArgList())
         if func_name == "size":
-            assert len(arg_cols) in [0, 1], (
-                "Size aggregations arg len not in [0,1] are not supported"
+            assert len(arg_cols) == 0, (
+                "Size aggregations with non-zero arg len not supported"
             )
             out_type = pa.int64()
         elif func_name == "count":
@@ -1329,4 +1337,26 @@ def java_literal_to_pyiceberg_literal(java_literal):
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet in java_literal_to_pyiceberg_literal"
+    )
+
+
+def JavaJoinTypeToDuckDB(java_join_type):
+    from bodo.ext import plan_optimizer
+
+    JoinRelType = gateway.jvm.org.apache.calcite.rel.core.JoinRelType
+
+    if java_join_type.equals(JoinRelType.INNER):
+        return plan_optimizer.CJoinType.INNER
+
+    if java_join_type.equals(JoinRelType.LEFT):
+        return plan_optimizer.CJoinType.LEFT
+
+    if java_join_type.equals(JoinRelType.RIGHT):
+        return plan_optimizer.CJoinType.RIGHT
+
+    if java_join_type.equals(JoinRelType.FULL):
+        return plan_optimizer.CJoinType.OUTER
+
+    raise NotImplementedError(
+        f"Join type {java_join_type.toString()} not supported yet"
     )

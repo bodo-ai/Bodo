@@ -6,9 +6,11 @@ import datetime
 
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 
 import bodo
+import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
@@ -42,9 +44,7 @@ def use_sf_cast_syntax(request):
 
 
 @pytest.mark.slow
-def test_cast_str_to_numeric(
-    basic_df, spark_info, use_sf_cast_syntax, memory_leak_check
-):
+def test_cast_str_to_numeric(basic_df, use_sf_cast_syntax, memory_leak_check):
     """Tests casting str literals to numeric datatypes"""
 
     spark_query1 = "SELECT CAST('5' AS INT)"
@@ -66,39 +66,38 @@ def test_cast_str_to_numeric(
     check_query(
         query1,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query1,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query2,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         query3,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query3,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         query4,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query4,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
-@pytest.mark.skip("[BS-416] Calcite produces incorrect results")
-def test_numeric_to_str(basic_df, spark_info, use_sf_cast_syntax, memory_leak_check):
+def test_numeric_to_str(basic_df, use_sf_cast_syntax, memory_leak_check):
     """test that you can cast numeric literals to strings"""
 
     if use_sf_cast_syntax:
@@ -110,29 +109,26 @@ def test_numeric_to_str(basic_df, spark_info, use_sf_cast_syntax, memory_leak_ch
         query2 = "SELECT CAST(-103 AS CHAR)"
         query3 = "SELECT CAST(5.012 AS CHAR)"
 
-    spark_query1 = "SELECT CAST(13 AS STRING)"
-    spark_query2 = "SELECT CAST(-103 AS STRING)"
-    spark_query3 = "SELECT CAST(5.012 AS STRING)"
     check_query(
         query1,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query1,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query2,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
     check_query(
         query3,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query3,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -156,7 +152,7 @@ def cast_str_typename(request):
 
 @pytest.mark.slow
 def test_numeric_to_str(
-    basic_df, use_sf_cast_syntax, cast_str_typename, spark_info, memory_leak_check
+    basic_df, use_sf_cast_syntax, cast_str_typename, memory_leak_check
 ):
     """test that you can cast numeric literals to strings"""
 
@@ -169,35 +165,31 @@ def test_numeric_to_str(
         query2 = f"SELECT CAST(-103 AS {cast_str_typename})"
         query3 = f"SELECT CAST(5.012 AS {cast_str_typename})"
 
-    spark_query1 = "SELECT CAST(13 AS STRING)"
-    spark_query2 = "SELECT CAST(-103 AS STRING)"
-    spark_query3 = "SELECT CAST(5.012 AS STRING)"
-
     check_query(
         query1,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query1,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query2,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
     check_query(
         query3,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query3,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_str_to_date(basic_df, use_sf_cast_syntax, spark_info, memory_leak_check):
+def test_str_to_date(basic_df, use_sf_cast_syntax, memory_leak_check):
     """Tests casting str literals to date types"""
     spark_query1 = "SELECT CAST('2017-08-29' AS DATE)"
     spark_query2 = "SELECT CAST('2019-02-13' AS DATE)"
@@ -213,18 +205,18 @@ def test_str_to_date(basic_df, use_sf_cast_syntax, spark_info, memory_leak_check
     check_query(
         query1,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query1,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query2,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -238,12 +230,11 @@ def test_str_to_date(basic_df, use_sf_cast_syntax, spark_info, memory_leak_check
         pytest.param(
             f"SELECT CAST(X'{b'HELLO'.hex()}' AS VARBINARY)",
             f"SELECT X'{b'HELLO'.hex()}'::VARBINARY",
-            marks=pytest.mark.skip("[BE-957] Support Bytes.fromhex"),
         ),
     ],
 )
 def test_like_to_like(
-    spark_query, sf_query, basic_df, use_sf_cast_syntax, spark_info, memory_leak_check
+    spark_query, sf_query, basic_df, use_sf_cast_syntax, memory_leak_check
 ):
     """tests that you casting to the same type doesn't cause any weird issues"""
 
@@ -251,15 +242,15 @@ def test_like_to_like(
     check_query(
         query,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.skip("[BS-414] casting strings/string literals to Binary not supported")
-def test_str_to_binary(basic_df, use_sf_cast_syntax, spark_info, memory_leak_check):
+def test_str_to_binary(basic_df, use_sf_cast_syntax, memory_leak_check):
     """Tests casting str literals to binary types"""
     spark_query1 = "SELECT CAST('HELLO' AS BINARY)"
     spark_query2 = "SELECT CAST('WORLD' AS VARBINARY)"
@@ -273,25 +264,25 @@ def test_str_to_binary(basic_df, use_sf_cast_syntax, spark_info, memory_leak_che
     check_query(
         query1,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
-        equivalent_spark_query=spark_query1,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
-        equivalent_spark_query=spark_query2,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 # missing gaps are string and binary
 @pytest.mark.skip("[BS-414] casting strings/string literals to Binary not supported")
 def test_str_to_binary_cols(
-    bodosql_string_types, spark_info, use_sf_cast_syntax, memory_leak_check
+    bodosql_string_types, use_sf_cast_syntax, memory_leak_check
 ):
     """Tests casting str columns to binary types"""
     spark_query = "SELECT CAST(A AS BINARY), CAST(B as VARBINARY) from table1"
@@ -303,21 +294,18 @@ def test_str_to_binary_cols(
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.skip(
     "[BS-415] Calcite converts binary string to string version of binary value, not the string it encodes."
 )
-def test_binary_to_str(basic_df, use_sf_cast_syntax, spark_info, memory_leak_check):
+def test_binary_to_str(basic_df, use_sf_cast_syntax, memory_leak_check):
     """Tests casting str literals to date types"""
-    spark_query1 = f"SELECT CAST(X'{b'HELLO'.hex()}' AS STRING)"
-    spark_query2 = f"SELECT CAST(X'{b'WORLD'.hex()}' AS STRING)"
-
     if use_sf_cast_syntax:
         query1 = f"SELECT X'{b'HELLO'.hex()}'::CHAR"
         query2 = f"SELECT X'{b'WORLD'.hex()}'::VARCHAR"
@@ -329,18 +317,18 @@ def test_binary_to_str(basic_df, use_sf_cast_syntax, spark_info, memory_leak_che
     check_query(
         query1,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query1,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query2,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -348,7 +336,6 @@ def test_binary_to_str(basic_df, use_sf_cast_syntax, spark_info, memory_leak_che
 def test_numeric_scalar_to_numeric(
     bodosql_numeric_types,
     use_sf_cast_syntax,
-    spark_info,
     numeric_type_names,
     memory_leak_check,
 ):
@@ -363,10 +350,10 @@ def test_numeric_scalar_to_numeric(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -374,7 +361,6 @@ def test_numeric_scalar_to_numeric(
 def test_numeric_nullable_scalar_to_numeric(
     bodosql_nullable_numeric_types,
     use_sf_cast_syntax,
-    spark_info,
     numeric_type_names,
     memory_leak_check,
 ):
@@ -389,10 +375,10 @@ def test_numeric_nullable_scalar_to_numeric(
     check_query(
         query,
         bodosql_nullable_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -400,7 +386,6 @@ def test_numeric_nullable_scalar_to_numeric(
 def test_string_scalar_to_numeric(
     bodosql_integers_string_types,
     use_sf_cast_syntax,
-    spark_info,
     numeric_type_names,
     memory_leak_check,
 ):
@@ -415,10 +400,10 @@ def test_string_scalar_to_numeric(
     check_query(
         query,
         bodosql_integers_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -427,13 +412,10 @@ def test_numeric_scalar_to_str(
     bodosql_numeric_types,
     use_sf_cast_syntax,
     cast_str_typename,
-    spark_info,
     memory_leak_check,
 ):
     """Tests casting int scalars (from columns) to str types"""
     # Use substring to avoid difference in Number of decimal places for
-
-    spark_query = "SELECT CASE WHEN B > 5 THEN SUBSTRING(CAST(A AS STRING), 1, 3) ELSE 'OTHER' END FROM TABLE1"
 
     if use_sf_cast_syntax:
         query = f"SELECT CASE WHEN B > 5 THEN SUBSTRING(A::{cast_str_typename}, 1, 3) ELSE 'OTHER' END FROM TABLE1"
@@ -443,10 +425,10 @@ def test_numeric_scalar_to_str(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -455,7 +437,6 @@ def test_numeric_nullable_scalar_to_str(
     bodosql_nullable_numeric_types,
     use_sf_cast_syntax,
     cast_str_typename,
-    spark_info,
     memory_leak_check,
 ):
     """Tests casting nullable int scalars (from columns) to str types"""
@@ -464,16 +445,13 @@ def test_numeric_nullable_scalar_to_str(
         query = f"SELECT CASE WHEN B > 5 THEN A::{cast_str_typename} ELSE 'OTHER' END FROM TABLE1"
     else:
         query = f"SELECT CASE WHEN B > 5 THEN CAST(A AS {cast_str_typename}) ELSE 'OTHER' END FROM TABLE1"
-    spark_query = (
-        "SELECT CASE WHEN B > 5 THEN CAST(A AS STRING) ELSE 'OTHER' END FROM TABLE1"
-    )
     check_query(
         query,
         bodosql_nullable_numeric_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -482,7 +460,6 @@ def test_string_scalar_to_str(
     bodosql_string_types,
     use_sf_cast_syntax,
     cast_str_typename,
-    spark_info,
     memory_leak_check,
 ):
     """Tests casting string scalars (from columns) to str types"""
@@ -490,14 +467,13 @@ def test_string_scalar_to_str(
         query = f"SELECT CASE WHEN B <> 'how' THEN A::{cast_str_typename} ELSE 'OTHER' END FROM TABLE1"
     else:
         query = f"SELECT CASE WHEN B <> 'how' THEN CAST(A AS {cast_str_typename}) ELSE 'OTHER' END FROM TABLE1"
-    spark_query = "SELECT CASE WHEN B <> 'how' THEN CAST(A AS STRING) ELSE 'OTHER' END FROM TABLE1"
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -506,7 +482,6 @@ def test_timestamp_scalar_to_str(
     bodosql_datetime_types,
     use_sf_cast_syntax,
     cast_str_typename,
-    spark_info,
     memory_leak_check,
 ):
     """Tests casting datetime scalars (from columns) to string types"""
@@ -514,20 +489,36 @@ def test_timestamp_scalar_to_str(
         query = f"SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN A::{cast_str_typename} ELSE 'OTHER' END FROM TABLE1"
     else:
         query = f"SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN CAST(A AS {cast_str_typename}) ELSE 'OTHER' END FROM TABLE1"
-    spark_query = "SELECT CASE WHEN B > TIMESTAMP '2010-01-01' THEN CAST(A AS STRING) ELSE 'OTHER' END FROM TABLE1"
+
+    df = bodosql_datetime_types["TABLE1"]
+    S = (
+        pc.cast(
+            pa.Array.from_pandas(df["A"].astype("datetime64[ns]")), pa.string()
+        ).to_pandas()
+        if bodosql.use_cpp_backend
+        else df["A"].apply(lambda x: str(x))
+    )
+    py_output = pd.DataFrame(
+        {
+            "OUTPUT": S.where(
+                df["B"] > pd.Timestamp("2010-01-01"),
+                "OTHER",
+            )
+        }
+    )
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        expected_output=py_output,
     )
 
 
 @pytest.mark.slow
 def test_numeric_nullable_scalar_to_datetime(
-    bodosql_nullable_numeric_types, use_sf_cast_syntax, spark_info, memory_leak_check
+    bodosql_nullable_numeric_types, use_sf_cast_syntax, memory_leak_check
 ):
     """Tests casting numeric scalars (from columns) to str types"""
     if use_sf_cast_syntax:
@@ -537,10 +528,9 @@ def test_numeric_nullable_scalar_to_datetime(
     check_query(
         query,
         bodosql_nullable_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=query.replace("TIMESTAMP", "TIMESTAMP_NS"),
         use_duckdb=True,
     )
 
@@ -548,7 +538,6 @@ def test_numeric_nullable_scalar_to_datetime(
 @pytest.mark.slow
 def test_datetime_scalar_to_datetime(
     bodosql_datetime_types,
-    spark_info,
     sql_datetime_typestrings,
     use_sf_cast_syntax,
     memory_leak_check,
@@ -561,16 +550,15 @@ def test_datetime_scalar_to_datetime(
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=query.replace("TIMESTAMP", "TIMESTAMP_NS"),
         use_duckdb=True,
     )
 
 
 def test_timestamp_col_to_str(
-    bodosql_datetime_types, use_sf_cast_syntax, spark_info, memory_leak_check
+    bodosql_datetime_types, use_sf_cast_syntax, memory_leak_check
 ):
     """Tests casting datetime columns to string types"""
     if use_sf_cast_syntax:
@@ -578,14 +566,22 @@ def test_timestamp_col_to_str(
     else:
         query = "SELECT CAST(A AS VARCHAR) FROM TABLE1"
 
-    spark_query = "SELECT CAST(A AS STRING) FROM TABLE1"
+    out_arr = bodosql_datetime_types["TABLE1"]["A"].apply(lambda x: str(x))
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(
+            pa.Array.from_pandas(
+                bodosql_datetime_types["TABLE1"]["A"].astype("datetime64[ns]")
+            ),
+            pa.string(),
+        ).to_pandas()
+    expected_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_names=False,
         check_dtype=False,
+        expected_output=expected_output,
     )
 
 
@@ -600,9 +596,13 @@ def test_tz_aware_datetime_to_char_cast(
     else:
         query = "SELECT CAST(A as VARCHAR) as A from table1"
 
-    spark_query = "SELECT CAST(A as VARCHAR) as A from table1"
-
-    expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].astype(str)})
+    out_arr = tz_aware_df["TABLE1"]["A"].astype(str)
+    if bodosql.use_cpp_backend:
+        out_arr = pc.cast(
+            pa.Array.from_pandas(tz_aware_df["TABLE1"]["A"]),
+            pa.string(),
+        ).to_pandas()
+    expected_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
         tz_aware_df,
@@ -610,7 +610,6 @@ def test_tz_aware_datetime_to_char_cast(
         check_dtype=False,
         check_names=False,
         expected_output=expected_output,
-        equivalent_spark_query=spark_query,
     )
 
 
@@ -623,37 +622,26 @@ def test_tz_aware_datetime_to_timestamp_cast(
         query1 = "SELECT A::Timestamp as A from table1"
     else:
         query1 = "SELECT CAST(A as Timestamp) as A from table1"
-    spark_query1 = "SELECT CAST(A as Timestamp) as A from table1"
-    expected_output1 = pd.DataFrame(
-        {"A": tz_aware_df["TABLE1"]["A"].dt.tz_localize(None)}
-    )
     check_query(
         query1,
         tz_aware_df,
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=expected_output1,
-        equivalent_spark_query=spark_query1,
+        use_duckdb=True,
     )
 
     if use_sf_cast_syntax:
         query2 = "SELECT A::Date as A from table1"
     else:
         query2 = "SELECT CAST(A as Date) as A from table1"
-    spark_query2 = "SELECT CAST(A as Date) as A from table1"
-
-    expected_output2 = pd.DataFrame(
-        {"A": tz_aware_df["TABLE1"]["A"].dt.tz_localize(None).dt.normalize().dt.date}
-    )
     check_query(
         query2,
         tz_aware_df,
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=expected_output2,
-        equivalent_spark_query=spark_query2,
+        use_duckdb=True,
     )
 
 
@@ -664,10 +652,6 @@ def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
     df = tz_aware_df["TABLE1"]
     new_df = pd.DataFrame({"A": df["A"].dt.tz_convert("UTC")})
     ctx = {"TABLE1": new_df}
-    expected_filter = (pd.Timestamp("2020-1-1", tz="UTC") <= new_df["A"]) & (
-        new_df["A"] <= pd.Timestamp("2021-12-31", tz="UTC")
-    )
-    expected_output = tz_aware_df["TABLE1"][expected_filter]
 
     check_query(
         query,
@@ -675,7 +659,7 @@ def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -687,15 +671,12 @@ def test_cast_date_scalar_to_timestamp(basic_df, use_sf_cast_syntax, memory_leak
     else:
         query = "SELECT CAST(DATE('2013-05-06') as TIMESTAMP)"
 
-    expected_output = pd.DataFrame(
-        {"A": pd.Series([pd.Timestamp(2013, 5, 6)], dtype="datetime64[ns]")}
-    )
     check_query(
         query,
         basic_df,
         None,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -707,20 +688,12 @@ def test_cast_scalars_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
     else:
         query = "SELECT CAST(DATE('2013-05-06') as TIMESTAMP_NTZ), CAST('2013-05-06 12:34:56' as TIMESTAMP_NTZ)"
 
-    expected_output = pd.DataFrame(
-        {
-            "A": pd.Series([pd.Timestamp(2013, 5, 6)], dtype="datetime64[ns]"),
-            "B": pd.Series(
-                [pd.Timestamp(2013, 5, 6, 12, 34, 56)], dtype="datetime64[ns]"
-            ),
-        }
-    )
     check_query(
         query,
         basic_df,
         None,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -757,24 +730,12 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
     else:
         query = "SELECT CAST(DATES as TIMESTAMP_NTZ), CAST(STRINGS as TIMESTAMP_NTZ) from table1"
 
-    expected_output = pd.DataFrame(
-        {
-            "DATES": pd.Series(
-                [pd.Timestamp(date) for date in ctx["TABLE1"]["DATES"]],
-                dtype="datetime64[ns]",
-            ),
-            "STRINGS": pd.Series(
-                [pd.Timestamp(string) for string in ctx["TABLE1"]["STRINGS"]],
-                dtype="datetime64[ns]",
-            ),
-        }
-    )
     check_query(
         query,
         ctx,
         None,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 

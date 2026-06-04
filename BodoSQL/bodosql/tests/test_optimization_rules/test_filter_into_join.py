@@ -32,10 +32,11 @@ def filter_into_join_queries(request):
 
 
 @pytest.mark.slow
-def test_filter_into_join(simple_join_fixture, spark_info, filter_into_join_queries):
+def test_filter_into_join(simple_join_fixture, filter_into_join_queries):
     """checks for bugs with the Filter into Join rule"""
     check_query(
         filter_into_join_queries,
         simple_join_fixture,
-        spark_info,
+        None,
+        use_duckdb=True,
     )

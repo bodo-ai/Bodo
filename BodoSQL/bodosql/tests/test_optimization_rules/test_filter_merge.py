@@ -32,12 +32,13 @@ def filter_merge_queries(request):
 
 
 @pytest.mark.slow
-def test_filter_merge(basic_df, spark_info, filter_merge_queries):
+def test_filter_merge(basic_df, filter_merge_queries):
     """checking for alias bugs with filter_merge"""
     # need to have dtype = false, due to reduce Expr rule stuff where entire tables get optimized out
     check_query(
         filter_merge_queries,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )

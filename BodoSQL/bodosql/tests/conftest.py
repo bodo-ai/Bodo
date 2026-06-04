@@ -132,33 +132,33 @@ def zeros_df():
 
 @pytest.fixture(
     params=[
-        pytest.param(np.int8, marks=pytest.mark.slow),
+        pytest.param(np.int8, marks=pytest.mark.weekly),
         pytest.param(
             np.uint8,
             marks=[
-                pytest.mark.slow,
+                pytest.mark.weekly,
                 pytest.mark.skipif(
                     sys.platform == "win32",
                     reason="Spark doesn't support unsigned int on Windows.",
                 ),
             ],
         ),
-        pytest.param(np.int16, marks=pytest.mark.slow),
+        pytest.param(np.int16, marks=pytest.mark.weekly),
         pytest.param(
             np.uint16,
             marks=[
-                pytest.mark.slow,
+                pytest.mark.weekly,
                 pytest.mark.skipif(
                     sys.platform == "win32",
                     reason="Spark doesn't support unsigned int on Windows.",
                 ),
             ],
         ),
-        pytest.param(np.int32, marks=pytest.mark.slow),
+        pytest.param(np.int32, marks=pytest.mark.weekly),
         pytest.param(
             np.uint32,
             marks=[
-                pytest.mark.slow,
+                pytest.mark.weekly,
                 pytest.mark.skipif(
                     sys.platform == "win32",
                     reason="Spark doesn't support unsigned int on Windows.",
@@ -169,14 +169,14 @@ def zeros_df():
         pytest.param(
             np.uint64,
             marks=[
-                pytest.mark.slow,
+                pytest.mark.weekly,
                 pytest.mark.skipif(
                     sys.platform == "win32",
                     reason="Spark doesn't support unsigned int on Windows.",
                 ),
             ],
         ),
-        pytest.param(np.float32, marks=pytest.mark.slow),
+        pytest.param(np.float32, marks=pytest.mark.weekly),
         np.float64,
     ]
 )
@@ -357,7 +357,7 @@ def simple_join_fixture(request):
                     dtype=np.uint64,
                 )
             },
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             {
@@ -369,7 +369,7 @@ def simple_join_fixture(request):
                     dtype=np.int64,
                 )
             },
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             {
@@ -381,7 +381,7 @@ def simple_join_fixture(request):
                     dtype=np.uint32,
                 )
             },
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             {
@@ -393,7 +393,7 @@ def simple_join_fixture(request):
                     dtype=np.int32,
                 )
             },
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
     ]
 )
@@ -607,9 +607,9 @@ def bodosql_boolean_types(request):
 @pytest.fixture(
     params=[
         "2011-01-01",
-        pytest.param("1971-02-02", marks=pytest.mark.slow),
+        pytest.param("1971-02-02", marks=pytest.mark.weekly),
         "2021-03-03",
-        pytest.param("2004-12-07", marks=pytest.mark.slow),
+        pytest.param("2004-12-07", marks=pytest.mark.weekly),
         "2007-01-01 03:30:00",
     ]
 )
@@ -641,7 +641,7 @@ def timestamp_literal_strings(request):
                     }
                 )
             },
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             {
@@ -653,7 +653,7 @@ def timestamp_literal_strings(request):
                     }
                 )
             },
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
     ]
 )
@@ -682,7 +682,7 @@ def bodosql_string_types(request):
                     }
                 )
             },
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
     ]
 )
@@ -728,14 +728,14 @@ def bodosql_date_string_types(request):
 
 @pytest.fixture(
     params=[
-        pytest.param("Int8", marks=pytest.mark.slow),
-        pytest.param("UInt8", marks=pytest.mark.slow),
-        pytest.param("Int16", marks=pytest.mark.slow),
-        pytest.param("UInt16", marks=pytest.mark.slow),
-        pytest.param("Int32", marks=pytest.mark.slow),
-        pytest.param("UInt32", marks=pytest.mark.slow),
+        pytest.param("Int8", marks=pytest.mark.weekly),
+        pytest.param("UInt8", marks=pytest.mark.weekly),
+        pytest.param("Int16", marks=pytest.mark.weekly),
+        pytest.param("UInt16", marks=pytest.mark.weekly),
+        pytest.param("Int32", marks=pytest.mark.weekly),
+        pytest.param("UInt32", marks=pytest.mark.weekly),
         "Int64",
-        pytest.param("UInt64", marks=pytest.mark.slow),
+        pytest.param("UInt64", marks=pytest.mark.weekly),
     ]
 )
 def bodosql_nullable_numeric_types(request):
@@ -1082,13 +1082,13 @@ def numeric_agg_builtin_funcs(request):
 
 @pytest.fixture(
     params=[
-        pytest.param("TINYINT", marks=pytest.mark.slow),
-        pytest.param("SMALLINT", marks=pytest.mark.slow),
+        pytest.param("TINYINT", marks=pytest.mark.weekly),
+        pytest.param("SMALLINT", marks=pytest.mark.weekly),
         "INTEGER",
-        pytest.param("BIGINT", marks=pytest.mark.slow),
+        pytest.param("BIGINT", marks=pytest.mark.weekly),
         "FLOAT",
-        pytest.param("DOUBLE", marks=pytest.mark.slow),
-        pytest.param("DECIMAL", marks=pytest.mark.slow),
+        pytest.param("DOUBLE", marks=pytest.mark.weekly),
+        pytest.param("DECIMAL", marks=pytest.mark.weekly),
     ]
 )
 def sql_numeric_typestrings(request):
@@ -1121,16 +1121,16 @@ def sql_datetime_typestrings(request):
 @pytest.fixture(
     params=[
         0,
-        pytest.param(1, marks=pytest.mark.slow),
-        pytest.param(-1, marks=pytest.mark.slow),
-        pytest.param(0.0, marks=pytest.mark.slow),
-        pytest.param(1.0, marks=pytest.mark.slow),
+        pytest.param(1, marks=pytest.mark.weekly),
+        pytest.param(-1, marks=pytest.mark.weekly),
+        pytest.param(0.0, marks=pytest.mark.weekly),
+        pytest.param(1.0, marks=pytest.mark.weekly),
         -1.0,
-        pytest.param(2, marks=pytest.mark.slow),
+        pytest.param(2, marks=pytest.mark.weekly),
         0.001,
-        pytest.param(4, marks=pytest.mark.slow),
+        pytest.param(4, marks=pytest.mark.weekly),
         -7,
-        pytest.param(11, marks=pytest.mark.slow),
+        pytest.param(11, marks=pytest.mark.weekly),
     ]
 )
 def numeric_values(request):
@@ -1925,10 +1925,10 @@ def timeadd_dataframe():
 @pytest.fixture(
     params=[
         "HOUR",
-        pytest.param("MINUTE", marks=pytest.mark.slow),
+        pytest.param("MINUTE", marks=pytest.mark.weekly),
         "SECOND",
         "MILLISECOND",
-        pytest.param("MICROSECOND", marks=pytest.mark.slow),
+        pytest.param("MICROSECOND", marks=pytest.mark.weekly),
         "NANOSECOND",
     ]
 )

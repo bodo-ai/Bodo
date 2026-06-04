@@ -39,12 +39,13 @@ def project_unaliased_remove_rule_queries(request):
 
 @pytest.mark.slow
 def test_project_unaliased_remove_rule(
-    basic_df, spark_info, project_unaliased_remove_rule_queries, memory_leak_check
+    basic_df, project_unaliased_remove_rule_queries, memory_leak_check
 ):
     """checking for alias bugs with project_unaliased_remove"""
     check_query(
         project_unaliased_remove_rule_queries,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )

@@ -89,7 +89,7 @@ def test_single_op_trig_fns_cols(
 
 
 def test_double_op_trig_fns_cols(
-    double_op_trig_fn_info, bodosql_trig_values, spark_info, memory_leak_check
+    double_op_trig_fn_info, bodosql_trig_values, memory_leak_check
 ):
     """tests the behavior of trig functions with two arguments on columns"""
     fn_name = double_op_trig_fn_info[0]
@@ -99,9 +99,10 @@ def test_double_op_trig_fns_cols(
     check_query(
         query,
         bodosql_trig_values,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -125,7 +126,7 @@ def test_single_op_trig_fns_scalars(
 
 @pytest.mark.slow
 def test_double_op_trig_fns_scalars(
-    double_op_trig_fn_info, bodosql_trig_values, spark_info, memory_leak_check
+    double_op_trig_fn_info, bodosql_trig_values, memory_leak_check
 ):
     """tests the behavior of trig functions with two arguments on scalars"""
     fn_name = double_op_trig_fn_info[0]
@@ -135,22 +136,24 @@ def test_double_op_trig_fns_scalars(
     check_query(
         query,
         bodosql_trig_values,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_pi(basic_df, spark_info, memory_leak_check):
+def test_pi(basic_df, memory_leak_check):
     """tests that the pi fn is working"""
     query = "SELECT A, PI from table1"
     spark_query = "SELECT A, PI() from table1"
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
