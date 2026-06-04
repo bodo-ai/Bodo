@@ -194,6 +194,27 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
+        if func_name == "DAYNAME" and num_operands == 1:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%a",))
+
+        if func_name == "MONTHNAME" and num_operands == 1:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
+
+        if func_name == "MONTH_NAME" and num_operands == 1:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
+
         if func_name == "DATE_TRUNC" and num_operands == 2:
             # DATE_TRUNC(FLAG(DAY), timestamp) → floor_temporal(timestamp, unit)
             unit_raw = str(java_call.getOperands()[0].toString()).upper()
