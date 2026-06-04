@@ -28,6 +28,10 @@ jobs:
       contents: read
 
     steps:
+      - name: Debug marker
+        run: echo "PYTEST_MARKER=$PYTEST_MARKER"
+        env:
+          PYTEST_MARKER: "${{ inputs.pytest_marker || 'not weekly' }} and bodo_${{ matrix.batch }}of30"
       - uses: actions/checkout@v5
       - name: Build from Source
         uses: ./.github/actions/build-source
