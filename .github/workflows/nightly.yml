@@ -47,7 +47,7 @@ jobs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
           role-session-name: BodoEnginePrCiSession
           role-skip-session-tagging: true
-          role-duration-seconds: 21600
+          role-duration-seconds: 14400
       - name: Install Polaris
         run: |
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
