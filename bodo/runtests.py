@@ -40,8 +40,8 @@ for l in output.decode().split("\n"):
         all_modules.append(filename)
 
 # We don't run HDFS tests on CI, so exclude them.
-modules = list(set(all_modules) - {"test_hdfs.py"})
-
+modules = list(dict.fromkeys(all_modules))
+modules = [m for m in modules if m != "test_hdfs.py"]
 
 # The '--cov-report=' option passed to pytest means that we want pytest-cov to
 # generate coverage files (".coverage" files used by `coverage` to generate

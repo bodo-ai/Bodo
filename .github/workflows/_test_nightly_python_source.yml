@@ -1,11 +1,6 @@
 on:
   workflow_call:
     inputs:
-      pytest-marker:
-        description: 'Pytest marker expression to select tests to run'
-        required: false
-        default: 'not weekly'
-        type: string
       test-type:
         type: string
         # options:
@@ -24,18 +19,24 @@ on:
         #   - ubuntu-latest
         description: The kind of runner to use
         required: true
-      batch:
-        type: string
-        description: 'Batch number for test selection'
-        required: true
-      job-total:
-        type: string
-        description: 'Total number of batches for test selection'
-        required: true
       num-workers:
         type: string
         description: 'Number of workers to test'
+        required: true
+      pytest-marker:
+        description: 'Pytest marker expression to select tests to run'
+        required: true
+        type: string
+      extra-markers:
+        description: 'Additional pytest markers to select tests to run e.g. spawn_mode'
         required: false
+        default: ""
+        type: string
+      partition:
+        type: string
+        description: 'Partition to run tests on (e.g. bodo_1of22)'
+        required: false
+        default: ""
 
 jobs:
   run-tests:
@@ -44,10 +45,26 @@ jobs:
       contents: read
     runs-on: ${{ inputs.runner-id }}
     steps:
-      - name: Print Pytest Marker
-        run: echo "Running tests with PYTEST_MARKER=$PYTEST_MARKER"
-        env:
-          PYTEST_MARKER: "${{ inputs.pytest-marker || 'not weekly' }} and bodo_${{ inputs.batch }}of${{ inputs.job-total }}"
+      - name: Create Test Marker
+        id: set-marker
+        run: |
+          MARKER="${{ inputs.pytest-marker }}"
+
+          append_marker() {
+              local expr="$1"
+              [[ -z "$expr" ]] && return
+
+              if [[ -n "$MARKER" ]]; then
+                  MARKER="$MARKER and $expr"
+              else
+                  MARKER="$expr"
+              fi
+          }
+
+          append_marker "${{ inputs.partition }}"
+          append_marker "${{ inputs.extra-markers }}"
+
+          echo "PYTEST_MARKER=$MARKER" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
       - name: Build from Source
         uses: ./.github/actions/build-source
@@ -72,7 +89,6 @@ jobs:
         run: |
           python -m bodo.runtests "${{ runner.os }}" "${{ inputs.num-workers }}" --pyargs bodo -s -v -m "$PYTEST_MARKER"
         env:
-          PYTEST_MARKER: "${{ inputs.pytest-marker || 'not weekly' }} and bodo_${{ inputs.batch }}of${{ inputs.job-total }}"
           BODO_STREAMING_BATCH_SIZE: 4096 
           BODO_SPAWN_MODE: "0"
           BODO_BUFFER_POOL_REMOTE_MODE: "1"
