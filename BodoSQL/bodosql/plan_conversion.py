@@ -570,6 +570,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # function name as string (e.g., "POWER", "SQRT")
         func_name = op.getName().upper()
 
+        if func_name in ("UTC_TIMESTAMP", "UTC_DATE"):
+            curr_ts = pd.Timestamp.now(tz="UTC")
+            if func_name == "UTC_DATE":
+                curr_ts = curr_ts.normalize()
+            dummy_empty_data = pd.Series(
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz="UTC"))
+            )
+            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+
         if func_name in (
             "CURRENT_TIMESTAMP",
             "GETDATE",
