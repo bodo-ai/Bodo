@@ -3,7 +3,7 @@ from __future__ import annotations
 import operator
 import zoneinfo
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import pyarrow as pa
@@ -214,6 +214,20 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
             return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
+
+        if func_name == "MAKEDATE" and num_operands == 2:
+            # MAKEDATE(year, dayofyear) → Jan 1 of year + (doy-1) days
+            year_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            doy_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            result_date = datetime(int(year_expr.value), 1, 1).date() + timedelta(
+                days=int(doy_expr.value) - 1
+            )
+            empty_data = pd.Series([result_date], dtype=pd.ArrowDtype(pa.date32()))
+            return ConstantExpression(empty_data, input_plan, result_date)
 
         if func_name == "DATE_TRUNC" and num_operands == 2:
             # DATE_TRUNC(FLAG(DAY), timestamp) → floor_temporal(timestamp, unit)
