@@ -10,6 +10,7 @@ on:
         type: string
   schedule:
     - cron: '00 21 * * 0,1,2,3,4'    # 9:00PM EST Sunday-Friday
+  pull_request:
 
 env:
   PYTEST_MARKER: ${{ inputs.pytest_marker || 'not weekly' }}
