@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+import s3fs
 
 import benchmarks.tpch.bodo.dataframe_queries as tpch
 import bodo.pandas as bd
@@ -27,8 +28,6 @@ def local_sf1_data(tmp_path_factory):
         "supplier.pq",
         "partsupp.pq",
     ]
-
-    import s3fs
 
     fs = s3fs.S3FileSystem()
     for file in tpch_data_files:

@@ -1008,7 +1008,7 @@ def main():
     parser.add_argument(
         "--folder",
         type=str,
-        default="s3://tpch-data-parquet/SF1",
+        default="s3://bodo-example-data/tpch/SF1",
         help="The folder containing TPCH data",
     )
     parser.add_argument(
