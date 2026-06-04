@@ -375,15 +375,9 @@ def test_wraparound_unsigned_numerics(bodosql_numeric_types, memory_leak_check):
         "'6' seconds",
         pytest.param(
             "'123' milliseconds",
-            marks=pytest.mark.skip(
-                "[BS-507] Support Intervals for values smaller than seconds"
-            ),
         ),
         pytest.param(
             "'45' microseconds",
-            marks=pytest.mark.skip(
-                "[BS-507] Support Intervals for values smaller than seconds"
-            ),
         ),
         pytest.param(
             "'4' nanoseconds",
