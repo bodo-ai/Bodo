@@ -301,13 +301,11 @@ std::shared_ptr<array_info> do_arrow_compute_ternary(
     arrow::Datum arg0_datum;
     if (arg0_as_array) {
         arg0_datum = arrow::Datum(prepare_arrow_compute(arg0_as_array->result));
-        std::cout << "ternary arg0 is array" << std::endl;
     } else if (arg0_as_scalar) {
         arg0_datum =
             arrow::MakeScalar(prepare_arrow_compute(arg0_as_scalar->result)
                                   ->GetScalar(0)
                                   .ValueOrDie());
-        std::cout << "ternary arg0 is scalar" << std::endl;
     } else {
         throw std::runtime_error(
             "do_arrow_compute_ternary arg0 is neither array nor scalar.");
@@ -316,13 +314,11 @@ std::shared_ptr<array_info> do_arrow_compute_ternary(
     arrow::Datum arg1_datum;
     if (arg1_as_array) {
         arg1_datum = arrow::Datum(prepare_arrow_compute(arg1_as_array->result));
-        std::cout << "ternary arg1 is array" << std::endl;
     } else if (arg1_as_scalar) {
         arg1_datum =
             arrow::MakeScalar(prepare_arrow_compute(arg1_as_scalar->result)
                                   ->GetScalar(0)
                                   .ValueOrDie());
-        std::cout << "ternary arg1 is scalar" << std::endl;
     } else {
         throw std::runtime_error(
             "do_arrow_compute_ternary arg1 is neither array nor scalar.");
@@ -331,13 +327,11 @@ std::shared_ptr<array_info> do_arrow_compute_ternary(
     arrow::Datum arg2_datum;
     if (arg2_as_array) {
         arg2_datum = arrow::Datum(prepare_arrow_compute(arg2_as_array->result));
-        std::cout << "ternary arg2 is array" << std::endl;
     } else if (arg2_as_scalar) {
         arg2_datum =
             arrow::MakeScalar(prepare_arrow_compute(arg2_as_scalar->result)
                                   ->GetScalar(0)
                                   .ValueOrDie());
-        std::cout << "ternary arg2 is scalar" << std::endl;
     } else {
         throw std::runtime_error(
             "do_arrow_compute_ternary arg2 is neither array nor scalar.");
