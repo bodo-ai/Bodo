@@ -67,16 +67,20 @@ jobs:
           append_marker "${{ inputs.extra-markers }}"
 
           echo "PYTEST_MARKER=$MARKER" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v5
+
       - name: Build from Source
         uses: ./.github/actions/build-source
         with:
           build-iceberg: true
           build-bodosql: ${{ startsWith(inputs.test-type, 'sql') }}
           environment: "default"
+
       - name: Clean Maven and Spark Ivy Cache
         run: |
           rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -85,9 +89,11 @@ jobs:
           role-session-name: BodoEnginePrCiSession
           role-skip-session-tagging: true
           role-duration-seconds: 14400 # Max duration: 4 hours
+
       - name: Install Polaris
         run: |
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+
       - name: Run Tests
         run: |
           # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode
@@ -108,27 +114,20 @@ jobs:
                   bodo/tests/caching_tests
 
           elif [[ "$TEST_TYPE" == "spawn" ]]; then
-              # Disabling the DataFrame library for spawn tests since some of the tests
-              # create Pandas manager states for testing that are not fully functional.
-              export BODO_ENABLE_DATAFRAME_LIBRARY=0
-              export BODO_TEST_SPAWN_MODE=1
-
               pytest \
                   -s -v -Wignore \
                   -m "$PYTEST_MARKER" \
                   "${PYTEST_IGNORE[@]}" \
                   bodo/tests \
-                  --junitxml=pytest-report-spawn-mode.xml \
+                  --junitxml=pytest-report-spawn-mode-$PARTITION_STRING.xml \
 
           elif [[ "$TEST_TYPE" == "df_lib" ]]; then
-              export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=1
-
               pytest \
                   -s -v -Wignore \
                   -m "$PYTEST_MARKER and not jit_dependency" \
                   "${PYTEST_IGNORE[@]}" \
                   bodo/tests \
-                  --junitxml=pytest-report-df-library.xml \
+                  --junitxml=pytest-report-df-library-$PARTITION_STRING.xml \
 
               # Run tests with JIT dependency separately to avoid JIT imports
               # impacting other tests.
@@ -137,10 +136,11 @@ jobs:
                   -m "$PYTEST_MARKER and jit_dependency" \
                   "${PYTEST_IGNORE[@]}" \
                   bodo/tests \
-                  --junitxml=pytest-report-df-library-jit-dependency.xml \
+                  --junitxml=pytest-report-df-library-jit-dependency-$PARTITION_STRING.xml \
 
           elif [[ "$TEST_TYPE" == "compiler" ]]; then
               # Some tests assume a batch size of 4096 for testing specific behavior.
+              # Other test types leave variable unset to use default value.
               export BODO_STREAMING_BATCH_SIZE=4096
 
               python -m bodo.runtests \
@@ -165,7 +165,7 @@ jobs:
                   -Wignore \
                   -m "$PYTEST_MARKER" \
                   bodosql/tests \
-                  --junitxml=pytest-report-sql-spawn-mode.xml \
+                  --junitxml=pytest-report-sql-spawn-mode-$PARTITION_STRING.xml \
 
           elif [[ "$TEST_TYPE" == "sql" ]]; then
               python -u -m bodosql.runtests \
@@ -190,9 +190,15 @@ jobs:
           BODO_BUFFER_POOL_REMOTE_MODE: "1"
           BODO_BUFFER_POOL_DEBUG_MODE: "1"
           BODO_SF_WRITE_DEBUG: "1"
+          BODO_TEST_SPAWN_MODE: ${{ endsWith(inputs.test-type, 'spawn') && '1' || '0' }}
+          # Disabling the DataFrame library for spawn tests since some of the tests
+          # create Pandas manager states for testing that are not fully functional.
+          BODO_ENABLE_DATAFRAME_LIBRARY: ${{ endsWith(inputs.test-type, 'spawn') && '0' || '1' }}
+          BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ inputs.test-type == 'df_lib' && '1' || '0' }}
           # For caching tests we need to update the location of the decryption file.
           # We set the absolute path as an environment variable.
           BODO_TRACING_DECRYPTION_FILE_PATH: ${{ github.workspace }}/buildscripts/decompress_traces.py
+          PARTITION_STRING: ${{ inputs.partition }}
           # Testing Credentials
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
@@ -207,3 +213,11 @@ jobs:
           AZURE_CLIENT_ID:  ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
+
+      - name: Upload JUnit Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-reports-${{ inputs.test-type }}-${{ inputs.runner-id }}-${{ inputs.partition }}
+          path: '**/pytest-report*.xml'
+
