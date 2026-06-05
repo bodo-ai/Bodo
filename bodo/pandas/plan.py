@@ -1034,6 +1034,12 @@ class ArithOpExpression(BinaryExpression):
     pass
 
 
+class SubstrOpExpression(BinaryExpression):
+    """Expression representing a substring operation in the query plan."""
+
+    pass
+
+
 total_init_lazy = 0
 total_execute_plan = 0
 

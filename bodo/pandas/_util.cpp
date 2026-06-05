@@ -2,13 +2,19 @@
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
 #include <arrow/compute/api.h>
+#include <arrow/compute/api_scalar.h>
+#include <arrow/compute/function.h>
+#include <arrow/compute/kernel.h>
 #include <arrow/datum.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/result.h>
 #include <arrow/scalar.h>
+#include <arrow/status.h>
 #include <arrow/table.h>
 #include <arrow/type_fwd.h>
+#include <arrow/type_traits.h>
 #include <arrow/util/decimal.h>
+#include <arrow/util/logging.h>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "duckdb/common/types.hpp"
@@ -1276,6 +1282,191 @@ size_t col_ref_map_lookup(
             "Did not find table and column indices in col_ref_map");
     }
     return iter->second;
+}
+
+std::optional<int64_t> ExtractIntScalar(const arrow::Datum &d) {
+    // 1. Must be a scalar
+    if (!d.is_scalar()) {
+        return std::nullopt;
+    }
+
+    std::shared_ptr<arrow::Scalar> s = d.scalar();
+
+    // 2. Must be an integer type
+    if (!arrow::is_integer(s->type->id())) {
+        return std::nullopt;
+    }
+
+    // 3. Switch on integer width and signedness
+    switch (s->type->id()) {
+        case arrow::Int8Type::type_id:
+            return std::static_pointer_cast<arrow::Int8Scalar>(s)->value;
+        case arrow::Int16Type::type_id:
+            return std::static_pointer_cast<arrow::Int16Scalar>(s)->value;
+        case arrow::Int32Type::type_id:
+            return std::static_pointer_cast<arrow::Int32Scalar>(s)->value;
+        case arrow::Int64Type::type_id:
+            return std::static_pointer_cast<arrow::Int64Scalar>(s)->value;
+
+        case arrow::UInt8Type::type_id:
+            return std::static_pointer_cast<arrow::UInt8Scalar>(s)->value;
+        case arrow::UInt16Type::type_id:
+            return std::static_pointer_cast<arrow::UInt16Scalar>(s)->value;
+        case arrow::UInt32Type::type_id:
+            return std::static_pointer_cast<arrow::UInt32Scalar>(s)->value;
+        case arrow::UInt64Type::type_id:
+            return std::static_pointer_cast<arrow::UInt64Scalar>(s)->value;
+
+        default:
+            return std::nullopt;
+    }
+}
+
+// The execution function for the kernel.
+// Signature: Status Exec(KernelContext*, const ExecBatch&, Datum* out)
+static arrow::Status SubstrThreeExec(arrow::compute::KernelContext *ctx,
+                                     const arrow::compute::ExecSpan &batch,
+                                     arrow::compute::ExecResult *out) {
+    // Expect exactly 3 inputs
+    if (batch.values.size() != 3) {
+        throw std::runtime_error("bodo_substr_three expected 3 inputs.");
+    }
+
+    const arrow::ArraySpan &src = batch[0].array;
+    const arrow::ArraySpan &start = batch[1].array;
+    const arrow::ArraySpan &len = batch[2].array;
+
+    if (!src.type) {
+        throw std::runtime_error("bodo_substr_three src not valid.");
+    }
+    if (!start.type) {
+        throw std::runtime_error("bodo_substr_three start not valid.");
+    }
+    if (!len.type) {
+        throw std::runtime_error("bodo_substr_three len not valid.");
+    }
+
+    // Number of rows
+    int64_t n = static_cast<int64_t>(batch.length);
+
+    // Pointers to src buffers
+    const uint8_t *src_null_bitmap = src.buffers[0].data;
+    const int64_t *src_offsets =
+        reinterpret_cast<const int64_t *>(src.buffers[1].data);
+    const char *src_data = reinterpret_cast<const char *>(src.buffers[2].data);
+    int64_t src_offset = src.offset;  // element offset into offsets array
+
+    // Pointers to start/len buffers (int64)
+    const uint8_t *start_null_bitmap = start.buffers[0].data;
+    const int64_t *start_values =
+        reinterpret_cast<const int64_t *>(start.buffers[1].data);
+    int64_t start_offset = start.offset;
+
+    const uint8_t *len_null_bitmap = len.buffers[0].data;
+    const int64_t *len_values =
+        reinterpret_cast<const int64_t *>(len.buffers[1].data);
+    int64_t len_offset = len.offset;
+
+    // Prepare builder for output strings
+    arrow::LargeStringBuilder builder(ctx->memory_pool());
+
+    auto is_valid_bit = [](const uint8_t *bits, int64_t offset,
+                           int64_t i) -> bool {
+        return !bits || arrow::bit_util::GetBit(bits, offset + i);
+    };
+
+    for (int64_t i = 0; i < n; ++i) {
+        // Check nulls: bitmaps may be null (no nulls) -> treat as all-valid
+        bool src_is_null = false;
+        if (src_null_bitmap) {
+            src_is_null = !is_valid_bit(src_null_bitmap, src_offset, i);
+        }
+        bool start_is_null = false;
+        if (start_null_bitmap) {
+            start_is_null = !is_valid_bit(start_null_bitmap, start_offset, i);
+        }
+        bool len_is_null = false;
+        if (len_null_bitmap) {
+            len_is_null = !is_valid_bit(len_null_bitmap, len_offset, i);
+        }
+
+        if (src_is_null || start_is_null || len_is_null) {
+            ARROW_RETURN_NOT_OK(builder.AppendNull());
+            continue;
+        }
+
+        // Read start and len values
+        int64_t start_val = start_values[start_offset + i];
+        int64_t len_val = len_values[len_offset + i];
+
+        // Normalize negatives
+        if (start_val < 0)
+            start_val = 0;
+        if (len_val < 0)
+            len_val = 0;
+
+        // Read string offsets: offsets are int64 (common Arrow layout)
+        // offsets array length is n + 1; offsets index = src_offset + i
+        int64_t off0 = src_offsets[src_offset + i];
+        int64_t off1 = src_offsets[src_offset + i + 1];
+        int64_t byte_len = off1 - off0;
+
+        // If start beyond string length or len == 0 -> empty string
+        if (start_val >= static_cast<int64_t>(byte_len) || len_val == 0) {
+            ARROW_RETURN_NOT_OK(builder.Append(std::string()));
+            continue;
+        }
+
+        // Compute take and append substring
+        int64_t take = std::min<int64_t>(
+            len_val, static_cast<int64_t>(byte_len) - start_val);
+        const char *substr_ptr =
+            src_data + off0 + static_cast<size_t>(start_val);
+        ARROW_RETURN_NOT_OK(
+            builder.Append(std::string(substr_ptr, static_cast<size_t>(take))));
+    }
+
+    // Finish builder to produce Array
+    std::shared_ptr<arrow::Array> out_array;
+    ARROW_RETURN_NOT_OK(builder.Finish(&out_array));
+
+    out->value = out_array->data();
+    return arrow::Status::OK();
+}
+
+void RegisterSubstr(arrow::compute::FunctionRegistry *registry) {
+    auto func = std::make_shared<arrow::compute::ScalarFunction>(
+        "bodo_substr_three", arrow::compute::Arity::Ternary(),
+        arrow::compute::FunctionDoc{"substr of source, start, len",
+                                    "Returns substr(src, start, len)",
+                                    {"src", "start", "len"}});
+
+    arrow::compute::ScalarKernel kernel64(
+        {arrow::compute::InputType(arrow::large_utf8()),
+         arrow::compute::InputType(arrow::int64()),
+         arrow::compute::InputType(arrow::int64())},
+        arrow::compute::OutputType(arrow::large_utf8()), SubstrThreeExec);
+
+    arrow::Status status;
+    status = func->AddKernel(kernel64);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod 64 AddKernel failed.");
+    }
+    // Register the function.
+    status = registry->AddFunction(std::move(func));
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod AddFunction failed.");
+    }
+}
+
+// Register the function in Arrow's global function registry.
+void RegisterSubstrThree() {
+    static std::once_flag once_flag_;
+    // Register the Bodo substr arrow compute function only once.
+    std::call_once(once_flag_, [&]() {
+        auto *registry = arrow::compute::GetFunctionRegistry();
+        RegisterSubstr(registry);
+    });
 }
 
 #ifdef USE_CUDF

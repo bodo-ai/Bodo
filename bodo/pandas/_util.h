@@ -452,6 +452,10 @@ size_t col_ref_map_lookup(
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
     duckdb::idx_t table, duckdb::idx_t column);
 
+std::optional<int64_t> ExtractIntScalar(const arrow::Datum &d);
+
+void RegisterSubstrThree();
+
 #ifdef USE_CUDF
 
 #include <cstdint>
