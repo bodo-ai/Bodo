@@ -8,17 +8,24 @@ import pytest
 from bodosql.tests.utils import check_query
 
 
-def test_simple_cast(basic_df, spark_info, memory_leak_check):
+def test_simple_cast(basic_df, memory_leak_check):
     """
     Checks that integer casting of constants behaves as expected
     """
     query = "SELECT CAST(1.0 AS integer)"
-    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
 def test_float_to_int_cast(
-    basic_df, numeric_values, sql_numeric_typestrings, spark_info, memory_leak_check
+    basic_df, numeric_values, sql_numeric_typestrings, memory_leak_check
 ):
     """
     Checks that numeric casting of constants behaves as expected
@@ -28,11 +35,18 @@ def test_float_to_int_cast(
         return
     query = f"SELECT CAST({numeric_values} AS {sql_numeric_typestrings})"
     # check_dtype=False since Bodo returns nullable columns by default
-    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 def test_numeric_column_casting(
-    bodosql_numeric_types, sql_numeric_typestrings, spark_info, memory_leak_check
+    bodosql_numeric_types, sql_numeric_typestrings, memory_leak_check
 ):
     """
     Checks that casting numeric columns behaves as expected
@@ -44,13 +58,18 @@ def test_numeric_column_casting(
         table1
     """
     check_query(
-        query, bodosql_numeric_types, spark_info, check_dtype=False, check_names=False
+        query,
+        bodosql_numeric_types,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.skip("Cast from dt64 to other numeric types not supported in Pandas")
 def test_datetime_numeric_column_casting(
-    bodosql_datetime_types, sql_numeric_typestrings, spark_info, memory_leak_check
+    bodosql_datetime_types, sql_numeric_typestrings, memory_leak_check
 ):
     """
     Checks that casting datetime to numeric columns behaves as expected
@@ -61,12 +80,18 @@ def test_datetime_numeric_column_casting(
     FROM
         table1
     """
-    check_query(query, bodosql_datetime_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_datetime_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.skip("[BS-151] Cast Not supported in our MySQL Dialect")
 def test_interval_numeric_column_casting(
-    bodosql_interval_types, sql_numeric_typestrings, spark_info, memory_leak_check
+    bodosql_interval_types, sql_numeric_typestrings, memory_leak_check
 ):
     """
     Checks that casting interval to numeric columns behaves as expected
@@ -77,13 +102,17 @@ def test_interval_numeric_column_casting(
     FROM
         table1
     """
-    check_query(query, bodosql_interval_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_interval_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
-def test_varchar_to_numeric_cast(
-    sql_numeric_typestrings, spark_info, memory_leak_check
-):
+def test_varchar_to_numeric_cast(sql_numeric_typestrings, memory_leak_check):
     """
     Checks that casting strings to numeric values behaves as expected
     """
@@ -97,12 +126,19 @@ def test_varchar_to_numeric_cast(
         "A": ["1", "2", "3"] * 4,
     }
     ctx = {"TABLE1": pd.DataFrame(str_data)}
-    check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 def test_numeric_to_varchar_nullable(bodosql_nullable_numeric_types, memory_leak_check):
     """
-    Checks that casting strings to numeric values behaves as expected
+    Checks that casting numeric values to strings behaves as expected
     """
     query = """
     SELECT

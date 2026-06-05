@@ -12,7 +12,7 @@ import pytest
 import bodosql
 from bodo.tests.utils import pytest_slow_unless_groupby
 from bodo.types import Time
-from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
+from bodosql.tests.utils import check_query
 
 # Skip unless any groupby-related files were changed
 pytestmark = pytest_slow_unless_groupby
@@ -78,7 +78,7 @@ def test_agg_numeric(
 
 @pytest.mark.bodosql_cpp  # failing for variance, stddev w/ unimplemented CASE
 def test_agg_numeric_larger_group(
-    grouped_dfs, numeric_agg_builtin_funcs, spark_info, memory_leak_check
+    grouped_dfs, numeric_agg_builtin_funcs, memory_leak_check
 ):
     """test aggregation calls in queries on DataFrames with a larger data in each group."""
 
@@ -109,17 +109,17 @@ def test_agg_numeric_larger_group(
     check_query(
         query,
         grouped_dfs,
-        spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(query),
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp  # failing for variance, stddev w/ unimplemented CASE
 def test_aliasing_agg_numeric(
-    bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
+    bodosql_numeric_types, numeric_agg_builtin_funcs, memory_leak_check
 ):
     """test aliasing of aggregations in queries"""
 
@@ -149,7 +149,7 @@ def test_aliasing_agg_numeric(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         use_duckdb=True,
@@ -157,61 +157,65 @@ def test_aliasing_agg_numeric(
 
 
 @pytest.mark.bodosql_cpp
-def test_count_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_count_numeric(bodosql_numeric_types, memory_leak_check):
     """test various count queries on numeric data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1 group by A",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1 group by A",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.bodosql_cpp
-def test_count_nullable_numeric(
-    bodosql_nullable_numeric_types, spark_info, memory_leak_check
-):
+def test_count_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_check):
     """test various count queries on nullable numeric data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1 group by A",
         bodosql_nullable_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1 group by A",
         bodosql_nullable_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.bodosql_cpp
-def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
+def test_count_datetime(bodosql_datetime_types, memory_leak_check):
     """test various count queries on Timestamp data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1 group by A",
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1 group by A",
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -224,11 +228,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=bodosql_interval_types["TABLE1"]
-        .groupby("A")["B"]
-        .nunique()
-        .to_frame()
-        .reset_index(drop=True),
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1 group by A",
@@ -236,111 +236,116 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        expected_output=bodosql_interval_types["TABLE1"]
-        .groupby("A")
-        .size()
-        .to_frame()
-        .reset_index(drop=True),
+        use_duckdb=True,
     )
 
 
 @pytest.mark.bodosql_cpp
-def test_count_string(bodosql_string_types, spark_info, memory_leak_check):
+def test_count_string(bodosql_string_types, memory_leak_check):
     """test various count queries on string data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1 group by A",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1 group by A",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 # @pytest.mark.bodosql_cpp   # dataframe are different
-def test_count_binary(bodosql_binary_types, spark_info, memory_leak_check):
+def test_count_binary(bodosql_binary_types, memory_leak_check):
     """test various count queries on binary data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1 group by A",
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1 group by A",
         bodosql_binary_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 # @pytest.mark.bodosql_cpp   # dataframe are different
-def test_count_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_count_boolean(bodosql_boolean_types, memory_leak_check):
     """test various count queries on boolean data."""
     check_query(
         "SELECT COUNT(Distinct B) FROM table1 group by A",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) FROM table1 group by A",
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_count_numeric_alias(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_count_numeric_alias(bodosql_numeric_types, memory_leak_check):
     """test various count queries on numeric data with aliases."""
     check_query(
         "SELECT COUNT(Distinct B) as alias FROM table1 group by A",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         "SELECT COUNT(*) as alias FROM table1 group by A",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_having_repeat_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_having_repeat_numeric(bodosql_numeric_types, memory_leak_check):
     """test having clause in numeric queries"""
     check_query(
         "select sum(B) from table1 group by a having count(b) >1",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.bodosql_cpp
-def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
+def test_having_repeat_datetime(bodosql_datetime_types, memory_leak_check):
     """test having clause in datetime queries"""
     check_query(
         "select count(B) from table1 group by a having count(b) > 2",
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         use_duckdb=True,
     )
@@ -350,36 +355,33 @@ def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_
 @pytest.mark.bodosql_cpp
 def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
     """test having clause in datetime queries"""
-    expected_output = bodosql_interval_types["TABLE1"].groupby("A")["B"].count()
-    expected_output = (
-        expected_output[expected_output > 2].to_frame().reset_index(drop=True)
-    )
     check_query(
         "select count(B) from table1 group by a having count(b) > 2",
         bodosql_interval_types,
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_agg_repeat_col(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_agg_repeat_col(bodosql_numeric_types, memory_leak_check):
     """test aggregations repeating the same column"""
     check_query(
         "select max(A), min(A), avg(A) from table1 group by B",
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_groupby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_groupby_bool(bodosql_boolean_types, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on boolean types
     """
@@ -392,12 +394,17 @@ def test_groupby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
             A
         """
     check_query(
-        query, bodosql_boolean_types, spark_info, check_names=False, check_dtype=False
+        query,
+        bodosql_boolean_types,
+        None,
+        check_names=False,
+        check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.bodosql_cpp
-def test_groupby_string(bodosql_string_types, spark_info, memory_leak_check):
+def test_groupby_string(bodosql_string_types, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on string types
     """
@@ -412,14 +419,15 @@ def test_groupby_string(bodosql_string_types, spark_info, memory_leak_check):
     check_query(
         query,
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_groupby_numeric_scalars(basic_df, spark_info, memory_leak_check):
+def test_groupby_numeric_scalars(basic_df, memory_leak_check):
     """
     tests to ensure that groupby and max are working with numeric scalars
     """
@@ -431,12 +439,18 @@ def test_groupby_numeric_scalars(basic_df, spark_info, memory_leak_check):
         GROUP BY
             A
         """
-    check_query(query, basic_df, spark_info, check_names=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_groupby_datetime_types(bodosql_datetime_types, spark_info, memory_leak_check):
+def test_groupby_datetime_types(bodosql_datetime_types, memory_leak_check):
     """
     Simple test to ensure that groupby and max are working on datetime types
     """
@@ -451,7 +465,7 @@ def test_groupby_datetime_types(bodosql_datetime_types, spark_info, memory_leak_
     check_query(
         query,
         bodosql_datetime_types,
-        spark_info,
+        None,
         check_names=False,
         use_duckdb=True,
     )
@@ -539,7 +553,6 @@ def test_count_if(query, spark_info, memory_leak_check):
 def test_having_numeric(
     bodosql_numeric_types,
     comparison_ops,
-    spark_info,
     memory_leak_check,
 ):
     """
@@ -558,14 +571,15 @@ def test_having_numeric(
     check_query(
         query,
         bodosql_numeric_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.bodosql_cpp
-def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_having_boolean_agg_cond(bodosql_boolean_types, memory_leak_check):
     """
     Tests groupby + having with aggregation in the condition
     """
@@ -582,16 +596,15 @@ def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_
     check_query(
         query,
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.bodosql_cpp
-def test_having_boolean_groupby_cond(
-    bodosql_boolean_types, spark_info, memory_leak_check
-):
+def test_having_boolean_groupby_cond(bodosql_boolean_types, memory_leak_check):
     """
     Tests groupby + having using the groupby column in the having condtion
     """
@@ -608,15 +621,16 @@ def test_having_boolean_groupby_cond(
     check_query(
         query,
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_repeat_columns(basic_df, spark_info, memory_leak_check):
+def test_repeat_columns(basic_df, memory_leak_check):
     """
     Tests that a column that won't produce a conflicting name
     even if it performs the same operation.
@@ -625,9 +639,10 @@ def test_repeat_columns(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -655,7 +670,7 @@ def groupby_extension_table():
 
 
 # @pytest.mark.bodosql_cpp   # uses grouping sets not implemented
-def test_cube(groupby_extension_table, spark_info, memory_leak_check):
+def test_cube(groupby_extension_table, memory_leak_check):
     """
     Tests that bodosql can use snowflake's cube syntax in groupby.
     Note: Snowflake doesn't care about the spacing. CUBE (A, B, C)
@@ -663,22 +678,20 @@ def test_cube(groupby_extension_table, spark_info, memory_leak_check):
     """
 
     bodosql_query = "select A, B, C, SUM(D) from table1 GROUP BY CUBE (A, B, C)"
-    # SparkSQL syntax varies slightly
-    spark_query = "select A, B, C, SUM(D) from table1 GROUP BY A, B, C WITH CUBE"
 
     check_query(
         bodosql_query,
         groupby_extension_table,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 # @pytest.mark.bodosql_cpp   # uses grouping sets not implemented
-def test_rollup(groupby_extension_table, spark_info, memory_leak_check):
+def test_rollup(groupby_extension_table, memory_leak_check):
     """
     Tests that bodosql can use snowflake's rollup syntax in groupby.
     Note: Snowflake doesn't care about the spacing. ROLLUP (A, B, C)
@@ -686,22 +699,20 @@ def test_rollup(groupby_extension_table, spark_info, memory_leak_check):
     """
 
     bodosql_query = "select A, B, C, SUM(D) from table1 GROUP BY ROLLUP(A, B, C)"
-    # SparkSQL syntax varies slightly
-    spark_query = "select A, B, C, SUM(D) from table1 GROUP BY A, B, C WITH ROLLUP"
 
     check_query(
         bodosql_query,
         groupby_extension_table,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 # @pytest.mark.bodosql_cpp   # uses grouping sets not implemented
-def test_grouping_sets(groupby_extension_table, spark_info, memory_leak_check):
+def test_grouping_sets(groupby_extension_table, memory_leak_check):
     """
     Tests that bodosql can use snowflake's grouping sets syntax in groupby.
     GROUPING SETS ((A, B), (C, B), (A), ()) and GROUPING SETS((A, B), (C, B), (A), ())
@@ -714,29 +725,28 @@ def test_grouping_sets(groupby_extension_table, spark_info, memory_leak_check):
     check_query(
         query,
         groupby_extension_table,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 # @pytest.mark.bodosql_cpp   # uses grouping sets not implemented
-def test_no_group_or_agg(groupby_extension_table, spark_info, memory_leak_check):
+def test_no_group_or_agg(groupby_extension_table, memory_leak_check):
     """Tests the case in which we have at least one empty group with no aggregation"""
 
     bodosql_query = "select A, B from table1 GROUP BY rollup(A, B)"
-    # SparkSQL syntax varies slightly
-    spark_query = "select A, B from table1 GROUP BY A, B WITH ROLLUP"
 
     check_query(
         bodosql_query,
         groupby_extension_table,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_dtype=False,
         check_names=False,
         sort_output=True,
+        use_duckdb=True,
     )
 
 
@@ -1123,7 +1133,6 @@ def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
             }
         )
     }
-    expected_output = pd.DataFrame({0: pd.Series(res, dtype="boolean")})
 
     check_query(
         query,
@@ -1131,7 +1140,7 @@ def test_boolor_booland_boolxor_agg(query, res, memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -1142,7 +1151,6 @@ def test_booland_agg_having(memory_leak_check):
     query = (
         "SELECT G, boolor_agg(B) FROM table1 GROUP BY G HAVING booland_agg(B = True)"
     )
-    expected_output = pd.DataFrame({"0: ": [4, 5, 6], "1: ": [True, True, True]})
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -1196,7 +1204,7 @@ def test_booland_agg_having(memory_leak_check):
         None,
         check_dtype=False,
         check_names=False,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -1553,7 +1561,7 @@ def test_all_nulls_2(memory_leak_check):
     ],
 )
 @pytest.mark.bodosql_cpp
-def test_kurtosis_skew(agg_cols, spark_info, memory_leak_check):
+def test_kurtosis_skew(agg_cols, memory_leak_check):
     """Tests the Kurtosis and Skew functions"""
     query = (
         "SELECT "
@@ -1668,20 +1676,13 @@ def test_mode(values, dtype, memory_leak_check):
         )
     }
 
-    answer = pd.DataFrame(
-        {
-            0: list("ABCD"),
-            1: pd.Series([values[1], values[0], values[2], None], dtype=dtype),
-        }
-    )
-
     check_query(
         query,
         ctx,
         None,
-        expected_output=answer,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -1693,20 +1694,15 @@ def test_decimal_sum():
         pa.array(["0.01", "0.03", None] * 10).cast(pa.decimal128(38, 37)),
         dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
     )
-    B_out = pd.array(
-        pa.array(["0.1", "0.3", None]).cast(pa.decimal128(38, 37)),
-        dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
-    )
-    answer = pd.DataFrame({"A": [1, 2, 3], "B": B_out})
     ctx = {"TABLE1": pd.DataFrame({"A": [1, 2, 3] * 10, "B": B})}
 
     check_query(
         query,
         ctx,
         None,
-        expected_output=answer,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
     # Group 2 will overflow
@@ -1722,31 +1718,24 @@ def test_decimal_sum():
 
 
 @pytest.mark.parametrize(
-    "call, answer",
+    "call",
     [
         pytest.param(
             "ARRAY_AGG(D) WITHIN GROUP (ORDER BY O)",
-            [[20, 15, 12, 7, 2, 0], [21, 18, 13, 8, 6, 3, 1], [24, 19, 14, 9]],
             id="int-with_order",
         ),
         pytest.param(
             "ARRAY_AGG(D)",
-            [[0, 2, 7, 12, 15, 20], [1, 3, 6, 8, 13, 18, 21], [9, 14, 19, 24]],
             id="int-no_order",
         ),
         pytest.param(
             "ARRAY_AGG(S) WITHIN GROUP (ORDER BY O)",
-            [
-                ["habet", "habet", "abet", "", "", "abet", "Alphabet"],
-                ["", "", "", "", "abet", "", "", "lphabet"],
-                ["abet", "lphabet", "habet", "habet"],
-            ],
             id="string-with_order",
         ),
     ],
 )
 # @pytest.mark.bodosql_cpp   # Aggregation ARRAY_AGG not supported yet
-def test_array_agg(call, answer, memory_leak_check):
+def test_array_agg(call, memory_leak_check):
     """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
     a single ordering term, no DISTINCT, and accompanied by a GROUP BY.
     """
@@ -1769,61 +1758,42 @@ def test_array_agg(call, answer, memory_leak_check):
         )
     }
 
-    answer = pd.DataFrame(
-        {
-            0: list("EIO"),
-            1: answer,
-        }
-    )
-
     check_query(
         query,
         ctx,
         None,
-        expected_output=answer,
         check_names=False,
         check_dtype=False,
         convert_columns_to_pandas=True,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "call, answer",
+    "call",
     [
         pytest.param(
             "ARRAY_AGG(DISTINCT D) WITHIN GROUP (ORDER BY D DESC)",
-            [[2, 1, 0, -1, -2], [2, 0, -1, -2, -7], [7, 0, -2]],
             id="int-with_order",
         ),
         pytest.param(
             "ARRAY_AGG(DISTINCT D)",
-            [[-2, -1, 0, 1, 2], [-7, -2, -1, 0, 2], [-2, 0, 7]],
             id="int-no_order",
             marks=pytest.mark.skip("Output is non-deterministic"),
         ),
         pytest.param(
             "ARRAY_AGG(DISTINCT S) WITHIN GROUP (ORDER BY S)",
-            [
-                ["", "Alphabet", "abet", "habet"],
-                ["", "abet", "lphabet"],
-                ["abet", "habet", "lphabet"],
-            ],
             id="string-with_order",
         ),
         pytest.param(
             "ARRAY_AGG(DISTINCT S)",
-            [
-                ["", "Alphabet", "abet", "habet"],
-                ["", "abet", "lphabet"],
-                ["abet", "habet", "lphabet"],
-            ],
             id="string-no_order",
             marks=pytest.mark.skip("Output is non-deterministic"),
         ),
     ],
 )
 # @pytest.mark.bodosql_cpp   # Aggregation ARRAY_AGG not supported yet
-def test_array_agg_distinct(call, answer, memory_leak_check):
+def test_array_agg_distinct(call, memory_leak_check):
     """Tests ARRAY_AGG on integer data with and without a WITHIN GROUP clause containing
     a single ordering term, with DISTINCT, and accompanied by a GROUP BY.
     """
@@ -1846,21 +1816,14 @@ def test_array_agg_distinct(call, answer, memory_leak_check):
         )
     }
 
-    answer = pd.DataFrame(
-        {
-            0: list("EIO"),
-            1: answer,
-        }
-    )
-
     check_query(
         query,
         ctx,
         None,
-        expected_output=answer,
         check_names=False,
         check_dtype=False,
         convert_columns_to_pandas=True,
+        use_duckdb=True,
     )
 
 
@@ -2084,32 +2047,22 @@ def test_mixed_nested_agg_keys(memory_leak_check):
             }
         )
     }
-    expected = pd.DataFrame(
-        {
-            "A": ["1", "2", "2", "4"],
-            "B": pd.array(
-                [["1"], ["2"], ["3"], ["4"]],
-                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
-            ),
-            "C": [3, 3, 4, 10],
-        }
-    )
     # use_dict_encoded_strings must be set to false or hash_arrow_array will
     # panic as the underlying string array will unexpectedly be dict encoded.
     check_query(
         query,
         ctx,
         None,
-        expected_output=expected,
         convert_columns_to_pandas=True,
         check_dtype=False,
         use_dict_encoded_strings=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_groupby_agg_on_key_col(spark_info, memory_leak_check):
+def test_groupby_agg_on_key_col(memory_leak_check):
     """
     Test Groupby cases where the key columns are also the data columns.
     """
@@ -2125,4 +2078,10 @@ def test_groupby_agg_on_key_col(spark_info, memory_leak_check):
     )
 
     ctx = {"TABLE1": input_df}
-    check_query(query, ctx, spark_info, check_dtype=False)
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )

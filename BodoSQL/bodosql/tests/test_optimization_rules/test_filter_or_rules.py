@@ -70,7 +70,7 @@ from bodosql.tests.utils import check_query
         ),
     ],
 )
-def test_logical_filter_rule(basic_df, spark_info, query_info, memory_leak_check):
+def test_logical_filter_rule(basic_df, query_info, memory_leak_check):
     """
     Test that a common expression is extracted from an OR condition
     in a regular logical filter.
@@ -80,7 +80,7 @@ def test_logical_filter_rule(basic_df, spark_info, query_info, memory_leak_check
     # Check the correctness of all queries. We check for the optimization
     # by validating the number of booland/| operations in the generated code.
     # TODO: Validate the actual generated plans.
-    result1 = check_query(query, basic_df, spark_info, return_codegen=True)
+    result1 = check_query(query, basic_df, None, return_codegen=True, use_duckdb=True)
     gen_code1 = result1["pandas_code"]
     assert gen_code1.count("booland") == booland_count, (
         f"Expected {booland_count} booland after optimization"
@@ -151,7 +151,7 @@ def test_logical_filter_rule(basic_df, spark_info, query_info, memory_leak_check
         ),
     ],
 )
-def test_join_filter_rule(spark_info, query_info, memory_leak_check):
+def test_join_filter_rule(query_info, memory_leak_check):
     """
     Test that a common expression is extracted from an OR condition
     in a join expression.
@@ -167,7 +167,7 @@ def test_join_filter_rule(spark_info, query_info, memory_leak_check):
         ),
     }
 
-    result1 = check_query(query, ctx, spark_info, return_codegen=True)
+    result1 = check_query(query, ctx, None, return_codegen=True, use_duckdb=True)
     gen_code1 = result1["pandas_code"]
     assert gen_code1.count("booland") == booland_count, (
         f"Expected {booland_count} booland after optimization"

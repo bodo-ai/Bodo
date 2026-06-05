@@ -34,67 +34,70 @@ pytestmark = pytest_slow_unless_window
         ),
     ],
 )
-def test_only_upper_bound(query, uint8_window_df, spark_info, memory_leak_check):
+def test_only_upper_bound(query, uint8_window_df, memory_leak_check):
     """Tests when only the upper bound is provided to a window function call"""
     check_query(
         query,
         uint8_window_df,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
-@pytest.mark.skip("TODO")
-def test_empty_window(uint8_window_df, spark_info, memory_leak_check):
+def test_empty_window(uint8_window_df, memory_leak_check):
     """Tests when the clause inside the OVER term is empty"""
     query = "SELECT STDDEV(A) OVER () FROM table1"
     check_query(
         query,
         uint8_window_df,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_window_no_order(uint8_window_df, spark_info, memory_leak_check):
+def test_window_no_order(uint8_window_df, memory_leak_check):
     """Tests when the window clause does not have an order"""
     query = "SELECT W4, SUM(A) OVER (PARTITION BY W1) FROM table1"
     check_query(
         query,
         uint8_window_df,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
-def test_window_no_rows(uint8_window_df, spark_info, memory_leak_check):
+def test_window_no_rows(uint8_window_df, memory_leak_check):
     """Tests when the window clause does not have order/rows specification"""
     query = "SELECT W4, SUM(A) OVER (PARTITION BY W1) FROM table1"
     check_query(
         query,
         uint8_window_df,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest_mark_multi_rank_nightly
-def test_window_case(uint8_window_df, spark_info):
+def test_window_case(uint8_window_df):
     """Tests windowed window function calls inside of CASE statements. The
        case_args is a list of lists of tuples with the following format:
 
@@ -159,12 +162,13 @@ def test_window_case(uint8_window_df, spark_info):
     _ = check_query(
         query,
         uint8_window_df,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
         return_codegen=True,
+        use_duckdb=True,
     )["pandas_code"]
 
     # TODO: enable checking window fusion once window function calls inside
@@ -174,7 +178,7 @@ def test_window_case(uint8_window_df, spark_info):
 
 @pytest.mark.tz_aware
 @pytest.mark.slow
-def test_tz_aware_partition_by(spark_info):
+def test_tz_aware_partition_by():
     """
     Test that tz-aware data can be used as the input to partition by.
     """
@@ -198,12 +202,13 @@ def test_tz_aware_partition_by(spark_info):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
         convert_columns_tz_naive=["TZ"],
+        use_duckdb=True,
     )
 
 
@@ -222,19 +227,18 @@ def test_tz_aware_partition_by(spark_info):
         ),
     ],
 )
-def test_window_using_function(
-    calculation, window, all_window_df, spark_info, memory_leak_check
-):
+def test_window_using_function(calculation, window, all_window_df, memory_leak_check):
     """Tests case where the PARTITION BY or ORDER BY clause uses a function"""
     query = f"SELECT W4, {calculation} OVER ({window} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM table1"
     check_query(
         query,
         all_window_df,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
@@ -262,7 +266,7 @@ def test_window_using_function(
         ),
     ],
 )
-def test_row_number_without_partition(orders, spark_info, memory_leak_check):
+def test_row_number_without_partition(orders, memory_leak_check):
     """Test using ROW_NUMBER without a partition"""
     query = f"SELECT I32, {', '.join(f'ROW_NUMBER() OVER ({o}) AS C{i}' for i, o in enumerate(orders))} FROM table1"
     ctx = {
@@ -293,14 +297,15 @@ def test_row_number_without_partition(orders, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
+def test_window_pruning_multiple_layers(memory_leak_check):
     """
     Tests a query that will result in a plan with multiple layers
     of projection, filter & window nodes, with complex rel trimming
@@ -311,7 +316,7 @@ def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
     FROM (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY O4 ORDER BY O5) AS RN
         FROM (
-            SELECT 
+            SELECT
                 A, B, E,
                 P1, P3, O4, P5, O5,
                 W1,
@@ -322,7 +327,7 @@ def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
                 LEAD(W2 + W4, -1, -1) OVER (PARTITION BY P2 ORDER BY O2) as W8,
                 W5
             FROM (
-                SELECT 
+                SELECT
                     P1, P2, P3, P4, P5,
                     O1, O2, O3, O4, O5,
                     LEAD(A) OVER (PARTITION BY P1 ORDER BY O1+O2) as W1,
@@ -339,44 +344,6 @@ def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
                 WHERE O1 >= O2
             )
             QUALIFY RANK() OVER (PARTITION BY P1 ORDER BY O2) = DENSE_RANK() OVER (PARTITION BY P1 ORDER BY O2)
-        )
-    )
-    WHERE RN = 1
-    """
-    spark_query = """
-    SELECT A, E, P3, O4, W1, W5, W8
-    FROM (
-        SELECT *, ROW_NUMBER() OVER (PARTITION BY O4 ORDER BY O5) AS RN
-        FROM (
-            SELECT 
-                A, B, E,
-                P1, P3, O4, P5, O5,
-                W1,
-                LEAD(W1 - A) OVER (PARTITION BY P1 ORDER BY O2) as W6,
-                W3,
-                LEAD(W3 + C, 1, -1) OVER (PARTITION BY P3 ORDER BY O2) as W7,
-                W4,
-                LEAD(W2 + W4, -1, -1) OVER (PARTITION BY P2 ORDER BY O2) as W8,
-                W5
-            FROM (
-                SELECT 
-                    P1, P2, P3, P4, P5,
-                    O1, O2, O3, O4, O5,
-                    LEAD(A) OVER (PARTITION BY P1 ORDER BY O1+O2) as W1,
-                    A,
-                    LEAD(B, 2) OVER (PARTITION BY P2 ORDER BY O1+O2) as W2,
-                    B,
-                    LEAD(C) OVER (PARTITION BY P3-P1 ORDER BY O3-O5) as W3,
-                    C,
-                    LEAD(D) OVER (PARTITION BY P4 ORDER BY O4) as W4,
-                    D,
-                    LEAD(E) OVER (PARTITION BY P5 ORDER BY O5) as W5,
-                    E,
-                    RANK() OVER (PARTITION BY P1 ORDER BY O2) = DENSE_RANK() OVER (PARTITION BY P1 ORDER BY O2) as COND
-                FROM TABLE1
-                WHERE O1 >= O2
-            )
-            WHERE cond
         )
     )
     WHERE RN = 1
@@ -405,21 +372,21 @@ def test_window_pruning_multiple_layers(spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 
-def test_window_pruning_single_layer(spark_info, memory_leak_check):
+def test_window_pruning_single_layer(memory_leak_check):
     """
     Variant of test_window_pruning_multiple_layers but with a simpler query
     with only 1 layer of window calls.
     """
     query = """
-    SELECT 
+    SELECT
         A,
         B,
         W2,
@@ -453,10 +420,11 @@ def test_window_pruning_single_layer(spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
 

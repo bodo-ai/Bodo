@@ -46,12 +46,11 @@ def filter_aggregate_transpose_queries(request):
 
 
 @pytest.mark.slow
-def test_filter_aggregate_transpose(
-    basic_df, spark_info, filter_aggregate_transpose_queries
-):
+def test_filter_aggregate_transpose(basic_df, filter_aggregate_transpose_queries):
     """checks for bugs with filter aggregate transpose"""
     check_query(
         filter_aggregate_transpose_queries,
         basic_df,
-        spark_info,
+        None,
+        use_duckdb=True,
     )

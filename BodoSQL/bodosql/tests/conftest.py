@@ -29,7 +29,7 @@ from bodo.tests.conftest import (  # noqa
     memory_leak_check,
 )
 from bodo.tests.iceberg_database_helpers.utils import get_spark
-from bodo.tests.utils import gen_nonascii_list
+from bodo.tests.utils import gen_nonascii_list, set_config
 
 # Patch to avoid PySpark's Py4j exception handler in testing.
 # See:
@@ -104,6 +104,19 @@ def enable_numba_alloc_stats():
     from numba.core.runtime import _nrt_python
 
     _nrt_python.memsys_enable_stats()
+
+
+@pytest.fixture(autouse=True)
+def cpp_backend_disable_jit_fallback(request):
+    """Ensure that an error is thrown instead of falling back to JIT mode when a test marked BODOSQL_CPP utilizes an unsupported plan."""
+    if bodosql.cpp_backend_fallback:
+        marker = request.node.get_closest_marker("bodosql_cpp")
+        if marker:
+            set_config("bodosql.cpp_backend_fallback", False)
+            yield
+            set_config("bodosql.cpp_backend_fallback", True)
+            return
+    yield
 
 
 @pytest.fixture(scope="module")

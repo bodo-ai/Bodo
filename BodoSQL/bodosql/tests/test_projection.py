@@ -20,12 +20,7 @@ def test_literal_project(basic_df, memory_leak_check):
     query1 = "select 12"
 
     check_query(
-        query1,
-        basic_df,
-        None,
-        check_dtype=False,
-        check_names=False,
-        expected_output=pd.DataFrame({"A": [12]}),
+        query1, basic_df, None, check_dtype=False, check_names=False, use_duckdb=True
     )
 
     query2 = "select .23 as mycol"
@@ -40,59 +35,36 @@ def test_literal_project(basic_df, memory_leak_check):
 
     query3 = "select 'hello'"
     check_query(
-        query3,
-        basic_df,
-        None,
-        check_dtype=False,
-        check_names=False,
-        expected_output=pd.DataFrame({"A": ["hello"]}),
+        query3, basic_df, None, check_dtype=False, check_names=False, use_duckdb=True
     )
 
     query4 = "select true"
     check_query(
-        query4,
-        basic_df,
-        None,
-        check_dtype=False,
-        check_names=False,
-        expected_output=pd.DataFrame({"A": [True]}),
+        query4, basic_df, None, check_dtype=False, check_names=False, use_duckdb=True
     )
 
     query5 = "Select true, 1, false, 0, 'hello world', 13"
     check_query(
-        query5,
-        basic_df,
-        None,
-        check_dtype=False,
-        check_names=False,
-        expected_output=pd.DataFrame(
-            {
-                "A": [True],
-                "B": [1],
-                "C": [False],
-                "D": [0],
-                "E": ["hello world"],
-                "F": [13],
-            }
-        ),
+        query5, basic_df, None, check_dtype=False, check_names=False, use_duckdb=True
     )
 
     query6 = "Select X'1313'"
     check_query(
-        query6,
-        basic_df,
-        None,
-        check_dtype=False,
-        check_names=False,
-        expected_output=pd.DataFrame({"A": [bytes.fromhex("1313")]}),
+        query6, basic_df, None, check_dtype=False, check_names=False, use_duckdb=True
     )
 
 
-def test_project_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_project_numeric(bodosql_numeric_types, memory_leak_check):
     """test projection queries"""
     query = "select B, C from table1"
     # TODO: Update check_dtype to be False only on differing numeric types
-    check_query(query, bodosql_numeric_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_numeric_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 def test_project_null(memory_leak_check):
@@ -112,53 +84,62 @@ def test_project_null(memory_leak_check):
     )
 
 
-def test_select_multi_table(join_dataframes, spark_info, memory_leak_check):
+def test_select_multi_table(join_dataframes, memory_leak_check):
     """test selecting columns from multiple tables"""
     check_query(
         "select C, D from table1, table2",
         join_dataframes,
-        spark_info,
+        None,
         use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_select_multi_table_order_by(join_dataframes, spark_info, memory_leak_check):
+def test_select_multi_table_order_by(join_dataframes, memory_leak_check):
     """test selecting and sorting columns from multiple tables"""
     check_query(
         "select C, D from table1, table2 order by D, C",
         join_dataframes,
-        spark_info,
+        None,
         use_duckdb=True,
     )
 
 
-def test_select_all_numerics(bodosql_numeric_types, spark_info, memory_leak_check):
+def test_select_all_numerics(bodosql_numeric_types, memory_leak_check):
     """
     Simplest query possible on numeric types.
     """
     query = "SELECT * FROM table1"
-    check_query(query, bodosql_numeric_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_numeric_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
-@pytest.mark.skip("[BS-45]")
-def test_select_all_large_numerics(
-    bodosql_large_numeric_types, spark_info, memory_leak_check
-):
+def test_select_all_large_numerics(bodosql_large_numeric_types, memory_leak_check):
     """
     Simplest query possible on large numeric types.
     This checks to ensure values aren't truncated.
     """
     query = "SELECT * FROM table1"
-    check_query(query, bodosql_large_numeric_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_large_numeric_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
-def test_select_all_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
+def test_select_all_datetime(bodosql_datetime_types, memory_leak_check):
     """
     Simplest query possible on datetime/timedelta types.
     """
     query = "SELECT * FROM table1"
-    check_query(query, bodosql_datetime_types, spark_info, use_duckdb=True)
+    check_query(query, bodosql_datetime_types, None, use_duckdb=True)
 
 
 @pytest.mark.slow
@@ -176,52 +157,80 @@ def test_select_all_interval(bodosql_interval_types, memory_leak_check):
     )
 
 
-def test_select_all_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_select_all_boolean(bodosql_boolean_types, memory_leak_check):
     """
     Simplest query possible on boolean tables.
     """
     query = "SELECT * FROM table1"
-    check_query(query, bodosql_boolean_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_boolean_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
-def test_select_all_string(bodosql_string_types, spark_info, memory_leak_check):
+def test_select_all_string(bodosql_string_types, memory_leak_check):
     """
     Simplest query possible on string tables.
     """
     query = "SELECT * FROM table1"
-    check_query(query, bodosql_string_types, spark_info)
+    check_query(
+        query,
+        bodosql_string_types,
+        None,
+        use_duckdb=True,
+    )
 
 
-def test_select_expand_literal(basic_df, spark_info, memory_leak_check):
+def test_select_expand_literal(basic_df, memory_leak_check):
     """
     Tests select with all literals is expanded to
     the size of the input table.
     """
     query = "SELECT 1, 2, 'A' FROM table1"
-    check_query(query, basic_df, spark_info, check_names=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
-def test_select_literal_no_table(basic_df, spark_info, memory_leak_check):
+def test_select_literal_no_table(basic_df, memory_leak_check):
     """
     Tests that literals can be selected with no input table.
     """
     query = "SELECT 1, 2, 'A'"
-    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
-def test_select_all_nullable_numeric(
-    bodosql_nullable_numeric_types, spark_info, memory_leak_check
-):
+def test_select_all_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_check):
     """
     Simplest query possible on nullable numeric tables.
     """
     query = "SELECT * FROM table1"
-    check_query(query, bodosql_nullable_numeric_types, spark_info, check_dtype=False)
+    check_query(
+        query,
+        bodosql_nullable_numeric_types,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
-def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
+def test_select_from_simple(join_dataframes, memory_leak_check):
     """
     tests that the select and from operators are working correctly for simple cases
     """
@@ -249,19 +258,21 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query1,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray1,
+        use_duckdb=True,
     )
     check_query(
         query2,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray2,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_nested_select_from(join_dataframes, spark_info, memory_leak_check):
+def test_nested_select_from(join_dataframes, memory_leak_check):
     """
     Tests that simple nested SQL queries using only select and from work as intended
     """
@@ -284,13 +295,14 @@ def test_nested_select_from(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_check):
+def test_heavily_nested_select_from(join_dataframes, memory_leak_check):
     """
     Tests that heavily nested SQL queries using only select and from work as intended
     """
@@ -322,8 +334,9 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
@@ -342,4 +355,9 @@ def test_decimal(memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    check_query(query, ctx, None, expected_output=df)
+    check_query(
+        query,
+        ctx,
+        None,
+        use_duckdb=True,
+    )

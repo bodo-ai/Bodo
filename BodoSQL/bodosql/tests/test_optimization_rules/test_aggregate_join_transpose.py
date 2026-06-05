@@ -58,12 +58,13 @@ def aggregate_join_transpose_queries(request):
 
 @pytest.mark.slow
 def test_aggregate_join_transpose(
-    simple_join_fixture, spark_info, aggregate_join_transpose_queries
+    simple_join_fixture, aggregate_join_transpose_queries
 ):
     """checks for bugs with the Aggregate Join transpose rule"""
     check_query(
         aggregate_join_transpose_queries,
         simple_join_fixture,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
