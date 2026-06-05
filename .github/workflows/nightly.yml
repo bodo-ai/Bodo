@@ -56,6 +56,7 @@ jobs:
       test-type: compiler
       runner-id: ubuntu-latest
       num-workers: 1
+    secrets: inherit
 
   # bodo-compiler-2p:
   #   needs: create-test-marker
@@ -70,6 +71,7 @@ jobs:
   #     partition: bodo_${{ matrix.batch }}of30
   #     runner-id: ubuntu-latest
   #     num-workers: 2
+  #   secrets: inherit
 
   bodo-cache:
     needs: create-test-marker
@@ -79,6 +81,7 @@ jobs:
       test-type: cache
       runner-id: ubuntu-latest
       num-workers: 2
+    secrets: inherit
 
   # bodo-spawn-1p:
   #   needs: create-test-marker
@@ -89,6 +92,7 @@ jobs:
   #     test-type: spawn
   #     runner-id: ubuntu-latest
   #     num-workers: 1
+  #     secrets: inherit
 
   bodo-spawn-2p:
     needs: create-test-marker
@@ -103,6 +107,7 @@ jobs:
       test-type: spawn
       runner-id: ubuntu-latest
       num-workers: 2
+    secrets: inherit
 
   # bodo-df-lib-1p:
   #   needs: create-test-marker
@@ -117,6 +122,7 @@ jobs:
   #     test-type: df_lib
   #     runner-id: ubuntu-latest
   #     num-workers: 1
+  #     secrets: inherit
 
   bodo-df-lib-2p:
     needs: create-test-marker
@@ -131,6 +137,7 @@ jobs:
       test-type: df_lib
       runner-id: ubuntu-latest
       num-workers: 2
+    secrets: inherit
 
   bodosql-1p:
     needs: create-test-marker
@@ -144,6 +151,7 @@ jobs:
       test-type: sql
       runner-id: ubuntu-latest
       num-workers: 1
+    secrets: inherit
 
   # bodosql-2p:
   #   needs: create-test-marker
@@ -157,6 +165,7 @@ jobs:
   #     test-type: sql
   #     runner-id: ubuntu-latest
   #     num-workers: 2
+  #     secrets: inherit
 
   bodosql-cache:
     needs: create-test-marker
@@ -166,6 +175,7 @@ jobs:
       test-type: sql_cache
       runner-id: ubuntu-latest
       num-workers: 2
+    secrets: inherit
 
   # bodosql-spawn-1p:
   #   needs: create-test-marker
@@ -176,6 +186,7 @@ jobs:
   #     test-type: sql_spawn
   #     runner-id: ubuntu-latest
   #     num-workers: 1
+  #     secrets: inherit
 
   bodosql-spawn-2p:
     needs: create-test-marker
@@ -186,3 +197,4 @@ jobs:
       test-type: sql_spawn
       runner-id: ubuntu-latest
       num-workers: 1
+    secrets: inherit

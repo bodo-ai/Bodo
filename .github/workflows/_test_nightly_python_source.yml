@@ -196,10 +196,17 @@ jobs:
           # For caching tests we need to update the location of the decryption file.
           # We set the absolute path as an environment variable.
           BODO_TRACING_DECRYPTION_FILE_PATH: ${{ github.workspace }}/buildscripts/decompress_traces.py
-          # Testing credentials
-          SF_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SF_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          # Testing Credentials
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
           SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
           SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
-          AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_ICEBERG_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_ICEBERG_ACCESS_KEY }}
+          SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
+          AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+          AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+          BODO_TEST_SQL_DB_CREDENTIAL: ${{ secrets.BODO_TEST_SQL_DB_CREDENTIAL }}
+          BODO_TEST_ORACLE_DB_CREDENTIAL: ${{ secrets.BODO_TEST_ORACLE_DB_CREDENTIAL }}
+          AZURE_CLIENT_ID:  ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
