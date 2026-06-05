@@ -30,9 +30,7 @@ jobs:
       - id: set-marker
         name: Create Test Marker
         run: |
-          # MARKER="${{ inputs.pytest-marker }}"
-          # Debugging (TODO: reenable snowflake tests)
-          MARKER="not snowflake"
+          MARKER="${{ inputs.pytest-marker }}"
 
           # Add "not weekly" unless running weekly tests
           if [[ "${{ inputs.weekly }}" != "true" ]]; then
