@@ -92,42 +92,100 @@ jobs:
         run: |
           # For caching tests we need to update the location of the decryption file.
           # We set the absolute path as an environment variable.
-          export BODO_TRACING_DECRYPTION_FILE_PATH="$WORKING_DIR/buildscripts/decompress_traces.py"
+          export BODO_TRACING_DECRYPTION_FILE_PATH=\
+              "$WORKING_DIR/buildscripts/decompress_traces.py"
 
-          # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode to avoid importing JIT during test collection.
-          PYTEST_IGNORE="--ignore bodo/tests/test_streaming --ignore bodo/tests/caching_tests"
+          # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode
+          # to avoid importing JIT during test collection.
+          PYTEST_IGNORE="--ignore bodo/tests/test_streaming \
+          --ignore bodo/tests/caching_tests"
 
-          if [[ "$TEST_TYPE" == "sql*" ]]; then
-              cd $WORKING_DIR/BodoSQL
+          if [[ "$TEST_TYPE" == sql* ]]; then
+              cd "$WORKING_DIR/BodoSQL"
           fi
 
-          if [[ "$TEST_TYPE" == "cache" ]]; then    
-              python -m bodo.runtests_caching "$TEST_NAME" "$NP" bodo/tests/caching_tests
+          if [[ "$TEST_TYPE" == "cache" ]]; then
+              python -m bodo.runtests_caching \
+                  "$TEST_NAME" \
+                  "$NP" \
+                  bodo/tests/caching_tests
+
           elif [[ "$TEST_TYPE" == "spawn" ]]; then
               # Disabling the DataFrame library for spawn tests since some of the tests
               # create Pandas manager states for testing that are not fully functional.
               export BODO_ENABLE_DATAFRAME_LIBRARY=0
               export BODO_TEST_SPAWN_MODE=1
-              pytest -s -v -Wignore -m "$PYTEST_MARKER" $PYTEST_IGNORE \
-                  bodo/tests --junitxml=pytest-report-spawn-mode.xml --test-run-title="$TEST_NAME"
+              export BODO_NUM_WORKERS="$NP"
+
+              pytest \
+                  -s -v -Wignore \
+                  -m "$PYTEST_MARKER" \
+                  $PYTEST_IGNORE \
+                  bodo/tests \
+                  --junitxml=pytest-report-spawn-mode.xml \
+                  --test-run-title="$TEST_NAME"
+
           elif [[ "$TEST_TYPE" == "df_lib" ]]; then
               export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=1
-              pytest -s -v -Wignore -m "$PYTEST_MARKER and not jit_dependency" $PYTEST_IGNORE \
-                  bodo/tests --junitxml=pytest-report-df-library.xml --test-run-title="$TEST_NAME"
-              # Run tests with JIT dependency separately to avoid JIT imports impacting other tests.
-              pytest -s -v -Wignore -m "$PYTEST_MARKER and jit_dependency" $PYTEST_IGNORE \
-                  bodo/tests --junitxml=pytest-report-df-library-jit-dependency.xml --test-run-title="$TEST_NAME - JIT"
+              export BODO_NUM_WORKERS="$NP"
+
+              pytest \
+                  -s -v -Wignore \
+                  -m "$PYTEST_MARKER and not jit_dependency" \
+                  $PYTEST_IGNORE \
+                  bodo/tests \
+                  --junitxml=pytest-report-df-library.xml \
+                  --test-run-title="$TEST_NAME"
+
+              # Run tests with JIT dependency separately to avoid JIT imports
+              # impacting other tests.
+              pytest \
+                  -s -v -Wignore \
+                  -m "$PYTEST_MARKER and jit_dependency" \
+                  $PYTEST_IGNORE \
+                  bodo/tests \
+                  --junitxml=pytest-report-df-library-jit-dependency.xml \
+                  --test-run-title="$TEST_NAME - JIT"
+
           elif [[ "$TEST_TYPE" == "compiler" ]]; then
               # Some tests assume a batch size of 4096 for testing specific behavior.
               export BODO_STREAMING_BATCH_SIZE=4096
-              python -m bodo.runtests "$TEST_NAME" "$NP" --pyargs bodo -s -v -m "$PYTEST_MARKER"
+
+              python -m bodo.runtests \
+                  "$TEST_NAME" \
+                  "$NP" \
+                  --pyargs bodo \
+                  -s -v \
+                  -m "$PYTEST_MARKER"
+
           elif [[ "$TEST_TYPE" == "sql_cache" ]]; then
-              python -u -m bodosql.runtests_caching "$TEST_NAME" "$NP" bodosql/tests/caching_tests/
+              python -u -m bodosql.runtests_caching \
+                  "$TEST_NAME" \
+                  "$NP" \
+                  bodosql/tests/caching_tests/
+
           elif [[ "$TEST_TYPE" == "sql_spawn" ]]; then
               export BODO_TEST_SPAWN_MODE=1
-              pytest -s -v -p no:faulthandler -Wignore -m "$PYTEST_MARKER" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="$TEST_NAME"
+              export BODO_NUM_WORKERS="$NP"
+
+              pytest \
+                  -s -v \
+                  -p no:faulthandler \
+                  -Wignore \
+                  -m "$PYTEST_MARKER" \
+                  bodosql/tests \
+                  --junitxml=pytest-report-sql-spawn-mode.xml \
+                  --test-run-title="$TEST_NAME"
+
           elif [[ "$TEST_TYPE" == "sql" ]]; then
-              python -u -m bodosql.runtests "$TEST_NAME" "$NP" -s -v -p no:faulthandler -m "$PYTEST_MARKER" bodosql/tests/
+              python -u -m bodosql.runtests \
+                  "$TEST_NAME" \
+                  "$NP" \
+                  -s -v \
+                  -p no:faulthandler \
+                  -m "$PYTEST_MARKER" \
+                  bodosql/tests/
+
           else
               echo "Invalid TEST_TYPE: $TEST_TYPE"
               exit 1
