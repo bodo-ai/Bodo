@@ -378,6 +378,7 @@ def test_trimmed_multi_key_cond_inner_join(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     """
     Tests using non-ascii in an implicit join via select distinct.
