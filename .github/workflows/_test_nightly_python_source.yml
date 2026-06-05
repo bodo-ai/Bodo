@@ -199,7 +199,6 @@ jobs:
           # Testing credentials
           SF_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
           SF_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
           SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
           SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
           AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_ICEBERG_STORAGE_ACCOUNT }}
