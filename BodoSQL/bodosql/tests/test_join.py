@@ -194,6 +194,7 @@ def test_or_join(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_join_types(join_dataframes, join_type, memory_leak_check):
     """test all possible join types"""
     if any(
@@ -214,6 +215,7 @@ def test_join_types(join_dataframes, join_type, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_join_different_size_tables(join_dataframes, join_type, memory_leak_check):
     """tests that join operations still works when the dataframes have different sizes"""
     if any(
@@ -309,6 +311,7 @@ def test_nested_or_join(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nested_and_join(join_dataframes, memory_leak_check):
     """tests that nested joins work with implicit joins using 'and'"""
 
@@ -351,6 +354,7 @@ def test_join_boolean(bodosql_boolean_types, join_type, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_multi_key_join_types(join_dataframes, join_type, memory_leak_check):
     """test that for all possible join types "and equality conditions" turn into multi key join"""
     # Note: We don't check the generated code because column ordering isn't deterministic
@@ -626,6 +630,7 @@ def test_join_invalid_condition(memory_leak_check):
 @pytest.mark.skipif(
     "AGENT_NAME" in os.environ, reason="Assertion fails on Azure only [BSE-3585]"
 )
+@pytest.mark.bodosql_cpp
 def test_join_broadcast_hint(memory_leak_check, capfd):
     """
     Test that providing a broadcast hint for a join provides
