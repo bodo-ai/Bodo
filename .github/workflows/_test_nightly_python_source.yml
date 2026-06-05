@@ -120,7 +120,6 @@ jobs:
                   "${PYTEST_IGNORE[@]}" \
                   bodo/tests \
                   --junitxml=pytest-report-spawn-mode.xml \
-                  --test-run-title="$TEST_NAME"
 
           elif [[ "$TEST_TYPE" == "df_lib" ]]; then
               export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=1
@@ -132,7 +131,6 @@ jobs:
                   "${PYTEST_IGNORE[@]}" \
                   bodo/tests \
                   --junitxml=pytest-report-df-library.xml \
-                  --test-run-title="$TEST_NAME"
 
               # Run tests with JIT dependency separately to avoid JIT imports
               # impacting other tests.
@@ -142,7 +140,6 @@ jobs:
                   "${PYTEST_IGNORE[@]}" \
                   bodo/tests \
                   --junitxml=pytest-report-df-library-jit-dependency.xml \
-                  --test-run-title="$TEST_NAME - JIT"
 
           elif [[ "$TEST_TYPE" == "compiler" ]]; then
               # Some tests assume a batch size of 4096 for testing specific behavior.
@@ -172,7 +169,6 @@ jobs:
                   -m "$PYTEST_MARKER" \
                   bodosql/tests \
                   --junitxml=pytest-report-sql-spawn-mode.xml \
-                  --test-run-title="$TEST_NAME"
 
           elif [[ "$TEST_TYPE" == "sql" ]]; then
               python -u -m bodosql.runtests \
@@ -189,7 +185,7 @@ jobs:
           fi
         env:
           WORKING_DIR: ${{ github.workspace }}
-          TEST_NAME: "${{ inputs.test-type }}-${{ github.run_id }}"
+          TEST_NAME: "${{ inputs.test-type }}-${{ runner.os }}"
           TEST_TYPE: ${{ inputs.test-type }}
           NP: ${{ inputs.num-workers }}
           BODO_NUM_WORKERS: ${{ inputs.num-workers }}

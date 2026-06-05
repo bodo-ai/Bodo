@@ -116,7 +116,7 @@ jobs:
   #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
   #     extra-markers: df_lib
   #     partition: bodo_df_${{ matrix.batch }}of2
-  #     test-type: df-lib
+  #     test-type: df_lib
   #     runner-id: ubuntu-latest
   #     num-workers: 1
 
@@ -130,7 +130,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: df_lib
       partition: bodo_df_${{ matrix.batch }}of5
-      test-type: df-lib
+      test-type: df_lib
       runner-id: ubuntu-latest
       num-workers: 2
 
