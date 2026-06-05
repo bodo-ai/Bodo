@@ -3684,7 +3684,6 @@ def test_spill_to_s3_empty(tmp_s3_path: str):
     del pool
 
 
-@pytest.mark.skip("TODO(scott): Fix/reenable")
 def test_spill_to_azure(abfs_fs, tmp_abfs_path: str):
     """
     Test that data spilled to ABFS and read back is
