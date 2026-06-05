@@ -112,7 +112,6 @@ jobs:
               # create Pandas manager states for testing that are not fully functional.
               export BODO_ENABLE_DATAFRAME_LIBRARY=0
               export BODO_TEST_SPAWN_MODE=1
-              export BODO_NUM_WORKERS="$NP"
 
               pytest \
                   -s -v -Wignore \
@@ -123,7 +122,6 @@ jobs:
 
           elif [[ "$TEST_TYPE" == "df_lib" ]]; then
               export BODO_ENABLE_TEST_DATAFRAME_LIBRARY=1
-              export BODO_NUM_WORKERS="$NP"
 
               pytest \
                   -s -v -Wignore \
@@ -160,7 +158,6 @@ jobs:
 
           elif [[ "$TEST_TYPE" == "sql_spawn" ]]; then
               export BODO_TEST_SPAWN_MODE=1
-              export BODO_NUM_WORKERS="$NP"
 
               pytest \
                   -s -v \
