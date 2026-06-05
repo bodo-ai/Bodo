@@ -192,7 +192,7 @@ jobs:
           fi
         env:
           WORKING_DIR: ${{ github.workspace }}
-          TEST_NAME: "${{ github.run_id }}-${{ inputs.test-type }}"
+          TEST_NAME: "${{ inputs.test-type }}-${{ github.run_id }}"
           TEST_TYPE: ${{ inputs.test-type }}
           NP: ${{ inputs.num-workers }}
           BODO_NUM_WORKERS: ${{ inputs.num-workers }}
