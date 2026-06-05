@@ -1,0 +1,54 @@
+name: Bodo Weekly CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      pytest-marker:
+        description: 'Additional pytest marker to select tests to run'
+        required: false
+        default: ""
+        type: string
+      include-windows:
+        description: 'Whether to include Windows tests'
+        required: false
+        default: false
+        type: boolean
+      include-linux-arm:
+        description: 'Whether to include Linux ARM tests'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: '00 21 * * 5'    # 9:00PM EST every Friday
+  pull_request:
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  weekly-linux-64-ci:
+    uses: ./.github/workflows/nightly.yml
+    with:
+      pytest-marker: ${{ inputs.pytest-marker }}
+      weekly: true
+    secrets: inherit
+
+  weekly-windows-64-ci:
+    if: ${{ inputs.include-windows == 'true' }}
+    uses: ./.github/workflows/nightly.yml
+    with:
+      pytest-marker: not slow
+      weekly: false
+      runner-id: windows-latest
+    secrets: inherit
+
+  weekly-linux-arm-ci:
+    if: ${{ inputs.include-linux-arm == 'true' }}
+    uses: ./.github/workflows/nightly.yml
+    with:
+      pytest-marker: not slow
+      weekly: false
+      runner-id: ubuntu-24.04-arm
+    secrets: inherit
