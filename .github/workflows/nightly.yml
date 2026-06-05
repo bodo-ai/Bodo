@@ -96,15 +96,10 @@ jobs:
 
   bodo-spawn-2p:
     needs: create-test-marker
-    strategy:
-      matrix:
-        batch: [1, 2]
-      fail-fast: false
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: spawn_mode
-      partition: bodo_spawn_${{ matrix.batch }}of2
       test-type: spawn
       runner-id: ubuntu-latest
       num-workers: 2
@@ -112,15 +107,10 @@ jobs:
 
   bodo-df-lib-1p:
     needs: create-test-marker
-    strategy:
-      matrix:
-        batch: [1, 2]
-      fail-fast: false
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: df_lib
-      partition: bodo_df_${{ matrix.batch }}of2
       test-type: df_lib
       runner-id: ubuntu-latest
       num-workers: 1
@@ -128,15 +118,10 @@ jobs:
 
   bodo-df-lib-2p:
     needs: create-test-marker
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5]
-      fail-fast: false
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: df_lib
-      partition: bodo_df_${{ matrix.batch }}of5
       test-type: df_lib
       runner-id: ubuntu-latest
       num-workers: 2
