@@ -87,6 +87,7 @@ jobs:
   #   uses: ./.github/workflows/_test_nightly_python_source.yml
   #   with:
   #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: spawn_mode
   #     test-type: spawn
   #     runner-id: ubuntu-latest
   #     num-workers: 1
@@ -99,6 +100,7 @@ jobs:
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+      extra-markers: spawn_mode
       partition: bodo_spawn_${{ matrix.batch }}of2
       test-type: spawn
       runner-id: ubuntu-latest
@@ -112,6 +114,7 @@ jobs:
   #   uses: ./.github/workflows/_test_nightly_python_source.yml
   #   with:
   #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: df_lib
   #     partition: bodo_df_${{ matrix.batch }}of2
   #     test-type: df-lib
   #     runner-id: ubuntu-latest
@@ -125,6 +128,7 @@ jobs:
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+      extra-markers: df_lib
       partition: bodo_df_${{ matrix.batch }}of5
       test-type: df-lib
       runner-id: ubuntu-latest
@@ -170,6 +174,7 @@ jobs:
   #   uses: ./.github/workflows/_test_nightly_python_source.yml
   #   with:
   #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: spawn_mode
   #     test-type: sql_spawn
   #     runner-id: ubuntu-latest
   #     num-workers: 1
@@ -179,6 +184,7 @@ jobs:
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+      extra-markers: spawn_mode
       test-type: sql_spawn
       runner-id: ubuntu-latest
       num-workers: 1
