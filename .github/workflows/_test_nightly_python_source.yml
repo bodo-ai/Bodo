@@ -90,11 +90,6 @@ jobs:
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
       - name: Run Tests
         run: |
-          # For caching tests we need to update the location of the decryption file.
-          # We set the absolute path as an environment variable.
-          export BODO_TRACING_DECRYPTION_FILE_PATH=\
-              "$WORKING_DIR/buildscripts/decompress_traces.py"
-
           # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode
           # to avoid importing JIT during test collection.
           PYTEST_IGNORE=(
@@ -202,6 +197,9 @@ jobs:
           BODO_BUFFER_POOL_REMOTE_MODE: "1"
           BODO_BUFFER_POOL_DEBUG_MODE: "1"
           BODO_SF_WRITE_DEBUG: "1"
+          # For caching tests we need to update the location of the decryption file.
+          # We set the absolute path as an environment variable.
+          BODO_TRACING_DECRYPTION_FILE_PATH: ${{ github.workspace }}/buildscripts/decompress_traces.py
           # Testing credentials
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
