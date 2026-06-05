@@ -64,6 +64,7 @@ jobs:
           fi
 
           echo "pytest-marker=$MARKER" >> "$GITHUB_OUTPUT"
+        shell: bash
 
   bodo-compiler-1p:
     needs: create-test-marker

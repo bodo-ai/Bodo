@@ -67,6 +67,7 @@ jobs:
           append_marker "${{ inputs.extra-markers }}"
 
           echo "PYTEST_MARKER=$MARKER" >> "$GITHUB_ENV"
+        shell: bash
 
       - uses: actions/checkout@v5
 
