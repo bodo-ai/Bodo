@@ -454,6 +454,24 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[1]
             out_empty = left.empty_data.iloc[:, 0]
             return SubstrOpExpression(out_empty, left, 0, len_expr)
+        elif func_name == "ENDSWITH" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            match_expr = op_exprs[1]
+            if not isinstance(match_expr, bodo.pandas.plan.ConstantExpression):
+                raise ValueError(
+                    f"match_expr should be ConstantExpression but instead was {type(match_expr)}"
+                )
+            if not isinstance(match_expr.value, str):
+                raise ValueError(
+                    f"match_expr.value should be string but instead was {type(match_expr.value)}"
+                )
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return ArrowScalarFuncExpression(
+                bool_empty_data,
+                [src],
+                "ends_with",
+                (match_expr.value,),
+            )
 
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
@@ -619,13 +637,9 @@ def java_subplan_to_python_subplan(ctx, java_subplan):
     if subplan_id in subplan_cache:
         return subplan_cache[subplan_id]
 
-    print("subplan start")
-    print(dir(java_subplan))
     cached_plan = java_subplan.getCachedPlan()
     assert cached_plan.getClass().getSimpleName() == "CachedPlanInfo"
     subplan = java_plan_to_python_plan(ctx, cached_plan.getPlan())
-    print("subplan after cached plan conversion")
-
     subplan_cache[subplan_id] = subplan
     return subplan
 
