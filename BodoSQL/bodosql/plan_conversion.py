@@ -29,6 +29,7 @@ from bodo.pandas.plan import (
     LogicalOrder,
     LogicalProjection,
     NullExpression,
+    SubstrOpExpression,
     UnaryOpExpression,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -441,6 +442,18 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
         )
+
+    if operator_class_name == "SqlNullPolicyFunction":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "LEFT" and len(op_exprs) == 2:
+            # Implement LEFT as substr(0,...)
+            left = op_exprs[0]
+            len_expr = op_exprs[1]
+            out_empty = left.empty_data.iloc[:, 0]
+            return SubstrOpExpression(out_empty, left, 0, len_expr)
 
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
