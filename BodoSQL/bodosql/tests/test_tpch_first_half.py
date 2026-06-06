@@ -24,6 +24,7 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q1(tpch_data, memory_leak_check):
     tpch_query = """select
                       l_returnflag,
@@ -104,6 +105,7 @@ def test_tpch_q1(tpch_data, memory_leak_check):
 # multiple processes
 @pytest.mark.timeout(900)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q2(tpch_data, memory_leak_check):
     SIZE = 15
     TYPE = "BRASS"
@@ -342,6 +344,7 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q4(tpch_data, memory_leak_check):
     DATE = "1993-07-01"
     tpch_query = f"""select
@@ -441,6 +444,7 @@ def test_tpch_q5(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q6(tpch_data, memory_leak_check):
     tpch_query = """select
                       sum(l_extendedprice * l_discount) as revenue
