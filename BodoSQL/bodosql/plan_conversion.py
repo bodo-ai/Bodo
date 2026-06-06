@@ -134,6 +134,9 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalValues":
         return java_values_to_python_values(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalCachedSubPlan":
+        return java_subplan_to_python_subplan(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
@@ -591,6 +594,27 @@ def java_join_to_python_join(ctx, java_join):
         # work to do the mapping.
         planFilter = LogicalFilter(empty_join_out, planJoinOrCross, non_equi_exprs)
         return planFilter
+
+
+def java_subplan_to_python_subplan(ctx, java_subplan):
+    """Convert a BodoSQL Java join plan to a Python join plan."""
+
+    if not hasattr(ctx, "subplan_cache"):
+        subplan_cache = {}
+
+    subplan_id = java_subplan.getCacheID()
+    if subplan_id in subplan_cache:
+        return subplan_cache[subplan_id]
+
+    print("subplan start")
+    print(dir(java_subplan))
+    cached_plan = java_subplan.getCachedPlan()
+    assert cached_plan.getClass().getSimpleName() == "CachedPlanInfo"
+    subplan = java_plan_to_python_plan(ctx, cached_plan.getPlan())
+    print("subplan after cached plan conversion")
+
+    subplan_cache[subplan_id] = subplan
+    return subplan
 
 
 def java_rtjf_to_python_rtjf(ctx, java_plan):
