@@ -1,4 +1,4 @@
-name: Bodo Weekly CI
+name: Bodo & BodoSQL Weekly CI
 
 on:
   workflow_dispatch:
@@ -20,6 +20,7 @@ concurrency:
 jobs:
 
   weekly-linux-arm-ci:
+    name: Linux Arm CI
     uses: ./.github/workflows/nightly.yml
     with:
       pytest-marker: ${{ inputs.pytest-marker }}
