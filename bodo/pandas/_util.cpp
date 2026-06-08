@@ -1412,7 +1412,7 @@ static arrow::Status SubstrThreeExec(arrow::compute::KernelContext *ctx,
         int64_t byte_len = off1 - off0;
 
         // If start beyond string length or len == 0 -> empty string
-        if (start_val >= static_cast<int64_t>(byte_len) || len_val == 0) {
+        if (start_val >= byte_len || len_val == 0) {
             ARROW_RETURN_NOT_OK(builder.Append(std::string()));
             continue;
         }
