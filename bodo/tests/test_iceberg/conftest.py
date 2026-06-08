@@ -401,12 +401,7 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     return create_azure_warehouse()
 
 
-@pytest.fixture(
-    params=[
-        "aws-polaris-warehouse",
-        "azure-polaris-warehouse",
-    ]
-)
+@pytest.fixture(params=["aws-polaris-warehouse", "azure-polaris-warehouse"])
 def polaris_connection(
     request, polaris_server, aws_polaris_warehouse, azure_polaris_warehouse
 ):

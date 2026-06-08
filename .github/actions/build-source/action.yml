@@ -7,12 +7,12 @@ inputs:
     default: false
     type: 'boolean'
   build-iceberg:
-    description: 'Whether to build iceberg connector (only applies if build-all is false)'
+    description: 'Whether to build Iceberg connector (only applies if build-all is false)'
     required: false
     default: false
     type: 'boolean'
   build-bodosql:
-    description: 'Whether to build BodoSQL connector (only applies if build-all is false)'
+    description: 'Whether to build BodoSQL (only applies if build-all is false)'
     required: false
     default: false
     type: 'boolean'
