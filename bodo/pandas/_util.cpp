@@ -105,12 +105,11 @@ extractValue(const duckdb::Value &value) {
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
         } break;
         case duckdb::LogicalTypeId::INTERVAL: {
-            auto interval_type = arrow::duration(arrow::TimeUnit::NANO);
             duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
-            return arrow::MakeScalar(
-                       interval_type,
-                       duckdb::Interval::GetMicro(extracted) * 1000)
-                .ValueOrDie();
+            // Convert to nanoseconds total, dropping month/day information
+            int64_t total_nanos = duckdb::Interval::GetNanoseconds(extracted);
+            auto dur_type = arrow::duration(arrow::TimeUnit::NANO);
+            return arrow::MakeScalar(dur_type, total_nanos).ValueOrDie();
         } break;
         default:
             throw std::runtime_error("extractValue unhandled type." +
@@ -163,6 +162,10 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
         case duckdb::LogicalTypeId::TIME: {
             auto time_type = arrow::time64(arrow::TimeUnit::NANO);
             return arrow::MakeNullScalar(time_type);
+        } break;
+        case duckdb::LogicalTypeId::INTERVAL: {
+            auto dur_type = arrow::duration(arrow::TimeUnit::NANO);
+            return arrow::MakeNullScalar(dur_type);
         } break;
         case duckdb::LogicalTypeId::TIMESTAMP_TZ: {
             auto timestamp_type =

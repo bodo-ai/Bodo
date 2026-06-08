@@ -158,15 +158,22 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
     int64_t val) {
-    std::lldiv_t div_res = std::div((long long)val, 1000LL);
-    if (div_res.rem != 0) {
-        throw std::runtime_error(
-            "make_const_timedelta_ns_expr only supports values with "
-            "microsecond precision since duckdb::Value::INTERVAL only supports "
-            "microsecond precision");
-    }
+    // DuckDB INTERVAL only supports microsecond precision, so truncate
+    int64_t micros = val / 1000;
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
-        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(div_res.quot)));
+        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(micros)));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
+    int32_t months, int32_t days, int64_t nanos) {
+    duckdb::interval_t interval_val;
+    interval_val.months = months;
+    interval_val.days = days;
+    // Round to nearest microsecond (DuckDB INTERVAL only supports
+    // microsecond precision)
+    interval_val.micros = (nanos + 500LL) / 1000LL;
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::INTERVAL(interval_val));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
