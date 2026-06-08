@@ -1413,12 +1413,6 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 scalar_func_data.arrow_func_name.c_str());
             arrow::compute::StrftimeOptions opts(fmt_str);
             result = do_arrow_compute_unary(res, "strftime", &opts);
-        } else if (scalar_func_data.arrow_func_name == "strptime") {
-            auto [format_str, unit_str, error_is_null] =
-                get_py_strptime_args(scalar_func_data.args);
-            arrow::compute::StrptimeOptions opts(format_str, unit_str,
-                                                 error_is_null);
-            result = do_arrow_compute_unary(res, "strptime", &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);

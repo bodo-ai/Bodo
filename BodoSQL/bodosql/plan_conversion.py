@@ -311,10 +311,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     date_expr.empty_data.iloc[:, 0]
                     + interval_expr.empty_data.iloc[:, 0]
                 )
-                out_empty = (
-                    date_expr.empty_data.iloc[:, 0]
-                    + interval_expr.empty_data.iloc[:, 0]
-                )
                 result = ArithOpExpression(
                     out_empty, date_expr, interval_expr, "__add__"
                 )
@@ -324,9 +320,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     result_type.pyarrow_dtype
                 ):
                     date32_empty = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
-                    result = ArrowScalarFuncExpression(
-                        date32_empty, [result], "cast", (pa.date32(),)
-                    )
+                    result = CastExpression(date32_empty, result)
                 return result
         if func_name in ("DATE_SUB", "SUBDATE"):
             # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)

@@ -509,7 +509,7 @@ def test_getdate(query, spark_info, memory_leak_check):
         check_names=False,
         check_dtype=False,
         equivalent_spark_query=spark_query,
-        only_jit_1DVar=True,
+        only_jit_1DVar=not bodosql.use_cpp_backend,
     )
 
 
@@ -857,6 +857,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_utc_date(basic_df, spark_info, memory_leak_check):
     """tests utc_date"""
 
@@ -1025,6 +1026,7 @@ def test_tz_aware_microsecond_case(tz_aware_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_dayname_cols(dt_fn_dataframe, memory_leak_check):
     """tests the dayname function on column inputs. Needed since the equivalent function has different syntax"""
     query = "SELECT DAYNAME(timestamps) as OUTPUT from table1"
@@ -1053,6 +1055,7 @@ def test_dayname_cols(dt_fn_dataframe, memory_leak_check):
         ("'2021-03-03'", "'2021-03-13'", "'2021-03-01'"),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_dayname_scalars(basic_df, date_literal_strings, memory_leak_check):
     """tests the dayname function on scalar inputs. Needed since the equivalent function has different syntax"""
 
@@ -1074,6 +1077,7 @@ def test_dayname_scalars(basic_df, date_literal_strings, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_dayname_date_cols(date_df, memory_leak_check):
     """tests the dayname function on column inputs of date objects."""
     query = "SELECT DAYNAME(A) AS OUTPUT from table1"
@@ -1103,6 +1107,7 @@ def day_name_func(date):
     return dows[date.weekday()]
 
 
+@pytest.mark.bodosql_cpp
 def test_dayname_date_scalars(basic_df, memory_leak_check):
     """tests the dayname function on scalar inputs of date objects."""
 
@@ -1125,6 +1130,7 @@ def test_dayname_date_scalars(basic_df, memory_leak_check):
     "fn_name", ["MONTHNAME", pytest.param("MONTH_NAME", marks=pytest.mark.slow)]
 )
 @pytest.mark.parametrize("wrap_case", [True, False])
+@pytest.mark.bodosql_cpp
 def test_monthname_cols(fn_name, wrap_case, dt_fn_dataframe, memory_leak_check):
     """tests the monthname function on column inputs."""
 
@@ -1152,6 +1158,7 @@ def test_monthname_cols(fn_name, wrap_case, dt_fn_dataframe, memory_leak_check):
 
 
 @pytest.mark.parametrize("fn_name", ["MONTHNAME", "MONTH_NAME"])
+@pytest.mark.bodosql_cpp
 def test_monthname_scalars(fn_name, basic_df, memory_leak_check):
     """tests the monthname function on scalar inputs"""
 
@@ -1173,6 +1180,7 @@ def test_monthname_scalars(fn_name, basic_df, memory_leak_check):
     "fn_name", ["MONTHNAME", pytest.param("MONTH_NAME", marks=pytest.mark.slow)]
 )
 @pytest.mark.parametrize("wrap_case", [True, False])
+@pytest.mark.bodosql_cpp
 def test_monthname_date_cols(fn_name, wrap_case, date_df, memory_leak_check):
     """tests the monthname function on column inputs of date objects."""
 
@@ -1213,6 +1221,7 @@ def month_name_func(date):
 
 
 @pytest.mark.parametrize("fn_name", ["MONTHNAME", "MONTH_NAME"])
+@pytest.mark.bodosql_cpp
 def test_monthname_date_scalars(fn_name, basic_df, memory_leak_check):
     """tests the monthname function on scalar inputs of date objects."""
 
@@ -1229,6 +1238,7 @@ def test_monthname_date_scalars(fn_name, basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_makedate_scalars(basic_df, dt_fn_dataframe, memory_leak_check):
     """tests makedate on scalar values"""
 
@@ -1328,6 +1338,7 @@ def valid_extract_strings(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_extract_cols(
     spark_info, dt_fn_dataframe, valid_extract_strings, memory_leak_check
 ):
@@ -1359,6 +1370,7 @@ def test_extract_cols(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_extract_scalars(
     spark_info, dt_fn_dataframe, valid_extract_strings, memory_leak_check
 ):
@@ -1427,6 +1439,7 @@ def test_extract_scalars(
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
     selects = []
     for unit in ["year", "q", "mons", "wk", "dayofmonth", "dow", "hrs", "min", "s"]:
@@ -2398,6 +2411,7 @@ def test_snowflake_tz_dateadd(tz_dateadd_data, case):
     ],
 )
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_datedadd_date_literals(query, expected_output, basic_df, memory_leak_check):
     """
     Checks that calling DATEADD/TIMEADD/TIMESTAMPADD on datetime.date/string literals behaves as expected.
@@ -2438,7 +2452,6 @@ def test_timestamp_add_scalar(mysql_interval_str, dt_fn_dataframe, memory_leak_c
         check_names=False,
         check_dtype=False,
         expected_output=result,
-        only_jit_1DVar=True,
     )
 
 
