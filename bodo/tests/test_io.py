@@ -1565,10 +1565,9 @@ def test_file_not_found(memory_leak_check):
     _check_filenotfound("nofile.pq", test_pq)
     _check_filenotfound("nofile.json", test_json)
     _check_filenotfound("s3://bodo-test/csv_data_date_not_found.csv", test_csv)
-    # TODO (BSE: 5040): Fix anonymous GCS access.
-    # _check_filenotfound(
-    #     "gcs://anaconda-public-data/nyc-taxi/nyc.parquet/art.0.parquet", test_pq
-    # )
+    _check_filenotfound(
+        "gcs://anaconda-public-data/nyc-taxi/nyc.parquet/art.0.parquet", test_pq
+    )
 
 
 @pytest.mark.slow

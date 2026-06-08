@@ -338,7 +338,9 @@ def test_column_pruning(iceberg_database, iceberg_table_conn, memory_leak_check)
 
 
 @pytest.mark.slow
-@pytest.mark.skip(reason="TODO xxxx: Fix / reenable tests")
+@pytest.mark.skip(
+    reason="BSE-5453: Fix issue with iceberg dictionary encoding and reenable tests."
+)
 @pytest.mark.parametrize(
     "dict_encode_in_bodo",
     [
