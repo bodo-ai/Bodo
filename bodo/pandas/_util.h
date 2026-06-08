@@ -456,7 +456,7 @@ size_t col_ref_map_lookup(
  * @brief Extract int scalar from arrow::Datum as int64
  *
  * @param d the input arrow Datum
- * @return nullptr if Datum is not a valid integer, else the integer
+ * @return nullopt if Datum is not a valid integer, else the integer
  */
 std::optional<int64_t> ExtractIntScalar(const arrow::Datum &d);
 
