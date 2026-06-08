@@ -1,4 +1,4 @@
-name: Bodo Nightly CI
+name: Bodo & BodoSQL Nightly CI
 
 on:
   workflow_dispatch:
