@@ -535,6 +535,61 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (start_expr.value, len_expr.value, 1),
             )
 
+    if operator_class_name == "SqlLikeOperator":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "LIKE" and len(op_exprs) == 2:
+            left = op_exprs[0]
+            like_expr = op_exprs[1]
+            if not isinstance(like_expr, ConstantExpression):
+                raise ValueError("lik_expr not a ConstantExpression")
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            converted_like, needs_regex, start_match, end_match, match_anything = (
+                bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
+                    like_expr.value, "", False
+                )
+            )
+            if needs_regex:
+                if start_match or end_match or match_anything:
+                    raise NotImplementedError(
+                        "LIKE conversion supports nothing else if regex is required."
+                    )
+                return ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [left],
+                    "match_substring_regex",
+                    (converted_like,),
+                )
+            elif start_match:
+                if end_match or match_anything:
+                    raise NotImplementedError(
+                        "LIKE conversion supports nothing else if start_match is required."
+                    )
+                return ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [left],
+                    "starts_with",
+                    (converted_like,),
+                )
+            elif end_match:
+                if match_anything:
+                    raise NotImplementedError(
+                        "LIKE conversion supports nothing else if start_match is required."
+                    )
+                return ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [left],
+                    "ends_with",
+                    (converted_like,),
+                )
+            else:
+                raise NotImplementedError(
+                    "LIKE conversion does not currently support match anything."
+                )
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
