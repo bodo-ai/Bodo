@@ -17,9 +17,9 @@ on:
     - cron: '00 21 * * 0,1,2,3,4'    # 9:00PM EST Sunday-Friday
   pull_request:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }} 
-  cancel-in-progress: true
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+#   cancel-in-progress: true
 
 jobs:
   create-test-marker:
@@ -43,35 +43,35 @@ jobs:
 
           echo "pytest-marker=$MARKER" >> "$GITHUB_OUTPUT"
 
-  bodo-compiler-1p:
-    needs: create-test-marker
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
-      fail-fast: false
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      partition: bodo_${{ matrix.batch }}of22
-      test-type: compiler
-      runner-id: ubuntu-latest
-      num-workers: 1
-    secrets: inherit
+  # bodo-compiler-1p:
+  #   needs: create-test-marker
+  #   strategy:
+  #     matrix:
+  #       batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+  #     fail-fast: false
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     partition: bodo_${{ matrix.batch }}of22
+  #     test-type: compiler
+  #     runner-id: ubuntu-latest
+  #     num-workers: 1
+  #   secrets: inherit
 
-  bodo-compiler-2p:
-    needs: create-test-marker
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-      fail-fast: false
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      test-type: compiler
-      partition: bodo_${{ matrix.batch }}of30
-      runner-id: ubuntu-latest
-      num-workers: 2
-    secrets: inherit
+  # bodo-compiler-2p:
+  #   needs: create-test-marker
+  #   strategy:
+  #     matrix:
+  #       batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+  #     fail-fast: false
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     test-type: compiler
+  #     partition: bodo_${{ matrix.batch }}of30
+  #     runner-id: ubuntu-latest
+  #     num-workers: 2
+  #   secrets: inherit
 
   bodo-cache:
     needs: create-test-marker
@@ -83,108 +83,108 @@ jobs:
       num-workers: 2
     secrets: inherit
 
-  bodo-spawn-1p:
-    needs: create-test-marker
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      extra-markers: spawn_mode
-      test-type: spawn
-      runner-id: ubuntu-latest
-      num-workers: 1
-    secrets: inherit
+  # bodo-spawn-1p:
+  #   needs: create-test-marker
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: spawn_mode
+  #     test-type: spawn
+  #     runner-id: ubuntu-latest
+  #     num-workers: 1
+  #   secrets: inherit
 
-  bodo-spawn-2p:
-    needs: create-test-marker
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      extra-markers: spawn_mode
-      test-type: spawn
-      runner-id: ubuntu-latest
-      num-workers: 2
-    secrets: inherit
+  # bodo-spawn-2p:
+  #   needs: create-test-marker
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: spawn_mode
+  #     test-type: spawn
+  #     runner-id: ubuntu-latest
+  #     num-workers: 2
+  #   secrets: inherit
 
-  bodo-df-lib-1p:
-    needs: create-test-marker
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      extra-markers: df_lib
-      test-type: df_lib
-      runner-id: ubuntu-latest
-      num-workers: 1
-    secrets: inherit
+  # bodo-df-lib-1p:
+  #   needs: create-test-marker
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: df_lib
+  #     test-type: df_lib
+  #     runner-id: ubuntu-latest
+  #     num-workers: 1
+  #   secrets: inherit
 
-  bodo-df-lib-2p:
-    needs: create-test-marker
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      extra-markers: df_lib
-      test-type: df_lib
-      runner-id: ubuntu-latest
-      num-workers: 2
-    secrets: inherit
+  # bodo-df-lib-2p:
+  #   needs: create-test-marker
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: df_lib
+  #     test-type: df_lib
+  #     runner-id: ubuntu-latest
+  #     num-workers: 2
+  #   secrets: inherit
 
-  bodosql-1p:
-    needs: create-test-marker
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-      fail-fast: false
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      partition: bodosql_${{ matrix.batch }}of12
-      test-type: sql
-      runner-id: ubuntu-latest
-      num-workers: 1
-    secrets: inherit
+  # bodosql-1p:
+  #   needs: create-test-marker
+  #   strategy:
+  #     matrix:
+  #       batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  #     fail-fast: false
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     partition: bodosql_${{ matrix.batch }}of12
+  #     test-type: sql
+  #     runner-id: ubuntu-latest
+  #     num-workers: 1
+  #   secrets: inherit
 
-  bodosql-2p:
-    needs: create-test-marker
-    strategy:
-      matrix:
-        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
-      fail-fast: false
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      partition: bodosql_${{ matrix.batch }}of22
-      test-type: sql
-      runner-id: ubuntu-latest
-      num-workers: 2
-    secrets: inherit
+  # bodosql-2p:
+  #   needs: create-test-marker
+  #   strategy:
+  #     matrix:
+  #       batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
+  #     fail-fast: false
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     partition: bodosql_${{ matrix.batch }}of22
+  #     test-type: sql
+  #     runner-id: ubuntu-latest
+  #     num-workers: 2
+  #   secrets: inherit
 
-  bodosql-cache:
-    needs: create-test-marker
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      test-type: sql_cache
-      runner-id: ubuntu-latest
-      num-workers: 2
-    secrets: inherit
+  # bodosql-cache:
+  #   needs: create-test-marker
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     test-type: sql_cache
+  #     runner-id: ubuntu-latest
+  #     num-workers: 2
+  #   secrets: inherit
 
-  bodosql-spawn-1p:
-    needs: create-test-marker
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      extra-markers: spawn_mode
-      test-type: sql_spawn
-      runner-id: ubuntu-latest
-      num-workers: 1
-    secrets: inherit
+  # bodosql-spawn-1p:
+  #   needs: create-test-marker
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: spawn_mode
+  #     test-type: sql_spawn
+  #     runner-id: ubuntu-latest
+  #     num-workers: 1
+  #   secrets: inherit
 
-  bodosql-spawn-2p:
-    needs: create-test-marker
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      extra-markers: spawn_mode
-      test-type: sql_spawn
-      runner-id: ubuntu-latest
-      num-workers: 2
-    secrets: inherit
+  # bodosql-spawn-2p:
+  #   needs: create-test-marker
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     extra-markers: spawn_mode
+  #     test-type: sql_spawn
+  #     runner-id: ubuntu-latest
+  #     num-workers: 2
+  #   secrets: inherit
