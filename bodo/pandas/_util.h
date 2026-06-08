@@ -452,20 +452,6 @@ size_t col_ref_map_lookup(
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
     duckdb::idx_t table, duckdb::idx_t column);
 
-/**
- * @brief Extract int scalar from arrow::Datum as int64
- *
- * @param d the input arrow Datum
- * @return nullopt if Datum is not a valid integer, else the integer
- */
-std::optional<int64_t> ExtractIntScalar(const arrow::Datum &d);
-
-/**
- * @brief Register the bodo_substr_three custom arrow kernel.  Safe to
- * call multiple times but does the registration only the first time.
- */
-void RegisterSubstrThree();
-
 #ifdef USE_CUDF
 
 #include <cstdint>

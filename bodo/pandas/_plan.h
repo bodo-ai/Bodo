@@ -397,20 +397,6 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     PyObject *out_schema_py);
 
 /**
- * @brief Create a substring expression from a source, start, and length.
- *
- * @param lhs - the source of the expression
- * @param start_element - the starting index of the substring
- * @param length - the length of the substring
- * @param out_schema_py output data type
- * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
- */
-std::unique_ptr<duckdb::Expression> make_substring_expr(
-    std::unique_ptr<duckdb::Expression> &lhs,
-    std::unique_ptr<duckdb::Expression> &starting_element,
-    std::unique_ptr<duckdb::Expression> &length, PyObject *out_schema_py);
-
-/**
  * @brief Create an expression from a source and function as a string.
  *
  * @param source - the source of the expression

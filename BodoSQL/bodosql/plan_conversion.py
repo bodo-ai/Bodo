@@ -452,8 +452,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 raise ValueError("len_expr not a ConstantExpression")
 
             out_empty = left.empty_data.iloc[:, 0]
-            # return SubstrOpExpression(out_empty, left, 0, len_expr)
-            # dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(
                 out_empty, [left], "utf8_slice_codeunits", (0, len_expr.value, 1)
             )
