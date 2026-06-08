@@ -852,7 +852,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_utc_date(basic_df, spark_info, memory_leak_check):
+def test_utc_date(basic_df, memory_leak_check):
     """tests utc_date"""
 
     query = "SELECT A as A, UTC_DATE() as B from table1"
@@ -1322,9 +1322,7 @@ def valid_extract_strings(request):
 
 
 @pytest.mark.bodosql_cpp
-def test_extract_cols(
-    spark_info, dt_fn_dataframe, valid_extract_strings, memory_leak_check
-):
+def test_extract_cols(dt_fn_dataframe, valid_extract_strings, memory_leak_check):
     query = (
         f"SELECT EXTRACT({valid_extract_strings} from timestamps) AS OUTPUT from table1"
     )
@@ -1355,9 +1353,7 @@ def test_extract_cols(
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_extract_scalars(
-    spark_info, dt_fn_dataframe, valid_extract_strings, memory_leak_check
-):
+def test_extract_scalars(dt_fn_dataframe, valid_extract_strings, memory_leak_check):
     query = f"SELECT CASE WHEN EXTRACT({valid_extract_strings} from timestamps) < 0 THEN -1 ELSE EXTRACT({valid_extract_strings} from timestamps) END AS OUTPUT from table1"
 
     # spark does not allow the microsecond argument for extract, and to compensate, the
@@ -1399,7 +1395,7 @@ def test_extract_scalars(
     ],
 )
 @pytest.mark.bodosql_cpp
-def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
+def test_date_part(query_fmt, answer, memory_leak_check):
     selects = []
     for unit in ["year", "q", "mons", "wk", "dayofmonth", "dow", "hrs", "min", "s"]:
         selects.append(query_fmt.format(unit))
