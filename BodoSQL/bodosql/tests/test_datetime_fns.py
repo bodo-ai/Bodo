@@ -481,7 +481,7 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
         ),
     ],
 )
-def test_getdate(query, spark_info, memory_leak_check):
+def test_getdate(query, memory_leak_check):
     """Tests the snowflake GETDATE() function"""
 
     # Snowflake's GETDATE is equivalent to spark's CURRENT_TIMESTAMP (when
@@ -491,7 +491,6 @@ def test_getdate(query, spark_info, memory_leak_check):
     # `TO_DATE` to truncate first.
     # Ideally we should be able to mock out the clock source and test GETDATE
     # in isolation.
-    spark_query = query.replace("DATEFN", "CURRENT_DATE()")
     query = query.replace("DATEFN", "TO_DATE(GETDATE())")
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -499,21 +498,18 @@ def test_getdate(query, spark_info, memory_leak_check):
         )
     }
 
-    if query == "SELECT A, GETDATE() - interval '8 weeks' from table1":
-        spark_query = "SELECT A, CURRENT_DATE() - interval '8' weeks from table1"
-
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
         only_jit_1DVar=not bodosql.use_cpp_backend,
     )
 
 
-def test_getdate_dist_len(spark_info, memory_leak_check):
+def test_getdate_dist_len(memory_leak_check):
     """Make sure GETDATE() doesn't create a distributed reduction (to avoid streaming
     hang)
     """
@@ -524,16 +520,15 @@ def test_getdate_dist_len(spark_info, memory_leak_check):
     }
 
     query = "select distinct A, to_date(getdate()) as B from table1"
-    spark_query = query.replace("to_date(getdate())", "current_date()")
 
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )
 
     # make sure scalar to array conversion doesn't require distributed len which leads
@@ -768,9 +763,7 @@ def sysdate_equiv_fns(request):
 
 
 @pytest.mark.slow
-def test_sysdate_equivalents_cols(
-    basic_df, sysdate_equiv_fns, spark_info, memory_leak_check
-):
+def test_sysdate_equivalents_cols(basic_df, sysdate_equiv_fns, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp.
     As the results depend on when the function was run, we precompute a list of valid times.
@@ -799,7 +792,7 @@ def test_sysdate_equivalents_cols(
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=py_output,
@@ -808,7 +801,7 @@ def test_sysdate_equivalents_cols(
 
 
 @pytest.mark.slow
-def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_check):
+def test_sysdate_equivalents_case(sysdate_equiv_fns, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp in case.
     As the results depend on when the function was run, we precompute a list of valid times.
@@ -848,7 +841,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=py_output,
@@ -857,23 +850,13 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
 
 
 @pytest.mark.slow
+@pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_utc_date(basic_df, spark_info, memory_leak_check):
     """tests utc_date"""
 
     query = "SELECT A as A, UTC_DATE() as B from table1"
-    expected_output = pd.DataFrame(
-        {
-            "A": basic_df["TABLE1"]["A"],
-            "B": pd.Timestamp.now(tz="UTC").date(),
-        }
-    )
-    check_query(
-        query,
-        basic_df,
-        spark_info,
-        expected_output=expected_output,
-    )
+    check_query(query, basic_df, None, use_duckdb=True)
 
 
 @pytest.fixture(
@@ -1363,9 +1346,10 @@ def test_extract_cols(
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_dtype=False,
         expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -1393,48 +1377,23 @@ def test_extract_scalars(
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "query_fmt, answer",
+    "query_fmt",
     [
         pytest.param(
             "DATE_PART({!r}, col_dt)",
-            pd.DataFrame(
-                {
-                    "YR": [None, 2010, 2011, 2012, 2013],
-                    "QU": [None, 1, 1, 2, 4],
-                    "MO": [None, 1, 2, 5, 10],
-                    "WE": [None, 2, 8, 19, 43],
-                    "DA": [None, 17, 26, 9, 22],
-                    "DW": [None, 0, 6, 3, 2],
-                    "HR": [None, 0, 3, 16, 5],
-                    "MI": [None, 0, 36, 43, 32],
-                    "SE": [None, 0, 1, 16, 21],
-                }
-            ),
             id="vector-no_case",
         ),
         pytest.param(
             "CASE WHEN EXTRACT(YEAR from col_dt) = 2013 THEN NULL else DATE_PART({!r}, col_dt) END",
-            pd.DataFrame(
-                {
-                    "YR": [None, 2010, 2011, 2012, None],
-                    "QU": [None, 1, 1, 2, None],
-                    "MO": [None, 1, 2, 5, None],
-                    "WE": [None, 2, 8, 19, None],
-                    "DA": [None, 17, 26, 9, None],
-                    "DW": [None, 0, 6, 3, None],
-                    "HR": [None, 0, 3, 16, None],
-                    "MI": [None, 0, 36, 43, None],
-                    "SE": [None, 0, 1, 16, None],
-                }
-            ),
             id="vector-case",
         ),
     ],
@@ -1463,14 +1422,7 @@ def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
         )
     }
 
-    check_query(
-        query,
-        ctx,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        expected_output=answer,
-    )
+    check_query(query, ctx, None, check_names=False, check_dtype=False, use_duckdb=True)
 
 
 @pytest.mark.parametrize(
@@ -1483,32 +1435,15 @@ def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
     ],
 )
 @pytest.mark.tz_aware
-def test_tz_aware_date_part(tz_aware_df, query_fmt, spark_info, memory_leak_check):
+def test_tz_aware_date_part(tz_aware_df, query_fmt, memory_leak_check):
     selects = []
     for unit in ["year", "q", "mons", "wk", "dayofmonth", "hrs", "min", "s"]:
         selects.append(query_fmt.format(unit, unit))
     query = f"SELECT {', '.join(selects)} FROM table1"
-    df = tz_aware_df["TABLE1"]
-    py_output = pd.DataFrame(
-        {
-            "MY_YEAR": df.A.dt.year,
-            "MY_Q": df.A.dt.quarter,
-            "MY_MONS": df.A.dt.month,
-            "MY_WK": df.A.map(lambda t: t.weekofyear),
-            "MY_DAYOFMONTH": df.A.dt.day,
-            "MY_HRS": df.A.dt.hour,
-            "MY_MIN": df.A.dt.minute,
-            "MY_S": df.A.dt.second,
-        }
-    )
+    tz_aware_df["TABLE1"]
 
     check_query(
-        query,
-        tz_aware_df,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        expected_output=py_output,
+        query, tz_aware_df, None, check_names=False, check_dtype=False, use_duckdb=True
     )
 
 
@@ -2937,7 +2872,6 @@ def test_subdate_scalar_int_arg1(
     subdate_equiv_fns,
     dt_fn_dataframe,
     timestamp_date_string_cols,
-    spark_info,
     memory_leak_check,
 ):
     "tests that date_sub/subdate works when the second argument is an integer, on scalar values"
@@ -2949,7 +2883,7 @@ def test_subdate_scalar_int_arg1(
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_names=False,
         equivalent_spark_query=test_query,
         use_duckdb=True,
@@ -3130,7 +3064,7 @@ def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
     )
 
 
-def test_yearweek(spark_info, dt_fn_dataframe, memory_leak_check):
+def test_yearweek(dt_fn_dataframe, memory_leak_check):
     """Test for YEARWEEK, which returns a 6-character string
     with the date's year and week (1-53) concatenated together"""
     query = "SELECT YEARWEEK(timestamps) AS OUTPUT from table1"
@@ -3145,7 +3079,7 @@ def test_yearweek(spark_info, dt_fn_dataframe, memory_leak_check):
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_dtype=False,
         only_python=True,
         expected_output=expected_output,
@@ -3176,7 +3110,7 @@ def test_tz_aware_yearweek(tz_aware_df, memory_leak_check):
     )
 
 
-def test_yearweek_scalars(spark_info, dt_fn_dataframe, memory_leak_check):
+def test_yearweek_scalars(dt_fn_dataframe, memory_leak_check):
     query = "SELECT CASE WHEN YEARWEEK(timestamps) = 0 THEN -1 ELSE YEARWEEK(timestamps) END AS OUTPUT from table1"
 
     expected_output = pd.DataFrame(
@@ -3189,7 +3123,7 @@ def test_yearweek_scalars(spark_info, dt_fn_dataframe, memory_leak_check):
     check_query(
         query,
         dt_fn_dataframe,
-        spark_info,
+        None,
         check_dtype=False,
         only_python=True,
         expected_output=expected_output,
@@ -4893,27 +4827,19 @@ def test_current_date(fn_name, memory_leak_check):
     )
 
 
-def test_months_between(spark_info, date_df, memory_leak_check):
+def test_months_between(date_df, memory_leak_check):
     query = "SELECT MONTHS_BETWEEN(B, A) from table1"
 
     check_query(
-        query,
-        date_df,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
+        query, date_df, None, check_names=False, check_dtype=False, use_duckdb=True
     )
 
 
-def test_add_months(spark_info, date_df, memory_leak_check):
+def test_add_months(date_df, memory_leak_check):
     query = "SELECT ADD_MONTHS(A, -18) from table1"
 
     check_query(
-        query,
-        date_df,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
+        query, date_df, None, check_names=False, check_dtype=False, use_duckdb=True
     )
 
 
@@ -4921,25 +4847,6 @@ def test_time_slice(memory_leak_check):
     ts = pd.Timestamp(2012, 1, 1, 12, 59, 59)
     df = pd.DataFrame({"A": pd.Series([ts] * 12, dtype="datetime64[ns]")})
     ctx = {"TABLE1": df}
-
-    answer = pd.DataFrame(
-        {
-            "t1": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
-            "t2": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
-            "t3": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
-            "t4": pd.Series([pd.Timestamp(2011, 12, 26)] * 12, dtype="datetime64[ns]"),
-            "t5": pd.Series([pd.Timestamp(2012, 1, 1)] * 12, dtype="datetime64[ns]"),
-            "t6": pd.Series(
-                [pd.Timestamp(2012, 1, 1, 12)] * 12, dtype="datetime64[ns]"
-            ),
-            "t7": pd.Series(
-                [pd.Timestamp(2012, 1, 1, 12, 59)] * 12, dtype="datetime64[ns]"
-            ),
-            "t8": pd.Series(
-                [pd.Timestamp(2012, 1, 1, 12, 59, 59)] * 12, dtype="datetime64[ns]"
-            ),
-        }
-    )
 
     time_units = ["YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND"]
 
@@ -4952,6 +4859,4 @@ def test_time_slice(memory_leak_check):
     )
     query += " FROM table1"
 
-    check_query(
-        query, ctx, None, check_names=False, check_dtype=False, expected_output=answer
-    )
+    check_query(query, ctx, None, check_names=False, check_dtype=False, use_duckdb=True)

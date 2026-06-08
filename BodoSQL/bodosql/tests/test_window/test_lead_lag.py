@@ -16,7 +16,7 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_window
 
 
-def test_lead_lag_mixed(spark_info, memory_leak_check):
+def test_lead_lag_mixed(memory_leak_check):
     """Tests the window functions LEAD/LAG with a minimal set of combinations
     that cover the essential of behavior."""
     selects = [
@@ -46,11 +46,12 @@ def test_lead_lag_mixed(spark_info, memory_leak_check):
     pandas_code = check_query(
         query,
         ctx,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         return_codegen=True,
+        use_duckdb=True,
     )["pandas_code"]
 
     # Verify that fusion is working correctly so only one closure is produced
@@ -73,7 +74,7 @@ def test_lead_lag_mixed(spark_info, memory_leak_check):
         pytest.param("LEAD", -2, id="lead_negative", marks=pytest.mark.slow),
     ],
 )
-def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
+def test_lead_lag_shift(func, shift_amt, capfd):
     """
     Test different values for lead/lag with a pass through column,
     not keeping the input
@@ -107,10 +108,11 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             sort_output=True,
             check_dtype=False,
+            use_duckdb=True,
         )
 
     comm = MPI.COMM_WORLD
@@ -267,7 +269,7 @@ def test_lead_lag_defaults(input_arr, default, default_str, use_default):
         )
 
 
-def test_lead_lag_multiple(spark_info, memory_leak_check):
+def test_lead_lag_multiple(memory_leak_check):
     """Tests multiple lead/lag computations alongside other functions that can be done together."""
     window = "OVER (PARTITION BY P ORDER BY O)"
     query = f"SELECT T, I, LEAD(S, 12, '') {window}, ROW_NUMBER() {window}, LAG(I) {window}, LEAD(T, 1, 'foobar') {window} FROM TABLE1"
@@ -284,8 +286,9 @@ def test_lead_lag_multiple(spark_info, memory_leak_check):
     check_query(
         query,
         {"TABLE1": df},
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         only_jit_1DVar=True,
+        use_duckdb=True,
     )

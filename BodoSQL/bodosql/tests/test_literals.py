@@ -4,8 +4,6 @@ Tests that bodoSQL correctly interprets literal values
 For MySql reference used, see https://dev.mysql.com/doc/refman/8.0/en/literals.html
 """
 
-import datetime
-
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -45,9 +43,7 @@ def timedelta_equivalent_values(request):
     return request.param
 
 
-def test_timestamp_literals(
-    basic_df, timestamp_literal_strings, spark_info, memory_leak_check
-):
+def test_timestamp_literals(basic_df, timestamp_literal_strings, memory_leak_check):
     """
     tests that timestamp literals are correctly parsed by BodoSQL
     """
@@ -61,16 +57,14 @@ def test_timestamp_literals(
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-@pytest.mark.skip(
-    "Currently parses with calcite, unsupported timestamp due to a pandas error"
-)
-def test_timestamp_literal_pd_error(basic_df, spark_info, memory_leak_check):
+def test_timestamp_literal_pd_error(basic_df, memory_leak_check):
     """This is a specific test case that is parsed correctly by calcite, but generates a runtime pandas error.
     If we want to support this, it'll probably be a quicker fix then the other ones
     """
@@ -83,25 +77,19 @@ def test_timestamp_literal_pd_error(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.skip(
     "Unsupported timestamp format in Calcite: https://bodo.atlassian.net/browse/BE-3300"
 )
-def test_mysql_timestamp_literal(basic_df, spark_info, memory_leak_check):
+def test_mysql_timestamp_literal(basic_df, memory_leak_check):
     """tests a number of different timestamp formats that are currently supported by MySQL, but which we
     may/may not ultimately end up supporting"""
-
-    spark_query = """
-    SELECT
-        A, TIMESTAMP '2015-07-21', TIMESTAMP '2015-07-21', TIMESTAMP '2015-07-21', TIMESTAMP '2015-07-21', TIMESTAMP '2015-07-21',
-    FROM
-        table1
-    """
 
     query = """
     SELECT
@@ -113,14 +101,14 @@ def test_mysql_timestamp_literal(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
-def test_timestamptz_literal(basic_df, spark_info, memory_leak_check):
+def test_timestamptz_literal(basic_df, memory_leak_check):
     """
     tests that timestamptz literals are correctly parsed by BodoSQL
     """
@@ -180,15 +168,12 @@ def test_date_literal(basic_df, memory_leak_check):
     FROM
         table1
     """
-    py_output = pd.DataFrame(
-        {"A": basic_df["TABLE1"]["A"], "LIT": datetime.date(2015, 7, 21)}
-    )
 
     check_query(
         query1,
         basic_df,
         None,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
@@ -203,21 +188,16 @@ def test_time_literal(basic_df, memory_leak_check):
     FROM
         table1
     """
-    py_output = pd.DataFrame(
-        {"A": basic_df["TABLE1"]["A"], "LIT": bodo.types.Time(10, 3, 56)}
-    )
 
     check_query(
         query1,
         basic_df,
         None,
-        expected_output=py_output,
+        use_duckdb=True,
     )
 
 
-def test_interval_literals(
-    basic_df, spark_info, timedelta_equivalent_values, memory_leak_check
-):
+def test_interval_literals(basic_df, timedelta_equivalent_values, memory_leak_check):
     """
     tests that interval literals are correctly parsed by BodoSQL
 
@@ -240,7 +220,7 @@ def test_interval_literals(
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         expected_output=expected,
@@ -312,6 +292,38 @@ def test_interval_literals(
                     nanoseconds=7,
                 ),
             ),
+            marks=pytest.mark.weekly,
+        ),
+        pytest.param(
+            (
+                "1 second, 2 year",
+                lambda x: (x + pd.DateOffset(years=2)) + pd.Timedelta(seconds=1),
+            ),
+            marks=pytest.mark.weekly,
+        ),
+        pytest.param(
+            (
+                "1 year, 2 month, 3 second",
+                lambda x: (x + pd.DateOffset(years=1, months=2))
+                + pd.Timedelta(seconds=3),
+            ),
+            marks=pytest.mark.weekly,
+        ),
+        pytest.param(
+            (
+                "1 days, 2 hrs, 3 mins, 4s, 5ms, 6us, 7ns",
+                lambda x: x
+                + pd.Timedelta(
+                    days=1,
+                    hours=2,
+                    minutes=3,
+                    seconds=4,
+                    milliseconds=5,
+                    microseconds=6,
+                    nanoseconds=7,
+                ),
+            ),
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             (
@@ -370,7 +382,7 @@ def test_interval_literals_addition(interval_addition_values, memory_leak_check)
     )
 
 
-def test_boolean_literals(basic_df, spark_info, memory_leak_check):
+def test_boolean_literals(basic_df, memory_leak_check):
     """
     tests that boolean literals are correctly parsed by BodoSQL
     """
@@ -384,14 +396,15 @@ def test_boolean_literals(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_boolean_literals_case_insensitivity(basic_df, spark_info, memory_leak_check):
+def test_boolean_literals_case_insensitivity(basic_df, memory_leak_check):
     """
     tests that boolean literals are correctly parsed regardless of case by BodoSQL
     """
@@ -405,13 +418,14 @@ def test_boolean_literals_case_insensitivity(basic_df, spark_info, memory_leak_c
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_string_literals(basic_df, spark_info, memory_leak_check):
+def test_string_literals(basic_df, memory_leak_check):
     """
     tests that string literals are correctly parsed by BodoSQL
     """
@@ -425,13 +439,14 @@ def test_string_literals(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_binary_literals(basic_df, spark_info, memory_leak_check):
+def test_binary_literals(basic_df, memory_leak_check):
     """
     tests that binary literals are correctly parsed by BodoSQL
     """
@@ -445,16 +460,17 @@ def test_binary_literals(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         # Avoid sorting because bytes are unhashable right now and all rows are the same.
         sort_output=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_integer_literals(basic_df, spark_info, memory_leak_check):
+def test_integer_literals(basic_df, memory_leak_check):
     """
     tests that integer literals are correctly parsed by BodoSQL
     """
@@ -467,14 +483,15 @@ def test_integer_literals(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_float_literals(basic_df, spark_info, memory_leak_check):
+def test_float_literals(basic_df, memory_leak_check):
     """
     tests that float literals are correctly parsed by BodoSQL
     """
@@ -487,14 +504,15 @@ def test_float_literals(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         convert_columns_decimal=["B", "C", "D"],
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_timestamp_null_literal(basic_df, spark_info, memory_leak_check):
+def test_timestamp_null_literal(basic_df, memory_leak_check):
     """
     tests that timestamp literals are correctly parsed by BodoSQL
     """
@@ -504,23 +522,17 @@ def test_timestamp_null_literal(basic_df, spark_info, memory_leak_check):
     FROM
         table1
     """
-    spark_query = """
-    SELECT
-        A, NULL
-    FROM
-        table1
-    """
     check_query(
         query1,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
-def test_boolean_null_literals(bodosql_boolean_types, spark_info, memory_leak_check):
+def test_boolean_null_literals(bodosql_boolean_types, memory_leak_check):
     """
     tests that boolean literals are correctly parsed by BodoSQL
     """
@@ -539,21 +551,23 @@ def test_boolean_null_literals(bodosql_boolean_types, spark_info, memory_leak_ch
     check_query(
         query1,
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         bodosql_boolean_types,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.skip("[BE-4406] Support boxing null arrays")
-def test_integer_null_literals(basic_df, spark_info, memory_leak_check):
+def test_integer_null_literals(basic_df, memory_leak_check):
     """
     tests that integer literals are correctly parsed by BodoSQL
     """
@@ -572,20 +586,22 @@ def test_integer_null_literals(basic_df, spark_info, memory_leak_check):
     check_query(
         query1,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_backslash_literals(spark_info, memory_leak_check):
+def test_backslash_literals(memory_leak_check):
     """
     tests that integer literals are correctly parsed by BodoSQL
     """
@@ -600,12 +616,14 @@ def test_backslash_literals(spark_info, memory_leak_check):
     check_query(
         query1,
         {},
-        spark_info,
+        None,
+        use_duckdb=True,
     )
     check_query(
         query2,
         {},
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
 
@@ -629,60 +647,41 @@ def test_large_day_literals(bodosql_date_types, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args, answer",
+    "args",
     [
         pytest.param(
             "1, 2, 3",
-            pd.Series([[1, 2, 3]] * 5, dtype=pd.ArrowDtype(pa.large_list(pa.int64()))),
             id="integer_literals",
         ),
         pytest.param(
             "'a', 'b', 'c'",
-            pd.Series(
-                [["a", "b", "c"]] * 5, dtype=pd.ArrowDtype(pa.large_list(pa.string()))
-            ),
             id="string_literals",
         ),
         pytest.param(
             "OBJECT_CONSTRUCT('a', 0, 'b', '1')",
-            pd.Series(
-                [[{"a": 0, "b": "1"}]] * 5,
-                dtype=pd.ArrowDtype(
-                    pa.large_list(
-                        pa.struct(
-                            [pa.field("a", pa.int32()), pa.field("b", pa.string())]
-                        )
-                    )
-                ),
-            ),
             marks=pytest.mark.skip(reason="[BSE-2208] MAP array type is unsupported"),
             id="objects",
         ),
         pytest.param(
             "['a'], ['b'], ['c']",
-            pd.Series(
-                [[["a"], ["b"], ["c"]]] * 5,
-                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.string()))),
-            ),
             id="nested_strings",
         ),
         pytest.param(
             "0, A",
-            pd.Series([[0, 1]] * 5, dtype=pd.ArrowDtype(pa.large_list(pa.int64()))),
             id="integers_mixed",
         ),
     ],
 )
-def test_array_literals(args, answer, memory_leak_check):
+def test_array_literals(args, memory_leak_check):
     query = f"SELECT [{args}] FROM table1"
     check_query(
         query,
         {"TABLE1": pd.DataFrame({"A": [1] * 5})},
         None,
-        expected_output=pd.DataFrame({0: answer}),
         check_names=False,
         check_dtype=False,
         sort_output=False,
+        use_duckdb=True,
     )
 
 

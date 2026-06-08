@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from _pytest.mark.structures import ParameterSet
 
 import bodosql
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
@@ -12,17 +13,22 @@ from bodosql.kernels.array_kernel_utils import vectorized_sol
 pytestmark = pytest_slow_unless_codegen
 
 test_arrs = [
-    pd.Series([0, 1, -1, 0.5, -0.5, 0.3212, -0.78]),
-    pd.Series(
-        [
-            0,
-            1,
-            -1,
-            10000,
-            -100000,
-            20,
-            -139,
-        ]
+    pytest.param(
+        pd.Series([0, 1, -1, 0.5, -0.5, 0.3212, -0.78]), marks=pytest.mark.weekly
+    ),
+    pytest.param(
+        pd.Series(
+            [
+                0,
+                1,
+                -1,
+                10000,
+                -100000,
+                20,
+                -139,
+            ]
+        ),
+        marks=pytest.mark.weekly,
     ),
     pd.Series([1, -1, 0.1, -0.1, 1234, pd.NA, -4321, 3], dtype=pd.Float32Dtype()),
     pd.Series([-1, 0, 1, None, 2], dtype=pd.Int32Dtype()),
@@ -106,11 +112,23 @@ def test_trig_single_arg_option(func, memory_leak_check):
 
 @pytest.mark.parametrize(
     "arr1",
-    [pd.Series(list(arr), dtype=arr.dtype) for arr in test_arrs],
+    [
+        pd.Series(list(arr), dtype=arr.dtype)
+        for arr in [
+            (arr_param.values[0] if isinstance(arr_param, ParameterSet) else arr_param)
+            for arr_param in test_arrs
+        ]
+    ],
 )
 @pytest.mark.parametrize(
     "arr0",
-    [pd.Series(list(arr)[::-1], dtype=arr.dtype) for arr in test_arrs],
+    [
+        pd.Series(list(arr)[::-1], dtype=arr.dtype)
+        for arr in [
+            (arr_param.values[0] if isinstance(arr_param, ParameterSet) else arr_param)
+            for arr_param in test_arrs
+        ]
+    ],
 )
 @pytest.mark.parametrize("func", double_arg_np_list)
 def test_trig_double_arg_funcs(arr0, arr1, func, memory_leak_check):

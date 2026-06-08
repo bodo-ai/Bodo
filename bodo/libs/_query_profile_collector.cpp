@@ -93,7 +93,7 @@ void QueryProfileCollector::Init() {
                     ? output_dir_base
                     : output_dir_base + "_" + std::to_string(run_suffix);
 
-            if (mkdir(candidate.c_str(), 0700) == 0) {
+            if (makedir(candidate.c_str(), 0700) == 0) {
                 output_dir = candidate;
                 break;
             }

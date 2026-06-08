@@ -8,14 +8,15 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 default =      { features = ["py314", "rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
 azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
-platform =     { features = ["py314", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "313-platform" }
-platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "313-platform" }
+platform =     { features = ["py314", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "platform" }
+platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "platform-dev" }
 # Pip C++ Deps
 pip-cpp-win = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-win" }
 pip-cpp-macos = { features = ["rcpp", "local-mpi", "pip"], no-default-feature = true, solve-group = "pip-mac" }
 
 default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "cudf"],          solve-group = "gpu" }
-platform-cuda =      { features = ["py314", "rcpp", "dev", "platform-cuda-mpi", "cudf", "mpich-build-vars"],          solve-group = "platform-gpu" }
+platform-cuda-dev =      { features = ["py314", "rcpp", "dev", "platform-mpi", "platform-hwloc", "cudf", "mpich-build-vars"], solve-group = "platform-gpu-dev" }
+platform-cuda =      { features = ["py314", "rcpp", "platform", "platform-mpi", "platform-hwloc", "cudf", "mpich-build-vars"], solve-group = "platform-gpu" }
 
 [activation.env]
 # Avoid using system cmake during build-config step
@@ -207,15 +208,6 @@ clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash bu
 [system-requirements]
 macos = "12.0"
 
-[feature.cpu.pypi-dependencies]
-# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
-pyiceberg = ">=0.11"
-# Snowflake (Added to PyPi to ignore Pandas <3 constraint)
-snowflake-connector-python = "*"
-
-[feature.cpu.pypi-options.dependency-overrides]
-pandas = ">=3.0.0"
-
 [dependencies]
 pip = "*"
 # Core Python Deps
@@ -234,7 +226,6 @@ h5py = "*"
 scipy = "*"
 # sklearn 1.8 is not compatible with imblearn 0.14 used  in credit card fraud notebook
 scikit-learn = ">=1.4,<1.8"
-matplotlib ="*"
 # IO
 boto3 = ">=1.35.74"
 botocore = "*"
@@ -247,7 +238,6 @@ huggingface_hub = "*"
 zstandard = "*"
 # Databases
 pymysql = "*"
-psycopg2 = "*"
 sqlalchemy = "*"
 # Excel
 xlrd = "*"
@@ -257,16 +247,34 @@ cx_oracle = "*"
 pyzmq = "*"
 # Setting explicitly since Conda solve sets a newer version but PyIceberg installed from pip wants <15.0 (TODO: remove when unnecessary)
 rich = "<15.0"
+# Necessary to avoid regression in GCS I/O tests.
+# TODO(BSE-5450): Fix tests with newer version and remove.
+libgoogle-cloud-storage = "<=2.39.0"
 
 [target.linux-64.dependencies]
 libutf8proc = "*"
+
+[pypi-dependencies]
+# Added to PyPi to ignore Pandas <3 constraint
+snowflake-connector-python = "*"
+# The following dependencies were added to PyPi to avoid conflicts with hdf5 + boost-cpp
+matplotlib = "*"
+# Using psycopg2-binary to avoid issues locking pixi environment on MacOS
+# https://www.psycopg.org/docs/install.html#psycopg-vs-psycopg-binary
+psycopg2-binary = "*"
+
 
 # Features
 [feature.py314.dependencies]
 python = "3.14.*"
 
+
 [feature.cpu.dependencies]
 pandas = ">=3.0.0"
+
+[feature.cpu.pypi-options.dependency-overrides]
+pandas = ">=3.0.0"
+
 
 [feature.cudf]
 platforms = ["linux-64"]
@@ -283,16 +291,10 @@ librmm = ">=26.04"
 cudf = ">=26.04"
 pandas = ">=2.2.0"
 nvidia-ml-py = "*"
+ucx = "*"
 
 [feature.open-mpi.dependencies]
 openmpi = { version = "*" }
-
-[feature.platform-cuda-mpi]
-channels = ["conda-forge/label/mpi-external", "conda-forge"]
-
-[feature.platform-cuda-mpi.dependencies]
-mpich = { version = "*", channel = "conda-forge/label/mpi-external" }
-ucx = "*"
 
 [feature.rcpp-openmpi.dependencies]
 zstd = "*"
@@ -313,12 +315,6 @@ hdf5 = { version = "*", build = "*mpi_openmpi_*" }
 hdf5 = { version = "*", build = "*mpi_mpich_*" }
 [feature.rcpp.target.win.dependencies]
 hdf5 = { version = "*", build = "*mpi_impi_*" }
-
-
-# Added to PyPi to ignore Pandas <3 constraint
-[feature.dev.pypi-dependencies]
-# Snowflake Testing
-snowflake-sqlalchemy = "*"
 
 
 [feature.dev.dependencies]
@@ -348,7 +344,6 @@ duckdb = "!=1.2.1"
 
 # Restricted due to Spark 4.1 error in bodo/tests/test_df_lib/test_iceberg.py::test_simple_table_read[PARTITIONS_DT_TABLE]
 pyspark = "4.0.*"
-matplotlib = "*"
 # Iceberg Testing
 mmh3 = "*"
 avro = "*"  # Reading avro
@@ -402,6 +397,13 @@ openai = "*"
 # - pip:
 #   - horovod
 
+[feature.dev.pypi-dependencies]
+# Added to PyPi to ignore Pandas <3 constraint
+# Snowflake Testing
+snowflake-sqlalchemy = "*"
+# Use PyIceberg from pip to prevent segfaults in Mac dev environment.
+pyiceberg = ">=0.11"
+
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
 gcc_linux-64 = ">=9"
@@ -425,6 +427,7 @@ clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
 clang-tools = "=19"
 
+
 [feature.platform]
 platforms = ["linux-64"]
 channels = ["conda-forge"]
@@ -437,6 +440,14 @@ jupyter_client = "==8.6.1"
 uvicorn = "*"
 fastapi = "*"
 httpie = "*"
+# For compatibility with PyDough (TODO: remove when unnecessary)
+pyarrow = "22.0.*"
+
+
+[feature.platform-hwloc.target.linux-64.dependencies]
+# Needed for building MPICH MPI from source on platform
+libhwloc = "*"
+
 
 # MPI Handling
 [feature.local-mpi.target.osx.dependencies]
@@ -447,11 +458,13 @@ mpich = { version = "*" }
 impi-devel = "<2021.18" # Exclude version that segfaults on spawn in Windows
 
 [feature.platform-mpi]
-channels = ["conda-forge", "conda-forge/label/broken"]
+channels = ["conda-forge/label/mpi-external", "conda-forge"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "*", build = "external_*", channel = "conda-forge/label/broken" } }
+[feature.platform-mpi.dependencies]
+mpich = { version = "5.*", channel = "conda-forge/label/mpi-external" }
+
 
 # Feature pip
 [feature.pip.target.osx-64.dependencies]
@@ -463,6 +476,7 @@ clangxx_osx-64 = "=19"
 [feature.pip.target.osx-arm64.dependencies]
 clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
+
 
 # Azure CI
 [feature.azure.dependencies]

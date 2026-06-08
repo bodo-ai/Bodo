@@ -13,23 +13,20 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_codegen
 
 
-def test_like(
-    bodosql_string_types, regex_string, spark_info, like_expression, memory_leak_check
-):
+def test_like(bodosql_string_types, regex_string, like_expression, memory_leak_check):
     """
     tests that like works for a variety of different possible regex strings
     """
     check_query(
         f"select A from table1 where A {like_expression} {regex_string}",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_like_ilike_non_literal_pattern(
-    bodosql_string_types, spark_info, memory_leak_check
-):
+def test_like_ilike_non_literal_pattern(bodosql_string_types, memory_leak_check):
     """
     tests that like and ilike works for non-literal patterns
     """
@@ -38,17 +35,18 @@ def test_like_ilike_non_literal_pattern(
     check_query(
         query1,
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
     check_query(
         query2,
         bodosql_string_types,
-        spark_info,
-        equivalent_spark_query="select A from table1 where lower(A) like lower('H%' || 'o')",
+        None,
+        use_duckdb=True,
     )
 
 
-def test_like_ilike_arr_pattern(spark_info, memory_leak_check):
+def test_like_ilike_arr_pattern(memory_leak_check):
     """
     tests that like and ilike works for array patterns
     """
@@ -64,18 +62,19 @@ def test_like_ilike_arr_pattern(spark_info, memory_leak_check):
     check_query(
         query1,
         ctx,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
     check_query(
         query2,
         ctx,
-        spark_info,
-        equivalent_spark_query="select A from table1 where lower(A) like lower(B)",
+        None,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_like_ilike_basic_escape(spark_info, memory_leak_check):
+def test_like_ilike_basic_escape(memory_leak_check):
     """
     tests that like and like works for a couple different possible regex strings
     with escape
@@ -101,33 +100,33 @@ def test_like_ilike_basic_escape(spark_info, memory_leak_check):
     query1 = "select A from table1 where A like '%w^%%' escape '^'"
     query2 = "select A from table1 where A ilike '%w^_%' escape '^'"
     # Spark doesn't support ilike
-    spark_query2 = "select A from table1 where lower(A) like lower('%w^_%') escape '^'"
     query3 = "select A from table1 where A like '^%R%' escape '^'"
     query4 = "select A from table1 where A ilike '^_X%' escape '^'"
     # Spark doesn't support ilike
-    spark_query4 = "select A from table1 where lower(A) like lower('^_X%') escape '^'"
 
     check_query(
         query1,
         ctx,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
     check_query(
         query2,
         ctx,
-        spark_info,
-        equivalent_spark_query=spark_query2,
+        None,
+        use_duckdb=True,
     )
     check_query(
         query3,
         ctx,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
     check_query(
         query4,
         ctx,
-        spark_info,
-        equivalent_spark_query=spark_query4,
+        None,
+        use_duckdb=True,
     )
 
 
@@ -189,7 +188,7 @@ def test_like_ilike_arr_escape(memory_leak_check):
     )
 
 
-def test_ilike(bodosql_string_types, regex_string, spark_info, memory_leak_check):
+def test_ilike(bodosql_string_types, regex_string, memory_leak_check):
     """
     tests that ilike works for a variety of different possible regex strings
     """
@@ -198,12 +197,11 @@ def test_ilike(bodosql_string_types, regex_string, spark_info, memory_leak_check
     check_query(
         f"select A from table1 where A ilike {regex_string}",
         bodosql_string_types,
-        spark_info,
-        equivalent_spark_query=f"select A from table1 where LOWER(A) like LOWER({regex_string})",
+        None,
+        use_duckdb=True,
     )
 
 
-@pytest.mark.skip("[BS-552] Support ANY/ALL over subqueries")
 def test_like_any_all(
     bodosql_multiple_string_types,
     regex_strings,
@@ -224,7 +222,7 @@ def test_like_any_all(
 
 @pytest.mark.slow
 def test_like_scalar(
-    bodosql_string_types, regex_string, spark_info, like_expression, memory_leak_check
+    bodosql_string_types, regex_string, like_expression, memory_leak_check
 ):
     """
     tests that like works for a variety of different possible regex strings
@@ -232,15 +230,16 @@ def test_like_scalar(
     check_query(
         f"select case when A {like_expression} {regex_string} then 1 else 0 end from table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_like_with_logical_operators(
-    bodosql_string_types, regex_string, spark_info, like_expression, memory_leak_check
+    bodosql_string_types, regex_string, like_expression, memory_leak_check
 ):
     """
     test that like behaves well with logical operators
@@ -248,12 +247,14 @@ def test_like_with_logical_operators(
     check_query(
         f"select A from table1 where A {like_expression} {regex_string} and B like {regex_string}",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
     check_query(
         f"select B from table1 where A {like_expression} {regex_string} or B like {regex_string}",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
 
@@ -265,7 +266,7 @@ def test_like_cols(
         f"select A from table1 where C {like_expression} {regex_string} or B {like_expression} {regex_string}",
         basic_df,
         spark_info,
-        check_dtype=False,  # need this for case where the select returns empty table
+        check_dtype=False,  # need this for case where the select returns empty table,
     )
 
 
@@ -274,7 +275,6 @@ def test_like_constants(
     basic_df,
     regex_string,
     string_constants,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -282,24 +282,31 @@ def test_like_constants(
     tests that like works on constant strings
     """
     query = f"select A from table1 where '{string_constants}' {like_expression} {regex_string}"
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
-def test_nested_upper_lower(bodosql_string_types, spark_info, memory_leak_check):
+def test_nested_upper_lower(bodosql_string_types, memory_leak_check):
     """
     Tests that lower/upper calls nest properly
     """
     check_query(
         "select lower(upper(lower(upper(A)))) from table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_upper_lower_scalars(basic_df, string_constants, spark_info, memory_leak_check):
+def test_upper_lower_scalars(basic_df, string_constants, memory_leak_check):
     """
     Tests that lower/upper calls work on scalar values
     """
@@ -314,21 +321,21 @@ def test_upper_lower_scalars(basic_df, string_constants, spark_info, memory_leak
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
     check_query(
         query2,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_upper_lower_scalars_nested(
-    basic_df, string_constants, spark_info, memory_leak_check
-):
+def test_upper_lower_scalars_nested(basic_df, string_constants, memory_leak_check):
     """
     Tests that nested lower/upper calls work on scalar values
     """
@@ -337,18 +344,17 @@ def test_upper_lower_scalars_nested(
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-@pytest.mark.skip("[BE-3613] Support non-constant patterns in like")
 @pytest.mark.slow
 def test_upper_lower_like_constants(
     basic_df,
     regex_string,
     string_constants,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -358,20 +364,23 @@ def test_upper_lower_like_constants(
     check_query(
         f"select A from table1 where upper('{string_constants}') {like_expression} upper({regex_string})",
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         f"select A from table1 where lower('{string_constants}') {like_expression} upper({regex_string})",
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         f"select A from table1 where upper('{string_constants}') {like_expression} lower({regex_string})",
         basic_df,
-        spark_info,
+        None,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -379,7 +388,6 @@ def test_upper_lower_like_constants(
 def test_pythonic_regex(
     bodosql_string_types,
     pythonic_regex,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -389,14 +397,14 @@ def test_pythonic_regex(
     check_query(
         f"select A from table1 where A {like_expression} '{pythonic_regex}'",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_all_percent(
     bodosql_string_types,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -406,14 +414,14 @@ def test_all_percent(
     check_query(
         f"select A from table1 where A {like_expression} '%%'",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_all_percent_scalar(
     bodosql_string_types,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -423,16 +431,16 @@ def test_all_percent_scalar(
     check_query(
         f"select case when A {like_expression} '%%' then 1 else 0 end from table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_leading_percent(
     bodosql_string_types,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -442,20 +450,21 @@ def test_leading_percent(
     check_query(
         f"select A from table1 where A {like_expression} '%o'",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
     check_query(
         f"select A from table1 where A {like_expression} '%.o'",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_leading_percent_scalar(
     bodosql_string_types,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -465,16 +474,16 @@ def test_leading_percent_scalar(
     check_query(
         f"select case when A {like_expression} '%.o' then 1 else 0 end from table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_trailing_percent(
     bodosql_string_types,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -484,20 +493,21 @@ def test_trailing_percent(
     check_query(
         f"select A from table1 where A {like_expression} 'h%'",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
     check_query(
         f"select A from table1 where A {like_expression} 'h.%'",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_trailing_percent_scalar(
     bodosql_string_types,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -507,16 +517,16 @@ def test_trailing_percent_scalar(
     check_query(
         f"select case when A {like_expression} '%.o' then 1 else 0 end from table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_both_percent(
     bodosql_string_types,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -526,20 +536,21 @@ def test_both_percent(
     check_query(
         f"select A from table1 where A {like_expression} '%e%'",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
     check_query(
         f"select A from table1 where A {like_expression} '%e.%'",
         bodosql_string_types,
-        spark_info,
+        None,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_both_percent_scalar(
     bodosql_string_types,
-    spark_info,
     like_expression,
     memory_leak_check,
 ):
@@ -549,97 +560,51 @@ def test_both_percent_scalar(
     check_query(
         f"select case when A {like_expression} '%e%' then 1 else 0 end from table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
     check_query(
         f"select case when A {like_expression} '%e.%' then 1 else 0 end from table1",
         bodosql_string_types,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_utf_scalar(spark_info):
+def test_utf_scalar():
     check_query(
         "select 'ǖǘǚǜ'",
         {},
-        spark_info,
+        None,
         check_names=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT TRANSLATE(A, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "",
-                                None,
-                                "we've had vicious kings and idiot kings, but i don't know if we've ever been cursed with a vicious idiot for a king.",
-                                "the next time i have an idea like that, punch me in the face.",
-                                "that's what i do. i drink and i know things.",
-                                "an unhappy wife is a wine merchant's best friend.",
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT TRANSLATE(A, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') FROM table1",
             id="vector_scalar_scalar_upper_to_lower",
         ),
         pytest.param(
-            (
-                "SELECT TRANSLATE(A, ' ,.'';:!?', '_') FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "",
-                                None,
-                                "Weve_had_vicious_kings_and_idiot_kings_but_I_dont_know_if_weve_ever_been_cursed_with_a_vicious_idiot_for_a_king",
-                                "The_next_time_I_have_an_idea_like_that_punch_me_in_the_face",
-                                "Thats_what_I_do_I_drink_and_I_know_things",
-                                "An_unhappy_wife_is_a_wine_merchants_best_friend",
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT TRANSLATE(A, ' ,.'';:!?', '_') FROM table1",
             id="vector_scalar_scalar_remove_punct_transform_space",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN LENGTH(A) < 10 THEN 'xxx' ELSE TRANSLATE(A, 'abcdefghijklmnopqrstuvwxyz', 'silverabcdfghjkmnopqtuwxyz') END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "xxx",
-                                None,
-                                "We'ue bsv uclcktp fcjap sjv cvckq fcjap, itq I vkj'q fjkw cr we'ue eueo ieej ltopev wcqb s uclcktp cvckq rko s fcja.",
-                                "Tbe jexq qche I bsue sj cves gcfe qbsq, mtjlb he cj qbe rsle.",
-                                "Tbsq'p wbsq I vk. I vocjf sjv I fjkw qbcjap.",
-                                "Aj tjbsmmy wcre cp s wcje heolbsjq'p iepq rocejv.",
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT CASE WHEN LENGTH(A) < 10 THEN 'xxx' ELSE TRANSLATE(A, 'abcdefghijklmnopqrstuvwxyz', 'silverabcdfghjkmnopqtuwxyz') END FROM table1",
             id="vector_scalar_scalar_subst_cipher_case",
         ),
     ],
 )
-def test_translate(args, spark_info, memory_leak_check):
-    query, answer = args
+def test_translate(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -657,81 +622,32 @@ def test_translate(args, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT INITCAP(A) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "",
-                                None,
-                                "Alphabet Soup Is Delicious",
-                                ' Yay\tAb\nCd\rEf\fGh\u000bIj!Kl?Mn@Op"Qr^St#Uv$Wx&Yz~Ab_Cd,Ef.Gh:Ij;Kl+Mn-Op*Qr%St/Uv|Wx\\Yz[Ab]Cd(Ef)Gh{Ij}Kl<Mn>Op1qr¢stπuv',
-                                "Alpha,Beta,Gamma,Delta,Epsilon\nDo,Re,Mi,Fa,So,La,Ti,Do",
-                                "Run-Of-The-Mill",
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT INITCAP(A) FROM table1",
             id="vector_default",
         ),
         pytest.param(
-            (
-                "SELECT INITCAP(A, ' ,') FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "",
-                                None,
-                                "Alphabet Soup Is Delicious",
-                                ' Yay\tab\ncd\ref\fgh\u000bij!kl?mn@op"qr^st#uv$wx&yz~ab_cd,Ef.gh:ij;kl+mn-op*qr%st/uv|wx\\yz[ab]cd(ef)gh{ij}kl<mn>op1qr¢stπuv',
-                                "Alpha,Beta,Gamma,Delta,Epsilon\ndo,Re,Mi,Fa,So,La,Ti,Do",
-                                "Run-of-the-mill",
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT INITCAP(A, ' ,') FROM table1",
             id="vector_space_comma",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN INSTR(A, ',') > 0 AND INSTR(A, ',') < 10 THEN 'xxx' ELSE INITCAP(A, '') END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "",
-                                None,
-                                "Alphabet soup is delicious",
-                                ' yay\tab\ncd\ref\fgh\u000bij!kl?mn@op"qr^st#uv$wx&yz~ab_cd,ef.gh:ij;kl+mn-op*qr%st/uv|wx\\yz[ab]cd(ef)gh{ij}kl<mn>op1qr¢stπuv',
-                                "xxx",
-                                "Run-of-the-mill",
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT CASE WHEN INSTR(A, ',') > 0 AND INSTR(A, ',') < 10 THEN 'xxx' ELSE INITCAP(A, '') END FROM table1",
             id="vector_empty_case",
         ),
     ],
 )
-def test_initcap(args, spark_info, memory_leak_check):
-    query, answer = args
+def test_initcap(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -749,175 +665,81 @@ def test_initcap(args, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT EDITDISTANCE(A, 'pokerface') FROM table1",
-                pd.DataFrame(
-                    {0: pd.Series([7, None, 4, 6, 5, 1], dtype=pd.Int32Dtype())}
-                ),
-            ),
+            "SELECT EDITDISTANCE(A, 'pokerface') FROM table1",
             id="scalar_vector_no_case_no_max",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN A IS NULL THEN -1 ELSE EDITDISTANCE(A, 'pokerface') END FROM table1",
-                pd.DataFrame(
-                    {0: pd.Series([7, -1, 4, 6, 5, 1], dtype=pd.Int32Dtype())}
-                ),
-            ),
+            "SELECT CASE WHEN A IS NULL THEN -1 ELSE EDITDISTANCE(A, 'pokerface') END FROM table1",
             id="scalar_vector_with_case_no_max",
         ),
         pytest.param(
-            (
-                "SELECT EDITDISTANCE(A, 'pokerface', 5) FROM table1",
-                pd.DataFrame(
-                    {0: pd.Series([5, None, 4, 5, 5, 1], dtype=pd.Int32Dtype())}
-                ),
-            ),
+            "SELECT EDITDISTANCE(A, 'pokerface', 5) FROM table1",
             id="scalar_vector_no_case_with_max",
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN A IS NULL THEN -1 ELSE EDITDISTANCE(A, 'pokerface', 5) END FROM table1",
-                pd.DataFrame(
-                    {0: pd.Series([5, -1, 4, 5, 5, 1], dtype=pd.Int32Dtype())}
-                ),
-            ),
+            "SELECT CASE WHEN A IS NULL THEN -1 ELSE EDITDISTANCE(A, 'pokerface', 5) END FROM table1",
             id="scalar_vector_with_case_with_max",
             marks=pytest.mark.slow,
         ),
     ],
 )
-def test_editdistance(args, spark_info, memory_leak_check):
+def test_editdistance(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {"A": ["blackjack", None, "poker", "procedure", "disgrace", "poker face"]}
         )
     }
-    query, answer = args
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT SPLIT_PART(A, ' ', 1) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            ["alphabet", "aaeaaeieaaeioiea", "alpha", "", "a", None]
-                        )
-                    }
-                ),
-            ),
+            "SELECT SPLIT_PART(A, ' ', 1) FROM table1",
             id="vector_space_1",
         ),
         pytest.param(
-            (
-                "SELECT SPLIT_PART(A, 'a', 2) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "lph",
-                                "",
-                                "lph",
-                                "",
-                                "  b     c  d e        f  g     h  i        j ",
-                                None,
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT SPLIT_PART(A, 'a', 2) FROM table1",
             id="vector_a_2",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT SPLIT_PART(A, '  ', -1) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "alphabet soup is delicious",
-                                "aaeaaeieaaeioiea",
-                                "delta epsilon",
-                                "",
-                                "j ",
-                                None,
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT SPLIT_PART(A, '  ', -1) FROM table1",
             id="vector_doublespace_-1",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT SPLIT_PART(A, RIGHT(A, 1), 1 + (LENGTH(A) % 6)) FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                " deliciou",
-                                "eie",
-                                "",
-                                "",
-                                "",
-                                None,
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT SPLIT_PART(A, RIGHT(A, 1), 1 + (LENGTH(A) % 6)) FROM table1",
             id="vector_lastchar_vector",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN INSTR(A, '  ') > 0 THEN SPLIT_PART(A, '  ', 3) ELSE SPLIT_PART(A, 'e', -2) END FROM table1",
-                pd.DataFrame(
-                    {
-                        0: pd.Series(
-                            [
-                                "t soup is d",
-                                "ioi",
-                                "delta epsilon",
-                                "",
-                                "",
-                                None,
-                            ]
-                        )
-                    }
-                ),
-            ),
+            "SELECT CASE WHEN INSTR(A, '  ') > 0 THEN SPLIT_PART(A, '  ', 3) ELSE SPLIT_PART(A, 'e', -2) END FROM table1",
             id="case",
         ),
     ],
 )
-def test_split_part(args, spark_info, memory_leak_check):
+def test_split_part(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -932,14 +754,13 @@ def test_split_part(args, spark_info, memory_leak_check):
             }
         )
     }
-    query, answer = args
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
-        expected_output=answer,
+        use_duckdb=True,
     )
 
 
@@ -1001,7 +822,7 @@ def test_split_part(args, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_strtok(args, spark_info, memory_leak_check):
+def test_strtok(args, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -1018,12 +839,7 @@ def test_strtok(args, spark_info, memory_leak_check):
     }
     query, answer = args
     check_query(
-        query,
-        ctx,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        expected_output=answer,
+        query, ctx, None, check_names=False, check_dtype=False, expected_output=answer
     )
 
 
@@ -1200,166 +1016,27 @@ def test_strtok_to_array(query, expected, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
         pytest.param(
-            (
-                "SELECT SPLIT('www.bodo.ai', '.')",
-                pd.Series([pd.array(["www", "bodo", "ai"], "string[pyarrow]")]),
-            ),
+            "SELECT SPLIT('www.bodo.ai', '.')",
             id="all_scalar",
         ),
         pytest.param(
-            (
-                "SELECT SPLIT(A, ' ') FROM table1",
-                pd.Series(
-                    [
-                        pd.array(
-                            ["alphabet", "soup", "is", "delicious"], "string[pyarrow]"
-                        ),
-                        pd.array(["aaeaaeieaaeioiea"], "string[pyarrow]"),
-                        pd.array(
-                            ["A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ"], "string[pyarrow]"
-                        ),
-                        pd.array(
-                            ["415-555-1234,", "412-555-2345,", "937-555-3456"],
-                            "string[pyarrow]",
-                        ),
-                        pd.array(
-                            [
-                                "a",
-                                "",
-                                "b",
-                                "",
-                                "",
-                                "",
-                                "c",
-                                "",
-                                "d",
-                                "e",
-                                "",
-                                "",
-                                "",
-                                "",
-                                "f",
-                                "g",
-                                "",
-                                "",
-                                "",
-                                "",
-                                "h",
-                                "",
-                                "i",
-                                "",
-                                "",
-                                "",
-                                "",
-                                "j",
-                                "",
-                            ],
-                            "string[pyarrow]",
-                        ),
-                        None,
-                    ]
-                ),
-            ),
+            "SELECT SPLIT(A, ' ') FROM table1",
             id="vector_scalar",
         ),
         pytest.param(
-            (
-                "SELECT SPLIT(A, B) FROM table1",
-                pd.Series(
-                    [
-                        pd.array(
-                            ["alphabet", "soup", "is", "delicious"], "string[pyarrow]"
-                        ),
-                        pd.array(["", "", "ie", "ioiea"], "string[pyarrow]"),
-                        pd.array(
-                            [
-                                "A",
-                                "BCD",
-                                "E",
-                                "FGH",
-                                "I",
-                                "JKLMN",
-                                "O",
-                                "PQRST",
-                                "U",
-                                "VWXYZ",
-                            ],
-                            "string[pyarrow]",
-                        ),
-                        pd.array(
-                            [
-                                "415",
-                                "555",
-                                "1234, 412",
-                                "555",
-                                "2345, 937",
-                                "555",
-                                "3456",
-                            ],
-                            "string[pyarrow]",
-                        ),
-                        pd.array(
-                            ["a  b", " c  d e", "  f g", "  h  i", "  j "],
-                            "string[pyarrow]",
-                        ),
-                        None,
-                    ]
-                ),
-            ),
+            "SELECT SPLIT(A, B) FROM table1",
             id="all_vector",
         ),
         pytest.param(
-            (
-                "SELECT CASE WHEN A IS NULL THEN NULL ELSE SPLIT(A, B) END FROM table1",
-                pd.Series(
-                    [
-                        pd.array(
-                            ["alphabet", "soup", "is", "delicious"], "string[pyarrow]"
-                        ),
-                        pd.array(["", "", "ie", "ioiea"], "string[pyarrow]"),
-                        pd.array(
-                            [
-                                "A",
-                                "BCD",
-                                "E",
-                                "FGH",
-                                "I",
-                                "JKLMN",
-                                "O",
-                                "PQRST",
-                                "U",
-                                "VWXYZ",
-                            ],
-                            "string[pyarrow]",
-                        ),
-                        pd.array(
-                            [
-                                "415",
-                                "555",
-                                "1234, 412",
-                                "555",
-                                "2345, 937",
-                                "555",
-                                "3456",
-                            ],
-                            "string[pyarrow]",
-                        ),
-                        pd.array(
-                            ["a  b", " c  d e", "  f g", "  h  i", "  j "],
-                            "string[pyarrow]",
-                        ),
-                        None,
-                    ]
-                ),
-            ),
+            "SELECT CASE WHEN A IS NULL THEN NULL ELSE SPLIT(A, B) END FROM table1",
             id="all_vector_with_case",
         ),
     ],
 )
-def test_split(args, memory_leak_check):
+def test_split(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -1382,8 +1059,6 @@ def test_split(args, memory_leak_check):
             }
         )
     }
-    query, answer = args
-    answer = pd.DataFrame({0: answer})
     check_query(
         query,
         ctx,
@@ -1391,9 +1066,9 @@ def test_split(args, memory_leak_check):
         check_names=False,
         check_dtype=False,
         sort_output=False,
-        expected_output=answer,
         # Passing this since _use_dict_str_type=True causes gatherv to fail internally
         # and is not needed since the output of the actual test is regular string array
         # (see https://bodo.atlassian.net/browse/BSE-1256)
         use_dict_encoded_strings=False,
+        use_duckdb=True,
     )

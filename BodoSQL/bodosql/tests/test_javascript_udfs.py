@@ -722,18 +722,21 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
             IntegerArrayType(bodo.types.uint8),
             255,
             id="uint8",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             "return 2 ** 16 - 1",
             IntegerArrayType(bodo.types.uint16),
             2**16 - 1,
             id="uint16",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             "return 2 ** 32 -1",
             IntegerArrayType(bodo.types.uint32),
             2**32 - 1,
             id="uint32",
+            marks=pytest.mark.weekly,
         ),
         # This is bigint syntax in javascript, all numerics are double by default which can't represent this value
         pytest.param(
@@ -741,24 +744,28 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
             IntegerArrayType(bodo.types.uint64),
             2**64 - 1,
             id="uint64",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             "return 2 ** 8 / 2 - 1",
             IntegerArrayType(bodo.types.int8),
             127,
             id="int8",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             "return 2 ** 16 / 2 - 1",
             IntegerArrayType(bodo.types.int16),
             2**16 / 2 - 1,
             id="int16",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             "return 2 ** 32 / 2 - 1",
             IntegerArrayType(bodo.types.int32),
             2**32 / 2 - 1,
             id="int32",
+            marks=pytest.mark.weekly,
         ),
         # This is bigint syntax in javascript, all numerics are double by default which can't represent this value
         pytest.param(
@@ -772,6 +779,7 @@ def test_javascript_udf_calculate_upc(calculate_upc, memory_leak_check):
             IntegerArrayType(bodo.types.float32),
             3.1,
             id="float32",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             # Bigger than a float32 can represent

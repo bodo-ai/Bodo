@@ -329,9 +329,9 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate) except +
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
-    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id) except +
+    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id, c_bool force_broadcast) except +
     cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations, vector[vector[int64_t]] orig_build_key_cols) except +
-    cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs) except +
+    cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_bool force_broadcast) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
@@ -472,13 +472,13 @@ cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
     """
 
-    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, CJoinType join_type, conditions, int join_id=-1):
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, CJoinType join_type, conditions, int join_id=-1, force_broadcast=False):
         self.out_schema = out_schema
         cdef vector[int_pair] cond_vec
         for cond in conditions:
             cond_vec.push_back(int_pair(cond[0], cond[1]))
 
-        cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_comparison_join(lhs.c_logical_operator, rhs.c_logical_operator, join_type, cond_vec, join_id)
+        cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_comparison_join(lhs.c_logical_operator, rhs.c_logical_operator, join_type, cond_vec, join_id, force_broadcast)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_comparison_join.release())
 
     def __str__(self):
@@ -489,10 +489,10 @@ cdef class LogicalCrossProduct(LogicalOperator):
     """Wrapper around DuckDB's LogicalCrossProduct to provide access in Python.
     """
 
-    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs):
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, force_broadcast=False):
         self.out_schema = out_schema
 
-        cdef unique_ptr[CLogicalCrossProduct] c_logical_cross_product = make_cross_product(lhs.c_logical_operator, rhs.c_logical_operator)
+        cdef unique_ptr[CLogicalCrossProduct] c_logical_cross_product = make_cross_product(lhs.c_logical_operator, rhs.c_logical_operator, force_broadcast)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_cross_product.release())
 
     def __str__(self):

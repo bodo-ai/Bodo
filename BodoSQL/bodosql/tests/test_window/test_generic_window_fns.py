@@ -7,7 +7,6 @@ import pyarrow as pa
 import pytest
 from mpi4py import MPI
 
-import bodo
 from bodo.tests.utils import (
     pytest_mark_multi_rank_nightly,
     pytest_slow_unless_window,
@@ -42,7 +41,6 @@ def test_numeric_window_functions(
     all_numeric_window_df,
     all_numeric_window_col_names,
     window_frames,
-    spark_info,
 ):
     """Tests sum, avg, stdev/variance and their variants with various
     combinations of window frames to test correctness and fusion"""
@@ -53,18 +51,17 @@ def test_numeric_window_functions(
                 f"{funcs[i]}({col}) OVER ({window_frames[0][(i + j) % len(window_frames[0])]}) AS c_{funcs[i].lower()}_{col}"
             )
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
-    spark_query = get_equivalent_spark_agg_query(query)
     pandas_code = check_query(
         query,
         all_numeric_window_df,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         return_codegen=True,
         only_jit_1DVar=True,
         convert_expected_output_to_nullable_float=False,
+        use_duckdb=True,
     )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers
@@ -147,7 +144,7 @@ def test_two_arg_numeric_window_functions(memory_leak_check):
 @pytest.mark.timeout(1200)
 # NOTE (allai5): passes in 592.81 seconds on 1 rank on M1 as of 05/03/2023
 def test_non_numeric_window_functions(
-    funcs, all_window_df, all_window_col_names, window_frames, spark_info
+    funcs, all_window_df, all_window_col_names, window_frames
 ):
     """Tests min, max, count, count(*) and count_if with various combinations of
     window frames to test correctness and fusion"""
@@ -167,7 +164,7 @@ def test_non_numeric_window_functions(
     pandas_code = check_query(
         query,
         all_window_df,
-        spark_info,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
@@ -214,7 +211,7 @@ def test_non_numeric_window_functions(
         ),
     ],
 )
-def test_first_last_nth(window_calls, all_window_df, spark_info):
+def test_first_last_nth(window_calls, all_window_df):
     """Tests first_value, last_value and nth_value."""
     selects = []
     convert_columns_bytearray = []
@@ -226,12 +223,10 @@ def test_first_last_nth(window_calls, all_window_df, spark_info):
         if "BI" in window_call:
             convert_columns_bytearray.append(f"C_{i}")
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
-    spark_query = get_equivalent_spark_agg_query(query)
     check_query(
         query,
         all_window_df,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
@@ -322,7 +317,7 @@ def test_blended_fusion(memory_leak_check):
     ],
 )
 @pytest.mark.timeout(1500)
-def test_optimized_numeric_window_functions(func, all_numeric_window_df, spark_info):
+def test_optimized_numeric_window_functions(func, all_numeric_window_df):
     """Tests numeric window functions that can use groupby.window"""
     selects = []
     combinations = [
@@ -344,17 +339,16 @@ def test_optimized_numeric_window_functions(func, all_numeric_window_df, spark_i
             f"{func}({col}) OVER (PARTITION BY W3 ORDER BY W4 {frame}) AS C{i}"
         )
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
-    spark_query = get_equivalent_spark_agg_query(query)
     check_query(
         query,
         all_numeric_window_df,
-        spark_info,
-        equivalent_spark_query=spark_query,
+        None,
         sort_output=True,
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
         convert_expected_output_to_nullable_float=False,
+        use_duckdb=True,
     )
 
 
@@ -525,10 +519,6 @@ def test_all_null():
     )
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "df",
     [
@@ -559,7 +549,7 @@ def test_all_null():
         ),
     ],
 )
-def test_simple_sum(df, spark_info, capfd):
+def test_simple_sum(df, capfd):
     """Verifies that the correct path is taken for SUM"""
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
@@ -574,10 +564,11 @@ def test_simple_sum(df, spark_info, capfd):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
             sort_output=True,
+            use_duckdb=True,
         )
 
     comm = MPI.COMM_WORLD
@@ -588,10 +579,6 @@ def test_simple_sum(df, spark_info, capfd):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "df",
     [
@@ -626,7 +613,7 @@ def test_simple_sum(df, spark_info, capfd):
         ),
     ],
 )
-def test_simple_count(df, spark_info, capfd):
+def test_simple_count(df, capfd):
     """Verifies that the correct path is taken for COUNT"""
     from mpi4py import MPI
 
@@ -644,10 +631,11 @@ def test_simple_count(df, spark_info, capfd):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
             sort_output=True,
+            use_duckdb=True,
         )
 
     comm = MPI.COMM_WORLD
@@ -658,10 +646,6 @@ def test_simple_count(df, spark_info, capfd):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "partition_col",
     [
@@ -672,7 +656,7 @@ def test_simple_count(df, spark_info, capfd):
         pytest.param("P5", id="many_partitions", marks=pytest.mark.slow),
     ],
 )
-def test_simple_count_star(partition_col, spark_info, capfd):
+def test_simple_count_star(partition_col, capfd):
     """Verifies that the correct path is taken for COUNT(*)"""
     from mpi4py import MPI
 
@@ -701,10 +685,11 @@ def test_simple_count_star(partition_col, spark_info, capfd):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
             sort_output=True,
+            use_duckdb=True,
         )
 
     comm = MPI.COMM_WORLD
@@ -715,11 +700,7 @@ def test_simple_count_star(partition_col, spark_info, capfd):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
-def test_multiple_sum_count(spark_info, capfd):
+def test_multiple_sum_count(capfd):
     """Verifies that the correct path is taken for SUM/COUNT when called multiple times"""
     from mpi4py import MPI
 
@@ -752,10 +733,11 @@ def test_multiple_sum_count(spark_info, capfd):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
             sort_output=True,
+            use_duckdb=True,
         )
 
     comm = MPI.COMM_WORLD
@@ -766,10 +748,6 @@ def test_multiple_sum_count(spark_info, capfd):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "df",
     [
@@ -804,7 +782,7 @@ def test_multiple_sum_count(spark_info, capfd):
         ),
     ],
 )
-def test_simple_count(df, spark_info, capfd):
+def test_simple_count(df, capfd):
     """Verifies that the correct path is taken for COUNT"""
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
@@ -819,10 +797,11 @@ def test_simple_count(df, spark_info, capfd):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
             sort_output=True,
+            use_duckdb=True,
         )
 
     comm = MPI.COMM_WORLD
@@ -833,10 +812,6 @@ def test_simple_count(df, spark_info, capfd):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "partition_col",
     [
@@ -847,7 +822,7 @@ def test_simple_count(df, spark_info, capfd):
         pytest.param("P5", id="many_partitions", marks=pytest.mark.slow),
     ],
 )
-def test_simple_count_star(partition_col, spark_info, capfd):
+def test_simple_count_star(partition_col, capfd):
     """Verifies that the correct path is taken for COUNT(*)"""
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
@@ -873,10 +848,11 @@ def test_simple_count_star(partition_col, spark_info, capfd):
         check_query(
             query,
             {"TABLE1": df},
-            spark_info,
+            None,
             check_names=False,
             check_dtype=False,
             sort_output=True,
+            use_duckdb=True,
         )
 
     comm = MPI.COMM_WORLD
@@ -887,10 +863,6 @@ def test_simple_count_star(partition_col, spark_info, capfd):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "func_name, answer_func, out_dtype",
     [
@@ -1096,10 +1068,6 @@ def test_simple_aggfuncs(func_name, answer_func, out_dtype, df, arg_strings, cap
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 @pytest.mark.parametrize(
     "data, expected_out",
     [
@@ -1154,10 +1122,6 @@ def test_avg_over_blank(data, expected_out, capfd):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 def test_countstar_over_blank(capfd):
     """Checks that count(*) over () works properly and takes the correct codepath"""
 
@@ -1199,10 +1163,6 @@ def test_countstar_over_blank(capfd):
     assert assert_success
 
 
-@pytest.mark.skipif(
-    bodo.tests.utils.test_spawn_mode_enabled,
-    reason="capfd doesn't work for spawn",
-)
 def test_multiple_over_blank(capfd):
     """Checks that multiple FUNC(X) OVER () work properly and takes the correct codepath"""
     from mpi4py import MPI

@@ -173,17 +173,60 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
     // Single column reduction like Series.max()
     if (op.groups.empty()) {
-        for (const auto& expr : op.expressions) {
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
+            getColRefMap(op.children[0]->GetColumnBindings());
+        std::vector<std::string> function_names;
+        std::vector<int> input_column_indices;
+        auto bodo_schema = std::make_shared<bodo::Schema>();
+        bodo_schema->metadata = std::make_shared<bodo::TableMetadata>(
+            std::vector<std::string>({}), std::vector<std::string>({}));
+        int i = 0;
+        for (auto& expr : op.expressions) {
             if (expr->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
                 throw std::runtime_error(
                     "LogicalAggregate with no groups must have BOUND_AGGREGATE "
                     "expression types for reduction.");
             }
-        }
-        std::vector<std::string> function_names;
-        for (auto& expr : op.expressions) {
             auto& agg_expr = expr->Cast<duckdb::BoundAggregateExpression>();
+            if (agg_expr.children.size() != 1 &&
+                agg_expr.function.name != "size") {
+                throw std::runtime_error(
+                    "Aggregate expression for builtin funcs must have exactly "
+                    "one child expression" +
+                    expr->ToString());
+            }
+            if (agg_expr.function.name == "size") {
+                // size doesn't need an input column but we add a column to use
+                // the same infrastructure as other reductions
+                input_column_indices.push_back(0);
+            } else {
+                auto& child_expr = agg_expr.children[0];
+                if (child_expr->type !=
+                    duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                    throw std::runtime_error(
+                        "Aggregate expression must have only col ref "
+                        "expression children" +
+                        expr->ToString());
+                }
+                auto& colref =
+                    child_expr->Cast<duckdb::BoundColumnRefExpression>();
+                input_column_indices.push_back(col_ref_map.at(
+                    {colref.binding.table_index, colref.binding.column_index}));
+            }
+
             function_names.emplace_back(agg_expr.function.name);
+            BodoAggFunctionData& bind_info =
+                agg_expr.bind_info->Cast<BodoAggFunctionData>();
+            auto col_schema = bind_info.out_schema;
+            if (col_schema->num_fields() != 1) {
+                throw std::runtime_error(
+                    "Output schema for aggregate expression must have exactly "
+                    "one field for reduction.");
+            }
+            auto bodo_col_schema = bodo::Schema::FromArrowSchema(col_schema);
+            bodo_schema->append_column(
+                bodo_col_schema->column_types[0]->copy());
+            bodo_schema->column_names.push_back(std::to_string(i++));
         }
 
         if (function_names[0] == "count_star") {
@@ -214,23 +257,6 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 #endif  // USE_CUDF
             return;
         }
-        // bind_info in every expression stores the same schema for the entire
-        // list, formatted on the Python side; therefore we only extract
-        // bind_info of first element.
-        auto& agg_expr =
-            op.expressions[0]->Cast<duckdb::BoundAggregateExpression>();
-        BodoAggFunctionData& bind_info =
-            agg_expr.bind_info->Cast<BodoAggFunctionData>();
-        auto bodo_schema = std::make_shared<bodo::Schema>();
-        auto col_schema = bind_info.out_schema;
-        auto bodo_col_schema = bodo::Schema::FromArrowSchema(col_schema);
-        for (size_t i = 0; i < bodo_col_schema->column_types.size(); i++) {
-            bodo_schema->append_column(
-                bodo_col_schema->column_types[i]->copy());
-            bodo_schema->column_names.push_back(std::to_string(i));
-        }
-        bodo_schema->metadata = std::make_shared<bodo::TableMetadata>(
-            std::vector<std::string>({}), std::vector<std::string>({}));
 
         // If function_names includes quantiles, create a PhysicalQuantile
         // operator. Function names for quantile evaluations are formatted as
@@ -280,15 +306,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             physical_op = std::make_shared<PhysicalGPUReduce>(bodo_schema,
                                                               function_names);
         } else {
-            physical_op =
-                std::make_shared<PhysicalReduce>(bodo_schema, function_names);
+            physical_op = std::make_shared<PhysicalReduce>(
+                bodo_schema, function_names, input_column_indices);
         }
         std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); },
                    physical_op);
 #else   // USE_CUDF
         // Otherwise, create a PhysicalReduce operator
-        auto physical_op =
-            std::make_shared<PhysicalReduce>(bodo_schema, function_names);
+        auto physical_op = std::make_shared<PhysicalReduce>(
+            bodo_schema, function_names, input_column_indices);
         FinishPipelineOneOperator(physical_op);
 #endif  // USE_CUDF
         return;

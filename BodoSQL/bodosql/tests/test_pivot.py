@@ -4,7 +4,7 @@ import pytest
 from bodosql.tests.utils import check_query
 
 
-def test_basic_pivot(basic_df, spark_info, memory_leak_check):
+def test_basic_pivot(basic_df, memory_leak_check):
     """
     Basic test for PIVOT with 1 column.
     """
@@ -15,10 +15,16 @@ def test_basic_pivot(basic_df, spark_info, memory_leak_check):
         FOR A IN (1 as SINGLE, 3 as TRIPLE)
     )
     """
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
-def test_multi_col_pivot(basic_df, spark_info, memory_leak_check):
+def test_multi_col_pivot(basic_df, memory_leak_check):
     """
     Basic test for PIVOT with multiple
 
@@ -32,12 +38,17 @@ def test_multi_col_pivot(basic_df, spark_info, memory_leak_check):
     )
     """
     check_query(
-        query, basic_df, spark_info, check_dtype=False, is_out_distributed=False
+        query,
+        basic_df,
+        None,
+        check_dtype=False,
+        is_out_distributed=False,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_basic_null_pivot(basic_df, spark_info, memory_leak_check):
+def test_basic_null_pivot(basic_df, memory_leak_check):
     """
     Basic test for PIVOT with 1 column without a match somewhere.
     """
@@ -49,11 +60,17 @@ def test_basic_null_pivot(basic_df, spark_info, memory_leak_check):
     )
     """
     # set check_dtype=False because of int64 vs Int64 difference
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        None,
+        check_dtype=False,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
-def test_multi_col_null_pivot(basic_df, spark_info, memory_leak_check):
+def test_multi_col_null_pivot(basic_df, memory_leak_check):
     """
     Basic test for PIVOT with multiple columns without a match somewhere.
     """
@@ -68,9 +85,10 @@ def test_multi_col_null_pivot(basic_df, spark_info, memory_leak_check):
     check_query(
         query,
         basic_df,
-        spark_info,
+        None,
         is_out_distributed=False,
         check_dtype=False,
+        use_duckdb=True,
     )
 
 
@@ -128,14 +146,14 @@ def test_tz_aware_pivot(memory_leak_check):
         query,
         ctx,
         None,
-        expected_output=py_output,
         is_out_distributed=False,
         session_tz=session_tz,
+        expected_output=py_output,
     )
 
 
 @pytest.mark.slow
-def test_float_pivot(spark_info, memory_leak_check):
+def test_float_pivot(memory_leak_check):
     """
     Basic test for PIVOT that verifies that float values are handling
     with optional types.
@@ -156,7 +174,8 @@ def test_float_pivot(spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_dtype=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )

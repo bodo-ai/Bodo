@@ -152,12 +152,15 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
  * @param lhs - left-side of the join
  * @param rhs - right-side of the join
  * @param join_type - the type of the join, e.g., "INNER"
+ * @param force_broadcast - whether to force broadcast join (only used in
+ * BodoSQL C++ backend and doesn't go through DuckDB optimizer)
  * @return duckdb::unique_ptr<duckdb::LogicalComparisonJoin> output node
  */
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
-    std::vector<std::pair<int, int>> &cond_vec, int join_id);
+    std::vector<std::pair<int, int>> &cond_vec, int join_id,
+    bool force_broadcast);
 
 /**
  * @brief Creates a LogicalJoinFilter node.
@@ -469,12 +472,14 @@ duckdb::unique_ptr<duckdb::Expression> make_case_expr(
  *
  * @param lhs - the left-hand side of the cross product
  * @param rhs - the right-hand side of the cross product
+ * @param force_broadcast - whether to force broadcast join (only used in
+ * BodoSQL C++ backend and doesn't go through DuckDB optimizer)
  * @return duckdb::unique_ptr<duckdb::LogicalCrossProduct> - the cross product
  * node
  */
 duckdb::unique_ptr<duckdb::LogicalCrossProduct> make_cross_product(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
-    std::unique_ptr<duckdb::LogicalOperator> &rhs);
+    std::unique_ptr<duckdb::LogicalOperator> &rhs, bool force_broadcast);
 
 /**
  * @brief Create a filter node.

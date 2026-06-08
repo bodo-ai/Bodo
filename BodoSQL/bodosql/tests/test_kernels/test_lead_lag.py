@@ -293,7 +293,10 @@ def test_lead_lag_seq(
 
 @pytest.mark.parametrize(
     "use_default",
-    [pytest.param(True, id="with_default"), pytest.param(False, id="no_default")],
+    [
+        pytest.param(True, id="with_default"),
+        pytest.param(False, id="no_default", marks=pytest.mark.slow),
+    ],
 )
 @pytest.mark.parametrize(
     "shift, answer, pattern_list",

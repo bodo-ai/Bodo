@@ -8,16 +8,21 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
-def test_with(basic_df, spark_info, memory_leak_check):
+def test_with(basic_df, memory_leak_check):
     """
     Test that verifies that WITH works in the simple case for table names
     """
     query = "WITH FOO as (SELECT A FROM table1) SELECT FOO.A from FOO"
-    check_query(query, basic_df, spark_info)
+    check_query(
+        query,
+        basic_df,
+        None,
+        use_duckdb=True,
+    )
 
 
 @pytest.mark.slow
-def test_with_multiple_tables(join_dataframes, spark_info, memory_leak_check):
+def test_with_multiple_tables(join_dataframes, memory_leak_check):
     """
     Test that verifies that WITH works for multiple table names
     """
@@ -32,13 +37,14 @@ def test_with_multiple_tables(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_with_select_tables(join_dataframes, spark_info, memory_leak_check):
+def test_with_select_tables(join_dataframes, memory_leak_check):
     """
     Test that verifies that WITH aliasing works on created tables as well
     """
@@ -64,13 +70,14 @@ def test_with_select_tables(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_nested_with(join_dataframes, spark_info, memory_leak_check):
+def test_nested_with(join_dataframes, memory_leak_check):
     """
     Test that verifies that WITH aliasing works in the nested case
     """
@@ -108,6 +115,7 @@ def test_nested_with(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )

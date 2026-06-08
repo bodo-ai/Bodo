@@ -759,7 +759,7 @@ def test_log(args):
         pytest.param(
             pd.Series(pd.array([0, 1, 32, 127, -126, 125], dtype=pd.Int8Dtype())),
             id="vector_int8",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.Series(
@@ -769,13 +769,14 @@ def test_log(args):
                 )
             ),
             id="vector_uint8",
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.Series(
                 pd.array([0, 1, 100, 1000, 32767, 32768, 65535], dtype=pd.UInt16Dtype())
             ),
             id="vector_uint16",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.Series(
@@ -784,7 +785,7 @@ def test_log(args):
                 )
             ),
             id="vector_uint32",
-            marks=pytest.mark.slow,
+            marks=pytest.mark.weekly,
         ),
         pytest.param(
             pd.Series(
@@ -935,15 +936,15 @@ def test_width_bucket_error(args):
     [
         # We only test nullable types at this time because
         # we don't avoid nullable output yet.
-        pytest.param("Int8", marks=pytest.mark.slow),
-        pytest.param("UInt8", marks=pytest.mark.slow),
-        pytest.param("Int16", marks=pytest.mark.slow),
-        pytest.param("UInt16", marks=pytest.mark.slow),
-        pytest.param("Int32", marks=pytest.mark.slow),
-        pytest.param("UInt32", marks=pytest.mark.slow),
+        pytest.param("Int8", marks=pytest.mark.weekly),
+        pytest.param("UInt8", marks=pytest.mark.weekly),
+        pytest.param("Int16", marks=pytest.mark.weekly),
+        pytest.param("UInt16", marks=pytest.mark.weekly),
+        pytest.param("Int32", marks=pytest.mark.weekly),
+        pytest.param("UInt32", marks=pytest.mark.weekly),
         "Int64",
-        pytest.param("UInt64", marks=pytest.mark.slow),
-        pytest.param("Float32", marks=pytest.mark.slow),
+        pytest.param("UInt64", marks=pytest.mark.weekly),
+        pytest.param("Float32", marks=pytest.mark.weekly),
         "Float64",
     ],
 )
@@ -1279,22 +1280,27 @@ def test_negate_option():
 
 
 test_arrs = [
-    pd.Series([0, 0.5, 1, -1, -0.5, 0.3212, -0.78]),
-    pd.Series(
-        [
-            0,
-            1,
-            -1,
-            10000,
-            -10000,
-            20,
-            -139,
-        ]
+    pytest.param(
+        pd.Series([0, 0.5, 1, -1, -0.5, 0.3212, -0.78]), marks=pytest.mark.weekly
     ),
-    pd.Series([0, 1, 2, 3, 4, 5, 20]),
+    pytest.param(
+        pd.Series(
+            [
+                0,
+                1,
+                -1,
+                10000,
+                -10000,
+                20,
+                -139,
+            ]
+        ),
+        marks=pytest.mark.weekly,
+    ),
+    pytest.param(pd.Series([0, 1, 2, 3, 4, 5, 20]), marks=pytest.mark.weekly),
     pd.Series([1, -1, 0.1, -0.1, 1234, np.nan, -4321, 3], dtype=np.float32),
     pd.Series([-1, 0, 1, None, 2], dtype=pd.Int32Dtype()),
-    pd.Series([0, 2, 3, 5, 3], dtype=np.uint32),
+    pytest.param(pd.Series([0, 2, 3, 5, 3], dtype=np.uint32), marks=pytest.mark.weekly),
 ]
 
 single_arg_np_map = {
@@ -1366,9 +1372,11 @@ def test_numeric_single_arg_option(func):
 @pytest.mark.parametrize(
     "arr1",
     [
-        pd.Series([0, 1, 2, 3, 4, 5, 6] * 2),
+        pytest.param(pd.Series([0, 1, 2, 3, 4, 5, 6] * 2), marks=pytest.mark.weekly),
         pd.Series([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5] * 2),
-        pd.Series([0, -1.5, -2, -3.5, -4.5, -5, -6.5] * 2),
+        pytest.param(
+            pd.Series([0, -1.5, -2, -3.5, -4.5, -5, -6.5] * 2), marks=pytest.mark.weekly
+        ),
         pd.Series([0, -1, -2, -3, -4, -5, -6] * 2, dtype=np.int32),
     ],
 )

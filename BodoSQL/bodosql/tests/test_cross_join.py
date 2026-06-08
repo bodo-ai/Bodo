@@ -11,7 +11,7 @@ pytestmark = pytest_slow_unless_join
 
 
 @pytest.mark.parametrize("broadcast", [True, False])
-def test_cross_join_simpl(basic_df, spark_info, broadcast: bool, memory_leak_check):
+def test_cross_join_simpl(basic_df, broadcast: bool, memory_leak_check):
     """
     Tests a simple cross join on small tables
     """
@@ -28,14 +28,15 @@ def test_cross_join_simpl(basic_df, spark_info, broadcast: bool, memory_leak_che
         check_query(
             query,
             ctx,
-            spark_info,
+            None,
             check_dtype=False,
             check_names=False,
+            use_duckdb=True,
         )
 
 
 @pytest.mark.slow
-def test_nested_cross_join(join_dataframes, spark_info, memory_leak_check):
+def test_nested_cross_join(join_dataframes, memory_leak_check):
     """tests that nested cross joins work properly with all types,
     and with nullable values in one or more tables"""
 
@@ -60,15 +61,16 @@ def test_nested_cross_join(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_cross_join_select_star(join_dataframes, spark_info, memory_leak_check):
+def test_cross_join_select_star(join_dataframes, memory_leak_check):
     """
     Tests a simple cross join + select star
     """
@@ -84,13 +86,14 @@ def test_cross_join_select_star(join_dataframes, spark_info, memory_leak_check):
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
-def test_cross_join_select_filter(join_dataframes, spark_info, memory_leak_check):
+def test_cross_join_select_filter(join_dataframes, memory_leak_check):
     """
     Tests a simple cross join + filter
     """
@@ -107,17 +110,16 @@ def test_cross_join_select_filter(join_dataframes, spark_info, memory_leak_check
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_dtype=False,
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
-def test_nested_cross_join_with_filter_select_star(
-    join_dataframes, spark_info, memory_leak_check
-):
+def test_nested_cross_join_with_filter_select_star(join_dataframes, memory_leak_check):
     """tests that nested cross joins work properly with all types,
     and with nullable values in one or more tables, with filters and select star's"""
 
@@ -140,14 +142,15 @@ def test_nested_cross_join_with_filter_select_star(
     check_query(
         query,
         join_dataframes,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
-def test_cross_join_error(basic_df, spark_info, memory_leak_check):
+def test_cross_join_error(basic_df, memory_leak_check):
     """
     Tests that we throw a reasonable error if the cross join syntax is wrong
     """
