@@ -210,6 +210,7 @@ def test_tpch_q2(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q3(tpch_data, memory_leak_check):
     tpch_query = """select
                       l_orderkey,
@@ -641,6 +642,7 @@ def test_tpch_q9(tpch_data, spark_info, memory_leak_check):
 
 @pytest.mark.timeout(700)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q10(tpch_data, memory_leak_check):
     tpch_query = """select
                       c_custkey,
