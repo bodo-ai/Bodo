@@ -2308,7 +2308,7 @@ def box_period_index(typ, val, c):
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
     freq_obj = c.pyapi.string_from_constant_string(typ.freq)
 
-    # call pd.PeriodIndex(ordinal=data, name=name, freq=freq)
+    # call pd.PeriodIndex.from_ordinals(ordinals=data, name=name, freq=freq)
     args = c.pyapi.tuple_pack([])
     kws = c.pyapi.dict_pack(
         [("ordinals", data_obj), ("name", name_obj), ("freq", freq_obj)]
