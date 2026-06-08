@@ -306,8 +306,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
             physical_op = std::make_shared<PhysicalGPUReduce>(bodo_schema,
                                                               function_names);
         } else {
-            physical_op =
-                std::make_shared<PhysicalReduce>(bodo_schema, function_names);
+            physical_op = std::make_shared<PhysicalReduce>(
+                bodo_schema, function_names, input_column_indices);
         }
         std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); },
                    physical_op);

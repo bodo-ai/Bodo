@@ -6,11 +6,11 @@ on:
     types: [published]
   schedule:
     - cron: '45 21 * * 2,4'    # 9:45PM EST Tue, Thu
-  # pull_request:
-  #   paths:
-  #     - 'pixi.lock'
-  #     - '.github/workflows/_build_*_pip.yml'
-  #     - '.github/workflows/build_wheels.yml'
+  pull_request:
+    paths:
+      - 'pixi.lock'
+      - '.github/workflows/_build_*_pip.yml'
+      - '.github/workflows/build_wheels.yml'
 
 jobs:
   get_version:
