@@ -185,6 +185,9 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
 
         func_res = arrow::compute::CallFunction(
             "case_when", {cond, null_datum, arg_datums[0]});
+    } else if (arrow_func_name == "bodo_substr_three") {
+        RegisterSubstrThree();
+        func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums);
     } else {
         func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums);
     }
