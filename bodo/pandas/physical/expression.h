@@ -93,7 +93,6 @@ enum class PhysicalExpressionType {
     CAST,
     UNARY,
     BINARY,
-    TERNARY,
     CASE,
     UDF,
     ARROW
@@ -191,15 +190,6 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
- * @brief Extract substr from a string.
- *
- */
-std::shared_ptr<array_info> do_arrow_compute_ternary(
-    std::shared_ptr<ExprResult> arg0, std::shared_ptr<ExprResult> arg1,
-    std::shared_ptr<ExprResult> arg2, const std::string &opstr,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr);
-
-/**
  * @brief Convert ExprResult to arrow and cast to the requested type.
  *
  */
@@ -231,14 +221,6 @@ arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
                                      arrow::Datum right_res,
                                      const std::string &comparator);
 
-/**
- * @brief Run arrow compute operation on three Datums.
- *
- */
-arrow::Datum do_arrow_compute_ternary(arrow::Datum arg0_res,
-                                      arrow::Datum arg1_res,
-                                      arrow::Datum arg2_res,
-                                      const std::string &opstr);
 /**
  * @brief Run cast on arrow Datum.
  *
@@ -993,97 +975,6 @@ class PhysicalBinaryExpression : public PhysicalExpression {
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
         return do_arrow_compute_binary(left_datum, right_datum, comparator);
-    }
-
-   protected:
-    std::string comparator;
-    const std::shared_ptr<arrow::DataType> result_type;
-};
-
-/**
- * @brief Physical expression tree node type for binary op non-boolean arrays.
- *
- */
-class PhysicalTernaryExpression : public PhysicalExpression {
-   public:
-    PhysicalTernaryExpression(
-        std::shared_ptr<PhysicalExpression> arg0,
-        std::shared_ptr<PhysicalExpression> arg1,
-        std::shared_ptr<PhysicalExpression> arg2, duckdb::ExpressionType etype,
-        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
-        : PhysicalExpression(PhysicalExpressionType::TERNARY),
-          result_type(_result_type) {
-        children.push_back(arg0);
-        children.push_back(arg1);
-        children.push_back(arg2);
-        switch (etype) {
-            default:
-                throw std::runtime_error(
-                    "Unhandled binary expression type " +
-                    std::to_string(static_cast<int>(etype)));
-        }
-    }
-
-    PhysicalTernaryExpression(
-        std::shared_ptr<PhysicalExpression> arg0,
-        std::shared_ptr<PhysicalExpression> arg1,
-        std::shared_ptr<PhysicalExpression> arg2, std::string &opstr,
-        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
-        : PhysicalExpression(PhysicalExpressionType::TERNARY),
-          result_type(_result_type) {
-        children.push_back(arg0);
-        children.push_back(arg1);
-        children.push_back(arg2);
-        if (opstr == "substr") {
-            comparator = "utf8_slice_codeunits";
-        } else {
-            throw std::runtime_error("Unhandled ternary expression opstr " +
-                                     opstr);
-        }
-    }
-
-    virtual ~PhysicalTernaryExpression() = default;
-
-    /**
-     * @brief How to process this expression tree node.
-     *
-     */
-    virtual std::shared_ptr<ExprResult> ProcessBatch(
-        std::shared_ptr<table_info> input_batch) {
-        // We know we have two children so process them first.
-        std::shared_ptr<ExprResult> arg0_res =
-            children[0]->ProcessBatch(input_batch);
-        std::shared_ptr<ExprResult> arg1_res =
-            children[1]->ProcessBatch(input_batch);
-        std::shared_ptr<ExprResult> arg2_res =
-            children[2]->ProcessBatch(input_batch);
-
-        std::shared_ptr<array_info> result = do_arrow_compute_ternary(
-            arg0_res, arg1_res, arg2_res, comparator, result_type);
-        auto arg0_as_scalar =
-            std::dynamic_pointer_cast<ScalarExprResult>(arg0_res);
-        if (arg0_as_scalar) {
-            return std::make_shared<ScalarExprResult>(result);
-        }
-        return std::make_shared<ArrayExprResult>(result,
-                                                 "Ternary" + comparator);
-    }
-
-    virtual arrow::Datum join_expr_internal(
-        array_info **left_table, array_info **right_table, void **left_data,
-        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
-        int64_t left_index, int64_t right_index) {
-        arrow::Datum arg0_datum = children[0]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        arrow::Datum arg1_datum = children[1]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        arrow::Datum arg2_datum = children[1]->join_expr_internal(
-            left_table, right_table, left_data, right_data, left_null_bitmap,
-            right_null_bitmap, left_index, right_index);
-        return do_arrow_compute_ternary(arg0_datum, arg1_datum, arg2_datum,
-                                        comparator);
     }
 
    protected:

@@ -278,133 +278,6 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     return arrow_array_to_bodo(arrow_arr, bodo::BufferPool::DefaultPtr());
 }
 
-std::shared_ptr<array_info> do_arrow_compute_ternary(
-    std::shared_ptr<ExprResult> arg0, std::shared_ptr<ExprResult> arg1,
-    std::shared_ptr<ExprResult> arg2, const std::string& opstr,
-    const std::shared_ptr<arrow::DataType> result_type) {
-    // Determine whether each input is an array or a scalar
-    std::shared_ptr<ArrayExprResult> arg0_as_array =
-        std::dynamic_pointer_cast<ArrayExprResult>(arg0);
-    std::shared_ptr<ScalarExprResult> arg0_as_scalar =
-        std::dynamic_pointer_cast<ScalarExprResult>(arg0);
-
-    std::shared_ptr<ArrayExprResult> arg1_as_array =
-        std::dynamic_pointer_cast<ArrayExprResult>(arg1);
-    std::shared_ptr<ScalarExprResult> arg1_as_scalar =
-        std::dynamic_pointer_cast<ScalarExprResult>(arg1);
-
-    std::shared_ptr<ArrayExprResult> arg2_as_array =
-        std::dynamic_pointer_cast<ArrayExprResult>(arg2);
-    std::shared_ptr<ScalarExprResult> arg2_as_scalar =
-        std::dynamic_pointer_cast<ScalarExprResult>(arg2);
-
-    arrow::Datum arg0_datum;
-    if (arg0_as_array) {
-        arg0_datum = arrow::Datum(prepare_arrow_compute(arg0_as_array->result));
-    } else if (arg0_as_scalar) {
-        arg0_datum =
-            arrow::MakeScalar(prepare_arrow_compute(arg0_as_scalar->result)
-                                  ->GetScalar(0)
-                                  .ValueOrDie());
-    } else {
-        throw std::runtime_error(
-            "do_arrow_compute_ternary arg0 is neither array nor scalar.");
-    }
-
-    arrow::Datum arg1_datum;
-    if (arg1_as_array) {
-        arg1_datum = arrow::Datum(prepare_arrow_compute(arg1_as_array->result));
-    } else if (arg1_as_scalar) {
-        arg1_datum =
-            arrow::MakeScalar(prepare_arrow_compute(arg1_as_scalar->result)
-                                  ->GetScalar(0)
-                                  .ValueOrDie());
-    } else {
-        throw std::runtime_error(
-            "do_arrow_compute_ternary arg1 is neither array nor scalar.");
-    }
-
-    arrow::Datum arg2_datum;
-    if (arg2_as_array) {
-        arg2_datum = arrow::Datum(prepare_arrow_compute(arg2_as_array->result));
-    } else if (arg2_as_scalar) {
-        arg2_datum =
-            arrow::MakeScalar(prepare_arrow_compute(arg2_as_scalar->result)
-                                  ->GetScalar(0)
-                                  .ValueOrDie());
-    } else {
-        throw std::runtime_error(
-            "do_arrow_compute_ternary arg2 is neither array nor scalar.");
-    }
-
-    arrow::Result<arrow::Datum> ternary_res;
-    if (opstr == "utf8_slice_codeunits") {
-        // Convert arg2 datum to be stop instead of length.
-        arrow::Result<arrow::Datum> stop_res =
-            arrow::compute::CallFunction("add", {arg1_datum, arg2_datum});
-        if (!stop_res.ok()) {
-            throw std::runtime_error("Error computing stop: " +
-                                     stop_res.status().message());
-        }
-        arg2_datum = stop_res.ValueOrDie();
-        std::optional<int64_t> arg1_val, arg2_val;
-        arg1_val = ExtractIntScalar(arg1_datum);
-        arg2_val = ExtractIntScalar(arg2_datum);
-        if (!arg1_val.has_value() && !arg2_val.has_value()) {
-            // This is the version where start and stop are arrays.
-            RegisterSubstrThree();
-            ternary_res = arrow::compute::CallFunction(
-                "bodo_substr_three", {arg0_datum, arg1_datum, arg2_datum});
-        } else if (arg1_val.has_value() && arg2_val.has_value()) {
-            // This is the version where start and stop are scalars.
-            arrow::compute::SliceOptions options(arg1_val.value(),
-                                                 arg2_val.value());
-            ternary_res =
-                arrow::compute::CallFunction(opstr, {arg0_datum}, &options);
-        } else {
-            throw std::runtime_error(
-                "utf8_slice_codeunits not supported yet for this combination "
-                "of array and scalar inputs.");
-        }
-    } else {
-        ternary_res = arrow::compute::CallFunction(
-            opstr, {arg0_datum, arg1_datum, arg2_datum});
-    }
-
-    if (!ternary_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_arrow_compute_ternary: Error in Arrow compute: " +
-            ternary_res.status().message());
-    }
-
-    arrow::Datum ternary_datum = ternary_res.ValueOrDie();
-    std::shared_ptr<arrow::DataType> ternary_dtype = ternary_datum.type();
-
-    // If a desired result_type is provided and differs, cast the result
-    if (result_type && ternary_dtype != result_type) {
-        arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(ternary_datum, result_type);
-        if (!cast_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_ternary cast_res: Error in Arrow compute: " +
-                cast_res.status().message());
-        }
-        ternary_res = cast_res;
-    }
-
-    arrow::Datum final_datum = ternary_res.ValueOrDie();
-
-    // If the result is a scalar, convert to a length-1 array first
-    if (final_datum.is_scalar()) {
-        return arrow_array_to_bodo(
-            arrow::MakeArrayFromScalar(*final_datum.scalar(), 1).ValueOrDie(),
-            bodo::BufferPool::DefaultPtr());
-    }
-
-    std::shared_ptr<arrow::Array> arrow_arr = final_datum.make_array();
-    return arrow_array_to_bodo(arrow_arr, bodo::BufferPool::DefaultPtr());
-}
-
 std::shared_ptr<array_info> do_arrow_compute_unary(
     std::shared_ptr<ExprResult> left_res, const std::string& comparator,
     const arrow::compute::FunctionOptions* func_options) {
@@ -489,21 +362,6 @@ arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
                                      const std::string& comparator) {
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {left_res, right_res});
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute_binary: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    return cmp_res.ValueOrDie();
-}
-
-arrow::Datum do_arrow_compute_ternary(arrow::Datum arg0_res,
-                                      arrow::Datum arg1_res,
-                                      arrow::Datum arg2_res,
-                                      const std::string& opstr) {
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction(opstr, {arg0_res, arg1_res, arg2_res});
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_array_compute_binary: Error in Arrow compute: " +
@@ -836,17 +694,6 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                                 buildPhysicalExprTree(bfe.children[0],
                                                       col_ref_map, no_scalars),
                                 buildPhysicalExprTree(bfe.children[1],
-                                                      col_ref_map, no_scalars),
-                                bfe.function.name, result_type));
-                    } break;
-                    case 3: {
-                        return std::static_pointer_cast<PhysicalExpression>(
-                            std::make_shared<PhysicalTernaryExpression>(
-                                buildPhysicalExprTree(bfe.children[0],
-                                                      col_ref_map, no_scalars),
-                                buildPhysicalExprTree(bfe.children[1],
-                                                      col_ref_map, no_scalars),
-                                buildPhysicalExprTree(bfe.children[2],
                                                       col_ref_map, no_scalars),
                                 bfe.function.name, result_type));
                     } break;
