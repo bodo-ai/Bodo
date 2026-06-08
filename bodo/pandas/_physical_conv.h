@@ -42,6 +42,7 @@ class PhysicalPlanBuilder {
     std::shared_ptr<Pipeline> terminal_pipeline;
     std::map<duckdb::idx_t, CTEInfo>& ctes;
     duckdb::device_mapping_t& run_on_gpu;
+    bool use_sql_rules = false;
 
     // Mapping of join ids to their JoinState pointers for join filter operators
     // (filled during physical plan construction). Using loose pointers since
@@ -58,7 +59,7 @@ class PhysicalPlanBuilder {
 
     PhysicalPlanBuilder(
         std::map<duckdb::idx_t, CTEInfo>& _ctes,
-        duckdb::device_mapping_t& _run_on_gpu,
+        duckdb::device_mapping_t& _run_on_gpu, bool use_sql_rules = false,
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             _join_filter_states =
                 std::make_shared<std::unordered_map<int, join_state_t>>(),
@@ -74,6 +75,7 @@ class PhysicalPlanBuilder {
         : active_pipeline(nullptr),
           ctes(_ctes),
           run_on_gpu(_run_on_gpu),
+          use_sql_rules(use_sql_rules),
           join_filter_states(std::move(_join_filter_states)),
           join_filter_pipelines(std::move(_join_filter_pipelines))
 #ifdef USE_CUDF

@@ -113,7 +113,8 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
  * pyarrow schema object
  */
 std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py);
+    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py,
+    bool use_sql_rules = false);
 
 /**
  * @brief Creates a new table index.

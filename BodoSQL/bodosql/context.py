@@ -723,7 +723,9 @@ class BodoSQLContext:
             # filter translation during conversion to Python plan.
             self.join_filter_info = {}
             plan = java_plan_to_python_plan(self, java_plan)
-            out = bodo.pandas.plan.execute_plan(plan, optimize=False)
+            out = bodo.pandas.plan.execute_plan(
+                plan, optimize=False, use_sql_rules=True
+            )
         except Exception as e:
             message = error_to_string(e)
             if bodosql.verbose_cpp_backend:

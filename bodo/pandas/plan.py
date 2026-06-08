@@ -1038,7 +1038,7 @@ total_init_lazy = 0
 total_execute_plan = 0
 
 
-def execute_plan(plan: LazyPlan, optimize=True):
+def execute_plan(plan: LazyPlan, optimize=True, use_sql_rules=False):
     """Execute a dataframe plan using Bodo's execution engine.
 
     Args:
@@ -1093,7 +1093,7 @@ def execute_plan(plan: LazyPlan, optimize=True):
         if bodo.get_rank() == 0:
             start_time = time.perf_counter()
         ret = plan_optimizer.py_execute_plan(
-            optimized_plan, output_func, duckdb_plan.out_schema
+            optimized_plan, output_func, duckdb_plan.out_schema, use_sql_rules
         )
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time execute", time.perf_counter() - start_time)
