@@ -90,22 +90,75 @@ jobs:
           role-skip-session-tagging: true
           role-duration-seconds: 14400 # Max duration: 4 hours
 
+      - name: Install Oracle Instant Client
+        if: runner.os != 'Windows' && !startsWith(inputs.test-type, 'sql')
+        run: |
+          set -exo pipefail
+          pixi global install unzip
+          which unzip
+
+          if [[ "$(uname)" == 'Linux' ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
+              sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
+            else
+              wget https://download.oracle.com/otn_software/linux/instantclient/1925000/instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip
+              sudo $(which unzip) instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip -d /usr/local/lib
+            fi
+          else
+            wget https://download.oracle.com/otn_software/mac/instantclient/198000/instantclient-basic-macos.x64-19.8.0.0.0dbru.zip
+            sudo $(which unzip) instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
+          fi
+
       - name: Install Polaris
         run: |
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
       - name: Run Tests
         run: |
+          set -exo pipefail
+
+          if [[ "$unamestr" == 'Linux' ]]; then
+            export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
+          else
+            export LD_LIBRARY_PATH=/usr/local/lib/instantclient_19_8:$LD_LIBRARY_PATH
+          fi
+
+          if [[ "$unamestr" == 'Linux'  ]]; then
+            echo "Setting up Hadoop (and Arrow) environment variables"
+            export HADOOP_HOME=/opt/hadoop-3.4.0
+            export HADOOP_INSTALL=$HADOOP_HOME
+            export HADOOP_MAPRED_HOME=$HADOOP_HOME
+            export HADOOP_COMMON_HOME=$HADOOP_HOME
+            export HADOOP_HDFS_HOME=$HADOOP_HOME
+            export YARN_HOME=$HADOOP_HOME
+            export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+            export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+            export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+            export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+            export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            # On Windows we set HADOOP_HOME to a dummy directory.
+            # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+            export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
+            export PATH=$HADOOP_HOME/bin:$PATH
+            # Visual Studio 2010 DLLs are needed for winutils.exe
+            curl -LO https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+            ./vcredist_x64.exe -passive
+          else
+            echo "Skipping hadoop/arrow env var setup"
+          fi
+
+          if [[ "$TEST_TYPE" == sql* ]]; then
+              cd "$WORKING_DIR/BodoSQL"
+          fi
+
           # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode
           # to avoid importing JIT during test collection.
           PYTEST_IGNORE=(
               --ignore bodo/tests/test_streaming
               --ignore bodo/tests/caching_tests
           )
-
-          if [[ "$TEST_TYPE" == sql* ]]; then
-              cd "$WORKING_DIR/BodoSQL"
-          fi
 
           if [[ "$TEST_TYPE" == "cache" ]]; then
               python -m bodo.runtests_caching \
@@ -202,6 +255,8 @@ jobs:
           # Testing Credentials
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_USER2: ${{ secrets.SF_USER2 }}
+          SF_PASSWORD2: ${{ secrets.SF_PASSWORD2 }}
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
           SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
           SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
