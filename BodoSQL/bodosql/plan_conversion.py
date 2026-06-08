@@ -20,6 +20,7 @@ from bodo.pandas.plan import (
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
+    LazyPlan,
     LogicalAggregate,
     LogicalComparisonJoin,
     LogicalCrossProduct,
@@ -33,6 +34,7 @@ from bodo.pandas.plan import (
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
+from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
 
@@ -439,6 +441,19 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
         )
 
+    if operator_class_name == "SqlNullPolicyFunction":
+        # Map Calcite basic functions to Bodo expressions
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        # function name as string (e.g., "POWER", "SQRT")
+        func_name = op.getName().upper()
+
+        if func_name == "POW" and len(op_exprs) == 2:
+            left = op_exprs[0]
+            right = op_exprs[1]
+            out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
+            return ArithOpExpression(out_empty, left, right, "__pow__")
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
@@ -507,6 +522,18 @@ def java_binop_to_python_expr(ctx, kind, op_exprs):
         return ConjunctionOpExpression(bool_empty_data, left, right, "__or__")
 
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
+
+
+def gen_plan_via_bodo_dataframe(func, *args, **kwargs):
+    args = [arg if not isinstance(arg, LazyPlan) else wrap_plan(arg) for arg in args]
+    kwargs = {
+        k: (arg if not isinstance(arg, LazyPlan) else wrap_plan(arg))
+        for k, arg in kwargs.items()
+    }
+    output_dataframe = func(*args, **kwargs)
+    assert isinstance(output_dataframe, bodo.pandas.DataFrame)
+    assert output_dataframe.is_lazy_plan()
+    return output_dataframe._plan
 
 
 def java_case_to_python_case(ctx, operands, input_plan):
@@ -590,6 +617,68 @@ def java_join_to_python_join(ctx, java_join):
         # them to reference the build and probe side that is more tedious
         # work to do the mapping.
         planFilter = LogicalFilter(empty_join_out, planJoinOrCross, non_equi_exprs)
+        from bodo.ext import plan_optimizer
+
+        if join_type == plan_optimizer.CJoinType.LEFT:
+
+            def right_fix_na(filtered, left_keys, left_df, right_df):
+                new_test_col = "_plan_conversion_right"
+                # matched_left as unique left rows that appeared in filtered
+                matched_left = filtered[left_keys].drop_duplicates()
+                matched_left[new_test_col] = 1
+
+                # merge matched_left back to left_df; rows that did not match will have NaN in columns from matched_left
+                tmp = left_df.merge(matched_left, on=left_keys, how="left")
+
+                # unmatched rows are those with _matched NaN
+                unmatched_left = tmp[tmp[new_test_col].isna()]
+
+                # add right-only columns as NA
+                for c, dtype in zip(right_df.columns, right_df.dtypes):
+                    unmatched_left.new_na_col(c, dtype)
+
+                return bd.concat(
+                    [filtered, unmatched_left.drop(columns=[new_test_col])]
+                )  # this originally had ignore_index=True
+
+            if len(left_keys) == 0:
+                left_keys = list(left_plan.empty_data.columns)
+            planFilter = gen_plan_via_bodo_dataframe(
+                right_fix_na, planFilter, left_keys, left_plan, right_plan
+            )
+        elif join_type == plan_optimizer.CJoinType.RIGHT:
+
+            def left_fix_na(filtered, right_keys, left_df, right_df):
+                new_test_col = "_plan_conversion_left"
+                # matched_left as unique left rows that appeared in filtered
+                matched_right = filtered[right_keys].drop_duplicates()
+                matched_right[new_test_col] = 1
+
+                # merge matched_left back to left_df; rows that did not match will have NaN in columns from matched_left
+                tmp = right_df.merge(matched_right, on=right_keys, how="left")
+
+                # unmatched rows are those with _matched NaN
+                unmatched_right = tmp[tmp[new_test_col].isna()].drop(
+                    columns=[new_test_col]
+                )
+
+                # add right-only columns as NA
+                for c, dtype in zip(left_df.columns, left_df.dtypes):
+                    unmatched_right.new_na_col(c, dtype)
+                unmatched_right_reorder = unmatched_right[
+                    list(left_df.columns) + list(right_df.columns)
+                ]
+
+                return bd.concat(
+                    [filtered, unmatched_right_reorder]
+                )  # this originally had ignore_index=True
+
+            if len(right_keys) == 0:
+                right_keys = list(right_plan.empty_data.columns)
+            planFilter = gen_plan_via_bodo_dataframe(
+                left_fix_na, planFilter, right_keys, left_plan, right_plan
+            )
+
         return planFilter
 
 

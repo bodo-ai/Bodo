@@ -75,6 +75,8 @@ duckdb::device_mapping_t partition_to_gpu(
  */
 class Executor {
    private:
+    static bool running;
+
     std::vector<std::shared_ptr<Pipeline>> pipelines;
     /*
      * @brief Do topological sort and fill in the pipelines vector.
@@ -139,6 +141,10 @@ class Executor {
    public:
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
                       std::shared_ptr<arrow::Schema> out_schema) {
+        if (running) {
+            throw std::runtime_error("Recursive Executors not allowed.");
+        }
+        running = true;
         QueryProfileCollector::Default().Init();
         // Partition between CPU and GPU.
         run_on_gpu = partition_to_gpu(plan);
@@ -159,6 +165,8 @@ class Executor {
         }
         fillPipelinesTopoSort(root_pipeline);
     }
+
+    ~Executor() { running = false; }
 
     /**
      * @brief Execute the plan and return the result.

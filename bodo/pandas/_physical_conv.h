@@ -113,6 +113,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalAggregate& op);
     void Visit(duckdb::LogicalOrder& op);
     void Visit(duckdb::LogicalComparisonJoin& op);
+    void Visit(duckdb::LogicalAnyJoin& op);
     void Visit(duckdb::LogicalCrossProduct& op);
     void Visit(duckdb::LogicalLimit& op);
     void Visit(duckdb::LogicalTopN& op);
@@ -140,6 +141,8 @@ class PhysicalPlanBuilder {
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN) {
             Visit(op.Cast<duckdb::LogicalComparisonJoin>());
+        } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_ANY_JOIN) {
+            Visit(op.Cast<duckdb::LogicalAnyJoin>());
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_CROSS_PRODUCT) {
             Visit(op.Cast<duckdb::LogicalCrossProduct>());

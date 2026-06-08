@@ -1670,3 +1670,9 @@ def scalarOutputNACheck(out, dtype):
             # plain NumPy ints/bools can't hold NA, pandas promotes to float NaN
             return np.nan
     return out
+
+
+def pandas_dtype_to_arrow(dtype):
+    s = pd.Series(pd.NA, dtype=dtype)
+    arr = pa.Array.from_pandas(s)
+    return arr.type

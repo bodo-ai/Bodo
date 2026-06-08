@@ -61,6 +61,7 @@ from bodo.pandas.plan import (
     LogicalParquetWrite,
     LogicalProjection,
     LogicalS3VectorsWrite,
+    NullExpression,
     _get_df_python_func_plan,
     execute_plan,
     get_proj_expr_single,
@@ -85,6 +86,7 @@ from bodo.pandas.utils import (
     get_lazy_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
+    pandas_dtype_to_arrow,
     wrap_module_functions_and_methods,
     wrap_plan,
 )
@@ -1215,6 +1217,42 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         raise BodoLibNotImplementedException(
             "DataFrame getitem: Only selecting columns or filtering with BodoSeries is supported."
         )
+
+    def new_na_col(self, key, dtype):
+        from bodo.pandas.base import _empty_like
+
+        empty_data = _empty_like(self)
+
+        if key in empty_data.columns:
+            raise ValueError("Key cannot be an existing column.")
+
+        ikey = None
+        is_replace = False
+
+        pa_type = pandas_dtype_to_arrow(dtype)
+        const_empty_data = arrow_to_empty_df(pa.schema([pa.field(key, pa_type)]))
+        const_expr = NullExpression(
+            const_empty_data,
+            self._plan,
+            0,
+        )
+        proj_exprs = _get_setitem_proj_exprs(
+            empty_data, self._plan, ikey, is_replace, const_expr
+        )
+        empty_data[key] = pd.Series(dtype=dtype)
+
+        if isinstance(pa_type, pa.TimestampType):
+            # Convert to nanosecond precision as required by backend
+            pa_type = pa.timestamp("ns", pa_type.tz)
+        empty_data[key] = empty_data[key].astype(pd.ArrowDtype(pa_type))
+
+        new_plan = LogicalProjection(
+            empty_data,
+            self._plan,
+            proj_exprs,
+        )
+        self._update_setitem_internal_state(new_plan, key, pd.NA)
+        return self
 
     @check_args_fallback("none")
     def __setitem__(self, key, value) -> None:

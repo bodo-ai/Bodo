@@ -698,6 +698,67 @@ std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     return std::move(filter);
 }
 
+std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromAnyJoin(
+    duckdb::LogicalAnyJoin& comp_join) {
+    // Convert the JoinCondition to an Expression usable by a filter node.
+    duckdb::unique_ptr<duckdb::Expression>& combined_pred = comp_join.condition;
+
+    duckdb::vector<duckdb::ColumnBinding> probe_bindings =
+        comp_join.children[0]->GetColumnBindings();
+    duckdb::vector<duckdb::ColumnBinding> build_bindings =
+        comp_join.children[1]->GetColumnBindings();
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        probe_col_ref_map = getColRefMap(probe_bindings);
+    std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>
+        build_col_ref_map = getColRefMap(build_bindings);
+
+    auto probe_proj_map_copy = comp_join.left_projection_map;
+    auto build_proj_map_copy = comp_join.right_projection_map;
+    comp_join.ResolveOperatorTypes();
+    comp_join.children[0]->ResolveOperatorTypes();
+    comp_join.children[1]->ResolveOperatorTypes();
+    // This makes code simpler later if we know a column will appear
+    // in the map if it is projected.  (Empty projection map means
+    // everything is projected.)
+    fill_if_empty(probe_proj_map_copy, comp_join.children[0]->types.size());
+    fill_if_empty(build_proj_map_copy, comp_join.children[1]->types.size());
+
+    std::unordered_set<duckdb::idx_t> probe_table_bindings;
+    std::unordered_set<duckdb::idx_t> build_table_bindings;
+    duckdb::LogicalJoin::GetTableReferences(*(comp_join.children[0]),
+                                            probe_table_bindings);
+    duckdb::LogicalJoin::GetTableReferences(*(comp_join.children[1]),
+                                            build_table_bindings);
+    // Find column used in the expression but not output from the join
+    // previously.
+    MissingBindingsResult mbr = FindMissingBindingsInProjectionMaps(
+        combined_pred, probe_proj_map_copy, build_proj_map_copy,
+        probe_table_bindings, build_table_bindings);
+
+    // Add the missing columns to the projection map for the new join
+    // node.
+    duckdb::vector<duckdb::idx_t> new_probe_proj_map = gen_new_proj_map(
+        probe_proj_map_copy, mbr.missing_in_probe, probe_col_ref_map);
+    duckdb::vector<duckdb::idx_t> new_build_proj_map = gen_new_proj_map(
+        build_proj_map_copy, mbr.missing_in_build, build_col_ref_map);
+
+    duckdb::unique_ptr<duckdb::LogicalOperator> new_op;
+    auto new_op_cross = duckdb::make_uniq<duckdb::LogicalCrossProduct>(
+        std::move(comp_join.children[0]), std::move(comp_join.children[1]));
+    new_op = std::move(new_op_cross);
+
+    // Create the new filter node and give it the expression to test.
+    auto filter =
+        duckdb::make_uniq<duckdb::LogicalFilter>(std::move(combined_pred));
+    // Move the join (which now only contains equi conditions) under the filter
+    filter->children.push_back(std::move(new_op));
+    filter->projection_map = gen_split_filter_projection_map(
+        probe_proj_map_copy, new_probe_proj_map, build_proj_map_copy,
+        new_build_proj_map);
+
+    return std::move(filter);
+}
+
 void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     // See DuckDB code for background:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/src/execution/physical_plan/plan_comparison_join.cpp#L65
@@ -802,6 +863,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
 #endif  // USE_CUDF
     // Build side pipeline runs before probe side.
     this->active_pipeline->addRunBefore(done_pipeline);
+}
+
+void PhysicalPlanBuilder::Visit(duckdb::LogicalAnyJoin& op) {
+    std::unique_ptr<duckdb::LogicalOperator> split =
+        SplitNonEquiFromAnyJoin(op);
+    if (!split) {
+        throw std::runtime_error("Couldn't split AnyJoin.");
+    }
+    Visit(*split);
 }
 
 void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
