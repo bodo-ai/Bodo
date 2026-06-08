@@ -17,6 +17,7 @@ pytestmark = pytest_pandas
     [
         "`B B` > @a + 1 & 5 > index > 1",
         pytest.param("(A == @a) | (C == 'AA')", marks=pytest.mark.slow),
+        pytest.param("not A < 5", marks=pytest.mark.slow),
         pytest.param("C in ['AA', 'C']", marks=pytest.mark.slow),
         pytest.param("C not in ['AA', 'C']", marks=pytest.mark.slow),
         pytest.param("C.str.contains('C')", marks=pytest.mark.slow),
