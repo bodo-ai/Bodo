@@ -26,6 +26,7 @@ from bodo.pandas.plan import (
     LogicalDistinct,
     LogicalFilter,
     LogicalJoinFilter,
+    LogicalLimit,
     LogicalOrder,
     LogicalProjection,
     NullExpression,
@@ -1070,8 +1071,8 @@ def _agg_to_func_name(func):
 def java_sort_to_python_sort(ctx, java_plan):
     """Convert a BodoSQL Java sort plan to a Python sort plan."""
 
-    if java_plan.getFetch() is not None or java_plan.getOffset() is not None:
-        raise NotImplementedError("LIMIT/OFFSET in sort not supported yet")
+    if java_plan.getOffset() is not None:
+        raise NotImplementedError("OFFSET in sort not supported yet")
 
     input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
 
@@ -1097,7 +1098,12 @@ def java_sort_to_python_sort(ctx, java_plan):
         key_col_inds,
         input_plan.pa_schema,
     )
-    return sorted_plan
+    if java_plan.getFetch() is not None:
+        limit = java_plan.getFetch()
+        limit_expr = java_expr_to_python_expr(ctx, limit, input_plan)
+        return LogicalLimit(input_plan.empty_data, sorted_plan, limit_expr.value)
+    else:
+        return sorted_plan
 
 
 def java_values_to_python_values(ctx, java_plan):
