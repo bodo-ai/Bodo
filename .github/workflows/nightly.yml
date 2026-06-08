@@ -73,15 +73,15 @@ jobs:
   #     num-workers: 2
   #   secrets: inherit
 
-  bodo-cache:
-    needs: create-test-marker
-    uses: ./.github/workflows/_test_nightly_python_source.yml
-    with:
-      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-      test-type: cache
-      runner-id: ubuntu-latest
-      num-workers: 2
-    secrets: inherit
+  # bodo-cache:
+  #   needs: create-test-marker
+  #   uses: ./.github/workflows/_test_nightly_python_source.yml
+  #   with:
+  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+  #     test-type: cache
+  #     runner-id: ubuntu-latest
+  #     num-workers: 2
+  #   secrets: inherit
 
   # bodo-spawn-1p:
   #   needs: create-test-marker
@@ -157,15 +157,15 @@ jobs:
   #     num-workers: 2
   #   secrets: inherit
 
-  # bodosql-cache:
-  #   needs: create-test-marker
-  #   uses: ./.github/workflows/_test_nightly_python_source.yml
-  #   with:
-  #     pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
-  #     test-type: sql_cache
-  #     runner-id: ubuntu-latest
-  #     num-workers: 2
-  #   secrets: inherit
+  bodosql-cache:
+    needs: create-test-marker
+    uses: ./.github/workflows/_test_nightly_python_source.yml
+    with:
+      pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
+      test-type: sql_cache
+      runner-id: ubuntu-latest
+      num-workers: 2
+    secrets: inherit
 
   # bodosql-spawn-1p:
   #   needs: create-test-marker
