@@ -454,6 +454,24 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[1]
             out_empty = left.empty_data.iloc[:, 0]
             return SubstrOpExpression(out_empty, left, 0, len_expr)
+        elif func_name == "STARTSWITH" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            match_expr = op_exprs[1]
+            if not isinstance(match_expr, bodo.pandas.plan.ConstantExpression):
+                raise ValueError(
+                    f"match_expr should be ConstantExpression but instead was {type(match_expr)}"
+                )
+            if not isinstance(match_expr.value, str):
+                raise ValueError(
+                    f"match_expr.value should be string but instead was {type(match_expr.value)}"
+                )
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return ArrowScalarFuncExpression(
+                bool_empty_data,
+                [src],
+                "starts_with",
+                (match_expr.value,),
+            )
         elif func_name == "ENDSWITH" and len(op_exprs) == 2:
             src = op_exprs[0]
             match_expr = op_exprs[1]
