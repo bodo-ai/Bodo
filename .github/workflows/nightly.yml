@@ -14,7 +14,7 @@ on:
         default: false
         type: boolean
   schedule:
-    - cron: '00 21 * * 0,1,2,3,4'    # 9:00PM EST Sunday-Friday
+    - cron: '00 16 * * 0,1,2,3,4'    # 4:00 PM UTC Sunday-Friday
 
 jobs:
   create-test-marker:
