@@ -1419,7 +1419,7 @@ static arrow::Status SubstrThreeExec(arrow::compute::KernelContext *ctx,
 
         // Compute take and append substring
         int64_t take = std::min<int64_t>(
-            len_val, static_cast<int64_t>(byte_len) - start_val);
+            len_val, byte_len - start_val);
         const char *substr_ptr =
             src_data + off0 + static_cast<size_t>(start_val);
         ARROW_RETURN_NOT_OK(
