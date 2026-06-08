@@ -473,6 +473,18 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (match_expr.value,),
             )
 
+    if operator_class_name == "SqlSubstringFunction":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "SUBSTRING" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            start_expr = op_exprs[1]
+            len_expr = op_exprs[2]
+            out_empty = src.empty_data.iloc[:, 0]
+            return SubstrOpExpression(out_empty, src, start_expr, len_expr)
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
@@ -735,6 +747,10 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
 
     if lit_type_name.equals(SqlTypeName.DOUBLE):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+        return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
+
+    if lit_type_name.equals(SqlTypeName.BOOLEAN):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
         return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
 
     if lit_type_name.equals(SqlTypeName.CHAR):
