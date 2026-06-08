@@ -406,7 +406,9 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
         "aws-polaris-warehouse",
         pytest.param(
             "azure-polaris-warehouse",
-            marks=pytest.mark.skip(reason="TODO(scott): Enable Azure tests on CI"),
+            marks=pytest.mark.skip(
+                reason="TODO(scott): Configure credentials on Github CI"
+            ),
         ),
     ]
 )
