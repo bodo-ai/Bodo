@@ -9,7 +9,7 @@ on:
         default: ""
         type: string
   schedule:
-    - cron: '00 21 * * 5'    # 9:00PM EST every Friday
+    - cron: '00 2 * * 6'    # 9:00PM EST every Friday
   pull_request:
 
 
@@ -18,12 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  weekly-linux-64-ci:
-    uses: ./.github/workflows/nightly.yml
-    with:
-      pytest-marker: ${{ inputs.pytest-marker }}
-      weekly: true
-    secrets: inherit
 
   weekly-linux-arm-ci:
     uses: ./.github/workflows/nightly.yml
@@ -33,4 +27,4 @@ jobs:
       runner-id: ubuntu-24.04-arm
     secrets: inherit
 
-# TODO: Test Windows
+# TODO: Linux-64 Weekly tests, Windows tests
