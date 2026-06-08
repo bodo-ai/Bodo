@@ -1400,10 +1400,12 @@ static arrow::Status SubstrThreeExec(arrow::compute::KernelContext *ctx,
         int64_t len_val = len_values[len_offset + i];
 
         // Normalize negatives
-        if (start_val < 0)
+        if (start_val < 0) {
             start_val = 0;
-        if (len_val < 0)
+         }
+        if (len_val < 0) {
             len_val = 0;
+        }
 
         // Read string offsets: offsets are int64 (common Arrow layout)
         // offsets array length is n + 1; offsets index = src_offset + i
