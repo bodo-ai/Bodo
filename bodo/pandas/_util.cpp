@@ -1402,7 +1402,7 @@ static arrow::Status SubstrThreeExec(arrow::compute::KernelContext *ctx,
         // Normalize negatives
         if (start_val < 0) {
             start_val = 0;
-         }
+        }
         if (len_val < 0) {
             len_val = 0;
         }
@@ -1420,8 +1420,7 @@ static arrow::Status SubstrThreeExec(arrow::compute::KernelContext *ctx,
         }
 
         // Compute take and append substring
-        int64_t take = std::min<int64_t>(
-            len_val, byte_len - start_val);
+        int64_t take = std::min<int64_t>(len_val, byte_len - start_val);
         const char *substr_ptr =
             src_data + off0 + static_cast<size_t>(start_val);
         ARROW_RETURN_NOT_OK(
