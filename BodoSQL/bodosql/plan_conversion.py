@@ -1027,6 +1027,15 @@ def java_agg_to_python_agg(ctx, java_plan):
                 f"Only single-argument {func_name} aggregations are supported"
             )
             out_type = pa.bool_()
+        elif func_name == "literal_agg":
+            rexlist = func.getClass().getDeclaredField("rexList").get(func)
+            assert len(rexlist) == 1
+            literal_for_literal_agg = java_literal_to_python_literal(
+                ctx, rexlist.get(0), input_plan
+            )
+            out_types.append(literal_for_literal_agg.empty_data.dtypes[0].pyarrow_dtype)
+            exprs.append(literal_for_literal_agg)
+            continue
         else:
             raise NotImplementedError(
                 f"java_agg_to_python_agg: aggregation {func_name} not supported yet"
@@ -1087,6 +1096,9 @@ def _agg_to_func_name(func):
 
     if kind.equals(SqlKind.STDDEV_SAMP) and len(argList) == 1:
         return "std"
+
+    if kind.equals(SqlKind.LITERAL_AGG) and len(argList) == 0:
+        return "literal_agg"
 
     if kind.equals(SqlKind.OTHER):
         if agg_name == "BOOLOR_AGG":
