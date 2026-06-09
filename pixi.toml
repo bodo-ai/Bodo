@@ -400,6 +400,8 @@ openai = "*"
 snowflake-sqlalchemy = "*"
 # Use PyIceberg from pip to prevent segfaults in Mac dev environment.
 pyiceberg = ">=0.11"
+# AI Function testing
+transformers = "*"
 
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]

@@ -622,26 +622,33 @@ def test_tz_aware_datetime_to_timestamp_cast(
         query1 = "SELECT A::Timestamp as A from table1"
     else:
         query1 = "SELECT CAST(A as Timestamp) as A from table1"
+    expected_output1 = pd.DataFrame(
+        {"A": tz_aware_df["TABLE1"]["A"].dt.tz_localize(None)}
+    )
     check_query(
         query1,
         tz_aware_df,
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=expected_output1,
     )
 
     if use_sf_cast_syntax:
         query2 = "SELECT A::Date as A from table1"
     else:
         query2 = "SELECT CAST(A as Date) as A from table1"
+
+    expected_output2 = pd.DataFrame(
+        {"A": tz_aware_df["TABLE1"]["A"].dt.tz_localize(None).dt.normalize().dt.date}
+    )
     check_query(
         query2,
         tz_aware_df,
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=expected_output2,
     )
 
 

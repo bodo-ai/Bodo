@@ -439,6 +439,23 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
         )
 
+    if operator_class_name == "SqlNullPolicyFunction":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "LEFT" and len(op_exprs) == 2:
+            # Implement LEFT as substr(0,...)
+            left = op_exprs[0]
+            len_expr = op_exprs[1]
+            if not isinstance(len_expr, ConstantExpression):
+                raise ValueError("len_expr not a ConstantExpression")
+
+            out_empty = left.empty_data.iloc[:, 0]
+            return ArrowScalarFuncExpression(
+                out_empty, [left], "utf8_slice_codeunits", (0, len_expr.value, 1)
+            )
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
@@ -652,6 +669,36 @@ def java_filter_to_python_filter(ctx, java_filter):
     return LogicalFilter(input_plan.empty_data, input_plan, condition)
 
 
+def _is_interval_type(sql_type_name):
+    """Check if a SqlTypeName is any interval subtype."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    return (
+        sql_type_name.equals(SqlTypeName.INTERVAL_YEAR)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_MONTH)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_YEAR_MONTH)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_DAY)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_HOUR)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_MINUTE)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_SECOND)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_DAY_HOUR)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_DAY_MINUTE)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_HOUR_MINUTE)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_HOUR_SECOND)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_MINUTE_SECOND)
+    )
+
+
+def _is_year_month_interval(sql_type_name):
+    """Check if a SqlTypeName is a year/month interval subtype."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    return (
+        sql_type_name.equals(SqlTypeName.INTERVAL_YEAR)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_MONTH)
+        or sql_type_name.equals(SqlTypeName.INTERVAL_YEAR_MONTH)
+    )
+
+
 def java_literal_to_python_literal(ctx, java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
@@ -710,10 +757,20 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         val = pd.Timestamp(java_literal.getValue2(), unit="ms")
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
-    if lit_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
+    if _is_interval_type(lit_type_name):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-        # getValue2() returns an integer representing milliseconds
-        val = pd.to_timedelta(int(java_literal.getValue2()), unit="ms")
+        if _is_year_month_interval(lit_type_name):
+            # getValue() returns a BigDecimal representing total months
+            months = int(java_literal.getValue())
+            # cloudpickle can't serialize pyarrow month_day_nano_interval objects so we pass the values as integers and construct the interval in the C++ backend
+            val = ("MonthDayNanoInterval", months, 0, 0)
+        else:
+            # Day/second subtypes: getValue2() returns a BigDecimal (Py4J
+            # converts to decimal.Decimal) representing milliseconds.
+            millis = float(str(java_literal.getValue2()))
+            nanos = int(millis * 1_000_000)
+            # cloudpickle can't serialize pyarrow month_day_nano_interval objects so we pass the values as integers and construct the interval in the C++ backend
+            val = ("MonthDayNanoInterval", 0, 0, nanos)
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
     if (
@@ -1044,7 +1101,7 @@ def sql_type_to_pa_type(ctx, sql_type_name):
         # BodoSQL uses UTC if timezone is not specified
         tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
         return pa.timestamp("ns", tz=tz)
-    if sql_type_name.equals(SqlTypeName.INTERVAL_DAY_SECOND):
+    if _is_interval_type(sql_type_name):
         return pa.duration("ns")
     if sql_type_name.equals(SqlTypeName.BOOLEAN):
         return pa.bool_()

@@ -1,4 +1,4 @@
-name: Nightly Tests CI
+name: E2E and Examples CI
 on:
   # Run Every Weekday on main Branch at 2AM EST
   schedule:
