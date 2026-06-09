@@ -35,6 +35,27 @@ from bodo.pandas.plan import (
 )
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
+_DATE_PART_ARROW_FUNCS = {
+    "YEAR": "year",
+    "MONTH": "month",
+    "DAY": "day",
+    "DAYOFMONTH": "day",
+    "HOUR": "hour",
+    "MINUTE": "minute",
+    "SECOND": "second",
+    "QUARTER": "quarter",
+    "WEEK": "iso_week",
+    "WEEKOFYEAR": "iso_week",
+    "WEEKISO": "iso_week",
+    "DAYOFYEAR": "day_of_year",
+    "DAYOFWEEK": "day_of_week",
+    "WEEKDAY": "day_of_week",
+    "MICROSECOND": "microsecond",
+    "NANOSECOND": "nanosecond",
+    "DOW": "day_of_week",
+    "DOY": "day_of_year",
+}
+
 
 @dataclass
 class IcebergReadInfo:
@@ -172,22 +193,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         num_operands = len(java_call.getOperands())
 
         # Date part functions wrapped in SqlNullPolicyFunction (e.g. WEEKDAY($0))
-        _DATE_PART_ARROW_FUNCS = {
-            "YEAR": "year",
-            "MONTH": "month",
-            "DAY": "day",
-            "DAYOFMONTH": "day",
-            "HOUR": "hour",
-            "MINUTE": "minute",
-            "SECOND": "second",
-            "QUARTER": "quarter",
-            "WEEK": "iso_week",
-            "WEEKOFYEAR": "iso_week",
-            "WEEKISO": "iso_week",
-            "DAYOFYEAR": "day_of_year",
-            "DAYOFWEEK": "day_of_week",
-            "WEEKDAY": "day_of_week",
-        }
         if func_name in _DATE_PART_ARROW_FUNCS and num_operands == 1:
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[0], input_plan
@@ -231,6 +236,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             doy_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
+            )
+            assert hasattr(year_expr, "value") and hasattr(doy_expr, "value"), (
+                "MAKEDATE requires constant integer arguments in C++ backend"
             )
             result_date = datetime(int(year_expr.value), 1, 1).date() + timedelta(
                 days=int(doy_expr.value) - 1
@@ -513,21 +521,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # Strip "FLAG(" / ")" or "INTERVAL_" prefix from unit string
         if "(" in unit_str:
             unit_str = unit_str.split("(")[1].rstrip(")")
-        _DATE_PART_ARROW_FUNCS_EXTRA = {
-            "YEAR": "year",
-            "MONTH": "month",
-            "DAY": "day",
-            "HOUR": "hour",
-            "MINUTE": "minute",
-            "SECOND": "second",
-            "MICROSECOND": "microsecond",
-            "NANOSECOND": "nanosecond",
-            "QUARTER": "quarter",
-            "WEEK": "iso_week",
-            "DOW": "day_of_week",
-            "DOY": "day_of_year",
-        }
-        arrow_func = _DATE_PART_ARROW_FUNCS_EXTRA.get(unit_str)
+        arrow_func = _DATE_PART_ARROW_FUNCS.get(unit_str)
         if arrow_func is None:
             raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
         empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
@@ -548,24 +542,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         # Map Calcite function names to Arrow compute function names
-        _DATE_PART_ARROW_FUNCS = {
-            "YEAR": "year",
-            "MONTH": "month",
-            "DAY": "day",
-            "DAYOFMONTH": "day",
-            "HOUR": "hour",
-            "MINUTE": "minute",
-            "SECOND": "second",
-            "QUARTER": "quarter",
-            "MICROSECOND": "microsecond",
-            "NANOSECOND": "nanosecond",
-            "WEEK": "iso_week",
-            "WEEKOFYEAR": "iso_week",
-            "WEEKISO": "iso_week",
-            "DAYOFYEAR": "day_of_year",
-            "DAYOFWEEK": "day_of_week",
-            "WEEKDAY": "day_of_week",
-        }
         arrow_func = _DATE_PART_ARROW_FUNCS.get(func_name, func_name.lower())
 
         if func_name in (
