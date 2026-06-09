@@ -651,7 +651,7 @@ duckdb::unique_ptr<duckdb::LogicalTopN> make_topn(
                                        cols[i])));
     }
 
-    // Create projection node.
+    // Create TopN node.
     duckdb::unique_ptr<duckdb::LogicalTopN> topn =
         duckdb::make_uniq<duckdb::LogicalTopN>(std::move(col_orders), limit,
                                                offset);
