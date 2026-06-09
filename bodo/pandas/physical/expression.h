@@ -20,6 +20,7 @@
 #include "../tests/utils.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/common/types/interval.hpp"
 #include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
@@ -982,8 +983,6 @@ class PhysicalBinaryExpression : public PhysicalExpression {
     std::string comparator;
     const std::shared_ptr<arrow::DataType> result_type;
 };
-
-#include "duckdb/common/types/interval.hpp"
 
 /**
  * @brief Physical expression tree node for calendar-aware interval arithmetic

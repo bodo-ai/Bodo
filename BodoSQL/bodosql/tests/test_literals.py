@@ -243,11 +243,11 @@ def test_interval_literals(basic_df, timedelta_equivalent_values, memory_leak_ch
         ),
         pytest.param(
             ("1 quarter", lambda x: x + pd.DateOffset(months=3)),
-            marks=pytest.mark.bodosql_cpp,
+            marks=[pytest.mark.bodosql_cpp, pytest.mark.weekly],
         ),
         pytest.param(
             ("10 seconds", lambda x: x + pd.Timedelta(seconds=10)),
-            marks=pytest.mark.bodosql_cpp,
+            marks=[pytest.mark.bodosql_cpp, pytest.mark.weekly],
         ),
         pytest.param(
             (
