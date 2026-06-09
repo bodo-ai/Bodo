@@ -284,4 +284,3 @@ jobs:
         with:
           name: junit-reports-${{ inputs.test-type }}-${{ inputs.runner-id }}-${{ inputs.partition }}
           path: '**/pytest-report*.xml'
-
