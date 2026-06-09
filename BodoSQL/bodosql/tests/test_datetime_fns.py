@@ -38,7 +38,7 @@ from bodosql.tests.timezone_utils import (
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
-pytestmark = pytest_slow_unless_codegen + [pytest.mark.bodosql_cpp]
+pytestmark = pytest_slow_unless_codegen
 
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
