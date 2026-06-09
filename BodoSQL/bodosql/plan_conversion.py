@@ -745,7 +745,7 @@ def java_join_to_python_join(ctx, java_join):
 
 
 def java_subplan_to_python_subplan(ctx, java_subplan):
-    """Convert a BodoSQL Java join plan to a Python join plan."""
+    """Convert a BodoSQL Java subplan to a Python subplan."""
 
     if not hasattr(ctx, "subplan_cache"):
         subplan_cache = {}
