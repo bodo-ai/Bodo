@@ -26,9 +26,9 @@ from bodo.pandas.plan import (
     LogicalDistinct,
     LogicalFilter,
     LogicalJoinFilter,
-    LogicalLimit,
     LogicalOrder,
     LogicalProjection,
+    LogicalTopN,
     NullExpression,
     UnaryOpExpression,
     arrow_to_empty_df,
@@ -748,16 +748,16 @@ def java_subplan_to_python_subplan(ctx, java_subplan):
     """Convert a BodoSQL Java subplan to a Python subplan."""
 
     if not hasattr(ctx, "subplan_cache"):
-        subplan_cache = {}
+        ctx.subplan_cache = {}
 
     subplan_id = java_subplan.getCacheID()
-    if subplan_id in subplan_cache:
-        return subplan_cache[subplan_id]
+    if subplan_id in ctx.subplan_cache:
+        return ctx.subplan_cache[subplan_id]
 
     cached_plan = java_subplan.getCachedPlan()
     assert cached_plan.getClass().getSimpleName() == "CachedPlanInfo"
     subplan = java_plan_to_python_plan(ctx, cached_plan.getPlan())
-    subplan_cache[subplan_id] = subplan
+    ctx.subplan_cache[subplan_id] = subplan
     return subplan
 
 
@@ -1197,20 +1197,28 @@ def java_sort_to_python_sort(ctx, java_plan):
         ascending.append(not descending)
         na_position.append(is_nulls_first)
 
-    sorted_plan = LogicalOrder(
-        input_plan.empty_data,
-        input_plan,
-        ascending,
-        na_position,
-        key_col_inds,
-        input_plan.pa_schema,
-    )
-    if java_plan.getFetch() is not None:
-        limit = java_plan.getFetch()
-        limit_expr = java_expr_to_python_expr(ctx, limit, input_plan)
-        return LogicalLimit(input_plan.empty_data, sorted_plan, limit_expr.value)
+    limit = java_plan.getFetch()
+    if limit is None:
+        return LogicalOrder(
+            input_plan.empty_data,
+            input_plan,
+            ascending,
+            na_position,
+            key_col_inds,
+            input_plan.pa_schema,
+        )
     else:
-        return sorted_plan
+        limit_expr = java_expr_to_python_expr(ctx, limit, input_plan)
+        return LogicalTopN(
+            input_plan.empty_data,
+            input_plan,
+            ascending,
+            na_position,
+            key_col_inds,
+            input_plan.pa_schema,
+            limit_expr.value,
+            0,
+        )
 
 
 def java_values_to_python_values(ctx, java_plan):

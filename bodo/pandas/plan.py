@@ -464,6 +464,12 @@ class LogicalOrder(LogicalOperator):
     pass
 
 
+class LogicalTopN(LogicalOperator):
+    """Logical operator for sorting data."""
+
+    pass
+
+
 class LogicalGetParquetRead(LogicalOperatorLeaf):
     """Logical operator for reading Parquet files."""
 

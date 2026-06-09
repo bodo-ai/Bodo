@@ -294,6 +294,10 @@ cdef extern from "duckdb/planner/operator/logical_order.hpp" namespace "duckdb" 
     cdef cppclass CLogicalOrder" duckdb::LogicalOrder"(CLogicalOperator):
         pass
 
+cdef extern from "duckdb/planner/operator/logical_top_n.hpp" namespace "duckdb" nogil:
+    cdef cppclass CLogicalTopN" duckdb::LogicalTopN"(CLogicalOperator):
+        pass
+
 cdef extern from "duckdb/planner/operator/logical_aggregate.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalAggregate" duckdb::LogicalAggregate"(CLogicalOperator):
         pass
@@ -337,6 +341,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalDistinct] make_distinct(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
+    cdef unique_ptr[CLogicalTopN] make_topn(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema, idx_t limit, idx_t offset) except +
     cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CExpression] make_scalar_func_expr(object out_schema, vector[unique_ptr[CExpression]] in_exprs, object args, c_bool is_cfunc, c_bool has_state, c_string arrow_compute_func) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
@@ -611,6 +616,34 @@ cdef class LogicalOrder(LogicalOperator):
 
     def getCardinality(self):
         return self.sources[0].getCardinality()
+
+
+cdef class LogicalTopN(LogicalOperator):
+    """Wrapper around DuckDB's LogicalTopN to provide access in Python.
+    """
+    cdef idx_t limit
+
+    def __cinit__(self,
+                  object out_schema,
+                  LogicalOperator source,
+                  vector[c_bool] asc,
+                  vector[c_bool] na_position,
+                  vector[int] cols,
+                  object in_schema,
+                  idx_t limit,
+                  idx_t offset):
+        self.out_schema = out_schema
+        self.sources = [source]
+        self.limit = limit
+
+        cdef unique_ptr[CLogicalTopN] c_logical_topn = make_topn(source.c_logical_operator, asc, na_position, cols, in_schema, limit, offset)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_topn.release())
+
+    def __str__(self):
+        return f"LogicalTopN({self.out_schema})"
+
+    def getCardinality(self):
+        return self.limit
 
 
 cpdef get_pushed_down_columns(proj):
