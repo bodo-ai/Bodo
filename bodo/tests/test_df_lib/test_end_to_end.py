@@ -728,7 +728,6 @@ def test_filter_method(kwargs, error, epc):
         pytest.param(
             "A > ceil(@a) | C == 'AA' or @a <= 1.44",
             0,
-            marks=pytest.mark.skip(reason="Variable reference not yet supported"),
         ),
         pytest.param("(A == 1) or (C == 'AA')", 0, marks=pytest.mark.slow),
         pytest.param("not A < 5", 0, marks=pytest.mark.slow),
@@ -742,12 +741,10 @@ def test_filter_method(kwargs, error, epc):
         ),
         pytest.param("C in ['AA', 'C']", 0),
         pytest.param("A not in [1, 4]", 0, marks=pytest.mark.slow),
-        pytest.param(
-            "`B B` == 3.1 or 4.2 == [4.3, 4.2, 0, -4.1]", 0, marks=pytest.mark.slow
-        ),
+        pytest.param("`B B` == 3.1 or 4.2 == list_var", 0, marks=pytest.mark.slow),
         pytest.param("[3, 8, 11, 6] != A", 0, marks=pytest.mark.slow),
         pytest.param(
-            "A >= (3, 6, 7, 9, -10.5)",
+            "A >= @comparison_list",
             0,
             marks=[
                 pytest.mark.slow,
@@ -813,6 +810,9 @@ def test_query_unicode_expr(expr, epc):
     """Test BodoDataFrame.query with unicode(non-constant) expr
     Adapted from JIT test bodo/tests/test_df_query.py::test_df_query_unicode_expr.
     """
+    a = 1.2  # noqa
+    comparison_list = [3, 6, 7, 9, -10.5] * 3  # noqa
+    list_var_resolver = {"list_var": [4.3, 4.2, 0, -4.1]}
 
     df = pd.DataFrame(
         {
@@ -825,8 +825,8 @@ def test_query_unicode_expr(expr, epc):
     bdf = bd.from_pandas(df)
 
     with assert_executed_plan_count(epc):
-        df_result = df.query(expr)
-        bdf_result = bdf.query(expr)
+        df_result = df.query(expr, resolvers=(list_var_resolver,))
+        bdf_result = bdf.query(expr, resolvers=(list_var_resolver,))
 
     _test_equal(bdf_result, df_result, check_pandas_types=False, reset_index=True)
 

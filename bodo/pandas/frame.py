@@ -1512,7 +1512,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         return self.__getitem__(items)
 
-    @check_args_fallback(supported=["expr"])
+    @check_args_fallback(
+        supported=["expr", "local_dict", "global_dict", "resolvers", "level"]
+    )
     def query(
         self,
         expr: str,
@@ -1524,7 +1526,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         resolvers: list[Mapping] | None = None,
         level: int = 0,
         inplace: bool = False,
-    ):
+    ) -> BodoDataFrame | None:
+        # The pandas fallback involving local variable reference may not function correctly due to the extra function calls added by Bodo, affecting how many levels down the stack you need to go to find the referenced variable
+
         def _parse_query_expr(
             expr: str,
             env,
@@ -1684,7 +1688,17 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
                 def is_opr_list(opr):
                     try:
-                        return isinstance(ast.literal_eval(opr_str(opr)), (list, tuple))
+                        sentinel = pd.core.computation.ops.LOCAL_TAG
+                        name = opr_str(opr)
+                        if name.startswith(sentinel):
+                            var_name = name.removeprefix(sentinel)
+                            opr_value = str(env.scope[var_name])
+                        else:
+                            opr_value = name
+                        # TODO: Support non-literal collection types like frozenset
+                        return isinstance(
+                            ast.literal_eval(opr_value), (list, tuple, set, dict)
+                        )
                     except (ValueError, SyntaxError):
                         return False
 
@@ -1810,11 +1824,23 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # Fake values to maintain lazy evaluation
         resolver = dict.fromkeys(cleaned_columns, 0)
         resolver["index"] = 0
+        all_resolvers = (resolver,) + (resolvers or ())
 
-        env = pd.core.computation.scope.ensure_scope(2, resolvers=(resolver,))
+        env = pd.core.computation.scope.ensure_scope(
+            level + 2, global_dict, local_dict, resolvers=all_resolvers
+        )
         parsed_expr, parsed_expr_str, used_cols = _parse_query_expr(
             expr, env, self.columns, cleaned_columns
         )
+
+        # Replace local/global variable references with their real values
+        sentinel = pd.core.computation.ops.LOCAL_TAG
+        for name in parsed_expr.names:
+            if isinstance(name, str) and name.startswith(sentinel):
+                var_name = name.removeprefix(sentinel)
+                parsed_expr_str = parsed_expr_str.replace(
+                    name, str(env.scope[var_name])
+                )
 
         parsed_expr_str = parsed_expr_str.replace("(index)", "self.index")
 
@@ -1828,7 +1854,10 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     f"self['{column_name}'].{series_accessor}",
                 )
 
-        return eval(f"self.__getitem__({parsed_expr_str})")
+        try:
+            return eval(f"self.__getitem__({parsed_expr_str})")
+        except Exception as e:
+            raise BodoLibNotImplementedException("Unsupported query usage: " + str(e))
 
     @check_args_fallback(supported=["by", "ascending", "na_position", "kind"])
     def sort_values(
