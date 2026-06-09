@@ -686,9 +686,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             total_nanos = 0
             for expr in op_exprs:
                 val = expr.value
-                if isinstance(val, tuple) and len(val) == 2:
-                    total_months += val[0]
-                    total_nanos += val[1]
+                if (
+                    isinstance(val, tuple)
+                    and len(val) == 4
+                    and val[0] == "MonthDayNanoInterval"
+                ):
+                    total_months += val[1]
+                    total_nanos += val[3]
                 elif isinstance(val, pd.DateOffset):
                     total_months += val.months
                 elif isinstance(val, pd.Timedelta):
@@ -702,7 +706,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     "Sub-microsecond intervals not supported in C++ backend"
                 )
             if total_months != 0:
-                combined_val = (total_months, total_nanos)
+                combined_val = ("MonthDayNanoInterval", total_months, 0, total_nanos)
             else:
                 combined_val = pd.Timedelta(nanoseconds=total_nanos)
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
