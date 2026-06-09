@@ -38,7 +38,7 @@ from bodosql.tests.timezone_utils import (
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
-pytestmark = pytest_slow_unless_codegen
+pytestmark = pytest_slow_unless_codegen + [pytest.mark.bodosql_cpp]
 
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
@@ -1395,7 +1395,7 @@ def test_extract_scalars(dt_fn_dataframe, valid_extract_strings, memory_leak_che
     ],
 )
 @pytest.mark.bodosql_cpp
-def test_date_part(query_fmt, answer, memory_leak_check):
+def test_date_part(query_fmt, memory_leak_check):
     selects = []
     for unit in ["year", "q", "mons", "wk", "dayofmonth", "dow", "hrs", "min", "s"]:
         selects.append(query_fmt.format(unit))
