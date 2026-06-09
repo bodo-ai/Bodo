@@ -13,6 +13,28 @@ on:
         required: false
         default: false
         type: boolean
+      runner-id:
+        description: 'Runner ID to select tests to run'
+        required: false
+        default: ubuntu-latest
+        type: string
+  workflow_call:
+    inputs:
+      pytest-marker:
+        description: 'Additional pytest marker to select tests to run'
+        required: false
+        default: ""
+        type: string
+      weekly:
+        description: 'Whether to include tests marked "weekly"'
+        required: false
+        default: false
+        type: boolean
+      runner-id:
+        description: 'Runner ID to select tests to run'
+        required: false
+        default: ubuntu-latest
+        type: string
   schedule:
     - cron: '0 2 * * 1-5'    # 9:00 PM EST Sunday-Friday
 
@@ -37,6 +59,7 @@ jobs:
           fi
 
           echo "pytest-marker=$MARKER" >> "$GITHUB_OUTPUT"
+        shell: bash
 
   bodo-compiler-1p:
     needs: create-test-marker
@@ -49,7 +72,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       partition: bodo_${{ matrix.batch }}of22
       test-type: compiler
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 1
     secrets: inherit
 
@@ -64,7 +87,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       test-type: compiler
       partition: bodo_${{ matrix.batch }}of30
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 2
     secrets: inherit
 
@@ -74,7 +97,7 @@ jobs:
     with:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       test-type: cache
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 2
     secrets: inherit
 
@@ -85,7 +108,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: spawn_mode
       test-type: spawn
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 1
     secrets: inherit
 
@@ -96,7 +119,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: spawn_mode
       test-type: spawn
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 2
     secrets: inherit
 
@@ -107,7 +130,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: df_lib
       test-type: df_lib
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 1
     secrets: inherit
 
@@ -118,7 +141,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: df_lib
       test-type: df_lib
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 2
     secrets: inherit
 
@@ -133,7 +156,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       partition: bodosql_${{ matrix.batch }}of12
       test-type: sql
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 1
     secrets: inherit
 
@@ -148,7 +171,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       partition: bodosql_${{ matrix.batch }}of22
       test-type: sql
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 2
     secrets: inherit
 
@@ -158,7 +181,7 @@ jobs:
     with:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       test-type: sql_cache
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 2
     secrets: inherit
 
@@ -169,7 +192,7 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: spawn_mode
       test-type: sql_spawn
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 1
     secrets: inherit
 
@@ -180,6 +203,6 @@ jobs:
       pytest-marker: ${{ needs.create-test-marker.outputs.pytest-marker }}
       extra-markers: spawn_mode
       test-type: sql_spawn
-      runner-id: ubuntu-latest
+      runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 2
     secrets: inherit
