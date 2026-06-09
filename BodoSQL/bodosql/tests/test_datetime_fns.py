@@ -207,7 +207,7 @@ def dt_fn_dataframe():
         "2007-01-01T03:30",
         None,
         "2001-12-01T12:12:02.21",
-        "2100-10-01T13:00:33.1",
+        "2030-10-01T13:00:33.1",
     ]
     timestamps = pd.Series(
         [np.datetime64(x) if x is not None else x for x in dt_strings],
