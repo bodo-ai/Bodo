@@ -719,6 +719,118 @@ def test_filter_method(kwargs, error, epc):
         )
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "expr, epc",
+    [
+        pytest.param("`B B` > 2 & 5 > A > 1", 0),
+        pytest.param("index == 4 or index > 8", 1, marks=pytest.mark.weekly),
+        pytest.param(
+            "A > ceil(@a) | C == 'AA' or @a <= 1.44",
+            0,
+            marks=pytest.mark.skip(reason="Variable reference not yet supported"),
+        ),
+        pytest.param("(A == 1) or (C == 'AA')", 0, marks=pytest.mark.slow),
+        pytest.param("not A < 5", 0, marks=pytest.mark.slow),
+        pytest.param(
+            "A + `B B` < 6 or not (C != 'BBB' and not A == 8)",
+            0,
+            marks=pytest.mark.skipif(
+                os.environ.get("BODO_GPU", "0") != "0",
+                reason="Null handling difference",
+            ),
+        ),
+        pytest.param("C in ['AA', 'C']", 0),
+        pytest.param("A not in [1, 4]", 0, marks=pytest.mark.slow),
+        pytest.param(
+            "`B B` == 3.1 or 4.2 == [4.3, 4.2, 0, -4.1]", 0, marks=pytest.mark.slow
+        ),
+        pytest.param("[3, 8, 11, 6] != A", 0, marks=pytest.mark.slow),
+        pytest.param(
+            "A >= (3, 6, 7, 9, -10.5)",
+            0,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skip(
+                    reason="Comparison of column with list not supported in BodoDataFrame.__getitem__"
+                ),
+            ],
+        ),
+        pytest.param(
+            "abs(A) > 2.5",
+            0,
+            marks=[
+                pytest.mark.skipif(
+                    os.environ.get("BODO_GPU", "0") != "0",
+                    reason="Falls back to CPU due to UDF (np.abs())",
+                )
+            ],
+        ),
+        pytest.param(
+            "A != 11 and not (2 == 3)",
+            0,
+            marks=[
+                pytest.mark.slow,
+                pytest.mark.skip(
+                    reason="Currently broken; 'not' incorrectly converted to '~'"
+                ),
+            ],
+        ),
+        pytest.param("C.str.contains('C')", 0, marks=pytest.mark.slow),
+        pytest.param(
+            "C.str.len() < 3",
+            0,
+            marks=[
+                pytest.mark.weekly,
+                pytest.mark.skipif(
+                    os.environ.get("BODO_GPU", "0") != "0", reason="Falls back to CPU"
+                ),
+            ],
+        ),
+        pytest.param(
+            "C.str.lower() != 'A'",
+            0,
+            marks=[
+                pytest.mark.weekly,
+                pytest.mark.skipif(
+                    os.environ.get("BODO_GPU", "0") != "0", reason="Falls back to CPU"
+                ),
+            ],
+        ),
+        pytest.param(
+            "C.str.isalpha()",
+            0,
+            marks=[
+                pytest.mark.weekly,
+                pytest.mark.skipif(
+                    os.environ.get("BODO_GPU", "0") != "0", reason="Falls back to CPU"
+                ),
+            ],
+        ),
+    ],
+)
+def test_query_unicode_expr(expr, epc):
+    """Test BodoDataFrame.query with unicode(non-constant) expr
+    Adapted from JIT test bodo/tests/test_df_query.py::test_df_query_unicode_expr.
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 8, 4, 11, -3] * 3,
+            "B B": [1.1, np.nan, 4.2, 3.1, -1.3] * 3,
+            "C": ["AA", "BBB", "C", "AA", "C"] * 3,
+        },
+        index=[3, 1, 2, 4, 5, -1, 6, 7, -2, 8, 9, 11, 10, 12, 0],
+    )
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(epc):
+        df_result = df.query(expr)
+        bdf_result = bdf.query(expr)
+
+    _test_equal(bdf_result, df_result, check_pandas_types=False, reset_index=True)
+
+
 @pytest.mark.gpu(allow_fallback=True)  # fallback count-star
 def test_head_pushdown(datapath):
     """Test for head pushed down to read parquet."""
