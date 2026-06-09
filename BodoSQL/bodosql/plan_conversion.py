@@ -577,7 +577,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             elif end_match:
                 if match_anything:
                     raise NotImplementedError(
-                        "LIKE conversion supports nothing else if start_match is required."
+                        "LIKE conversion supports nothing else if end_match is required."
                     )
                 return ArrowScalarFuncExpression(
                     bool_empty_data,
