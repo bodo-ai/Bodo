@@ -10,12 +10,6 @@ on:
         type: string
   schedule:
     - cron: '00 2 * * 6'    # 9:00PM EST every Friday
-  pull_request:
-
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
 
 jobs:
 

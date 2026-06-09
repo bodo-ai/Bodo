@@ -18,10 +18,9 @@ default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "c
 platform-cuda-dev =      { features = ["py314", "rcpp", "dev", "platform-mpi", "platform-hwloc", "cudf", "mpich-build-vars"], solve-group = "platform-gpu-dev" }
 platform-cuda =      { features = ["py314", "rcpp", "platform", "platform-mpi", "platform-hwloc", "cudf", "mpich-build-vars"], solve-group = "platform-gpu" }
 
-
-[target.linux-64.activation.env]
+[activation.env]
+# Avoid using system cmake during build-config step
 CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
-
 
 [feature.mpich-build-vars.activation.env]
 LD_LIBRARY_PATH="/opt/mpich/lib:$LD_LIBRARY_PATH"
@@ -404,8 +403,6 @@ openai = "*"
 snowflake-sqlalchemy = "*"
 # Use PyIceberg from pip to prevent segfaults in Mac dev environment.
 pyiceberg = ">=0.11"
-# AI Function testing
-transformers = "*"
 
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
