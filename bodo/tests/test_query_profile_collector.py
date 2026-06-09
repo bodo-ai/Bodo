@@ -1556,6 +1556,7 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
 def test_iceberg_metrics_collection(
     memory_leak_check, tmp_path, iceberg_database, iceberg_table_conn
 ):
+    import bodo.decorators  # isort:skip # noqa
     from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 
     comm = MPI.COMM_WORLD
@@ -1657,7 +1658,9 @@ def test_iceberg_metrics_collection(
         "read_batch_total_time",
     ]:
         assert k in read_metrics_dict, k
-        assert read_metrics_dict[k] > 0, k
+        # Evolve time may be <1us
+        if k != "evolve_time":
+            assert read_metrics_dict[k] > 0, k
 
     assert "unify_time" in read_metrics_dict
     assert "unify_append_small_time" in read_metrics_dict
