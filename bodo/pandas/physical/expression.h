@@ -1368,6 +1368,18 @@ class PhysicalArrowExpression : public PhysicalExpression {
 
             arrow::compute::MatchSubstringOptions opts(pattern);
             result = do_arrow_compute_unary(res, func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name ==
+                   "replace_substring_regex") {
+            // Args: (pattern_string, replacement_string)
+            PyObject *args = scalar_func_data.args;
+            const char *pattern_cstr =
+                PyUnicode_AsUTF8(PyTuple_GetItem(args, 0));
+            const char *replacement_cstr =
+                PyUnicode_AsUTF8(PyTuple_GetItem(args, 1));
+            arrow::compute::ReplaceSubstringOptions opts(pattern_cstr,
+                                                         replacement_cstr);
+            result =
+                do_arrow_compute_unary(res, "replace_substring_regex", &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
             int64_t digits = get_py_round_arg(scalar_func_data.args);
 
@@ -1413,6 +1425,43 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 scalar_func_data.arrow_func_name.c_str());
             arrow::compute::StrftimeOptions opts(fmt_str);
             result = do_arrow_compute_unary(res, "strftime", &opts);
+        } else if (scalar_func_data.arrow_func_name == "floor_temporal" ||
+                   scalar_func_data.arrow_func_name == "ceil_temporal" ||
+                   scalar_func_data.arrow_func_name == "round_temporal") {
+            // Args: (multiple, unit_string).
+            // multiple is the first PyLong (e.g. 1),
+            // unit_string is the second PyUnicode (e.g. "day").
+            PyObject *args = scalar_func_data.args;
+            int64_t multiple = PyLong_AsLongLong(PyTuple_GetItem(args, 0));
+            PyObject *unit_py = PyTuple_GetItem(args, 1);
+            const char *unit_cstr = PyUnicode_AsUTF8(unit_py);
+            arrow::compute::CalendarUnit unit =
+                arrow::compute::CalendarUnit::DAY;
+            if (strcmp(unit_cstr, "year") == 0)
+                unit = arrow::compute::CalendarUnit::YEAR;
+            else if (strcmp(unit_cstr, "quarter") == 0)
+                unit = arrow::compute::CalendarUnit::QUARTER;
+            else if (strcmp(unit_cstr, "month") == 0)
+                unit = arrow::compute::CalendarUnit::MONTH;
+            else if (strcmp(unit_cstr, "week") == 0)
+                unit = arrow::compute::CalendarUnit::WEEK;
+            else if (strcmp(unit_cstr, "day") == 0)
+                unit = arrow::compute::CalendarUnit::DAY;
+            else if (strcmp(unit_cstr, "hour") == 0)
+                unit = arrow::compute::CalendarUnit::HOUR;
+            else if (strcmp(unit_cstr, "minute") == 0)
+                unit = arrow::compute::CalendarUnit::MINUTE;
+            else if (strcmp(unit_cstr, "second") == 0)
+                unit = arrow::compute::CalendarUnit::SECOND;
+            else if (strcmp(unit_cstr, "millisecond") == 0)
+                unit = arrow::compute::CalendarUnit::MILLISECOND;
+            else if (strcmp(unit_cstr, "microsecond") == 0)
+                unit = arrow::compute::CalendarUnit::MICROSECOND;
+            else if (strcmp(unit_cstr, "nanosecond") == 0)
+                unit = arrow::compute::CalendarUnit::NANOSECOND;
+            arrow::compute::RoundTemporalOptions opts(multiple, unit);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);

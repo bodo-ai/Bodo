@@ -224,6 +224,105 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
             return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
 
+        if func_name == "DATE_FORMAT" and num_operands == 2:
+            # DATE_FORMAT(timestamp, mysql_format_str)
+            # Convert MySQL format string to Python strftime format string
+            # and use Arrow's strftime function.
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            mysql_fmt = str(java_call.getOperands()[1].toString())
+            if mysql_fmt.startswith("'") and mysql_fmt.endswith("'"):
+                mysql_fmt = mysql_fmt[1:-1]
+            _MYSQL_TO_PYTHON_FMT_2 = {
+                "%a": "%a",
+                "%b": "%b",
+                "%d": "%d",
+                "%H": "%H",
+                "%h": "%b",
+                "%I": "%I",
+                "%i": "%M",
+                "%j": "%j",
+                "%M": "%B",
+                "%m": "%m",
+                "%p": "%p",
+                "%r": "%X %p",
+                "%S": "%S",
+                "%s": "%S",
+                "%T": "%X",
+                "%U": "%U",
+                "%u": "%W",
+                "%W": "%A",
+                "%w": "%w",
+                "%Y": "%Y",
+                "%y": "%y",
+                "%%": "%%",
+            }
+            # Detected format issues that need post-processing
+            needs_fix_micros = False  # %f → unsupported by Arrow
+            needs_fix_subsec = False  # %S includes fractional seconds
+            py_fmt_parts = []
+            i = 0
+            while i < len(mysql_fmt):
+                if mysql_fmt[i] == "%" and i + 1 < len(mysql_fmt):
+                    # Try longest match first
+                    matched = False
+                    for length in (2, 1):
+                        if i + length > len(mysql_fmt):
+                            continue
+                        spec = mysql_fmt[i : i + length]
+                        if spec in _MYSQL_TO_PYTHON_FMT_2:
+                            py_fmt_parts.append(_MYSQL_TO_PYTHON_FMT_2[spec])
+                            matched = True
+                            i += length
+                            break
+                    if matched:
+                        continue
+                    # Check for special Arrow-unsupported format specs
+                    if mysql_fmt[i : i + 2] == "%f":
+                        # %f (microseconds): Arrow strftime does not support it.
+                        # Replace with a sentinel; after strftime,
+                        # extract usec separately and patch in.
+                        py_fmt_parts.append("__MICROS__")
+                        needs_fix_micros = True
+                        i += 2
+                        continue
+                    if mysql_fmt[i : i + 2] in ("%S", "%s"):
+                        # Arrow's %S includes fractional seconds (SS.FFFFFFFFF).
+                        # Map directly and post-process to strip fraction.
+                        py_fmt_parts.append(mysql_fmt[i : i + 2])
+                        needs_fix_subsec = True
+                        i += 2
+                        continue
+                    # Unrecognized MySQL format: "%x" → output char literally
+                    py_fmt_parts.append(mysql_fmt[i + 1])
+                    i += 2
+                elif mysql_fmt[i] == "%" and i + 1 == len(mysql_fmt):
+                    # Trailing "%" → literal "%"
+                    py_fmt_parts.append("%%")
+                    i += 1
+                else:
+                    py_fmt_parts.append(mysql_fmt[i])
+                    i += 1
+            py_fmt = "".join(py_fmt_parts)
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            expr = ArrowScalarFuncExpression(empty_data, [input], "strftime", (py_fmt,))
+            if needs_fix_micros:
+                expr = ArrowScalarFuncExpression(
+                    empty_data,
+                    [expr],
+                    "replace_substring_regex",
+                    ("__MICROS__", "000000"),
+                )
+            if needs_fix_subsec:
+                expr = ArrowScalarFuncExpression(
+                    empty_data,
+                    [expr],
+                    "replace_substring_regex",
+                    (r"\.\d+", ""),
+                )
+            return expr
+
         if func_name == "MAKEDATE" and num_operands == 2:
             # MAKEDATE(year, dayofyear) → Jan 1 of year + (doy-1) days
             year_expr = java_expr_to_python_expr(
@@ -245,13 +344,20 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 unit_raw = unit_raw.split("(")[1].rstrip(")")
             _TRUNC_UNIT_MAP = {
                 "YEAR": "year",
+                "YYY": "year",
                 "QUARTER": "quarter",
                 "MONTH": "month",
+                "MON": "month",
                 "WEEK": "week",
+                "WK": "week",
                 "DAY": "day",
+                "DD": "day",
                 "HOUR": "hour",
                 "MINUTE": "minute",
                 "SECOND": "second",
+                "MS": "millisecond",
+                "MICROSECOND": "microsecond",
+                "NANOSECOND": "nanosecond",
             }
             arrow_unit = _TRUNC_UNIT_MAP.get(unit_raw, unit_raw.lower())
             input = java_expr_to_python_expr(
@@ -263,18 +369,52 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
             # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
-            # For 2 operands: (date, interval) → date + interval
-            # For 3 operands: (unit, amount, date) → date + (unit * amount)
+            # or DATE_ADD(date, integer_days) — MySQL syntax.
             if num_operands == 2:
+                date_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[0], input_plan
+                )
+                amount_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                # Check if the second argument is an integer (number of days)
+                amount_type = java_call.getOperands()[1].getType()
+                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+                if is_int_type(amount_type):
+                    # DATE_ADD(date, N) → date + N days
+                    if hasattr(amount_expr, "value"):
+                        interval_val = pd.Timedelta(days=int(amount_expr.value))
+                        dummy_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.duration("ns"))
+                        )
+                        interval_expr = ConstantExpression(
+                            dummy_empty_data, input_plan, interval_val
+                        )
+                    else:
+                        one_day = pd.Timedelta(days=1)
+                        dummy_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.duration("ns"))
+                        )
+                        one_day_expr = ConstantExpression(
+                            dummy_empty_data, input_plan, one_day
+                        )
+                        interval_expr = ArithOpExpression(
+                            dummy_empty_data,
+                            amount_expr,
+                            one_day_expr,
+                            "__mul__",
+                        )
+                    out_empty = (
+                        date_expr.empty_data.iloc[:, 0]
+                        + interval_expr.empty_data.iloc[:, 0]
+                    )
+                    return ArithOpExpression(
+                        out_empty, date_expr, interval_expr, "__add__"
+                    )
                 return java_binop_to_python_expr(
                     ctx,
                     SqlKind.PLUS,
-                    [
-                        java_expr_to_python_expr(
-                            ctx, java_call.getOperands()[i], input_plan
-                        )
-                        for i in range(num_operands)
-                    ],
+                    [date_expr, amount_expr],
                 )
             elif num_operands == 3:
                 # DATEADD(FLAG(unit), amount, date) from date + int arithmetic.
@@ -324,16 +464,54 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 return result
         if func_name in ("DATE_SUB", "SUBDATE"):
             # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
+            # or DATE_SUB(date, integer_days) — Snowflake syntax.
             if num_operands == 2:
+                date_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[0], input_plan
+                )
+                amount_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                # Check if the second argument is an integer (number of days)
+                # rather than an INTERVAL literal.
+                amount_type = java_call.getOperands()[1].getType()
+                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+                if is_int_type(amount_type):
+                    # DATE_SUB(date, N) → date - N days
+                    if hasattr(amount_expr, "value"):
+                        interval_val = pd.Timedelta(days=int(amount_expr.value))
+                        dummy_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.duration("ns"))
+                        )
+                        interval_expr = ConstantExpression(
+                            dummy_empty_data, input_plan, interval_val
+                        )
+                    else:
+                        one_day = pd.Timedelta(days=1)
+                        dummy_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.duration("ns"))
+                        )
+                        one_day_expr = ConstantExpression(
+                            dummy_empty_data, input_plan, one_day
+                        )
+                        interval_expr = ArithOpExpression(
+                            dummy_empty_data,
+                            amount_expr,
+                            one_day_expr,
+                            "__mul__",
+                        )
+                    out_empty = (
+                        date_expr.empty_data.iloc[:, 0]
+                        - interval_expr.empty_data.iloc[:, 0]
+                    )
+                    return ArithOpExpression(
+                        out_empty, date_expr, interval_expr, "__sub__"
+                    )
+                # Otherwise DATE_SUB(date, interval) — direct subtraction.
                 return java_binop_to_python_expr(
                     ctx,
                     SqlKind.MINUS,
-                    [
-                        java_expr_to_python_expr(
-                            ctx, java_call.getOperands()[i], input_plan
-                        )
-                        for i in range(num_operands)
-                    ],
+                    [date_expr, amount_expr],
                 )
             elif num_operands == 3:
                 return java_binop_to_python_expr(
