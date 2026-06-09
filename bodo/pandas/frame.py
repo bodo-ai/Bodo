@@ -1527,7 +1527,9 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         level: int = 0,
         inplace: bool = False,
     ) -> BodoDataFrame | None:
-        # The pandas fallback involving local variable reference may not function correctly due to the extra function calls added by Bodo, affecting how many levels down the stack you need to go to find the referenced variable
+        # The pandas fallback involving local variable reference may not function correctly
+        # due to the extra function calls added by Bodo, affecting how many levels down the
+        # stack you need to go to find the referenced variable.
 
         def _parse_query_expr(
             expr: str,
