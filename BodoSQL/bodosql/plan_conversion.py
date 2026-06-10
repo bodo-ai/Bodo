@@ -917,16 +917,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             sarg_rangeSet = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
             ranges_collection = sarg_rangeSet.asRanges()
             search_options = []
-            try:
-                it = ranges_collection.iterator()
-                while it.hasNext():
-                    r = it.next()
-                    search_options.append(r)
-            except Exception:
-                # fallback: index access
-                for i in range(len(ranges_collection)):
-                    r = ranges_collection.get(i)
-                    search_options.append(r)
+            it = ranges_collection.iterator()
+            while it.hasNext():
+                r = it.next()
+                search_options.append(r)
 
             def range_type_to_python(x):
                 if isinstance(x, py4j.java_gateway.JavaObject):
