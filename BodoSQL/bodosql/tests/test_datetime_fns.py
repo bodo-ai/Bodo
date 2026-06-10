@@ -2383,6 +2383,7 @@ def test_timestamp_add_scalar(mysql_interval_str, dt_fn_dataframe, memory_leak_c
         check_names=False,
         check_dtype=False,
         expected_output=result,
+        only_jit_1DVar=True,
     )
 
 

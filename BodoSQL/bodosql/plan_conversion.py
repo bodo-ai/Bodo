@@ -251,17 +251,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             unit_raw = str(java_call.getOperands()[0].toString()).upper()
             if "(" in unit_raw:
                 unit_raw = unit_raw.split("(")[1].rstrip(")")
-            _TRUNC_UNIT_MAP = {
-                "YEAR": "year",
-                "QUARTER": "quarter",
-                "MONTH": "month",
-                "WEEK": "week",
-                "DAY": "day",
-                "HOUR": "hour",
-                "MINUTE": "minute",
-                "SECOND": "second",
+            _TRUNC_UNITS = {
+                "year",
+                "quarter",
+                "month",
+                "week",
+                "day",
+                "hour",
+                "minute",
+                "second",
             }
-            arrow_unit = _TRUNC_UNIT_MAP.get(unit_raw, unit_raw.lower())
+            assert unit_raw.lower() in _TRUNC_UNITS, (
+                f"DATE_TRUNC unit has unexpected format after stripping: "
+                f"'{unit_raw}' (original: "
+                f"'{java_call.getOperands()[0].toString()}')"
+            )
+            arrow_unit = unit_raw.lower()
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
@@ -518,7 +523,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # EXTRACT(FLAG(MONTH), date) → month(date)
         unit_str = str(java_call.getOperands()[0].toString()).upper()
         input = java_expr_to_python_expr(ctx, java_call.getOperands()[1], input_plan)
-        # Strip "FLAG(" / ")" or "INTERVAL_" prefix from unit string
+        # Strip parentheses from unit if it's in the form FLAG(unit)
         if "(" in unit_str:
             unit_str = unit_str.split("(")[1].rstrip(")")
         arrow_func = _DATE_PART_ARROW_FUNCS.get(unit_str)
@@ -549,21 +554,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "MONTH",
             "DAY",
             "DAYOFMONTH",
-            "HOUR",
+            "DAYOFYEAR",
+            "WEEK",
+            "WEEKOFYEAR",
+            "WEEKISOHOUR",
             "MINUTE",
             "SECOND",
             "QUARTER",
             "MICROSECOND",
             "NANOSECOND",
         ):
-            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-
-        if func_name in ("WEEK", "WEEKOFYEAR", "WEEKISO"):
-            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-
-        if func_name == "DAYOFYEAR":
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
