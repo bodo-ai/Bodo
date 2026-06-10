@@ -1284,10 +1284,17 @@ class BodoRexSimplify(
 
     /**
      * Compute the PLUS/MINUS operator between two literals. This extends
-     * Calcite's behavior, so we only support Timestamp +/- Interval
+     * Calcite's behavior, so we support Date/Timestamp +/- Interval
      */
     private fun bodoLiteralPlusMinus(call: RexCall, lit1: RexLiteral, lit2: RexLiteral, isPlus: Boolean): RexNode {
-        val supportedIntervals = listOf(SqlTypeName.INTERVAL_DAY, SqlTypeName.INTERVAL_MONTH, SqlTypeName.INTERVAL_YEAR)
+        val supportedIntervals = listOf(
+            SqlTypeName.INTERVAL_DAY,
+            SqlTypeName.INTERVAL_HOUR,
+            SqlTypeName.INTERVAL_MINUTE,
+            SqlTypeName.INTERVAL_SECOND,
+            SqlTypeName.INTERVAL_MONTH,
+            SqlTypeName.INTERVAL_YEAR
+        )
         if ((lit1.type.sqlTypeName in listOf(SqlTypeName.DATE, SqlTypeName.TIMESTAMP)
                     && supportedIntervals.contains(lit2.type.sqlTypeName))
                     || (isPlus && supportedIntervals.contains(lit1.type.sqlTypeName)
@@ -1295,17 +1302,28 @@ class BodoRexSimplify(
             val (dateLiteral, intervalLiteral, signMultiplier) = getDateMathArguments(lit1, lit2, isPlus)
             val calendarVal = dateLiteral.getValueAs(Calendar::class.java)!!
             val intervalDecimal = intervalLiteral.getValueAs(BigDecimal::class.java)!!
-            val (intervalInt, calendarUnit) = when (intervalLiteral.type.sqlTypeName) {
-                // Years & Months have the integer value represented in months
-                SqlTypeName.INTERVAL_YEAR,
-                SqlTypeName.INTERVAL_MONTH,
-                -> Pair(intervalDecimal.toInt(), Calendar.MONTH)
-                // Days have their integer values represented in milliseconds
-                SqlTypeName.INTERVAL_DAY -> Pair(intervalDecimal.divide(BigDecimal(24 * 60 * 60 * 1000)).toInt(), Calendar.DAY_OF_MONTH)
-                else -> return call
+            
+            val isYearMonth = intervalLiteral.type.sqlTypeName in listOf(SqlTypeName.INTERVAL_YEAR, SqlTypeName.INTERVAL_MONTH)
+            
+            if (isYearMonth) {
+                val intervalInt = intervalDecimal.toInt()
+                calendarVal.add(Calendar.MONTH, intervalInt * signMultiplier)
+            } else {
+                // INTERVAL_DAY_TIME values are represented in milliseconds
+                val millisToAdd = intervalDecimal.toLong() * signMultiplier
+                calendarVal.timeInMillis += millisToAdd
             }
-            calendarVal.add(calendarUnit, intervalInt * signMultiplier)
-            return if (dateLiteral.type.sqlTypeName == SqlTypeName.DATE) {
+            
+            // If the original was a DATE, but we added a time component (not a day multiple),
+            // we must return a TIMESTAMP.
+            val hasTimeComponent = if (!isYearMonth) {
+                val millisToAdd = intervalDecimal.toLong() * signMultiplier
+                millisToAdd % (24 * 60 * 60 * 1000) != 0L
+            } else {
+                false
+            }
+            
+            return if (dateLiteral.type.sqlTypeName == SqlTypeName.DATE && !hasTimeComponent) {
                 rexBuilder.makeDateLiteral(DateString.fromCalendarFields(calendarVal))
             } else {
                 rexBuilder.makeTimestampLiteral(TimestampString.fromCalendarFields(calendarVal), 9)
@@ -1884,6 +1902,31 @@ class BodoRexSimplify(
         return false
     }
 
+    private fun isMySQLDateaddOp(e: RexNode): Boolean {
+        if (e is RexCall) {
+            return (e.operator.name == "DATE_ADD" || e.operator.name == "DATEADD" || e.operator.name == "ADDDATE" || e.operator.name == "DATE_SUB" || e.operator.name == "SUBDATE") && e.operands.size == 2
+        }
+        return false
+    }
+
+    private fun simplifyMySQLDateaddOp(e: RexCall): RexNode {
+        if (!e.operands.all { it is RexLiteral }) {
+            return e
+        }
+        val lit1 = e.operands[0] as RexLiteral
+        val lit2 = e.operands[1] as RexLiteral
+        
+        // We can delegate to bodoLiteralPlusMinus for the arithmetic
+        val isPlus = !(e.operator.name == "DATE_SUB" || e.operator.name == "SUBDATE")
+        val result = bodoLiteralPlusMinus(e, lit1, lit2, isPlus)
+        
+        // If bodoLiteralPlusMinus couldn't simplify it, return the original
+        if (result === e) {
+            return e
+        }
+        return result
+    }
+
     /**
      * Converts a date unit string to a pair of a calendar field enum and a
      * multiplier such that the unit string can be expressed as the field times
@@ -2235,6 +2278,7 @@ class BodoRexSimplify(
                 isConcat(e) -> simplifyConcat(e as RexCall)
                 isStringCapitalizationOp(e) -> simplifyStringCapitalizationOp(e as RexCall)
                 isSnowflakeDateaddOp(e) -> simplifySnowflakeDateaddOp(e as RexCall)
+                isMySQLDateaddOp(e) -> simplifyMySQLDateaddOp(e as RexCall)
                 isCompareLeastGreatest(e, 0) -> simplifyCompareLeastGreatest(e as RexCall)
                 isCompareLeastGreatest(e, 1) -> simplifyCompareLeastGreatest(reverseComparison(e as RexCall) as RexCall)
                 isCoalesceComparison(e) -> simplifyCoalesceComparison(e as RexCall)

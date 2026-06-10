@@ -195,12 +195,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             arrow_func = _DATE_PART_ARROW_FUNCS[func_name]
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-            if func_name in _DOW_NAMES:
-                # Arrow: 0=Monday. Snowflake: 0=Sunday → (dow+1)%7
+            if func_name in ("DAYOFWEEK", "DOW"):
+                # PyArrow default: 0=Monday, 6=Sunday.
+                # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
                 one = ConstantExpression(empty_data, input_plan, 1)
                 seven = ConstantExpression(empty_data, input_plan, 7)
                 raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
                 raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+            # For WEEKDAY, PyArrow default (0=Monday..6=Sunday) exactly matches
+            # Spark/Snowflake WEEKDAY, so no transformation is needed.
             return raw_expr
 
         if func_name == "DAYNAME" and num_operands == 1:
@@ -365,6 +368,79 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             return ArrowScalarFuncExpression(
                 input.empty_data, [input], "floor_temporal", (1, arrow_unit)
+            )
+
+        # LAST_DAY requires native C++ backend implementations.
+        if func_name == "LAST_DAY":
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            unit_str = "MONTH"
+            if num_operands == 2:
+                # EXTRACT(FLAG(MONTH), date) → month
+                unit_str = str(java_call.getOperands()[1].toString()).upper()
+                # Strip "FLAG(" / ")" or "INTERVAL_" prefix from unit string
+                if "(" in unit_str:
+                    unit_str = unit_str.split("(")[1].rstrip(")")
+            LAST_DAY_UNITS = {
+                "MONTH": ("month", 1, 0),
+                "QUARTER": ("quarter", 3, 0),
+                "YEAR": ("year", 12, 0),
+                "WEEK": ("week", 0, 7),  # Snowflake weeks end on Saturday
+            }
+            assert unit_str in LAST_DAY_UNITS, f"Unsupported LAST_DAY unit: {unit_str}"
+            empty_data = date_expr.empty_data
+
+            # Arrow doesn't have last day built in so emulate with date_trunc + interval + date arithmetic
+            # Maps unit -> (floor_temporal_unit, MonthDayNano months, MonthDayNano days)
+            # Note: WEEK uses days=7; others use months; all subtract 1 day at the end
+
+            if unit_str in LAST_DAY_UNITS:
+                floor_unit, interval_months, interval_days = LAST_DAY_UNITS[unit_str]
+
+                truncated = ArrowScalarFuncExpression(
+                    empty_data, [date_expr], "floor_temporal", (1, floor_unit)
+                )
+                next_period = ArithOpExpression(
+                    empty_data,
+                    truncated,
+                    ConstantExpression(
+                        empty_data,
+                        input_plan,
+                        ("MonthDayNanoInterval", interval_months, interval_days, 0),
+                    ),
+                    "__add__",
+                )
+                last_day = ArithOpExpression(
+                    empty_data,
+                    next_period,
+                    ConstantExpression(
+                        empty_data, input_plan, ("MonthDayNanoInterval", 0, 1, 0)
+                    ),
+                    "__sub__",
+                )
+                return last_day
+
+        # ADD_MONTHS(date, months) -> date + months * INTERVAL '1' MONTH
+        if func_name == "ADD_MONTHS" and num_operands == 2:
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            months_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            assert hasattr(months_expr, "value") and isinstance(
+                months_expr.value, int
+            ), "ADD_MONTHS requires constant integer for months argument in C++ backend"
+            month_interval = ("MonthDayNanoInterval", months_expr.value, 0, 0)
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+            month_interval_expr = ConstantExpression(
+                dummy_empty_data, input_plan, month_interval
+            )
+
+            # Add to date (output type is same as input date type)
+            return ArithOpExpression(
+                date_expr.empty_data, date_expr, month_interval_expr, "__add__"
             )
 
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
@@ -710,12 +786,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
         empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
         raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-        if unit_str in _DOW_NAMES:
-            # Arrow: 0=Monday. Snowflake: 0=Sunday → (dow+1)%7
+        if unit_str in ("DAYOFWEEK", "DOW"):
+            # PyArrow default: 0=Monday, 6=Sunday.
+            # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
             one = ConstantExpression(empty_data, input_plan, 1)
             seven = ConstantExpression(empty_data, input_plan, 7)
             raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
             raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+        # For WEEKDAY, PyArrow default (0=Monday..6=Sunday) exactly matches
+        # Spark/Snowflake WEEKDAY, so no transformation is needed.
         return raw_expr
     if (
         operator_class_name == "SqlDatePartFunction"
@@ -769,14 +848,21 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
-        if func_name in ("DAYOFWEEK", "WEEKDAY", "DOW"):
+        if func_name in ("DAYOFWEEK", "DOW"):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             dow_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-            # Arrow: 0=Monday. Snowflake: 0=Sunday. Convert: (dow+1)%7
+            # PyArrow default: 0=Monday, 6=Sunday.
+            # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
             one_const = ConstantExpression(empty_data, input_plan, 1)
             seven_const = ConstantExpression(empty_data, input_plan, 7)
             plus_one = ArithOpExpression(empty_data, dow_expr, one_const, "__add__")
             return ArithOpExpression(empty_data, plus_one, seven_const, "__mod__")
+
+        if func_name == "WEEKDAY":
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            # PyArrow default (0=Monday..6=Sunday) exactly matches
+            # Spark/Snowflake WEEKDAY, so no transformation is needed.
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
@@ -948,6 +1034,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if func_name == "NULLIF" and len(op_exprs) == 2:
             return ArrowScalarFuncExpression(
                 op_exprs[0].empty_data, op_exprs, "nullif", ()
+            )
+
+        # MONTHS_BETWEEN and TIME_SLICE also require specific C++ backend support
+        if func_name in ("MONTHS_BETWEEN", "TIME_SLICE"):
+            raise NotImplementedError(
+                f"{func_name} requires C++ backend arrow compute function registration"
             )
 
         # If we didn't match a supported basic function, fall through to NotImplemented

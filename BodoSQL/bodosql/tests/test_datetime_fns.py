@@ -38,7 +38,7 @@ from bodosql.tests.timezone_utils import (
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
-pytestmark = pytest_slow_unless_codegen + [pytest.mark.bodosql_cpp]
+pytestmark = pytest_slow_unless_codegen
 
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
@@ -363,6 +363,7 @@ def dt_fn_info(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_dt_fns_cols(spark_info, dt_fn_info, dt_fn_dataframe, memory_leak_check):
     """tests that the specified date_time functions work on columns"""
     bodo_fn_name = dt_fn_info[0]
@@ -4699,6 +4700,7 @@ def date_only_single_arg_fns(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def date_only_single_arg_fns_time_input_handling(
     date_only_single_arg_fns, time_df, memory_leak_check
 ):
@@ -4717,6 +4719,7 @@ def date_only_single_arg_fns_time_input_handling(
         )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 def next_previous_day_time_input_handling(next_or_prev, time_df, memory_leak_check):
     query = f"SELECT {next_or_prev}_DAY(A, 'mo') as output from table1"
@@ -4734,6 +4737,7 @@ def next_previous_day_time_input_handling(next_or_prev, time_df, memory_leak_che
         )
 
 
+@pytest.mark.bodosql_cpp
 def test_last_day_no_date_part(date_df, memory_leak_check):
     """
     Tests LAST_DAY function without specifying date units
@@ -4755,6 +4759,7 @@ def test_last_day_no_date_part(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
     """
     Tests LAST_DAY function with specifying date units
@@ -4791,6 +4796,7 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
         )
 
 
+@pytest.mark.bodosql_cpp
 def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
     """
     Tests LAST_DAY function can throw correct error when input
@@ -4831,6 +4837,7 @@ def test_months_between(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_add_months(date_df, memory_leak_check):
     query = "SELECT ADD_MONTHS(A, -18) from table1"
 
