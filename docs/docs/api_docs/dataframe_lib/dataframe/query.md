@@ -54,7 +54,7 @@ Output:
 
 ``` py
 list_var = [3.2, 0.18, 2, 10.1, 5]
-bdf_queried2 = df.query("A in @list_var & not (`B B` == @list_var | `C&C`.str.len() > @length)", local_dict={"length": 1})
+bdf_queried2 = bdf.query("A in @list_var & not (`B B` == @list_var | `C&C`.str.len() > @length)", local_dict={"length": 1})
 print(bdf_queried2)
 ```
 
