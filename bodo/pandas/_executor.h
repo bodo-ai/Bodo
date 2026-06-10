@@ -138,12 +138,13 @@ class Executor {
 
    public:
     explicit Executor(std::unique_ptr<duckdb::LogicalOperator> plan,
-                      std::shared_ptr<arrow::Schema> out_schema) {
+                      std::shared_ptr<arrow::Schema> out_schema,
+                      bool use_sql_rules = false) {
         QueryProfileCollector::Default().Init();
         // Partition between CPU and GPU.
         run_on_gpu = partition_to_gpu(plan);
         // Convert the logical plan to a physical plan
-        PhysicalPlanBuilder builder(ctes, run_on_gpu);
+        PhysicalPlanBuilder builder(ctes, run_on_gpu, use_sql_rules);
         builder.Visit(*plan);
 
         // Write finalizes the active pipeline but others need result collection

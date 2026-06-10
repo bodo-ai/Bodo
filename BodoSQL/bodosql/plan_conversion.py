@@ -701,7 +701,6 @@ def java_join_to_python_join(ctx, java_join):
     empty_join_out.columns = java_join.getRowType().getFieldNames()
 
     if len(key_indices) > 0:
-        # TODO[BSE-5150]: support broadcast join flag
         planJoinOrCross = LogicalComparisonJoin(
             empty_join_out,
             left_plan,
@@ -719,6 +718,10 @@ def java_join_to_python_join(ctx, java_join):
     if len(nonEquiConds) == 0:
         return planJoinOrCross
     else:
+        if java_join.getJoinType().toString() != "INNER":
+            raise NotImplementedError(
+                "Joins with non-equi conditions are only supported for inner joins in C++ backend currently"
+            )
         non_equi_exprs = java_expr_to_python_expr(ctx, nonEquiConds[0], planJoinOrCross)
         # And all the conditions together with the first one above.
         for e in nonEquiConds[1:]:

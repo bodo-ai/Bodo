@@ -1344,7 +1344,8 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
 }
 
 std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py,
+    bool use_sql_rules) {
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
     rmm::cuda_device_id gpu_id = get_gpu_id();
@@ -1367,7 +1368,7 @@ std::pair<int64_t, PyObject *> execute_plan(
     // in case executor holds any GPU resources that need to be released before
     // resetting the device.
     {
-        Executor executor(std::move(plan), out_schema);
+        Executor executor(std::move(plan), out_schema, use_sql_rules);
         output = executor.ExecutePipelines();
     }
 

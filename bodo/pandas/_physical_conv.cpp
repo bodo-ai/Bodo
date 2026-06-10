@@ -331,11 +331,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
         physical_op =
             std::make_shared<PhysicalGPUAggregate>(in_table_schema, op);
     } else {
-        physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op);
+        physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op,
+                                                          use_sql_rules);
     }
 #else   // USE_CUDF
     std::variant<std::shared_ptr<PhysicalAggregate>> physical_op;
-    physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op);
+    physical_op =
+        std::make_shared<PhysicalAggregate>(in_table_schema, op, use_sql_rules);
 #endif  // USE_CUDF
 
     // Finish the current pipeline with groupby build sink.
@@ -741,8 +743,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
 #endif  // USE_CUDF
 
     // Create pipelines for the build side of the join (right child)
-    PhysicalPlanBuilder rhs_builder(ctes, run_on_gpu, join_filter_states,
-                                    join_filter_pipelines);
+    PhysicalPlanBuilder rhs_builder(ctes, run_on_gpu, use_sql_rules,
+                                    join_filter_states, join_filter_pipelines);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
@@ -966,8 +968,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
     // Same as LogicalComparisonJoin, but without conditions.
 
     // Create pipelines for the build side of the join (right child)
-    PhysicalPlanBuilder rhs_builder(ctes, run_on_gpu, join_filter_states,
-                                    join_filter_pipelines);
+    PhysicalPlanBuilder rhs_builder(ctes, run_on_gpu, use_sql_rules,
+                                    join_filter_states, join_filter_pipelines);
     rhs_builder.Visit(*op.children[1]);
     std::shared_ptr<bodo::Schema> build_table_schema =
         rhs_builder.active_pipeline->getPrevOpOutputSchema();
@@ -1043,8 +1045,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
         // UNION ALL
         if (op.setop_all) {
             // Right-child will feed into a table.
-            PhysicalPlanBuilder rhs_builder(
-                ctes, run_on_gpu, join_filter_states, join_filter_pipelines);
+            PhysicalPlanBuilder rhs_builder(ctes, run_on_gpu, use_sql_rules,
+                                            join_filter_states,
+                                            join_filter_pipelines);
             rhs_builder.Visit(*op.children[1]);
             std::shared_ptr<bodo::Schema> rhs_table_schema =
                 rhs_builder.active_pipeline->getPrevOpOutputSchema();
@@ -1243,11 +1246,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalDistinct& op) {
         physical_op =
             std::make_shared<PhysicalGPUAggregate>(in_table_schema, op);
     } else {
-        physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op);
+        physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op,
+                                                          use_sql_rules);
     }
 #else   // USE_CUDF
     std::variant<std::shared_ptr<PhysicalAggregate>> physical_op;
-    physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op);
+    physical_op =
+        std::make_shared<PhysicalAggregate>(in_table_schema, op, use_sql_rules);
 #endif  // USE_CUDF
 
     // Finish the current pipeline with groupby build sink.

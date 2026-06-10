@@ -370,7 +370,7 @@ cdef extern from "_plan.h" nogil:
         c_string index_name, object region) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
     cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
-    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema) except +
+    cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema, c_bool use_sql_rules) except +
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
     cdef int planCountNodes(unique_ptr[CLogicalOperator] root) except +
@@ -1288,7 +1288,7 @@ cpdef py_optimize_plan(object plan):
     return optimized_plan
 
 
-cpdef py_execute_plan(object plan, output_func, out_schema):
+cpdef py_execute_plan(object plan, output_func, out_schema, bool use_sql_rules=False):
     """Execute a logical plan in the C++ backend
     """
     cdef LogicalOperator wrapped_operator
@@ -1300,7 +1300,7 @@ cpdef py_execute_plan(object plan, output_func, out_schema):
 
     wrapped_operator = plan
 
-    exec_output = execute_plan(move(wrapped_operator.c_logical_operator), out_schema)
+    exec_output = execute_plan(move(wrapped_operator.c_logical_operator), out_schema, use_sql_rules)
     cpp_table = exec_output.first
 
     # Write doesn't return output data
