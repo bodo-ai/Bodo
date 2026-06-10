@@ -218,8 +218,6 @@ jobs:
                   bodosql/tests/caching_tests/
 
           elif [[ "$TEST_TYPE" == "sql_spawn" ]]; then
-              export BODO_TEST_SPAWN_MODE=1
-
               pytest \
                   -s -v \
                   -p no:faulthandler \

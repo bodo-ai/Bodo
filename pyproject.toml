@@ -6,7 +6,7 @@ requires = [
     "cython>=3.0",
     # Build Libraries
     "numpy>=1.24",
-    "pyarrow>=23.0,<23.1",
+    "pyarrow>=24.0,<24.1",
     "mpi4py>=4.1",
     "pip"
 ]
@@ -37,7 +37,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pyarrow>=23.0,<23.1",
+    "pyarrow>=24.0,<24.1",
     "numba>=0.62,<0.66",
     "pandas>=2.2",
     "pytz",
