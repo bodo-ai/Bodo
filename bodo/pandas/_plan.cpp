@@ -1064,11 +1064,19 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
             ValidityMask &validity = FlatVector::Validity(vec);
             auto ts_arr = std::static_pointer_cast<arrow::TimestampArray>(arr);
             auto data = FlatVector::GetData<int64_t>(vec);
+            // If DuckDB expects microseconds (TIMESTAMP) but Arrow has
+            // nanoseconds, convert ns → us.
+            bool convert_ns_to_us =
+                (vec.GetType().id() == LogicalTypeId::TIMESTAMP &&
+                 std::static_pointer_cast<arrow::TimestampType>(arr->type())
+                         ->unit() == arrow::TimeUnit::NANO);
             for (idx_t i = 0; i < count; i++) {
                 if (ts_arr->IsNull(i)) {
                     validity.SetInvalid(i);
+                } else if (convert_ns_to_us) {
+                    data[i] = ts_arr->Value(i) / 1000;
                 } else {
-                    data[i] = ts_arr->Value(i);  // stored as int64 epoch units
+                    data[i] = ts_arr->Value(i);
                 }
             }
             break;

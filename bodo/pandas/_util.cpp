@@ -49,12 +49,13 @@ extractValue(const duckdb::Value &value) {
         case duckdb::LogicalTypeId::VARCHAR:
             return value.GetValue<std::string>();
         case duckdb::LogicalTypeId::TIMESTAMP: {
-            // Define a timestamp type with microsecond precision
-            auto timestamp_type = arrow::timestamp(arrow::TimeUnit::MICRO);
+            // DuckDB timestamp_t stores microseconds. Convert to nanoseconds
+            // for Arrow since we use timestamp[ns] throughout.
+            auto timestamp_type = arrow::timestamp(arrow::TimeUnit::NANO);
             duckdb::timestamp_t extracted =
                 value.GetValue<duckdb::timestamp_t>();
-            // Create a TimestampScalar with microsecond value
-            return std::make_shared<arrow::TimestampScalar>(extracted.value,
+            int64_t ns_value = static_cast<int64_t>(extracted.value) * 1000;
+            return std::make_shared<arrow::TimestampScalar>(ns_value,
                                                             timestamp_type);
         } break;
         case duckdb::LogicalTypeId::TIMESTAMP_MS: {
@@ -499,7 +500,11 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
         case duckdb::LogicalTypeId::TIMESTAMP_MS:
             return arrow::timestamp(arrow::TimeUnit::MILLI);
         case duckdb::LogicalTypeId::TIMESTAMP:
-            return arrow::timestamp(arrow::TimeUnit::MICRO);
+            // DuckDB TIMESTAMP is microsecond precision, but we use nanosecond
+            // Arrow arrays throughout. Map to NANO so do_array_compute_cast
+            // becomes a no-op (prepare_arrow_compute also produces NANO).
+            // arrowArrayToDuckdbVector handles the ns→us conversion.
+            return arrow::timestamp(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::TIMESTAMP_NS:
             return arrow::timestamp(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::TIME:
