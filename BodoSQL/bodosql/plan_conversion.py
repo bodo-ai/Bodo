@@ -661,6 +661,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             total_months = 0
             total_nanos = 0
             for expr in op_exprs:
+                assert hasattr(expr, "value"), (
+                    "COMBINE_INTERVALS requires constant interval arguments in C++ backend"
+                )
                 val = expr.value
                 if (
                     isinstance(val, tuple)
