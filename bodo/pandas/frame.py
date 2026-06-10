@@ -1531,293 +1531,107 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # due to the extra function calls added by Bodo, affecting how many levels down the
         # stack you need to go to find the referenced variable.
 
-        def _parse_query_expr(
-            expr: str,
-            env,
-            columns,
-            cleaned_columns,
-            join_cleaned_cols=(),
-        ):
-            """Parses expression string for BodoDataFrame.query() call handling.
-            Patches Pandas query expr parsing code to avoid evaluating values during parsing.
+        # Import compiler lazily
+        import bodo.decorators  # isort:skip # noqa
 
-            join_cleaned_cols are used by general join condition to detect
-            non-valid identifiers.
+        bodo.spawn.utils.import_compiler_on_workers()
 
-            Tweaked from the original bodo.hiframes.dataframe_impl._parse_query_expr() for conversion to bracket syntax
-            """
-            used_cols = {}
+        # Lazily import _parse_query_expr() to avoid circular import
+        from bodo.hiframes.dataframe_impl import _parse_query_expr
 
-            # NOTE: all comments are Bodo specific
-            # avoid rewrite of operations in Pandas such as early evaluation of string exprs
-            def _rewrite_membership_op(self, node, left, right):
-                op_instance = node.op
-                op = self.visit(op_instance)
-                return op, op_instance, left, right
-
-            def _maybe_evaluate_binop(
-                self,
-                op,
-                op_class,
-                lhs,
-                rhs,
-                eval_in_python=("in", "not in"),
-                maybe_eval_in_python=("==", "!=", "<", ">", "<=", ">="),
-            ):
-                res = op(lhs, rhs)
-                return res
-
-            # avoid early evaluation of getattr such as C.str.contains().
-            # functions like C.str.contains are saved and handled similar to
-            # intrinsic functions like sqrt instead of evaluation.
-            new_funcs = []
-
-            class NewFuncNode(pd.core.computation.ops.FuncNode):
-                def __init__(self, name):
-                    if name not in pd.core.computation.ops.MATHOPS or (
-                        pd.core.computation.check._NUMEXPR_INSTALLED
-                        and pd.core.computation.check_NUMEXPR_VERSION
-                        < pd.core.computation.ops.LooseVersion("2.6.9")
-                        and name in ("floor", "ceil")
-                    ):
-                        if name not in new_funcs:
-                            raise ValueError(f'"{name}" is not a supported function')
-
-                    self.name = name
-                    if name in new_funcs:
-                        self.func = name
-                    else:
-                        self.func = getattr(np, name)
-
-                def __call__(self, *args):
-                    return pd.core.computation.ops.MathCall(self, args)
-
-                # __repr__ is needed if this attr node is not called, e.g. A.dt.year
-                def __repr__(self):
-                    # _replace_column_accesses expects column access to be wraped in parenthesis,
-                    # so we wrap everything in parenthesis when converting to string,
-                    # since we can't distinguish a column access from any other type of expression
-                    return pd.io.formats.printing.pprint_thing(f"({self.name})")
-
-            def visit_Attribute(self, node, **kwargs):
-                """handles value.attr cases such as C.str.contains()
-                functions are turned into NewFuncNode. Intermediate values like C.str
-                are added to local scope as local variable to avoid evaluation.
-                """
-                attr = node.attr
-                value = node.value
-                sentinel = pd.core.computation.ops.LOCAL_TAG
-
-                if attr in ("str", "dt"):
-                    # check the case where df.column.str where column is not in df
-                    try:
-                        value_str = str(self.visit(value))
-                    except pd.errors.UndefinedVariableError as e:
-                        col_name = e.args[0].split("'")[1]
-                        raise ValueError(
-                            f"df.query(): column {col_name} is not found in dataframe columns {columns}"
-                        )
-                else:
-                    value_str = str(self.visit(value))
-
-                escape_key = (value_str, attr)
-
-                # convert column names back the original string
-                if escape_key in join_cleaned_cols:
-                    attr = join_cleaned_cols[escape_key]
-
-                name = value_str + "." + attr
-                if name.startswith(sentinel):
-                    name = name[len(sentinel) :]
-
-                # make local variable in case of C.str
-                if attr in ("str", "dt"):
-                    orig_col_name = columns[cleaned_columns.index(value_str)]
-                    used_cols[orig_col_name] = value_str
-                    self.env.scope[name] = 0
-                    return self.term_type(sentinel + name, self.env)
-
-                # make function node
-                new_funcs.append(name)
-                return NewFuncNode(name)
-
-            # make sure string literals are printed correctly in expression
-            def __str__(self):
-                if isinstance(self.value, list):
-                    return f"{self.value}"
-                if isinstance(self.value, str):
-                    return f"'{self.value}'"
-                return pd.io.formats.printing.pprint_thing(self.name)
-
-            # handle math calls
-            def math__str__(self):
-                """makes math calls compilable by adding "np." and Series functions"""
+        # handle math calls by converting them to numpy calls
+        def math__str__(self_, new_funcs):
+            if self_.op not in new_funcs:
+                op = f"np.{self_.op}"
+                parens = "({})"
+            else:
                 # avoid change if it is a dummy attribute call
-                if self.op not in new_funcs:
-                    op = f"np.{self.op}"
-                    parens = "({})"
-                else:
-                    op = self.op
-                    parens = "{}"
+                op = self_.op
+                parens = "{}"
 
+            return pd.io.formats.printing.pprint_thing(
+                op + f"({parens})".format(",".join(map(str, self_.operands)))
+            )
+
+        # Make any needed operation transformations
+        def op__str__(self_):
+            if len(self_.operands) == 1:
                 return pd.io.formats.printing.pprint_thing(
-                    op + f"({parens})".format(",".join(map(str, self.operands)))
+                    f"{self_.op} ({pd.io.formats.printing.pprint_thing(self_.operands[0])})"
                 )
 
-            # replace 'in' operator with dummy function to convert to prange later
-            def op__str__(self):
-                if len(self.operands) == 1:
+            assert len(self_.operands) == 2
+
+            operator = self_.op
+
+            left_opr = self_.operands[0]
+            right_opr = self_.operands[1]
+
+            def is_opr_column(opr):
+                return repr(opr) in cleaned_columns
+
+            def opr_str(opr):
+                return (
+                    pd.io.formats.printing.pprint_thing(opr)
+                    if not is_opr_column(opr)
+                    else repr(opr)
+                )
+
+            def is_opr_list(opr):
+                try:
+                    sentinel = pd.core.computation.ops.LOCAL_TAG
+                    name = opr_str(opr)
+                    if name.startswith(sentinel):
+                        var_name = name.removeprefix(sentinel)
+                        opr_value = str(env.scope[var_name])
+                    else:
+                        opr_value = name
+                    # TODO: Support non-literal collection types like frozenset
+                    return isinstance(
+                        ast.literal_eval(opr_value), (list, tuple, set, dict)
+                    )
+                except (ValueError, SyntaxError):
+                    return False
+
+            if operator in ("==", "!="):
+                left_opr_is_list = is_opr_list(left_opr)
+                right_opr_is_list = is_opr_list(right_opr)
+
+                if left_opr_is_list or right_opr_is_list:
+                    if left_opr_is_list and not right_opr_is_list:
+                        if is_opr_column(right_opr):
+                            temp = left_opr
+                            left_opr = right_opr
+                            right_opr = temp
+                    elif left_opr_is_list and right_opr_is_list:
+                        # Both are lists
+                        return "False"
+
+                    # Now we have that right_opr is a list and left_opr is not a list
+                    if operator == "==":
+                        operator = "in"
+                    else:  # operator == "!="
+                        operator = "not in"
+
+            if is_opr_column(left_opr):
+                # Handle "in" and "not in" operators involving a dataframe column
+                if operator == "in":
                     return pd.io.formats.printing.pprint_thing(
-                        f"{self.op} ({pd.io.formats.printing.pprint_thing(self.operands[0])})"
+                        f"({opr_str(left_opr)}).isin(({opr_str(right_opr)}))"
+                    )
+                elif operator == "not in":
+                    return pd.io.formats.printing.pprint_thing(
+                        f"~({opr_str(left_opr)}).isin(({opr_str(right_opr)}))"
                     )
 
-                assert len(self.operands) == 2
-
-                operator = self.op
-
-                left_opr = self.operands[0]
-                right_opr = self.operands[1]
-
-                def is_opr_column(opr):
-                    return repr(opr) in cleaned_columns
-
-                def opr_str(opr):
-                    return (
-                        pd.io.formats.printing.pprint_thing(opr)
-                        if not is_opr_column(opr)
-                        else repr(opr)
-                    )
-
-                def is_opr_list(opr):
-                    try:
-                        sentinel = pd.core.computation.ops.LOCAL_TAG
-                        name = opr_str(opr)
-                        if name.startswith(sentinel):
-                            var_name = name.removeprefix(sentinel)
-                            opr_value = str(env.scope[var_name])
-                        else:
-                            opr_value = name
-                        # TODO: Support non-literal collection types like frozenset
-                        return isinstance(
-                            ast.literal_eval(opr_value), (list, tuple, set, dict)
-                        )
-                    except (ValueError, SyntaxError):
-                        return False
-
-                if operator in ("==", "!="):
-                    left_opr_is_list = is_opr_list(left_opr)
-                    right_opr_is_list = is_opr_list(right_opr)
-
-                    if left_opr_is_list or right_opr_is_list:
-                        if left_opr_is_list and not right_opr_is_list:
-                            if is_opr_column(right_opr):
-                                temp = left_opr
-                                left_opr = right_opr
-                                right_opr = temp
-                        elif left_opr_is_list and right_opr_is_list:
-                            # Both are lists
-                            return "False"
-
-                        # Now we have that right_opr is a list and left_opr is not a list
-                        if operator == "==":
-                            operator = "in"
-                        else:  # operator == "!="
-                            operator = "not in"
-
-                if is_opr_column(left_opr):
-                    # Handle "in" and "not in" operators involving a dataframe column
-                    if operator == "in":
-                        return pd.io.formats.printing.pprint_thing(
-                            f"({opr_str(left_opr)}).isin(({opr_str(right_opr)}))"
-                        )
-                    elif operator == "not in":
-                        return pd.io.formats.printing.pprint_thing(
-                            f"~({opr_str(left_opr)}).isin(({opr_str(right_opr)}))"
-                        )
-
-                return pd.io.formats.printing.pprint_thing(
-                    f"({opr_str(left_opr)}) {operator} ({opr_str(right_opr)})"
-                )
-
-            saved_rewrite_membership_op = (
-                pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op  # type: ignore
+            return pd.io.formats.printing.pprint_thing(
+                f"({opr_str(left_opr)}) {operator} ({opr_str(right_opr)})"
             )
-            saved_maybe_evaluate_binop = (
-                pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop  # type: ignore
-            )
-            saved_visit_Attribute = (
-                pd.core.computation.expr.BaseExprVisitor.visit_Attribute
-            )
-            saved__maybe_downcast_constants = (
-                pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants  # type: ignore
-            )
-            saved__str__ = pd.core.computation.ops.Term.__str__
-            saved_math__str__ = pd.core.computation.ops.MathCall.__str__
-            saved_op__str__ = pd.core.computation.ops.Op.__str__
-            saved__disallow_scalar_only_bool_ops = (
-                pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops  # type: ignore
-            )
-            try:
-                pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (  # type: ignore
-                    _rewrite_membership_op
-                )
-                pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (  # type: ignore
-                    _maybe_evaluate_binop
-                )
-                pd.core.computation.expr.BaseExprVisitor.visit_Attribute = (
-                    visit_Attribute
-                )
-                # _maybe_downcast_constants accesses actual value which is not possible
-                pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
-                    lambda self, left, right: (  # type: ignore
-                        left,
-                        right,
-                    )
-                )
-                pd.core.computation.ops.Term.__str__ = __str__
-                pd.core.computation.ops.MathCall.__str__ = math__str__
-                pd.core.computation.ops.Op.__str__ = op__str__
-                # _disallow_scalar_only_bool_ops accesses actual value which is not possible
-                pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
-                    lambda self: None
-                )  # type: ignore
-                parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
-                parsed_expr_str = str(parsed_expr)
-            except pd.errors.UndefinedVariableError as e:
-                # catch undefined variable error
-                raise BodoLibNotImplementedException(
-                    "Undefined variable or named index in df.query() expression: "
-                    + str(e)
-                )
-            finally:
-                pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (  # type: ignore
-                    saved_rewrite_membership_op
-                )
-                pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (  # type: ignore
-                    saved_maybe_evaluate_binop
-                )
-                pd.core.computation.expr.BaseExprVisitor.visit_Attribute = (
-                    saved_visit_Attribute
-                )
-                pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (  # type: ignore
-                    saved__maybe_downcast_constants
-                )
-                pd.core.computation.ops.Term.__str__ = saved__str__
-                pd.core.computation.ops.MathCall.__str__ = saved_math__str__
-                pd.core.computation.ops.Op.__str__ = saved_op__str__
-                pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (  # type: ignore
-                    saved__disallow_scalar_only_bool_ops
-                )
 
-            clean_name = pd.core.computation.parsing.clean_column_name
-            used_cols.update(
-                {
-                    c: clean_name(c)
-                    for c in columns
-                    if clean_name(c) in parsed_expr.names
-                }
+        def undefined_variable_handler(e):
+            raise BodoLibNotImplementedException(
+                "Undefined variable or named index in df.query() expression: " + str(e)
             )
-            return parsed_expr, parsed_expr_str, used_cols
 
         # Parse expression and convert to bracket syntax so that we can reuse __getitem__ query handling
 
@@ -1828,11 +1642,23 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         resolver["index"] = 0
         all_resolvers = (resolver,) + (resolvers or ())
 
+        # Get environment for variable reference
         env = pd.core.computation.scope.ensure_scope(
             level + 2, global_dict, local_dict, resolvers=all_resolvers
         )
+        """Parse expression string for BodoDataFrame.query() call handling.
+        Patches Pandas query expr parsing code to avoid evaluating values during parsing.
+
+        Tweaked functions from the JIT version bodo.hiframes.dataframe_impl._parse_query_expr() for conversion to bracket syntax
+        """
         parsed_expr, parsed_expr_str, used_cols = _parse_query_expr(
-            expr, env, self.columns, cleaned_columns
+            expr,
+            env,
+            self.columns,
+            cleaned_columns,
+            math__str__func=math__str__,
+            op__str__=op__str__,
+            undefined_variable_handler=undefined_variable_handler,
         )
 
         # Replace local/global variable references with their real values

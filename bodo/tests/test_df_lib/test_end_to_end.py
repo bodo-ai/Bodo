@@ -719,6 +719,7 @@ def test_filter_method(kwargs, error, epc):
         )
 
 
+@pytest.mark.jit_dependency
 @pytest.mark.gpu
 @pytest.mark.parametrize(
     "expr, epc",
