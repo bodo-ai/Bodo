@@ -171,8 +171,10 @@ duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
     interval_val.months = months;
     interval_val.days = days;
     // Round to nearest microsecond (DuckDB INTERVAL only supports
-    // microsecond precision)
-    interval_val.micros = (nanos + 500LL) / 1000LL;
+    // microsecond precision). Add or subtract 500 depending on sign
+    // because C integer division truncates toward zero.
+    interval_val.micros =
+        nanos < 0 ? (nanos - 500LL) / 1000LL : (nanos + 500LL) / 1000LL;
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value::INTERVAL(interval_val));
 }
@@ -1344,7 +1346,8 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
 }
 
 std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py,
+    bool use_sql_rules) {
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
     rmm::cuda_device_id gpu_id = get_gpu_id();
@@ -1367,7 +1370,7 @@ std::pair<int64_t, PyObject *> execute_plan(
     // in case executor holds any GPU resources that need to be released before
     // resetting the device.
     {
-        Executor executor(std::move(plan), out_schema);
+        Executor executor(std::move(plan), out_schema, use_sql_rules);
         output = executor.ExecutePipelines();
     }
 

@@ -6340,6 +6340,11 @@ def _parse_query_expr(
 
     # replace 'in' operator with dummy function to convert to prange later
     def op__str__(self):
+        if len(self.operands) == 1:
+            return pandas.io.formats.printing.pprint_thing(
+                f"{self.op} ({pandas.io.formats.printing.pprint_thing(self.operands[0])})"
+            )
+
         parened = (
             f"({pandas.io.formats.printing.pprint_thing(opr)})" for opr in self.operands
         )

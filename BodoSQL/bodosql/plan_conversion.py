@@ -4,7 +4,7 @@ import decimal
 import operator
 import zoneinfo
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import py4j
@@ -39,6 +39,27 @@ from bodo.pandas.plan import (
 )
 from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
+
+_DATE_PART_ARROW_FUNCS = {
+    "YEAR": "year",
+    "MONTH": "month",
+    "DAY": "day",
+    "DAYOFMONTH": "day",
+    "HOUR": "hour",
+    "MINUTE": "minute",
+    "SECOND": "second",
+    "QUARTER": "quarter",
+    "WEEK": "iso_week",
+    "WEEKOFYEAR": "iso_week",
+    "WEEKISO": "iso_week",
+    "DAYOFYEAR": "day_of_year",
+    "DAYOFWEEK": "day_of_week",
+    "WEEKDAY": "day_of_week",
+    "MICROSECOND": "microsecond",
+    "NANOSECOND": "nanosecond",
+    "DOW": "day_of_week",
+    "DOY": "day_of_year",
+}
 
 
 @dataclass
@@ -171,7 +192,183 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     op = java_call.getOperator()
     operator_class_name = op.getClass().getSimpleName()
 
-    if operator_class_name in ("SqlMonotonicBinaryOperator", "SqlBinaryOperator"):
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+    _DOW_NAMES = {"DAYOFWEEK", "WEEKDAY", "DOW"}
+
+    if operator_class_name == "SqlNullPolicyFunction":
+        func_name = op.getName().upper()
+        num_operands = len(java_call.getOperands())
+
+        # Date part functions wrapped in SqlNullPolicyFunction (e.g. WEEKDAY($0))
+        if func_name in _DATE_PART_ARROW_FUNCS and num_operands == 1:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            arrow_func = _DATE_PART_ARROW_FUNCS[func_name]
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+            if func_name in _DOW_NAMES:
+                # Arrow: 0=Monday. Snowflake: 0=Sunday → (dow+1)%7
+                one = ConstantExpression(empty_data, input_plan, 1)
+                seven = ConstantExpression(empty_data, input_plan, 7)
+                raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
+                raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+            return raw_expr
+
+        if func_name == "DAYNAME" and num_operands == 1:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%a",))
+
+        if func_name in ("MONTHNAME", "MONTH_NAME") and num_operands == 1:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
+
+        if func_name == "MAKEDATE" and num_operands == 2:
+            # MAKEDATE(year, dayofyear) → Jan 1 of year + (doy-1) days
+            year_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            doy_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            assert hasattr(year_expr, "value") and hasattr(doy_expr, "value"), (
+                "MAKEDATE requires constant integer arguments in C++ backend"
+            )
+            result_date = datetime(int(year_expr.value), 1, 1).date() + timedelta(
+                days=int(doy_expr.value) - 1
+            )
+            empty_data = pd.Series([result_date], dtype=pd.ArrowDtype(pa.date32()))
+            return ConstantExpression(empty_data, input_plan, result_date)
+
+        if func_name == "DATE_TRUNC" and num_operands == 2:
+            # DATE_TRUNC(FLAG(DAY), timestamp) → floor_temporal(timestamp, unit)
+            unit_raw = str(java_call.getOperands()[0].toString()).upper()
+            if "(" in unit_raw:
+                unit_raw = unit_raw.split("(")[1].rstrip(")")
+            _TRUNC_UNITS = {
+                "year",
+                "quarter",
+                "month",
+                "week",
+                "day",
+                "hour",
+                "minute",
+                "second",
+            }
+            assert unit_raw.lower() in _TRUNC_UNITS, (
+                f"DATE_TRUNC unit has unexpected format after stripping: "
+                f"'{unit_raw}' (original: "
+                f"'{java_call.getOperands()[0].toString()}')"
+            )
+            arrow_unit = unit_raw.lower()
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            return ArrowScalarFuncExpression(
+                input.empty_data, [input], "floor_temporal", (1, arrow_unit)
+            )
+
+        if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
+            # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
+            # For 2 operands: (date, interval) → date + interval
+            # For 3 operands: (unit, amount, date) → date + (unit * amount)
+            if num_operands == 2:
+                return java_binop_to_python_expr(
+                    ctx,
+                    SqlKind.PLUS,
+                    [
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[i], input_plan
+                        )
+                        for i in range(num_operands)
+                    ],
+                )
+            elif num_operands == 3:
+                # DATEADD(FLAG(unit), amount, date) from date + int arithmetic.
+                # Only handle when first operand is an interval qualifier (FLAG).
+                first_op_str = str(java_call.getOperands()[0].toString())
+                if not first_op_str.startswith("FLAG"):
+                    raise NotImplementedError(
+                        "DATEADD with 3 string operands not supported in "
+                        "C++ backend yet"
+                    )
+                # In Snowflake, date + integer always means date + N days.
+                amount_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                date_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[2], input_plan
+                )
+                if hasattr(amount_expr, "value"):
+                    interval_val = pd.Timedelta(days=int(amount_expr.value))
+                    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+                    interval_expr = ConstantExpression(
+                        dummy_empty_data, input_plan, interval_val
+                    )
+                else:
+                    one_day = pd.Timedelta(days=1)
+                    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+                    one_day_expr = ConstantExpression(
+                        dummy_empty_data, input_plan, one_day
+                    )
+                    interval_expr = ArithOpExpression(
+                        dummy_empty_data, amount_expr, one_day_expr, "__mul__"
+                    )
+                out_empty = (
+                    date_expr.empty_data.iloc[:, 0]
+                    + interval_expr.empty_data.iloc[:, 0]
+                )
+                result = ArithOpExpression(
+                    out_empty, date_expr, interval_expr, "__add__"
+                )
+                # Cast back to date32 if input was date (date+duration → timestamp)
+                result_type = result.empty_data.iloc[:, 0].dtype
+                if hasattr(result_type, "pyarrow_dtype") and pa.types.is_timestamp(
+                    result_type.pyarrow_dtype
+                ):
+                    date32_empty = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+                    result = CastExpression(date32_empty, result)
+                return result
+        if func_name in ("DATE_SUB", "SUBDATE"):
+            # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
+            if num_operands == 2:
+                return java_binop_to_python_expr(
+                    ctx,
+                    SqlKind.MINUS,
+                    [
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[i], input_plan
+                        )
+                        for i in range(num_operands)
+                    ],
+                )
+            elif num_operands == 3:
+                return java_binop_to_python_expr(
+                    ctx,
+                    SqlKind.MINUS,
+                    [
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[2], input_plan
+                        ),
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[1], input_plan
+                        ),
+                    ],
+                )
+
+    if operator_class_name in (
+        "SqlMonotonicBinaryOperator",
+        "SqlBinaryOperator",
+        "SqlDatetimePlusOperator",
+        "SqlDatetimeSubtractionOperator",
+    ):
         operands = java_call.getOperands()
         # Calcite may add more than 2 operand for the same binary operator
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
@@ -321,6 +518,28 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return UnaryOpExpression(bool_empty_data, input, "__invert__")
 
     if (
+        operator_class_name == "SqlExtractFunction"
+        and len(java_call.getOperands()) == 2
+    ):
+        # EXTRACT(FLAG(MONTH), date) → month(date)
+        unit_str = str(java_call.getOperands()[0].toString()).upper()
+        input = java_expr_to_python_expr(ctx, java_call.getOperands()[1], input_plan)
+        # Strip parentheses from unit if it's in the form FLAG(unit)
+        if "(" in unit_str:
+            unit_str = unit_str.split("(")[1].rstrip(")")
+        arrow_func = _DATE_PART_ARROW_FUNCS.get(unit_str)
+        if arrow_func is None:
+            raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
+        empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+        raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+        if unit_str in _DOW_NAMES:
+            # Arrow: 0=Monday. Snowflake: 0=Sunday → (dow+1)%7
+            one = ConstantExpression(empty_data, input_plan, 1)
+            seven = ConstantExpression(empty_data, input_plan, 7)
+            raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
+            raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+        return raw_expr
+    if (
         operator_class_name == "SqlDatePartFunction"
         and len(java_call.getOperands()) == 1
     ):
@@ -328,13 +547,36 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         input = java_expr_to_python_expr(ctx, operands[0], input_plan)
         func_name = op.getName().upper()
 
-        if func_name == "YEAR":
-            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], "year", ())
+        # Map Calcite function names to Arrow compute function names
+        arrow_func = _DATE_PART_ARROW_FUNCS.get(func_name, func_name.lower())
 
-        if func_name == "HOUR":
+        if func_name in (
+            "YEAR",
+            "MONTH",
+            "DAY",
+            "DAYOFMONTH",
+            "DAYOFYEAR",
+            "WEEK",
+            "WEEKOFYEAR",
+            "WEEKISOHOUR",
+            "HOUR",
+            "MINUTE",
+            "SECOND",
+            "QUARTER",
+            "MICROSECOND",
+            "NANOSECOND",
+        ):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], "hour", ())
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+
+        if func_name in ("DAYOFWEEK", "WEEKDAY", "DOW"):
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            dow_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+            # Arrow: 0=Monday. Snowflake: 0=Sunday. Convert: (dow+1)%7
+            one_const = ConstantExpression(empty_data, input_plan, 1)
+            seven_const = ConstantExpression(empty_data, input_plan, 7)
+            plus_one = ArithOpExpression(empty_data, dow_expr, one_const, "__add__")
+            return ArithOpExpression(empty_data, plus_one, seven_const, "__mod__")
 
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
@@ -375,12 +617,81 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # add plan caching
         return ConstantExpression(dummy_empty_data, input_plan, curr_date)
 
+    if operator_class_name == "SqlAbstractTimeFunction":
+        func_name = op.getName().upper()
+        if func_name in ("LOCALTIME", "CURRENT_TIME"):
+            curr_ts = pd.Timestamp.now()
+            dummy_empty_data = pd.Series(
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+            )
+            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         # function name as string (e.g., "POWER", "SQRT")
         func_name = op.getName().upper()
+
+        if func_name in ("UTC_TIMESTAMP", "UTC_DATE"):
+            curr_ts = pd.Timestamp.now(tz="UTC")
+            if func_name == "UTC_DATE":
+                curr_ts = curr_ts.normalize()
+            dummy_empty_data = pd.Series(
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz="UTC"))
+            )
+            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+
+        if func_name in (
+            "CURRENT_TIMESTAMP",
+            "GETDATE",
+            "LOCALTIMESTAMP",
+            "SYSTIMESTAMP",
+            "NOW",
+        ):
+            curr_ts = pd.Timestamp.now()
+            dummy_empty_data = pd.Series(
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+            )
+            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+
+        # COMBINE_INTERVALS combines multiple interval literals into a single
+        # interval constant. Accumulate months (from DateOffset) and nanoseconds
+        # (from Timedelta) separately since pd.DateOffset does not support
+        # arithmetic with other DateOffsets or Timedeltas.
+        if func_name == "COMBINE_INTERVALS":
+            total_months = 0
+            total_nanos = 0
+            for expr in op_exprs:
+                assert hasattr(expr, "value"), (
+                    "COMBINE_INTERVALS requires constant interval arguments in C++ backend"
+                )
+                val = expr.value
+                if (
+                    isinstance(val, tuple)
+                    and len(val) == 4
+                    and val[0] == "MonthDayNanoInterval"
+                ):
+                    total_months += val[1]
+                    total_nanos += val[3]
+                elif isinstance(val, pd.DateOffset):
+                    total_months += val.months
+                elif isinstance(val, pd.Timedelta):
+                    total_nanos += val.value
+                else:
+                    raise ValueError(
+                        f"Unexpected interval type in COMBINE_INTERVALS: {type(val)}"
+                    )
+            if total_nanos % 1000 != 0:
+                raise ValueError(
+                    "Sub-microsecond intervals not supported in C++ backend"
+                )
+            if total_months != 0:
+                combined_val = ("MonthDayNanoInterval", total_months, 0, total_nanos)
+            else:
+                combined_val = pd.Timedelta(nanoseconds=total_nanos)
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+            return ConstantExpression(dummy_empty_data, input_plan, combined_val)
 
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
@@ -593,7 +904,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 raise NotImplementedError(
                     "LIKE conversion does not currently support match anything."
                 )
-
     if operator_class_name == "SqlSearchOperator":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
@@ -808,7 +1118,6 @@ def java_join_to_python_join(ctx, java_join):
     empty_join_out.columns = java_join.getRowType().getFieldNames()
 
     if len(key_indices) > 0:
-        # TODO[BSE-5150]: support broadcast join flag
         planJoinOrCross = LogicalComparisonJoin(
             empty_join_out,
             left_plan,
@@ -826,6 +1135,10 @@ def java_join_to_python_join(ctx, java_join):
     if len(nonEquiConds) == 0:
         return planJoinOrCross
     else:
+        if java_join.getJoinType().toString() != "INNER":
+            raise NotImplementedError(
+                "Joins with non-equi conditions are only supported for inner joins in C++ backend currently"
+            )
         non_equi_exprs = java_expr_to_python_expr(ctx, nonEquiConds[0], planJoinOrCross)
         # And all the conditions together with the first one above.
         for e in nonEquiConds[1:]:

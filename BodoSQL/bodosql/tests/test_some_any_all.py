@@ -102,6 +102,7 @@ def test_some_any_all_datetime_non_null_tuples(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_some_any_all_interval_non_null_tuples(
     bodosql_interval_types, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):

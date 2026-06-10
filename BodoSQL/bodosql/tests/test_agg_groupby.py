@@ -1432,7 +1432,7 @@ def test_tz_aware_having(memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp   # aggregation OTHER not supported yet
+@pytest.mark.bodosql_cpp
 def test_all_nulls_1(memory_leak_check):
     """
     Test the case where all values in a group are null.
