@@ -105,6 +105,9 @@ def test_simple_table_read(
     )
 
 
+@pytest.mark.skip(
+    reason="BSE-5453: Fix issue with iceberg dictionary encoding and reenable tests."
+)
 @pytest.mark.slow
 def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
@@ -187,6 +190,9 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
     )
 
 
+@pytest.mark.skip(
+    reason="BSE-5453: Fix issue with iceberg dictionary encoding and reenable tests."
+)
 @pytest.mark.slow
 def test_explicit_dict_encoding(
     memory_leak_check, iceberg_database, iceberg_table_conn

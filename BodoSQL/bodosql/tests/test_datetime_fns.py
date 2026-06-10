@@ -1419,10 +1419,27 @@ def test_tz_aware_date_part(tz_aware_df, query_fmt, memory_leak_check):
     for unit in ["year", "q", "mons", "wk", "dayofmonth", "hrs", "min", "s"]:
         selects.append(query_fmt.format(unit, unit))
     query = f"SELECT {', '.join(selects)} FROM table1"
-    tz_aware_df["TABLE1"]
+    df = tz_aware_df["TABLE1"]
+    py_output = pd.DataFrame(
+        {
+            "MY_YEAR": df.A.dt.year,
+            "MY_Q": df.A.dt.quarter,
+            "MY_MONS": df.A.dt.month,
+            "MY_WK": df.A.map(lambda t: t.weekofyear),
+            "MY_DAYOFMONTH": df.A.dt.day,
+            "MY_HRS": df.A.dt.hour,
+            "MY_MIN": df.A.dt.minute,
+            "MY_S": df.A.dt.second,
+        }
+    )
 
     check_query(
-        query, tz_aware_df, None, check_names=False, check_dtype=False, use_duckdb=True
+        query,
+        tz_aware_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
     )
 
 

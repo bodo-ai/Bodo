@@ -43,6 +43,7 @@
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
+#include "duckdb/planner/operator/logical_top_n.hpp"
 #include "optimizer/runtime_join_filter.h"
 
 #include "../libs/gpu_utils.h"
@@ -158,15 +159,22 @@ duckdb::unique_ptr<duckdb::Expression> make_const_timestamp_ns_expr(
 
 duckdb::unique_ptr<duckdb::Expression> make_const_timedelta_ns_expr(
     int64_t val) {
-    std::lldiv_t div_res = std::div((long long)val, 1000LL);
-    if (div_res.rem != 0) {
-        throw std::runtime_error(
-            "make_const_timedelta_ns_expr only supports values with "
-            "microsecond precision since duckdb::Value::INTERVAL only supports "
-            "microsecond precision");
-    }
+    // DuckDB INTERVAL only supports microsecond precision, so truncate
+    int64_t micros = val / 1000;
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
-        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(div_res.quot)));
+        duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(micros)));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
+    int32_t months, int32_t days, int64_t nanos) {
+    duckdb::interval_t interval_val;
+    interval_val.months = months;
+    interval_val.days = days;
+    // Round to nearest microsecond (DuckDB INTERVAL only supports
+    // microsecond precision)
+    interval_val.micros = (nanos + 500LL) / 1000LL;
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb::Value::INTERVAL(interval_val));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
@@ -619,6 +627,39 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     order->children.push_back(std::move(source_duck));
 
     return order;
+}
+
+duckdb::unique_ptr<duckdb::LogicalTopN> make_topn(
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
+    std::vector<bool> &na_position, std::vector<int> &cols, PyObject *schema_py,
+    duckdb::idx_t limit, duckdb::idx_t offset) {
+    auto schema_res = arrow::py::unwrap_schema(schema_py);
+    std::shared_ptr<arrow::Schema> schema;
+    CHECK_ARROW_AND_ASSIGN(schema_res, "make_topn: unable to unwrap schema",
+                           schema);
+
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    duckdb::vector<duckdb::BoundOrderByNode> col_orders;
+    for (size_t i = 0; i < asc.size(); ++i) {
+        col_orders.emplace_back(duckdb::BoundOrderByNode(
+            asc[i] ? duckdb::OrderType::ASCENDING
+                   : duckdb::OrderType::DESCENDING,
+            na_position[i] ? duckdb::OrderByNullType::NULLS_FIRST
+                           : duckdb::OrderByNullType::NULLS_LAST,
+            make_col_ref_expr_internal(source_duck, schema->field(i),
+                                       cols[i])));
+    }
+
+    // Create TopN node.
+    duckdb::unique_ptr<duckdb::LogicalTopN> topn =
+        duckdb::make_uniq<duckdb::LogicalTopN>(std::move(col_orders), limit,
+                                               offset);
+
+    // Add the source of the topn.
+    topn->children.push_back(std::move(source_duck));
+
+    return topn;
 }
 
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(

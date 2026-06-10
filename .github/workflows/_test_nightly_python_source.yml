@@ -1,0 +1,286 @@
+on:
+  workflow_call:
+    inputs:
+      test-type:
+        type: string
+        # options:
+        #   - spawn
+        #   - compiler
+        #   - cache
+        #   - df_lib
+        #   - sql
+        #   - sql_spawn
+        #   - sql_cache
+        description: The kind of tests to run e.g. spawn tests
+        required: true
+      runner-id:
+        type: string
+        # options:
+        #   - ubuntu-latest
+        #   - windows-latest
+        #   - ubuntu-24.04-arm
+        description: The kind of runner to use
+        required: true
+      num-workers:
+        type: string
+        description: 'Number of workers to test'
+        required: true
+      pytest-marker:
+        description: 'Pytest marker expression to select tests to run'
+        required: true
+        type: string
+      extra-markers:
+        description: 'Additional pytest markers to select tests to run e.g. spawn_mode'
+        required: false
+        default: ""
+        type: string
+      partition:
+        type: string
+        description: 'Partition to run tests on (e.g. bodo_1of22)'
+        required: false
+        default: ""
+
+jobs:
+  run-tests:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ${{ inputs.runner-id }}
+    steps:
+      - name: Create Test Marker
+        id: set-marker
+        run: |
+          MARKER="${{ inputs.pytest-marker }}"
+
+          append_marker() {
+              local expr="$1"
+              [[ -z "$expr" ]] && return
+
+              if [[ -n "$MARKER" ]]; then
+                  MARKER="$MARKER and $expr"
+              else
+                  MARKER="$expr"
+              fi
+          }
+
+          append_marker "${{ inputs.partition }}"
+          append_marker "${{ inputs.extra-markers }}"
+
+          echo "PYTEST_MARKER=$MARKER" >> "$GITHUB_ENV"
+        shell: bash
+
+      - uses: actions/checkout@v5
+
+      - name: Build from Source
+        uses: ./.github/actions/build-source
+        with:
+          build-iceberg: true
+          build-bodosql: ${{ startsWith(inputs.test-type, 'sql') }}
+          environment: "default"
+
+      - name: Clean Maven and Spark Ivy Cache
+        run: |
+          rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEnginePrCiSession
+          role-skip-session-tagging: true
+          role-duration-seconds: 14400 # Max duration: 4 hours
+
+      - name: Install Oracle Instant Client
+        if: runner.os != 'Windows' && !startsWith(inputs.test-type, 'sql')
+        run: |
+          set -exo pipefail
+          pixi global install unzip
+          which unzip
+
+          if [[ "$(uname)" == 'Linux' ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
+              sudo $(which unzip) instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
+            else
+              wget https://download.oracle.com/otn_software/linux/instantclient/1925000/instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip
+              sudo $(which unzip) instantclient-basic-linux.arm64-19.25.0.0.0dbru.zip -d /usr/local/lib
+            fi
+          else
+            wget https://download.oracle.com/otn_software/mac/instantclient/198000/instantclient-basic-macos.x64-19.8.0.0.0dbru.zip
+            sudo $(which unzip) instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
+          fi
+
+      - name: Install Polaris
+        run: |
+            pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
+
+      - name: Run Tests
+        run: |
+          set -exo pipefail
+
+          unamestr=`uname`
+          if [[ "$unamestr" == 'Linux' ]]; then
+            export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
+          else
+            export LD_LIBRARY_PATH=/usr/local/lib/instantclient_19_8:$LD_LIBRARY_PATH
+          fi
+
+          if [[ "$unamestr" == 'Linux' ]]; then
+            echo "Setting up Hadoop (and Arrow) environment variables"
+            export HADOOP_HOME=/opt/hadoop-3.4.0
+            export HADOOP_INSTALL=$HADOOP_HOME
+            export HADOOP_MAPRED_HOME=$HADOOP_HOME
+            export HADOOP_COMMON_HOME=$HADOOP_HOME
+            export HADOOP_HDFS_HOME=$HADOOP_HOME
+            export YARN_HOME=$HADOOP_HOME
+            export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+            export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+            export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+            export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+            export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            # On Windows we set HADOOP_HOME to a dummy directory.
+            # Spark needs to verify HADOOP_HOME exists at initialization even if it is not used.
+            export HADOOP_HOME="$(System.DefaultWorkingDirectory)/buildscripts/local_utils/hadoop_dummy"
+            export PATH=$HADOOP_HOME/bin:$PATH
+            # Visual Studio 2010 DLLs are needed for winutils.exe
+            curl -LO https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
+            ./vcredist_x64.exe -passive
+          else
+            echo "Skipping hadoop/arrow env var setup"
+          fi
+
+          if [[ "$(uname -m)" == "aarch64" ]]; then
+            # Preload libgomp on aarch64 to avoid dynamic loader issues in Sklearn tests:
+            # https://stackoverflow.com/questions/61065541/importerror-usr-lib-aarch64-linux-gnu-libgomp-so-1-cannot-allocate-memory-in
+            export LD_PRELOAD=libgomp.so.1
+          fi 
+
+          if [[ "$TEST_TYPE" == sql* ]]; then
+              cd "$WORKING_DIR/BodoSQL"
+          fi
+
+          # Ignore streaming/caching/metadata tests in Dataframes/Spawn mode
+          # to avoid importing JIT during test collection.
+          PYTEST_IGNORE=(
+              --ignore bodo/tests/test_streaming
+              --ignore bodo/tests/caching_tests
+          )
+
+          if [[ "$TEST_TYPE" == "cache" ]]; then
+              python -m bodo.runtests_caching \
+                  "$TEST_NAME" \
+                  "$NP" \
+                  bodo/tests/caching_tests
+
+          elif [[ "$TEST_TYPE" == "spawn" ]]; then
+              pytest \
+                  -s -v -Wignore \
+                  -m "$PYTEST_MARKER" \
+                  "${PYTEST_IGNORE[@]}" \
+                  bodo/tests \
+                  --junitxml=pytest-report-spawn-mode-$PARTITION_STRING.xml \
+
+          elif [[ "$TEST_TYPE" == "df_lib" ]]; then
+              pytest \
+                  -s -v -Wignore \
+                  -m "$PYTEST_MARKER and not jit_dependency" \
+                  "${PYTEST_IGNORE[@]}" \
+                  bodo/tests \
+                  --junitxml=pytest-report-df-library-$PARTITION_STRING.xml \
+
+              # Run tests with JIT dependency separately to avoid JIT imports
+              # impacting other tests.
+              pytest \
+                  -s -v -Wignore \
+                  -m "$PYTEST_MARKER and jit_dependency" \
+                  "${PYTEST_IGNORE[@]}" \
+                  bodo/tests \
+                  --junitxml=pytest-report-df-library-jit-dependency-$PARTITION_STRING.xml \
+
+          elif [[ "$TEST_TYPE" == "compiler" ]]; then
+              # Some tests assume a batch size of 4096 for testing specific behavior.
+              # Other test types leave variable unset to use default value.
+              export BODO_STREAMING_BATCH_SIZE=4096
+
+              python -m bodo.runtests \
+                  "$TEST_NAME" \
+                  "$NP" \
+                  --pyargs bodo \
+                  -s -v \
+                  -m "$PYTEST_MARKER"
+
+          elif [[ "$TEST_TYPE" == "sql_cache" ]]; then
+              python -u -m bodosql.runtests_caching \
+                  "$TEST_NAME" \
+                  "$NP" \
+                  bodosql/tests/caching_tests/
+
+          elif [[ "$TEST_TYPE" == "sql_spawn" ]]; then
+              export BODO_TEST_SPAWN_MODE=1
+
+              pytest \
+                  -s -v \
+                  -p no:faulthandler \
+                  -Wignore \
+                  -m "$PYTEST_MARKER" \
+                  bodosql/tests \
+                  --junitxml=pytest-report-sql-spawn-mode-$PARTITION_STRING.xml \
+
+          elif [[ "$TEST_TYPE" == "sql" ]]; then
+              python -u -m bodosql.runtests \
+                  "$TEST_NAME" \
+                  "$NP" \
+                  -s -v \
+                  -p no:faulthandler \
+                  -m "$PYTEST_MARKER" \
+                  bodosql/tests/
+
+          else
+              echo "Invalid TEST_TYPE: $TEST_TYPE"
+              exit 1
+          fi
+        shell: bash
+        env:
+          WORKING_DIR: ${{ github.workspace }}
+          TEST_NAME: "${{ inputs.test-type }}-${{ runner.os }}"
+          TEST_TYPE: ${{ inputs.test-type }}
+          NP: ${{ inputs.num-workers }}
+          BODO_NUM_WORKERS: ${{ inputs.num-workers }}
+          BODO_SPAWN_MODE: "0"
+          BODO_BUFFER_POOL_REMOTE_MODE: "1"
+          BODO_BUFFER_POOL_DEBUG_MODE: "1"
+          BODO_SF_WRITE_DEBUG: "1"
+          BODO_TEST_SPAWN_MODE: ${{ endsWith(inputs.test-type, 'spawn') && '1' || '0' }}
+          # Disabling the DataFrame library for spawn tests since some of the tests
+          # create Pandas manager states for testing that are not fully functional.
+          BODO_ENABLE_DATAFRAME_LIBRARY: ${{ endsWith(inputs.test-type, 'spawn') && '0' || '1' }}
+          BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ inputs.test-type == 'df_lib' && '1' || '0' }}
+          # For caching tests we need to update the location of the decryption file.
+          # We set the absolute path as an environment variable.
+          BODO_TRACING_DECRYPTION_FILE_PATH: ${{ github.workspace }}/buildscripts/decompress_traces.py
+          PARTITION_STRING: ${{ inputs.partition }}
+          # Testing Credentials
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_USER2: ${{ secrets.SF_USER2 }}
+          SF_PASSWORD2: ${{ secrets.SF_PASSWORD2 }}
+          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
+          SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
+          SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
+          AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
+          AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+          BODO_TEST_SQL_DB_CREDENTIAL: ${{ secrets.BODO_TEST_SQL_DB_CREDENTIAL }}
+          BODO_TEST_ORACLE_DB_CREDENTIAL: ${{ secrets.BODO_TEST_ORACLE_DB_CREDENTIAL }}
+          AZURE_CLIENT_ID:  ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
+
+      - name: Upload JUnit Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-reports-${{ inputs.test-type }}-${{ inputs.runner-id }}-${{ inputs.partition }}
+          path: '**/pytest-report*.xml'
