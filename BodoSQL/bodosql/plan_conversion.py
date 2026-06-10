@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import decimal
 import operator
 import zoneinfo
 from dataclasses import dataclass
 from datetime import datetime
 
 import pandas as pd
+import py4j
 import pyarrow as pa
 
 import bodo
@@ -20,6 +22,7 @@ from bodo.pandas.plan import (
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
+    LazyPlan,
     LogicalAggregate,
     LogicalComparisonJoin,
     LogicalCrossProduct,
@@ -34,6 +37,7 @@ from bodo.pandas.plan import (
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
+from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
 
@@ -590,6 +594,109 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     "LIKE conversion does not currently support match anything."
                 )
 
+    if operator_class_name == "SqlSearchOperator":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "SEARCH" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            search_expr = op_exprs[1]
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            sarg = search_expr.value
+            sarg_rangeSet = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
+            ranges_collection = sarg_rangeSet.asRanges()
+            search_options = []
+            try:
+                it = ranges_collection.iterator()
+                while it.hasNext():
+                    r = it.next()
+                    search_options.append(r)
+            except Exception:
+                # fallback: index access
+                for i in range(len(ranges_collection)):
+                    r = ranges_collection.get(i)
+                    search_options.append(r)
+
+            def range_type_to_python(x):
+                if isinstance(x, py4j.java_gateway.JavaObject):
+                    return x.getValue()
+                elif isinstance(x, decimal.Decimal):
+                    return int(x)
+                else:
+                    return x
+
+            def process_one_search_option(so):
+                """Generate an expression to check if src satisfies this
+                current possibility from the range set."""
+                # Get and convert the lower range endpoint if it has one else None.
+                lower_lit = (
+                    range_type_to_python(so.lowerEndpoint())
+                    if so.hasLowerBound()
+                    else None
+                )
+                # Get and convert the upper range endpoint if it has one else None.
+                upper_lit = (
+                    range_type_to_python(so.upperEndpoint())
+                    if so.hasUpperBound()
+                    else None
+                )
+                lower_inclusive = so.lowerBoundType().toString() == "CLOSED"
+                upper_inclusive = so.upperBoundType().toString() == "CLOSED"
+                # There are 9 possibilities here.  NA=Not applicable
+                # HasLower HasUpper LowerInclusive UpperInclusive
+                # F        F        NA             NA
+                # T        F        T              NA
+                # T        F        F              NA
+                # F        T        NA             T
+                # F        T        NA             F
+                # T        T        T              T
+                # T        T        T              F
+                # T        T        F              T
+                # T        T        F              F
+
+                # Also, the case of having lower and upper bound and both being
+                # inclusive can be divided up into two cases, where lower and
+                # upper are equal and where they are not equal.
+                if (
+                    lower_lit is not None
+                    and upper_lit is not None
+                    and lower_inclusive
+                    and upper_inclusive
+                    and lower_lit == upper_lit
+                ):
+                    # The exception case where we have lower and upper bounds and they are both
+                    # inclusive and the same we can simplify as equality check.
+                    const_empty_data = arrow_to_empty_df(
+                        pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
+                    )
+
+                    return ComparisonOpExpression(
+                        bool_empty_data,
+                        src,
+                        ConstantExpression(const_empty_data, input_plan, lower_lit),
+                        operator.eq,
+                    )
+
+                raise NotImplementedError(
+                    f"SEARCH operator case of hasLower {lower_lit is not None}, hasUpper {upper_lit is not None}, lowerInclusive {lower_inclusive}, upperInclusive {upper_inclusive} not supported yet."
+                )
+
+            out_expr = process_one_search_option(search_options[0])
+            # The definition of search is that the value is one of the
+            # possibilities in the range set.  so, "or" in the other
+            # possibilities below.
+            for so in search_options[1:]:
+                out_expr = ConjunctionOpExpression(
+                    bool_empty_data, out_expr, process_one_search_option(so), "__or__"
+                )
+            return out_expr
+
+        raise NotImplementedError(
+            f"Function name {func_name} not supported for SEARCH oeprator yet: "
+            + java_call.toString()
+        )
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
         + java_call.toString()
@@ -958,6 +1065,25 @@ def is_int_type(java_type):
     )
 
 
+def gen_plan_via_bodo_dataframe(func, *args, **kwargs):
+    """Generate a Python plan for this module by wrapping input plans with
+    dataframes/series and calling a func parameter that is written in
+    regular Pandas/Bodo DataFrame library syntax.  Finally, convert the
+    dataframe returned by that function to a plan."""
+    # Wrap any LazyPlans in the args or kwargs as dataframes/series.
+    args = [arg if not isinstance(arg, LazyPlan) else wrap_plan(arg) for arg in args]
+    kwargs = {
+        k: (arg if not isinstance(arg, LazyPlan) else wrap_plan(arg))
+        for k, arg in kwargs.items()
+    }
+    # Call the func to generate a new plan.
+    output_dataframe = func(*args, **kwargs)
+    # Extract that plan from the returned dataframe.
+    assert isinstance(output_dataframe, bodo.pandas.DataFrame)
+    assert output_dataframe.is_lazy_plan()
+    return output_dataframe._plan
+
+
 def java_agg_to_python_agg(ctx, java_plan):
     """Convert a BodoSQL Java aggregation plan to a Python aggregation plan."""
     from bodo.pandas.groupby import GroupbyAggFunc, _get_agg_output_type
@@ -984,7 +1110,10 @@ def java_agg_to_python_agg(ctx, java_plan):
         )
         return plan
 
-    for func in aggCallList:
+    # calcite supports a literal "aggregation" function but Bodo backend doesn't.
+    # So capture those functions here and treat them as projections later.
+    literal_aggs = []
+    for aggIndex, func in enumerate(aggCallList):
         if func.hasFilter():
             raise NotImplementedError("Filtered aggregations are not supported yet")
         func_name = _agg_to_func_name(func)
@@ -1033,8 +1162,9 @@ def java_agg_to_python_agg(ctx, java_plan):
             literal_for_literal_agg = java_literal_to_python_literal(
                 ctx, rexlist.get(0), input_plan
             )
-            out_types.append(literal_for_literal_agg.empty_data.dtypes[0].pyarrow_dtype)
-            exprs.append(literal_for_literal_agg)
+            # Save column index where this literal aggregation should appear
+            # and the value of the literal.
+            literal_aggs.append((aggIndex + len(keys), literal_for_literal_agg))
             continue
         else:
             raise NotImplementedError(
@@ -1053,16 +1183,57 @@ def java_agg_to_python_agg(ctx, java_plan):
             )
         )
 
+    # All column names of the desired output in order.
     names = list(java_plan.getRowType().getFieldNames())
-    new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
-    empty_out_data = arrow_to_empty_df(new_schema)
+    agg_names = []
+    # Column indices we should skip to start with since they are literal
+    # aggregations to be added later.
+    skipped_literal_indices = [x[0] for x in literal_aggs]
+    # Get just the column names that Bodo will do as a true aggregation.
+    for nindex in range(len(names)):
+        if nindex not in skipped_literal_indices:
+            agg_names.append(names[nindex])
+    if len(agg_names) > len(keys):
+        # There is some non-literal_agg aggregate.
+        new_schema = pa.schema(
+            [pa.field(name, t) for name, t in zip(agg_names, out_types)]
+        )
+        empty_out_data = arrow_to_empty_df(new_schema)
 
-    plan = LogicalAggregate(
-        empty_out_data,
-        input_plan,
-        keys,
-        exprs,
-    )
+        # Do the real aggregations.
+        plan = LogicalAggregate(
+            empty_out_data,
+            input_plan,
+            keys,
+            exprs,
+        )
+
+        # If there is some literal_agg we have to deal with.
+        if len(agg_names) != len(names):
+
+            def add_lits_to_agg(df, names, literal_aggs):
+                # Add in the literal_agg columns.
+                for literal_agg in literal_aggs:
+                    df[names[literal_agg[0]]] = literal_agg[1].value
+                # Reorder to the originally calculated order.
+                return df[names]
+
+            plan = gen_plan_via_bodo_dataframe(
+                add_lits_to_agg, plan, names, literal_aggs
+            )
+    else:
+        # There were no non-literal aggregations so just select the keys and
+        # drop_duplicates and then add on the literal aggregation columns.
+        def select_keys_lits(plan, keys, names, literal_aggs):
+            cols = plan.columns[keys].tolist()
+            key_df = plan[cols].drop_duplicates()
+            for literal_agg in literal_aggs:
+                key_df[names[literal_agg[0]]] = literal_agg[1].value
+            return key_df
+
+        plan = gen_plan_via_bodo_dataframe(
+            select_keys_lits, input_plan, keys, names, literal_aggs
+        )
     return plan
 
 
