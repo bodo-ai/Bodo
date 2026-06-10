@@ -188,6 +188,20 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "DAYOFWEEK": "day_of_week",
             "WEEKDAY": "day_of_week",
         }
+
+        INTERVAL_UNIT_MAP = {
+            "YEAR": ("year", lambda n: (12 * n, 0, 0)),
+            "QUARTER": ("quarter", lambda n: (3 * n, 0, 0)),
+            "MONTH": ("month", lambda n: (n, 0, 0)),
+            "WEEK": ("week", lambda n: (0, 7 * n, 0)),
+            "DAY": ("day", lambda n: (0, n, 0)),
+            "HOUR": ("hour", lambda n: (0, 0, 3600 * n * 1_000_000_000)),
+            "MINUTE": ("minute", lambda n: (0, 0, 60 * n * 1_000_000_000)),
+            "SECOND": ("second", lambda n: (0, 0, n * 1_000_000_000)),
+            "MS": ("millisecond", lambda n: (0, 0, n * 1_000_000)),
+            "MICROSECOND": ("microsecond", lambda n: (0, 0, n * 1_000)),
+            "NANOSECOND": ("nanosecond", lambda n: (0, 0, n)),
+        }
         if func_name in _DATE_PART_ARROW_FUNCS and num_operands == 1:
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[0], input_plan
@@ -602,6 +616,61 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         ),
                     ],
                 )
+        if func_name == "TIME_SLICE":
+            # TIME_SLICE(date, interval) → floor_temporal(date, interval)
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            interval_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            unit_str = str(java_call.getOperands()[2].toString()).upper().strip("'")
+            # Strip "FLAG(" / ")" or "INTERVAL_" prefix from unit string
+            if "(" in unit_str:
+                unit_str = unit_str.split("(")[1].rstrip(")")
+            start_or_end = "START"
+            if num_operands == 4:
+                start_or_end = (
+                    str(java_call.getOperands()[3].toString()).upper().strip("'")
+                )
+                assert start_or_end in ("START", "END"), (
+                    f"Unsupported TIME_SLICE 4th operand: {start_or_end}"
+                )
+            assert hasattr(interval_expr, "value"), (
+                "TIME_SLICE interval must be a constant in C++ backend"
+            )
+            slice_length = int(interval_expr.value)
+            assert unit_str in INTERVAL_UNIT_MAP, (
+                f"Unsupported TIME_SLICE interval unit: {unit_str}"
+            )
+            empty_data = date_expr.empty_data
+
+            arrow_unit, interval_fn = INTERVAL_UNIT_MAP[unit_str]
+            interval_months, interval_days, interval_nanos = interval_fn(slice_length)
+
+            truncated = ArrowScalarFuncExpression(
+                empty_data, [date_expr], "floor_temporal", (slice_length, arrow_unit)
+            )
+
+            if start_or_end == "START":
+                return truncated
+
+            # END: return start of next slice
+            return ArithOpExpression(
+                empty_data,
+                truncated,
+                ConstantExpression(
+                    empty_data,
+                    input_plan,
+                    (
+                        "MonthDayNanoInterval",
+                        interval_months,
+                        interval_days,
+                        interval_nanos,
+                    ),
+                ),
+                "__add__",
+            )
 
     if operator_class_name in (
         "SqlMonotonicBinaryOperator",

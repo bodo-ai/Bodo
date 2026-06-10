@@ -4846,6 +4846,7 @@ def test_add_months(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_time_slice(memory_leak_check):
     ts = pd.Timestamp(2012, 1, 1, 12, 59, 59)
     df = pd.DataFrame({"A": pd.Series([ts] * 12, dtype="datetime64[ns]")})
