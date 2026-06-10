@@ -43,6 +43,7 @@
 #include "duckdb/planner/operator/logical_limit.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
+#include "duckdb/planner/operator/logical_top_n.hpp"
 #include "optimizer/runtime_join_filter.h"
 
 #include "../libs/gpu_utils.h"
@@ -628,6 +629,39 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     order->children.push_back(std::move(source_duck));
 
     return order;
+}
+
+duckdb::unique_ptr<duckdb::LogicalTopN> make_topn(
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
+    std::vector<bool> &na_position, std::vector<int> &cols, PyObject *schema_py,
+    duckdb::idx_t limit, duckdb::idx_t offset) {
+    auto schema_res = arrow::py::unwrap_schema(schema_py);
+    std::shared_ptr<arrow::Schema> schema;
+    CHECK_ARROW_AND_ASSIGN(schema_res, "make_topn: unable to unwrap schema",
+                           schema);
+
+    // Convert std::unique_ptr to duckdb::unique_ptr.
+    auto source_duck = to_duckdb(source);
+    duckdb::vector<duckdb::BoundOrderByNode> col_orders;
+    for (size_t i = 0; i < asc.size(); ++i) {
+        col_orders.emplace_back(duckdb::BoundOrderByNode(
+            asc[i] ? duckdb::OrderType::ASCENDING
+                   : duckdb::OrderType::DESCENDING,
+            na_position[i] ? duckdb::OrderByNullType::NULLS_FIRST
+                           : duckdb::OrderByNullType::NULLS_LAST,
+            make_col_ref_expr_internal(source_duck, schema->field(i),
+                                       cols[i])));
+    }
+
+    // Create TopN node.
+    duckdb::unique_ptr<duckdb::LogicalTopN> topn =
+        duckdb::make_uniq<duckdb::LogicalTopN>(std::move(col_orders), limit,
+                                               offset);
+
+    // Add the source of the topn.
+    topn->children.push_back(std::move(source_duck));
+
+    return topn;
 }
 
 duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
@@ -1320,7 +1354,8 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
 }
 
 std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py) {
+    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py,
+    bool use_sql_rules) {
 #ifdef USE_CUDF
     // Assign ranks to cuda devices
     rmm::cuda_device_id gpu_id = get_gpu_id();
@@ -1343,7 +1378,7 @@ std::pair<int64_t, PyObject *> execute_plan(
     // in case executor holds any GPU resources that need to be released before
     // resetting the device.
     {
-        Executor executor(std::move(plan), out_schema);
+        Executor executor(std::move(plan), out_schema, use_sql_rules);
         output = executor.ExecutePipelines();
     }
 

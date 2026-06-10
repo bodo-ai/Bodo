@@ -1,0 +1,25 @@
+name: Bodo & BodoSQL Weekly CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      pytest-marker:
+        description: 'Additional pytest marker to select tests to run'
+        required: false
+        default: ""
+        type: string
+  schedule:
+    - cron: '00 2 * * 6'    # 9:00PM EST every Friday
+
+jobs:
+
+  weekly-linux-arm-ci:
+    name: Linux Arm CI
+    uses: ./.github/workflows/nightly.yml
+    with:
+      pytest-marker: ${{ inputs.pytest-marker }}
+      weekly: false
+      runner-id: ubuntu-24.04-arm
+    secrets: inherit
+
+# TODO: Linux-64 Weekly tests, Windows tests

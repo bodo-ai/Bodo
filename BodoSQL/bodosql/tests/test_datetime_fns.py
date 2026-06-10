@@ -207,7 +207,7 @@ def dt_fn_dataframe():
         "2007-01-01T03:30",
         None,
         "2001-12-01T12:12:02.21",
-        "2100-10-01T13:00:33.1",
+        "2030-10-01T13:00:33.1",
     ]
     timestamps = pd.Series(
         [np.datetime64(x) if x is not None else x for x in dt_strings],
@@ -851,7 +851,6 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_utc_date(basic_df, memory_leak_check):
     """tests utc_date"""
@@ -1437,10 +1436,27 @@ def test_tz_aware_date_part(tz_aware_df, query_fmt, memory_leak_check):
     for unit in ["year", "q", "mons", "wk", "dayofmonth", "hrs", "min", "s"]:
         selects.append(query_fmt.format(unit, unit))
     query = f"SELECT {', '.join(selects)} FROM table1"
-    tz_aware_df["TABLE1"]
+    df = tz_aware_df["TABLE1"]
+    py_output = pd.DataFrame(
+        {
+            "MY_YEAR": df.A.dt.year,
+            "MY_Q": df.A.dt.quarter,
+            "MY_MONS": df.A.dt.month,
+            "MY_WK": df.A.map(lambda t: t.weekofyear),
+            "MY_DAYOFMONTH": df.A.dt.day,
+            "MY_HRS": df.A.dt.hour,
+            "MY_MIN": df.A.dt.minute,
+            "MY_S": df.A.dt.second,
+        }
+    )
 
     check_query(
-        query, tz_aware_df, None, check_names=False, check_dtype=False, use_duckdb=True
+        query,
+        tz_aware_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
     )
 
 

@@ -28,12 +28,34 @@ from bodo.pandas.plan import (
     LogicalJoinFilter,
     LogicalOrder,
     LogicalProjection,
+    LogicalTopN,
     NullExpression,
     UnaryOpExpression,
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
+
+_DATE_PART_ARROW_FUNCS = {
+    "YEAR": "year",
+    "MONTH": "month",
+    "DAY": "day",
+    "DAYOFMONTH": "day",
+    "HOUR": "hour",
+    "MINUTE": "minute",
+    "SECOND": "second",
+    "QUARTER": "quarter",
+    "WEEK": "iso_week",
+    "WEEKOFYEAR": "iso_week",
+    "WEEKISO": "iso_week",
+    "DAYOFYEAR": "day_of_year",
+    "DAYOFWEEK": "day_of_week",
+    "WEEKDAY": "day_of_week",
+    "MICROSECOND": "microsecond",
+    "NANOSECOND": "nanosecond",
+    "DOW": "day_of_week",
+    "DOY": "day_of_year",
+}
 
 
 @dataclass
@@ -134,6 +156,9 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalValues":
         return java_values_to_python_values(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalCachedSubPlan":
+        return java_subplan_to_python_subplan(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
@@ -172,23 +197,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         num_operands = len(java_call.getOperands())
 
         # Date part functions wrapped in SqlNullPolicyFunction (e.g. WEEKDAY($0))
-        _DATE_PART_ARROW_FUNCS = {
-            "YEAR": "year",
-            "MONTH": "month",
-            "DAY": "day",
-            "DAYOFMONTH": "day",
-            "HOUR": "hour",
-            "MINUTE": "minute",
-            "SECOND": "second",
-            "QUARTER": "quarter",
-            "WEEK": "iso_week",
-            "WEEKOFYEAR": "iso_week",
-            "WEEKISO": "iso_week",
-            "DAYOFYEAR": "day_of_year",
-            "DAYOFWEEK": "day_of_week",
-            "WEEKDAY": "day_of_week",
-        }
-
         INTERVAL_UNIT_MAP = {
             "YEAR": ("year", lambda n: (12 * n, 0, 0)),
             "QUARTER": ("quarter", lambda n: (3 * n, 0, 0)),
@@ -348,6 +356,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             doy_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
+            assert hasattr(year_expr, "value") and hasattr(doy_expr, "value"), (
+                "MAKEDATE requires constant integer arguments in C++ backend"
+            )
             result_date = datetime(int(year_expr.value), 1, 1).date() + timedelta(
                 days=int(doy_expr.value) - 1
             )
@@ -359,24 +370,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             unit_raw = str(java_call.getOperands()[0].toString()).upper()
             if "(" in unit_raw:
                 unit_raw = unit_raw.split("(")[1].rstrip(")")
-            _TRUNC_UNIT_MAP = {
-                "YEAR": "year",
-                "YYY": "year",
-                "QUARTER": "quarter",
-                "MONTH": "month",
-                "MON": "month",
-                "WEEK": "week",
-                "WK": "week",
-                "DAY": "day",
-                "DD": "day",
-                "HOUR": "hour",
-                "MINUTE": "minute",
-                "SECOND": "second",
-                "MS": "millisecond",
-                "MICROSECOND": "microsecond",
-                "NANOSECOND": "nanosecond",
+            _TRUNC_UNITS = {
+                "year",
+                "quarter",
+                "month",
+                "week",
+                "day",
+                "hour",
+                "minute",
+                "second",
             }
-            arrow_unit = _TRUNC_UNIT_MAP.get(unit_raw, unit_raw.lower())
+            assert unit_raw.lower() in _TRUNC_UNITS, (
+                f"DATE_TRUNC unit has unexpected format after stripping: "
+                f"'{unit_raw}' (original: "
+                f"'{java_call.getOperands()[0].toString()}')"
+            )
+            arrow_unit = unit_raw.lower()
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
@@ -505,6 +514,21 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     ctx,
                     SqlKind.PLUS,
                     [date_expr, amount_expr],
+                )
+        if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
+            # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
+            # For 2 operands: (date, interval) → date + interval
+            # For 3 operands: (unit, amount, date) → date + (unit * amount)
+            if num_operands == 2:
+                return java_binop_to_python_expr(
+                    ctx,
+                    SqlKind.PLUS,
+                    [
+                        java_expr_to_python_expr(
+                            ctx, java_call.getOperands()[i], input_plan
+                        )
+                        for i in range(num_operands)
+                    ],
                 )
             elif num_operands == 3:
                 # DATEADD(FLAG(unit), amount, date) from date + int arithmetic.
@@ -833,24 +857,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # EXTRACT(FLAG(MONTH), date) → month(date)
         unit_str = str(java_call.getOperands()[0].toString()).upper()
         input = java_expr_to_python_expr(ctx, java_call.getOperands()[1], input_plan)
-        # Strip "FLAG(" / ")" or "INTERVAL_" prefix from unit string
+        # Strip parentheses from unit if it's in the form FLAG(unit)
         if "(" in unit_str:
             unit_str = unit_str.split("(")[1].rstrip(")")
-        _DATE_PART_ARROW_FUNCS_EXTRA = {
-            "YEAR": "year",
-            "MONTH": "month",
-            "DAY": "day",
-            "HOUR": "hour",
-            "MINUTE": "minute",
-            "SECOND": "second",
-            "MICROSECOND": "microsecond",
-            "NANOSECOND": "nanosecond",
-            "QUARTER": "quarter",
-            "WEEK": "iso_week",
-            "DOW": "day_of_week",
-            "DOY": "day_of_year",
-        }
-        arrow_func = _DATE_PART_ARROW_FUNCS_EXTRA.get(unit_str)
+        arrow_func = _DATE_PART_ARROW_FUNCS.get(unit_str)
         if arrow_func is None:
             raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
         empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
@@ -874,24 +884,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         # Map Calcite function names to Arrow compute function names
-        _DATE_PART_ARROW_FUNCS = {
-            "YEAR": "year",
-            "MONTH": "month",
-            "DAY": "day",
-            "DAYOFMONTH": "day",
-            "HOUR": "hour",
-            "MINUTE": "minute",
-            "SECOND": "second",
-            "QUARTER": "quarter",
-            "MICROSECOND": "microsecond",
-            "NANOSECOND": "nanosecond",
-            "WEEK": "iso_week",
-            "WEEKOFYEAR": "iso_week",
-            "WEEKISO": "iso_week",
-            "DAYOFYEAR": "day_of_year",
-            "DAYOFWEEK": "day_of_week",
-            "WEEKDAY": "day_of_week",
-        }
         arrow_func = _DATE_PART_ARROW_FUNCS.get(func_name, func_name.lower())
 
         if func_name in (
@@ -899,6 +891,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "MONTH",
             "DAY",
             "DAYOFMONTH",
+            "DAYOFYEAR",
+            "WEEK",
+            "WEEKOFYEAR",
+            "WEEKISOHOUR",
             "HOUR",
             "MINUTE",
             "SECOND",
@@ -1018,6 +1014,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             total_months = 0
             total_nanos = 0
             for expr in op_exprs:
+                assert hasattr(expr, "value"), (
+                    "COMBINE_INTERVALS requires constant interval arguments in C++ backend"
+                )
                 val = expr.value
                 if (
                     isinstance(val, tuple)
@@ -1115,6 +1114,153 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
         )
+
+    if operator_class_name == "SqlNullPolicyFunction":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "LEFT" and len(op_exprs) == 2:
+            # Implement LEFT as substr(0,...)
+            left = op_exprs[0]
+            len_expr = op_exprs[1]
+            if not isinstance(len_expr, ConstantExpression):
+                raise ValueError("len_expr not a ConstantExpression")
+
+            out_empty = left.empty_data.iloc[:, 0]
+            return ArrowScalarFuncExpression(
+                out_empty, [left], "utf8_slice_codeunits", (0, len_expr.value, 1)
+            )
+        elif func_name == "STARTSWITH" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            match_expr = op_exprs[1]
+            if not isinstance(match_expr, bodo.pandas.plan.ConstantExpression):
+                raise ValueError(
+                    f"match_expr should be ConstantExpression but instead was {type(match_expr)}"
+                )
+            if not isinstance(match_expr.value, str):
+                raise ValueError(
+                    f"match_expr.value should be string but instead was {type(match_expr.value)}"
+                )
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return ArrowScalarFuncExpression(
+                bool_empty_data,
+                [src],
+                "starts_with",
+                (match_expr.value,),
+            )
+        elif func_name == "ENDSWITH" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            match_expr = op_exprs[1]
+            if not isinstance(match_expr, bodo.pandas.plan.ConstantExpression):
+                raise ValueError(
+                    f"match_expr should be ConstantExpression but instead was {type(match_expr)}"
+                )
+            if not isinstance(match_expr.value, str):
+                raise ValueError(
+                    f"match_expr.value should be string but instead was {type(match_expr.value)}"
+                )
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return ArrowScalarFuncExpression(
+                bool_empty_data,
+                [src],
+                "ends_with",
+                (match_expr.value,),
+            )
+        elif func_name == "CONTAINS" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            match_expr = op_exprs[1]
+            if not isinstance(match_expr, bodo.pandas.plan.ConstantExpression):
+                raise ValueError(
+                    f"match_expr should be ConstantExpression but instead was {type(match_expr)}"
+                )
+            if not isinstance(match_expr.value, str):
+                raise ValueError(
+                    f"match_expr.value should be string but instead was {type(match_expr.value)}"
+                )
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return ArrowScalarFuncExpression(
+                bool_empty_data,
+                [src],
+                "match_substring",
+                (match_expr.value,),
+            )
+
+    if operator_class_name == "SqlSubstringFunction":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "SUBSTRING" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            start_expr = op_exprs[1]
+            if not isinstance(start_expr, ConstantExpression):
+                raise ValueError("start_expr not a ConstantExpression")
+            len_expr = op_exprs[2]
+            if not isinstance(len_expr, ConstantExpression):
+                raise ValueError("len_expr not a ConstantExpression")
+            out_empty = src.empty_data.iloc[:, 0]
+            return ArrowScalarFuncExpression(
+                out_empty,
+                [src],
+                "utf8_slice_codeunits",
+                (start_expr.value, len_expr.value, 1),
+            )
+
+    if operator_class_name == "SqlLikeOperator":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "LIKE" and len(op_exprs) == 2:
+            left = op_exprs[0]
+            like_expr = op_exprs[1]
+            if not isinstance(like_expr, ConstantExpression):
+                raise ValueError("lik_expr not a ConstantExpression")
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            converted_like, needs_regex, start_match, end_match, match_anything = (
+                bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
+                    like_expr.value, "", False
+                )
+            )
+            if needs_regex:
+                if start_match or end_match or match_anything:
+                    raise NotImplementedError(
+                        "LIKE conversion supports nothing else if regex is required."
+                    )
+                return ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [left],
+                    "match_substring_regex",
+                    (converted_like,),
+                )
+            elif start_match:
+                if end_match or match_anything:
+                    raise NotImplementedError(
+                        "LIKE conversion supports nothing else if start_match is required."
+                    )
+                return ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [left],
+                    "starts_with",
+                    (converted_like,),
+                )
+            elif end_match:
+                if match_anything:
+                    raise NotImplementedError(
+                        "LIKE conversion supports nothing else if end_match is required."
+                    )
+                return ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [left],
+                    "ends_with",
+                    (converted_like,),
+                )
+            else:
+                raise NotImplementedError(
+                    "LIKE conversion does not currently support match anything."
+                )
 
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
@@ -1227,7 +1373,6 @@ def java_join_to_python_join(ctx, java_join):
     empty_join_out.columns = java_join.getRowType().getFieldNames()
 
     if len(key_indices) > 0:
-        # TODO[BSE-5150]: support broadcast join flag
         planJoinOrCross = LogicalComparisonJoin(
             empty_join_out,
             left_plan,
@@ -1245,6 +1390,10 @@ def java_join_to_python_join(ctx, java_join):
     if len(nonEquiConds) == 0:
         return planJoinOrCross
     else:
+        if java_join.getJoinType().toString() != "INNER":
+            raise NotImplementedError(
+                "Joins with non-equi conditions are only supported for inner joins in C++ backend currently"
+            )
         non_equi_exprs = java_expr_to_python_expr(ctx, nonEquiConds[0], planJoinOrCross)
         # And all the conditions together with the first one above.
         for e in nonEquiConds[1:]:
@@ -1268,6 +1417,23 @@ def java_join_to_python_join(ctx, java_join):
         # work to do the mapping.
         planFilter = LogicalFilter(empty_join_out, planJoinOrCross, non_equi_exprs)
         return planFilter
+
+
+def java_subplan_to_python_subplan(ctx, java_subplan):
+    """Convert a BodoSQL Java subplan to a Python subplan."""
+
+    if not hasattr(ctx, "subplan_cache"):
+        ctx.subplan_cache = {}
+
+    subplan_id = java_subplan.getCacheID()
+    if subplan_id in ctx.subplan_cache:
+        return ctx.subplan_cache[subplan_id]
+
+    cached_plan = java_subplan.getCachedPlan()
+    assert cached_plan.getClass().getSimpleName() == "CachedPlanInfo"
+    subplan = java_plan_to_python_plan(ctx, cached_plan.getPlan())
+    ctx.subplan_cache[subplan_id] = subplan
+    return subplan
 
 
 def java_rtjf_to_python_rtjf(ctx, java_plan):
@@ -1391,6 +1557,10 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
 
     if lit_type_name.equals(SqlTypeName.DOUBLE):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+        return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
+
+    if lit_type_name.equals(SqlTypeName.BOOLEAN):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
         return ConstantExpression(dummy_empty_data, input_plan, java_literal.getValue())
 
     if lit_type_name.equals(SqlTypeName.CHAR):
@@ -1532,6 +1702,15 @@ def java_agg_to_python_agg(ctx, java_plan):
                 f"Only single-argument {func_name} aggregations are supported"
             )
             out_type = pa.bool_()
+        elif func_name == "literal_agg":
+            rexlist = func.getClass().getDeclaredField("rexList").get(func)
+            assert len(rexlist) == 1
+            literal_for_literal_agg = java_literal_to_python_literal(
+                ctx, rexlist.get(0), input_plan
+            )
+            out_types.append(literal_for_literal_agg.empty_data.dtypes[0].pyarrow_dtype)
+            exprs.append(literal_for_literal_agg)
+            continue
         else:
             raise NotImplementedError(
                 f"java_agg_to_python_agg: aggregation {func_name} not supported yet"
@@ -1592,6 +1771,9 @@ def _agg_to_func_name(func):
 
     if kind.equals(SqlKind.STDDEV_SAMP) and len(argList) == 1:
         return "std"
+
+    if kind.equals(SqlKind.LITERAL_AGG) and len(argList) == 0:
+        return "literal_agg"
 
     if kind.equals(SqlKind.OTHER):
         if agg_name == "BOOLOR_AGG":
@@ -1671,8 +1853,8 @@ def _agg_to_func_name(func):
 def java_sort_to_python_sort(ctx, java_plan):
     """Convert a BodoSQL Java sort plan to a Python sort plan."""
 
-    if java_plan.getFetch() is not None or java_plan.getOffset() is not None:
-        raise NotImplementedError("LIMIT/OFFSET in sort not supported yet")
+    if java_plan.getOffset() is not None:
+        raise NotImplementedError("OFFSET in sort not supported yet")
 
     input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
 
@@ -1690,15 +1872,28 @@ def java_sort_to_python_sort(ctx, java_plan):
         ascending.append(not descending)
         na_position.append(is_nulls_first)
 
-    sorted_plan = LogicalOrder(
-        input_plan.empty_data,
-        input_plan,
-        ascending,
-        na_position,
-        key_col_inds,
-        input_plan.pa_schema,
-    )
-    return sorted_plan
+    limit = java_plan.getFetch()
+    if limit is None:
+        return LogicalOrder(
+            input_plan.empty_data,
+            input_plan,
+            ascending,
+            na_position,
+            key_col_inds,
+            input_plan.pa_schema,
+        )
+    else:
+        limit_expr = java_expr_to_python_expr(ctx, limit, input_plan)
+        return LogicalTopN(
+            input_plan.empty_data,
+            input_plan,
+            ascending,
+            na_position,
+            key_col_inds,
+            input_plan.pa_schema,
+            limit_expr.value,
+            0,
+        )
 
 
 def java_values_to_python_values(ctx, java_plan):

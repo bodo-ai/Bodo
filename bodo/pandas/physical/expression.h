@@ -20,6 +20,7 @@
 #include "../tests/utils.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/common/types/interval.hpp"
 #include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
@@ -1349,6 +1350,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
                        "match_substring_regex" ||
                    scalar_func_data.arrow_func_name ==
                        "match_substring_regex_first" ||
+                   scalar_func_data.arrow_func_name == "match_substring" ||
                    scalar_func_data.arrow_func_name == "starts_with" ||
                    scalar_func_data.arrow_func_name == "ends_with") {
             const char *c_str = get_py_single_arg_as_cstr(

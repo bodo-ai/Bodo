@@ -710,8 +710,7 @@ void AbstractChunkedTableBuilder::AppendBatch(
     size_t num_append_rows = 0;
     for (int64_t i = 0;
          i < (arrow::bit_util::BytesForBits(in_table->nrows()) / 8); i++) {
-        num_append_rows +=
-            arrow::bit_util::PopCount(((uint64_t*)append_rows.get())[i]);
+        num_append_rows += std::popcount(((uint64_t*)append_rows.get())[i]);
     }
     this->AppendBatch(in_table, append_rows, num_append_rows,
                       in_table_start_offset);

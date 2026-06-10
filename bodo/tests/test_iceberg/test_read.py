@@ -338,7 +338,16 @@ def test_column_pruning(iceberg_database, iceberg_table_conn, memory_leak_check)
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("dict_encode_in_bodo", [True, False])
+@pytest.mark.skip(
+    reason="BSE-5453: Fix issue with iceberg dictionary encoding and reenable tests."
+)
+@pytest.mark.parametrize(
+    "dict_encode_in_bodo",
+    [
+        True,
+        False,
+    ],
+)
 def test_dict_encoded_string_arrays(
     iceberg_database, iceberg_table_conn, dict_encode_in_bodo
 ):

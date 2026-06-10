@@ -65,7 +65,8 @@ stream_udf_t* get_cfunc_from_wrapper(PyObject* cfunc_wrapper) {
 class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
-                               duckdb::LogicalAggregate& op) {
+                               duckdb::LogicalAggregate& op,
+                               bool use_sql_rules = false) {
         time_pt start_init = start_timer();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
@@ -189,14 +190,14 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
             get_streaming_batch_size(), true, -1, getOpId(), -1, false,
-            std::nullopt,
-            /*use_sql_rules*/ false, /* pandas_drop_na_*/ dropna.value(),
+            std::nullopt, use_sql_rules, /* pandas_drop_na_*/ dropna.value(),
             udf_table, udf_cfuncs);
         this->metrics.init_time += end_timer(start_init);
     }
 
     explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
-                               duckdb::LogicalDistinct& op) {
+                               duckdb::LogicalDistinct& op,
+                               bool use_sql_rules = false) {
         time_pt start_init = start_timer();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
@@ -221,8 +222,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
             std::vector<int32_t>(), f_in_offsets, f_in_cols, this->keys.size(),
             std::vector<bool>(), std::vector<bool>(), cols_to_keep_vec, nullptr,
             get_streaming_batch_size(), true, -1, getOpId(), -1, false,
-            std::nullopt,
-            /*use_sql_rules*/ false, /* pandas_drop_na_*/ false);
+            std::nullopt, use_sql_rules, /* pandas_drop_na_*/ false);
         this->metrics.init_time += end_timer(start_init);
     }
 

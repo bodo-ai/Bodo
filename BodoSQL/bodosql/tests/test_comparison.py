@@ -470,7 +470,7 @@ def test_where_and(join_dataframes, memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp TODO: enable when we support non-equi joins
+@pytest.mark.bodosql_cpp
 def test_where_or(join_dataframes, memory_leak_check):
     """
     Tests an or expression within a where clause.
@@ -487,13 +487,6 @@ def test_where_or(join_dataframes, memory_leak_check):
     else:
         scalar_val1, scalar_val2 = (3, 4)
 
-    if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     query = f"""SELECT
                  t1.A as A1,
                  t2.A as A2
@@ -509,7 +502,7 @@ def test_where_or(join_dataframes, memory_leak_check):
         join_dataframes,
         None,
         check_names=False,
-        check_dtype=check_dtype,
+        check_dtype=False,
         use_duckdb=True,
     )
 

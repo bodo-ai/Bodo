@@ -12,6 +12,16 @@ std::shared_ptr<arrow::Array> prepare_arrow_compute(
                                bodo::default_buffer_memory_manager());
 }
 
+#define CHECK_ARROW(expr, msg)                                \
+    {                                                         \
+        arrow::Status __status = expr;                        \
+        if (!__status.ok()) {                                 \
+            std::string err_msg =                             \
+                std::string(msg) + " " + __status.ToString(); \
+            throw std::runtime_error(err_msg);                \
+        }                                                     \
+    }
+
 // String specialization
 std::shared_ptr<arrow::Array> ScalarToArrowArray(const std::string& value,
                                                  size_t num_elements) {
@@ -707,19 +717,32 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                                     duckdb::interval_t interval =
                                         const_expr.value
                                             .GetValue<duckdb::interval_t>();
-                                    int date_child_idx = 1 - ci;
-                                    bool is_sub =
-                                        (bfe.function.name == "subtract" ||
-                                         bfe.function.name == "-");
-                                    return std::static_pointer_cast<
-                                        PhysicalExpression>(
-                                        std::make_shared<
-                                            PhysicalCalendarIntervalExpression>(
-                                            buildPhysicalExprTree(
-                                                bfe.children[date_child_idx],
-                                                col_ref_map, no_scalars),
-                                            interval, ci == 0, is_sub,
-                                            result_type));
+                                    if (interval.months != 0) {
+                                        if (bfe.function.name != "add" &&
+                                            bfe.function.name != "+" &&
+                                            bfe.function.name != "subtract" &&
+                                            bfe.function.name != "-") {
+                                            throw std::runtime_error(
+                                                "Only addition and subtraction "
+                                                "are supported for "
+                                                "month-bearing calendar "
+                                                "intervals.");
+                                        }
+                                        int date_child_idx = 1 - ci;
+                                        bool is_sub =
+                                            (bfe.function.name == "subtract" ||
+                                             bfe.function.name == "-");
+                                        return std::static_pointer_cast<
+                                            PhysicalExpression>(
+                                            std::make_shared<
+                                                PhysicalCalendarIntervalExpression>(
+                                                buildPhysicalExprTree(
+                                                    bfe.children
+                                                        [date_child_idx],
+                                                    col_ref_map, no_scalars),
+                                                interval, ci == 0, is_sub,
+                                                result_type));
+                                    }
                                 }
                             }
                         }
@@ -1120,16 +1143,23 @@ void EnsureModRegistered() {
 
 std::shared_ptr<ExprResult> PhysicalCalendarIntervalExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {
+    // Evaluate the date-side child expression to get the operand.
     auto child_res = date_child->ProcessBatch(input_batch);
 
+    // If this is a subtraction (date - interval), invert the interval so we
+    // can always use DuckDB's Interval::Add() for uniform handling.
     duckdb::interval_t effective_interval = calendar_interval;
     if (is_subtract) {
         effective_interval = duckdb::Interval::Invert(effective_interval);
     }
 
+    // Extract the typed concrete result (array or scalar) from the child.
     auto child_arr = std::dynamic_pointer_cast<ArrayExprResult>(child_res);
     auto child_scalar = std::dynamic_pointer_cast<ScalarExprResult>(child_res);
 
+    // Convert the child result to an Arrow array for element-wise processing.
+    // Scalars are wrapped into single-element arrays but we track `is_scalar`
+    // so we can return the same result shape as the input.
     std::shared_ptr<arrow::Array> arrow_arr;
     bool is_scalar = false;
     if (child_arr) {
@@ -1151,6 +1181,9 @@ std::shared_ptr<ExprResult> PhysicalCalendarIntervalExpression::ProcessBatch(
             std::static_pointer_cast<arrow::TimestampArray>(arrow_arr);
         auto ts_unit =
             std::static_pointer_cast<arrow::TimestampType>(arrow_type)->unit();
+        // Arrow timestamps can be in different units; convert to nanoseconds
+        // for uniform handling since DuckDB's timestamp_t is microsecond-based
+        // (via `value` which is microseconds since epoch).
         auto nanos_per_unit = [](arrow::TimeUnit::type unit) -> int64_t {
             switch (unit) {
                 case arrow::TimeUnit::SECOND:
@@ -1166,6 +1199,7 @@ std::shared_ptr<ExprResult> PhysicalCalendarIntervalExpression::ProcessBatch(
             }
         };
         int64_t mult = nanos_per_unit(ts_unit);
+        // Build result as nanosecond timestamps.
         arrow::TimestampBuilder ts_builder(
             arrow::timestamp(arrow::TimeUnit::NANO),
             arrow::default_memory_pool());
@@ -1173,10 +1207,14 @@ std::shared_ptr<ExprResult> PhysicalCalendarIntervalExpression::ProcessBatch(
             if (ts_arr->IsNull(i)) {
                 (void)ts_builder.AppendNull();
             } else {
+                // Convert Arrow timestamp → nanoseconds → DuckDB timestamp_t
+                // (microseconds). DuckDB's Interval::Add handles month-end
+                // clamping (e.g., Jan 31 + 1 month → Feb 28).
                 int64_t ns_val = ts_arr->Value(i) * mult;
                 duckdb::timestamp_t ts(ns_val / 1000);
                 duckdb::timestamp_t result =
                     duckdb::Interval::Add(ts, effective_interval);
+                // Convert DuckDB result (microseconds) back to nanoseconds.
                 (void)ts_builder.Append(result.value * 1000);
             }
         }
@@ -1325,3 +1363,4 @@ arrow::Datum PhysicalCalendarIntervalExpression::join_expr_internal(
         "PhysicalCalendarIntervalExpression::join_expr_internal not "
         "implemented");
 }
+#undef CHECK_ARROW

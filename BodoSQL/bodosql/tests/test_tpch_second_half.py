@@ -67,6 +67,7 @@ def test_tpch_q12(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q13(tpch_data, memory_leak_check):
     WORD1 = "special"
     WORD2 = "requests"
@@ -182,6 +183,7 @@ def test_tpch_q13(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q14(tpch_data, memory_leak_check):
     DATE = "1995-09-01"
     tpch_query = f"""select
@@ -211,6 +213,7 @@ def test_tpch_q14(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
     DATE = "1996-01-01"
     # This query is modified because we don't support DDL properly.
@@ -328,6 +331,7 @@ def test_tpch_q16(tpch_data, spark_info, memory_leak_check):
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q17(tpch_data, memory_leak_check):
     BRAND = "Brand#23"
     CONTAINER = "MED BOX"
@@ -362,6 +366,7 @@ def test_tpch_q17(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q18(tpch_data, memory_leak_check):
     QUANTITY = 300
     tpch_query = f"""select
@@ -479,6 +484,7 @@ def test_tpch_q19(tpch_data, memory_leak_check):
 @pytest.mark.timeout(600)
 # NOTE (allai5): Arbitrary high timeout number due to inability to replicate
 # timeout locally
+@pytest.mark.bodosql_cpp
 def test_tpch_q20(tpch_data, memory_leak_check):
     COLOR = "forest"
     DATE = "1994-01-01"

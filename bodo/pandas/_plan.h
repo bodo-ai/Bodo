@@ -113,7 +113,8 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
  * pyarrow schema object
  */
 std::pair<int64_t, PyObject *> execute_plan(
-    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py);
+    std::unique_ptr<duckdb::LogicalOperator> plan, PyObject *out_schema_py,
+    bool use_sql_rules = false);
 
 /**
  * @brief Creates a new table index.
@@ -235,6 +236,25 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
     std::vector<bool> &na_position, std::vector<int> &cols,
     PyObject *schema_py);
+
+/**
+ * @brief Creates a LogicalTopN node.
+ *
+ * @param source - the data source to order
+ * @param asc - vector of bool to say whether corresponding key is sorted
+ *              ascending (true) or descending (false)
+ * @param na_position - vector of bool to say whether corresponding key places
+ *              na values first (true) or last (false)
+ * @param cols - vector of int specifying the key column indices for sorting
+ * @param schema_py - the schema of data coming into the order
+ * @param limit - the number of rows to limit to
+ * @param offset - the offset to apply
+ * @return duckdb::unique_ptr<duckdb::LogicalTopN> output node
+ */
+duckdb::unique_ptr<duckdb::LogicalTopN> make_topn(
+    std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
+    std::vector<bool> &na_position, std::vector<int> &cols, PyObject *schema_py,
+    duckdb::idx_t limit, duckdb::idx_t offset);
 
 /**
  * @brief Creates a LogicalAggregate node.

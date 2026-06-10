@@ -6,7 +6,6 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 [environments]
 # Development
 default =      { features = ["py314", "rcpp", "dev", "local-mpi", "cpu"],          solve-group = "314" }
-azure =        { features = ["py314", "rcpp", "dev", "local-mpi", "azure", "cpu"], solve-group = "314" }
 # Platform
 platform =     { features = ["py314", "rcpp", "platform", "platform-mpi", "cpu"],  solve-group = "platform" }
 platform-dev = { features = ["py314", "rcpp", "dev", "platform-mpi", "cpu"],       solve-group = "platform-dev" }
@@ -247,9 +246,6 @@ cx_oracle = "*"
 pyzmq = "*"
 # Setting explicitly since Conda solve sets a newer version but PyIceberg installed from pip wants <15.0 (TODO: remove when unnecessary)
 rich = "<15.0"
-# Necessary to avoid regression in GCS I/O tests.
-# TODO(BSE-5450): Fix tests with newer version and remove.
-libgoogle-cloud-storage = "<=2.39.0"
 
 [target.linux-64.dependencies]
 libutf8proc = "*"
@@ -326,7 +322,7 @@ scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
 mpi4py = ">=4.0"
 numba = ">=0.62,<0.66.0"
-pyarrow = "23.0.*"
+pyarrow = "24.0.*"
 
 # Build C++ Deps
 # Adding constraint on cmake to allow zstd 1.5.7 (necessary for conda-forge).
@@ -403,6 +399,8 @@ openai = "*"
 snowflake-sqlalchemy = "*"
 # Use PyIceberg from pip to prevent segfaults in Mac dev environment.
 pyiceberg = ">=0.11"
+# AI Function testing
+transformers = "*"
 
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
@@ -476,9 +474,3 @@ clangxx_osx-64 = "=19"
 [feature.pip.target.osx-arm64.dependencies]
 clang_osx-arm64 = "=19"
 clangxx_osx-arm64 = "=19"
-
-
-# Azure CI
-[feature.azure.dependencies]
-pytest-azurepipelines = "*"
-pytest-nunit = "*"
