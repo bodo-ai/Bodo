@@ -174,6 +174,28 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
             } else {
                 col_names.emplace_back("Not");
             }
+        } else if (expr->type == duckdb::ExpressionType::OPERATOR_IS_NULL) {
+            std::unique_ptr<bodo::DataType> col_type =
+                arrow_type_to_bodo_data_type(
+                    duckdbTypeToArrow(duckdb::LogicalType::BOOLEAN))
+                    ->copy();
+            output_schema->append_column(std::move(col_type));
+            if (input_schema->column_names.size() > 0) {
+                col_names.emplace_back(input_schema->column_names[0]);
+            } else {
+                col_names.emplace_back("is_null");
+            }
+        } else if (expr->type == duckdb::ExpressionType::OPERATOR_IS_NOT_NULL) {
+            std::unique_ptr<bodo::DataType> col_type =
+                arrow_type_to_bodo_data_type(
+                    duckdbTypeToArrow(duckdb::LogicalType::BOOLEAN))
+                    ->copy();
+            output_schema->append_column(std::move(col_type));
+            if (input_schema->column_names.size() > 0) {
+                col_names.emplace_back(input_schema->column_names[0]);
+            } else {
+                col_names.emplace_back("is_not_null");
+            }
         } else if (expr->type == duckdb::ExpressionType::OPERATOR_NEG) {
             auto& neg_expr = expr->Cast<duckdb::BoundOperatorExpression>();
 
