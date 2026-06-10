@@ -850,7 +850,6 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_utc_date(basic_df, memory_leak_check):
     """tests utc_date"""
