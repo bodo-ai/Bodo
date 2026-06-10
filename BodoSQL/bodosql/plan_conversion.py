@@ -558,6 +558,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "WEEK",
             "WEEKOFYEAR",
             "WEEKISOHOUR",
+            "HOUR",
             "MINUTE",
             "SECOND",
             "QUARTER",
