@@ -215,14 +215,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
             return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%a",))
 
-        if func_name == "MONTHNAME" and num_operands == 1:
-            input = java_expr_to_python_expr(
-                ctx, java_call.getOperands()[0], input_plan
-            )
-            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-            return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
-
-        if func_name == "MONTH_NAME" and num_operands == 1:
+        if func_name in ("MONTHNAME", "MONTH_NAME") and num_operands == 1:
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[0], input_plan
             )
