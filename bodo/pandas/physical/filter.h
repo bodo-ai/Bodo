@@ -54,10 +54,10 @@ class PhysicalFilter : public PhysicalProcessBatch {
         this->output_schema->metadata = std::make_shared<bodo::TableMetadata>(
             std::vector<std::string>({}), std::vector<std::string>({}));
 
-        expression = buildPhysicalExprTree(exprs[0], col_ref_map);
+        expression = buildPhysicalExprTree(exprs[0], col_ref_map, true);
         for (size_t i = 1; i < exprs.size(); ++i) {
             std::shared_ptr<PhysicalExpression> subExprTree =
-                buildPhysicalExprTree(exprs[i], col_ref_map);
+                buildPhysicalExprTree(exprs[i], col_ref_map, true);
             expression = std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalConjunctionExpression>(
                     expression, subExprTree,
