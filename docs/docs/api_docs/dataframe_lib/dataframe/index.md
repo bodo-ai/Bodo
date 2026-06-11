@@ -6,6 +6,11 @@ Bodo DataFrames supports Pandas DataFrame methods and accessors that are listed 
 	DataFrames gracefully falls back to native Pandas. See [overview][overview] of
 	Bodo DataFrames for more info.
 
+## Indexing, iteration
+- [`bodo.pandas.BodoDataFrame.head`][bododfhead]
+- [`bodo.pandas.BodoDataFrame.query`][bododfquery]
+
+___
 
 ## Function application, GroupBy & window
 - [`bodo.pandas.BodoDataFrame.apply`][bododfapply]
@@ -16,7 +21,6 @@ Bodo DataFrames supports Pandas DataFrame methods and accessors that are listed 
 
 ## Reindexing / selection / label manipulation
 - [`bodo.pandas.BodoDataFrame.get`][bododfget]
-- [`bodo.pandas.BodoDataFrame.head`][bododfhead]
 - [`bodo.pandas.BodoDataFrame.filter`][bododffilter]
 - [`bodo.pandas.BodoDataFrame.reset_index`][bododfresetindex]
 ___
@@ -38,6 +42,7 @@ ___
 [bododfresetindex]: https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.reset_index.html
 
 [bododfhead]: ../dataframe/head.md
+[bododfquery]: ../dataframe/query.md
 [bododffilter]: ../dataframe/filter.md
 [bododfapply]: ../dataframe/apply.md
 [bododfmappartitions]: ../dataframe/map_partitions.md
