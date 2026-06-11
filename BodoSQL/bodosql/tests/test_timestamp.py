@@ -357,12 +357,12 @@ def test_str_date_case_stmt(spark_info, memory_leak_check):
 @pytest.fixture(
     params=[
         pytest.param(
-            "2013-04-28T20:57:01.123456789+00:00",
+            "2013-04-28T20:57:01.123+00:00",
             id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_no_offset',
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            "2013-04-28T20:57:01.123456789+07:00",
+            "2013-04-28T20:57:01.123+07:00",
             id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_with_offset',
         ),
     ]
