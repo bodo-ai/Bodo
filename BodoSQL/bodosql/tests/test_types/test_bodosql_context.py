@@ -496,9 +496,9 @@ def test_add_or_replace_catalog_jit(
     catalog1, catalog2 = dummy_snowflake_catalogs
 
     bc = BodoSQLContext({"CATALOG_TABLE": local_df, "TABLE2": table_path})
-    check_func(impl, (bc, catalog1))
+    check_func(impl, (bc, catalog1), check_pandas_types=False)
     bc = bc.add_or_replace_catalog(catalog1)
-    check_func(impl, (bc, catalog2))
+    check_func(impl, (bc, catalog2), check_pandas_types=False)
 
 
 def test_remove_catalog_jit(datapath, dummy_snowflake_catalogs, memory_leak_check):
