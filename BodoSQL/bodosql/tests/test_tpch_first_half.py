@@ -471,6 +471,7 @@ def test_tpch_q6(tpch_data, memory_leak_check):
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q7(tpch_data, memory_leak_check):
     NATION1 = "FRANCE"
     NATION2 = "GERMANY"
@@ -537,6 +538,7 @@ def test_tpch_q7(tpch_data, memory_leak_check):
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q8(tpch_data, memory_leak_check):
     NATION = "BRAZIL"
     REGION = "AMERICA"
@@ -596,6 +598,7 @@ def test_tpch_q8(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q9(tpch_data, spark_info, memory_leak_check):
     COLOR = "green"
     tpch_query = f"""select
