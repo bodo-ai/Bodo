@@ -276,9 +276,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "%y": "%y",
                 "%%": "%%",
             }
-            # Detected format issues that need post-processing
-            needs_fix_micros = False  # %f → unsupported by Arrow
-            needs_fix_subsec = False  # %S includes fractional seconds
+            # Detected format issues that need post-processing (currently none, as unsupported ones raise errors)
             py_fmt_parts = []
             i = 0
             while i < len(mysql_fmt):
@@ -298,20 +296,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         continue
                     # Check for special Arrow-unsupported format specs
                     if mysql_fmt[i : i + 2] == "%f":
-                        # %f (microseconds): Arrow strftime does not support it.
-                        # Replace with a sentinel; after strftime,
-                        # extract usec separately and patch in.
-                        py_fmt_parts.append("__MICROS__")
-                        needs_fix_micros = True
-                        i += 2
-                        continue
+                        raise NotImplementedError(
+                            "DATE_FORMAT with '%f' (microseconds) is not supported in the C++ backend yet "
+                            "because PyArrow's strftime does not handle it correctly."
+                        )
                     if mysql_fmt[i : i + 2] in ("%S", "%s"):
-                        # Arrow's %S includes fractional seconds (SS.FFFFFFFFF).
-                        # Map directly and post-process to strip fraction.
-                        py_fmt_parts.append(mysql_fmt[i : i + 2])
-                        needs_fix_subsec = True
-                        i += 2
-                        continue
+                        raise NotImplementedError(
+                            "DATE_FORMAT with '%S' or '%s' (seconds) is not supported in the C++ backend yet "
+                            "because PyArrow's strftime includes fractional seconds which breaks matching."
+                        )
                     # Unrecognized MySQL format: "%x" → output char literally
                     py_fmt_parts.append(mysql_fmt[i + 1])
                     i += 2
@@ -324,22 +317,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     i += 1
             py_fmt = "".join(py_fmt_parts)
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-            expr = ArrowScalarFuncExpression(empty_data, [input], "strftime", (py_fmt,))
-            if needs_fix_micros:
-                expr = ArrowScalarFuncExpression(
-                    empty_data,
-                    [expr],
-                    "replace_substring_regex",
-                    ("__MICROS__", "000000"),
-                )
-            if needs_fix_subsec:
-                expr = ArrowScalarFuncExpression(
-                    empty_data,
-                    [expr],
-                    "replace_substring_regex",
-                    (r"\.\d+", ""),
-                )
-            return expr
+            return ArrowScalarFuncExpression(empty_data, [input], "strftime", (py_fmt,))
 
         if func_name == "MAKEDATE" and num_operands == 2:
             # MAKEDATE(year, dayofyear) → Jan 1 of year + (doy-1) days

@@ -861,12 +861,10 @@ def test_utc_date(basic_df, memory_leak_check):
 
 @pytest.fixture(
     params=[
-        # check the values for which the format strings are the same
-        (x, x)
+        pytest.param((x, x), marks=pytest.mark.bodosql_cpp)
         for x in [
             "%a",
             "%b",
-            "%f",
             "%H",
             "%j",
             "%m",
@@ -875,21 +873,26 @@ def test_utc_date(basic_df, memory_leak_check):
             "%Y",
             "%y",
             "%U",
-            "%S",
         ]
     ]
-    +
-    # check the values for which the format strings have a 1 to 1
-    [
-        ("%i", "%M"),
-        ("%M", "%B"),
-        ("%r", "%X %p"),
+    + [
+        # Format specifiers not supported in C++ backend due to PyArrow strftime limitations
+        ("%f", "%f"),
+        ("%S", "%S"),
         ("%s", "%S"),
-        ("%T", "%X"),
-        ("%u", "%W"),
-        ('% %a %\\, %%a, %%, %%%%, "%"', ' %a \\, %%a, %%, %%%%, ""'),
     ]
-    # TODO: add addition format characters when/if they become supported
+    + [
+        pytest.param(x, marks=pytest.mark.bodosql_cpp)
+        for x in [
+            ("%i", "%M"),
+            ("%M", "%B"),
+            ("%r", "%X %p"),
+            ("%T", "%X"),
+            ("%u", "%W"),
+            ('% %a %\\, %%a, %%, %%%%, "%"', ' %a \\, %%a, %%, %%%%, ""'),
+        ]
+    ]
+    # TODO: add additional format characters when/if they become supported
 )
 def python_mysql_dt_format_strings(request):
     """returns a tuple of python mysql string, and the equivalent python format string"""
