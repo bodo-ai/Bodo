@@ -30,6 +30,7 @@ from bodo.pandas.plan import (
     LogicalProjection,
     LogicalTopN,
     NullExpression,
+    PythonScalarFuncExpression,
     UnaryOpExpression,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -1025,8 +1026,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 op_exprs[0].empty_data, op_exprs, "nullif", ()
             )
 
-        # MONTHS_BETWEEN and TIME_SLICE also require specific C++ backend support
-        if func_name in ("MONTHS_BETWEEN", "TIME_SLICE"):
+        if func_name == "TIME_SLICE":
             raise NotImplementedError(
                 f"{func_name} requires C++ backend arrow compute function registration"
             )
@@ -1040,6 +1040,52 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
+
+        if func_name == "MONTHS_BETWEEN" and len(op_exprs) == 2:
+            dt0 = op_exprs[0]
+            dt1 = op_exprs[1]
+
+            f64_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+            def _months_between_py(d0, d1):
+                if pd.isna(d0) or pd.isna(d1):
+                    return pd.NA
+                # d0 and d1 can be datetime or date
+                dt0_val = (
+                    pd.Timestamp(d0)
+                    if not isinstance(d0, (pd.Timestamp, datetime))
+                    else d0
+                )
+                dt1_val = (
+                    pd.Timestamp(d1)
+                    if not isinstance(d1, (pd.Timestamp, datetime))
+                    else d1
+                )
+
+                months_int = (dt0_val.year - dt1_val.year) * 12 + (
+                    dt0_val.month - dt1_val.month
+                )
+
+                # Check if same day or both are last day of month
+                next_d0 = dt0_val + pd.Timedelta(days=1)
+                next_d1 = dt1_val + pd.Timedelta(days=1)
+
+                if dt0_val.day == dt1_val.day or (
+                    next_d0.day == 1 and next_d1.day == 1
+                ):
+                    frac = 0.0
+                else:
+                    frac = round((dt0_val.day - dt1_val.day) / 31.0, 6)
+
+                return float(months_int + frac)
+
+            return PythonScalarFuncExpression(
+                f64_empty,
+                [dt0, dt1],
+                (_months_between_py,),
+                True,  # is_cfunc (treated as Python UDF)
+                False,  # has_state
+            )
 
         if func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
