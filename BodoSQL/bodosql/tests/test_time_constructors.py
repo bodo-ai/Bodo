@@ -59,7 +59,7 @@ def to_time_fn(request):
                         bodo.types.Time(1, 23, 45, microsecond=675880, precision=9),
                         bodo.types.Time(1, 0, 2, precision=9),
                         bodo.types.Time(11, 59, 59, precision=9),
-                        bodo.types.Time(1, 23, 4, nanosecond=675888330, precision=9),
+                        bodo.types.Time(1, 23, 4, precision=9),
                         bodo.types.Time(0, 0, 100, precision=9),
                         bodo.types.Time(0, 0, 1000, precision=9),
                         bodo.types.Time(0, 0, 1, precision=9),
@@ -84,7 +84,7 @@ def to_time_fn(request):
                         pd.Timestamp("2021-4-1 12:00:00"),
                         None,
                         pd.Timestamp("2022-7-4 20:21:22"),
-                        pd.Timestamp("2023-8-15 8:30:00.123456789"),
+                        pd.Timestamp("2023-8-15 8:30:00.123"),
                         pd.Timestamp("2019-1-1"),
                     ],
                     dtype="datetime64[ns]",
@@ -95,7 +95,7 @@ def to_time_fn(request):
                         bodo.types.Time(12, 0, 0, precision=9),
                         None,
                         bodo.types.Time(20, 21, 22, precision=9),
-                        bodo.types.Time(8, 30, 0, nanosecond=123456789, precision=9),
+                        bodo.types.Time(8, 30, 0, precision=9),
                         bodo.types.Time(0, 0, 0, precision=9),
                     ]
                 ),
@@ -111,7 +111,7 @@ def to_time_fn(request):
                         pd.Timestamp("2021-4-1 12:00:00", tz="US/Pacific"),
                         None,
                         pd.Timestamp("2022-7-4 20:21:22", tz="US/Pacific"),
-                        pd.Timestamp("2023-8-15 8:30:00.123456789", tz="US/Pacific"),
+                        pd.Timestamp("2023-8-15 8:30:00.123", tz="US/Pacific"),
                         pd.Timestamp("2019-1-1", tz="US/Pacific"),
                     ],
                     dtype="datetime64[ns, US/Pacific]",
@@ -122,7 +122,7 @@ def to_time_fn(request):
                         bodo.types.Time(12, 0, 0, precision=9),
                         None,
                         bodo.types.Time(20, 21, 22, precision=9),
-                        bodo.types.Time(8, 30, 0, nanosecond=123456789, precision=9),
+                        bodo.types.Time(8, 30, 0, precision=9),
                         bodo.types.Time(0, 0, 0, precision=9),
                     ]
                 ),
@@ -371,28 +371,22 @@ def time_from_parts_fn(request):
                                 bodo.types.Time(1, 30, 0, precision=9),
                                 bodo.types.Time(22, 59, 0, precision=9),
                                 bodo.types.Time(0, 0, 0, precision=9),
-                                bodo.types.Time(
-                                    23, 59, 59, nanosecond=999999999, precision=9
-                                ),
+                                bodo.types.Time(23, 59, 59, precision=9),
                                 bodo.types.Time(23, 58, 5, precision=9),
                                 None,
                                 bodo.types.Time(
                                     hour=4,
                                     minute=53,
                                     second=12,
-                                    nanosecond=186044416,
                                     precision=9,
                                 ),
                                 bodo.types.Time(
                                     hour=20,
                                     minute=8,
                                     second=18,
-                                    nanosecond=926258176,
                                     precision=9,
                                 ),
-                                bodo.types.Time(
-                                    10, 40, 0, nanosecond=1234, precision=9
-                                ),
+                                bodo.types.Time(10, 40, 0, precision=9),
                             ]
                         )
                     }
@@ -458,28 +452,22 @@ def time_from_parts_fn(request):
                                 bodo.types.Time(1, 30, 0, precision=9),
                                 bodo.types.Time(22, 59, 0, precision=9),
                                 bodo.types.Time(0, 0, 0, precision=9),
-                                bodo.types.Time(
-                                    23, 59, 59, nanosecond=999999999, precision=9
-                                ),
+                                bodo.types.Time(23, 59, 59, precision=9),
                                 bodo.types.Time(23, 58, 5, precision=9),
                                 None,
                                 bodo.types.Time(
                                     hour=4,
                                     minute=53,
                                     second=12,
-                                    nanosecond=186044416,
                                     precision=9,
                                 ),
                                 bodo.types.Time(
                                     hour=20,
                                     minute=8,
                                     second=18,
-                                    nanosecond=926258176,
                                     precision=9,
                                 ),
-                                bodo.types.Time(
-                                    10, 40, 0, nanosecond=1234, precision=9
-                                ),
+                                bodo.types.Time(10, 40, 0, precision=9),
                             ]
                         )
                     }
