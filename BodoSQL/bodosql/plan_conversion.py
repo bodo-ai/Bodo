@@ -235,14 +235,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
             return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%a",))
 
-        if func_name == "MONTHNAME" and num_operands == 1:
-            input = java_expr_to_python_expr(
-                ctx, java_call.getOperands()[0], input_plan
-            )
-            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-            return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
-
-        if func_name == "MONTH_NAME" and num_operands == 1:
+        if func_name in ("MONTHNAME", "MONTH_NAME") and num_operands == 1:
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[0], input_plan
             )
@@ -393,7 +386,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 input.empty_data, [input], "floor_temporal", (1, arrow_unit)
             )
 
-        # LAST_DAY requires native C++ backend implementations.
         if func_name == "LAST_DAY":
             date_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[0], input_plan
@@ -466,55 +458,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 date_expr.empty_data, date_expr, month_interval_expr, "__add__"
             )
 
-        if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
-            # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
-            # or DATE_ADD(date, integer_days) — MySQL syntax.
-            if num_operands == 2:
-                date_expr = java_expr_to_python_expr(
-                    ctx, java_call.getOperands()[0], input_plan
-                )
-                amount_expr = java_expr_to_python_expr(
-                    ctx, java_call.getOperands()[1], input_plan
-                )
-                # Check if the second argument is an integer (number of days)
-                amount_type = java_call.getOperands()[1].getType()
-                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-                if is_int_type(amount_type):
-                    # DATE_ADD(date, N) → date + N days
-                    if hasattr(amount_expr, "value"):
-                        interval_val = pd.Timedelta(days=int(amount_expr.value))
-                        dummy_empty_data = pd.Series(
-                            dtype=pd.ArrowDtype(pa.duration("ns"))
-                        )
-                        interval_expr = ConstantExpression(
-                            dummy_empty_data, input_plan, interval_val
-                        )
-                    else:
-                        one_day = pd.Timedelta(days=1)
-                        dummy_empty_data = pd.Series(
-                            dtype=pd.ArrowDtype(pa.duration("ns"))
-                        )
-                        one_day_expr = ConstantExpression(
-                            dummy_empty_data, input_plan, one_day
-                        )
-                        interval_expr = ArithOpExpression(
-                            dummy_empty_data,
-                            amount_expr,
-                            one_day_expr,
-                            "__mul__",
-                        )
-                    out_empty = (
-                        date_expr.empty_data.iloc[:, 0]
-                        + interval_expr.empty_data.iloc[:, 0]
-                    )
-                    return ArithOpExpression(
-                        out_empty, date_expr, interval_expr, "__add__"
-                    )
-                return java_binop_to_python_expr(
-                    ctx,
-                    SqlKind.PLUS,
-                    [date_expr, amount_expr],
-                )
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
             # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
             # For 2 operands: (date, interval) → date + interval
