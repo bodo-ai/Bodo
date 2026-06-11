@@ -458,22 +458,28 @@ def time_from_parts_fn(request):
                                 bodo.types.Time(1, 30, 0, precision=9),
                                 bodo.types.Time(22, 59, 0, precision=9),
                                 bodo.types.Time(0, 0, 0, precision=9),
-                                bodo.types.Time(23, 59, 59, precision=9),
+                                bodo.types.Time(
+                                    23, 59, 59, nanosecond=999999999, precision=9
+                                ),
                                 bodo.types.Time(23, 58, 5, precision=9),
                                 None,
                                 bodo.types.Time(
                                     hour=4,
                                     minute=53,
                                     second=12,
+                                    nanosecond=186044416,
                                     precision=9,
                                 ),
                                 bodo.types.Time(
                                     hour=20,
                                     minute=8,
                                     second=18,
+                                    nanosecond=926258176,
                                     precision=9,
                                 ),
-                                bodo.types.Time(10, 40, 0, precision=9),
+                                bodo.types.Time(
+                                    10, 40, 0, nanosecond=1234, precision=9
+                                ),
                             ]
                         )
                     }
