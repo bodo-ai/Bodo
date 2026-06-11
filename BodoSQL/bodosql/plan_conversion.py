@@ -520,6 +520,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name == "SUBSTRING" and len(op_exprs) == 3:
+            # See:
+            # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
+            # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
             src = op_exprs[0]
             start_expr = op_exprs[1]
             if not isinstance(start_expr, ConstantExpression):
@@ -527,12 +530,19 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[2]
             if not isinstance(len_expr, ConstantExpression):
                 raise ValueError("len_expr not a ConstantExpression")
+            start = start_expr.value
+            length = len_expr.value
+            if start <= 0 or length < 0:
+                raise ValueError(
+                    "negative or zero start or negative length not supported in SUBSTRING in C++ backend yet"
+                )
+            start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
             out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
                 out_empty,
                 [src],
                 "utf8_slice_codeunits",
-                (start_expr.value, len_expr.value, 1),
+                (start, start + length, 1),
             )
 
     if operator_class_name == "SqlLikeOperator":
