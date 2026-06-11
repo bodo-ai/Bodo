@@ -911,22 +911,34 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "SEARCH" and len(op_exprs) == 2:
             src = op_exprs[0]
+            # search_expr is a ConstantExpression with org.apache.calcite.util.Sarg value
             search_expr = op_exprs[1]
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            # sarg is an org.apache.calcite.util.Sarg
             sarg = search_expr.value
+            assert sarg.getClass().getSimpleName() == "Sarg"
+            # sarg_rangeSet is a com.google.common.collect.ImmutableRangeSet
             sarg_rangeSet = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
+            assert sarg_rangeSet.getClass().getSimpleName() == "ImmutableRangeSet"
+            # ranges_collection is a com.google.common.collect.RegularImmutableSortedSet
             ranges_collection = sarg_rangeSet.asRanges()
+            assert (
+                ranges_collection.getClass().getSimpleName()
+                == "RegularImmutableSortedSet"
+            )
             search_options = []
             it = ranges_collection.iterator()
             while it.hasNext():
+                # r is a com.google.common.collect.Range
                 r = it.next()
+                assert r.getClass().getSimpleName() == "Range"
                 search_options.append(r)
 
             def range_type_to_python(x):
                 if isinstance(x, py4j.java_gateway.JavaObject):
                     return x.getValue()
                 elif isinstance(x, decimal.Decimal):
-                    return int(x)
+                    return float(x)
                 else:
                     return x
 
