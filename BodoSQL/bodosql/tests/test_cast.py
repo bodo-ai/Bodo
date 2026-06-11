@@ -422,6 +422,10 @@ def test_numeric_scalar_to_str(
     else:
         query = f"SELECT CASE WHEN B > 5 THEN SUBSTRING(CAST(A AS {cast_str_typename}), 1, 3) ELSE 'OTHER' END FROM TABLE1"
 
+    # Arrow float to string cast returns 3 for 3.0 so add a fraction to avoid this case
+    if bodosql_numeric_types["TABLE1"]["A"].dtype == "float64":
+        bodosql_numeric_types["TABLE1"]["A"] += 0.1
+
     check_query(
         query,
         bodosql_numeric_types,
