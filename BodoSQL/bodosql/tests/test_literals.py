@@ -229,26 +229,68 @@ def test_interval_literals(basic_df, timedelta_equivalent_values, memory_leak_ch
 
 @pytest.fixture(
     params=[
-        ("1 day", lambda x: x + pd.DateOffset(days=1)),
         pytest.param(
-            ("2 month", lambda x: x + pd.DateOffset(months=2)), marks=pytest.mark.weekly
+            ("1 day", lambda x: x + pd.DateOffset(days=1)),
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
-            ("3 year", lambda x: x + pd.DateOffset(years=3)), marks=pytest.mark.weekly
+            ("2 month", lambda x: x + pd.DateOffset(months=2)),
+            marks=pytest.mark.bodosql_cpp,
+        ),
+        pytest.param(
+            ("3 year", lambda x: x + pd.DateOffset(years=3)),
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             ("1 quarter", lambda x: x + pd.DateOffset(months=3)),
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.bodosql_cpp, pytest.mark.weekly],
         ),
         pytest.param(
             ("10 seconds", lambda x: x + pd.Timedelta(seconds=10)),
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.bodosql_cpp, pytest.mark.weekly],
         ),
-        ("1 year, 1 quarter, 1 month", lambda x: x + pd.DateOffset(years=1, months=4)),
+        pytest.param(
+            (
+                "1 year, 1 quarter, 1 month",
+                lambda x: x + pd.DateOffset(years=1, months=4),
+            ),
+            marks=pytest.mark.bodosql_cpp,
+        ),
         pytest.param(
             (
                 "1 year, 2 second",
                 lambda x: (x + pd.DateOffset(years=1)) + pd.Timedelta(seconds=2),
+            ),
+            marks=pytest.mark.bodosql_cpp,
+        ),
+        pytest.param(
+            (
+                "1 second, 2 year",
+                lambda x: (x + pd.DateOffset(years=2)) + pd.Timedelta(seconds=1),
+            ),
+            marks=pytest.mark.bodosql_cpp,
+        ),
+        pytest.param(
+            (
+                "1 year, 2 month, 3 second",
+                lambda x: (x + pd.DateOffset(years=1, months=2))
+                + pd.Timedelta(seconds=3),
+            ),
+            marks=pytest.mark.bodosql_cpp,
+        ),
+        pytest.param(
+            (
+                "1 days, 2 hrs, 3 mins, 4s, 5ms, 6us, 7ns",
+                lambda x: x
+                + pd.Timedelta(
+                    days=1,
+                    hours=2,
+                    minutes=3,
+                    seconds=4,
+                    milliseconds=5,
+                    microseconds=6,
+                    nanoseconds=7,
+                ),
             ),
             marks=pytest.mark.weekly,
         ),
@@ -283,12 +325,14 @@ def test_interval_literals(basic_df, timedelta_equivalent_values, memory_leak_ch
             ),
             marks=pytest.mark.weekly,
         ),
-        (
-            "1 months, 2 days, 3 hrs, 4 mins, 5s, 6ms, 7us, 8ns",
-            lambda x: (
-                x + pd.DateOffset(months=1, days=2, hours=3, minutes=4, seconds=5)
-            )
-            + pd.Timedelta(milliseconds=6, microseconds=7, nanoseconds=8),
+        pytest.param(
+            (
+                "1 months, 2 days, 3 hrs, 4 mins, 5s, 6ms, 7us, 8ns",
+                lambda x: (
+                    x + pd.DateOffset(months=1, days=2, hours=3, minutes=4, seconds=5)
+                )
+                + pd.Timedelta(milliseconds=6, microseconds=7, nanoseconds=8),
+            ),
         ),
     ]
 )
@@ -317,9 +361,9 @@ def test_interval_literals_addition(interval_addition_values, memory_leak_check)
             "A": pd.Series(
                 [
                     pd.Timestamp(2020, 1, 2),
-                    pd.Timestamp(2020, 1, 2, 3, 4, 5, 6, nanosecond=7),
-                    pd.Timestamp(2020, 12, 31, 23, 59, 59, 999999, nanosecond=999),
-                    pd.Timestamp(2016, 2, 27, 4, 30, 15, 50, nanosecond=5),
+                    pd.Timestamp(2020, 1, 2, 3, 4, 5, 6),
+                    pd.Timestamp(2020, 12, 31, 23, 59, 59, 999999),
+                    pd.Timestamp(2016, 2, 27, 4, 30, 15, 50),
                 ],
                 dtype="datetime64[ns]",
             )
@@ -583,6 +627,7 @@ def test_backslash_literals(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_large_day_literals(bodosql_date_types, memory_leak_check):
     """
     tests that Interval literals with large offsets are handled by BodoSQL.

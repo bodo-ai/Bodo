@@ -496,6 +496,10 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::date32();
         case duckdb::LogicalTypeId::TIMESTAMP_SEC:
             return arrow::timestamp(arrow::TimeUnit::SECOND);
+        case duckdb::LogicalTypeId::TIMESTAMP_MS:
+            return arrow::timestamp(arrow::TimeUnit::MILLI);
+        case duckdb::LogicalTypeId::TIMESTAMP:
+            return arrow::timestamp(arrow::TimeUnit::MICRO);
         case duckdb::LogicalTypeId::TIMESTAMP_NS:
             return arrow::timestamp(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::TIME:

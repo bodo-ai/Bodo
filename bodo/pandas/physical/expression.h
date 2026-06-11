@@ -20,6 +20,7 @@
 #include "../tests/utils.h"
 #include "_util.h"
 #include "duckdb/common/enums/expression_type.hpp"
+#include "duckdb/common/types/interval.hpp"
 #include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
@@ -95,7 +96,8 @@ enum class PhysicalExpressionType {
     BINARY,
     CASE,
     UDF,
-    ARROW
+    ARROW,
+    CALENDAR_INTERVAL
 };
 
 arrow::Datum fill_null(arrow::Datum &src, const arrow::Datum &val);
@@ -983,6 +985,43 @@ class PhysicalBinaryExpression : public PhysicalExpression {
 };
 
 /**
+ * @brief Physical expression tree node for calendar-aware interval arithmetic
+ * (year/month offsets) that Arrow's duration-based add cannot handle.
+ * Uses DuckDB's Interval::Add() for month-end clamping.
+ *
+ */
+class PhysicalCalendarIntervalExpression : public PhysicalExpression {
+   public:
+    PhysicalCalendarIntervalExpression(
+        std::shared_ptr<PhysicalExpression> date_child,
+        duckdb::interval_t interval, bool interval_is_left, bool is_subtract,
+        std::shared_ptr<arrow::DataType> result_type)
+        : PhysicalExpression(PhysicalExpressionType::CALENDAR_INTERVAL),
+          date_child(std::move(date_child)),
+          calendar_interval(interval),
+          interval_is_left(interval_is_left),
+          is_subtract(is_subtract),
+          result_type(std::move(result_type)) {}
+
+    virtual ~PhysicalCalendarIntervalExpression() = default;
+
+    virtual std::shared_ptr<ExprResult> ProcessBatch(
+        std::shared_ptr<table_info> input_batch);
+
+    virtual arrow::Datum join_expr_internal(
+        array_info **left_table, array_info **right_table, void **left_data,
+        void **right_data, void **left_null_bitmap, void **right_null_bitmap,
+        int64_t left_index, int64_t right_index);
+
+   private:
+    std::shared_ptr<PhysicalExpression> date_child;
+    duckdb::interval_t calendar_interval;
+    bool interval_is_left;
+    bool is_subtract;
+    const std::shared_ptr<arrow::DataType> result_type;
+};
+
+/**
  * @brief Physical expression tree node type for case expressions.
  *
  */
@@ -1368,6 +1407,12 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 scalar_func_data.arrow_func_name.c_str());
             arrow::compute::AssumeTimezoneOptions opts(c_str);
             result = do_arrow_compute_unary(res, "assume_timezone", &opts);
+        } else if (scalar_func_data.arrow_func_name == "strftime") {
+            const char *fmt_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+            arrow::compute::StrftimeOptions opts(fmt_str);
+            result = do_arrow_compute_unary(res, "strftime", &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
