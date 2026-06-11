@@ -984,8 +984,6 @@ class PhysicalBinaryExpression : public PhysicalExpression {
     const std::shared_ptr<arrow::DataType> result_type;
 };
 
-#include "duckdb/common/types/interval.hpp"
-
 /**
  * @brief Physical expression tree node for calendar-aware interval arithmetic
  * (year/month offsets) that Arrow's duration-based add cannot handle.
@@ -1437,30 +1435,29 @@ class PhysicalArrowExpression : public PhysicalExpression {
             int64_t multiple = PyLong_AsLongLong(PyTuple_GetItem(args, 0));
             PyObject *unit_py = PyTuple_GetItem(args, 1);
             const char *unit_cstr = PyUnicode_AsUTF8(unit_py);
-            arrow::compute::CalendarUnit unit =
-                arrow::compute::CalendarUnit::DAY;
-            if (strcmp(unit_cstr, "year") == 0)
-                unit = arrow::compute::CalendarUnit::YEAR;
-            else if (strcmp(unit_cstr, "quarter") == 0)
-                unit = arrow::compute::CalendarUnit::QUARTER;
-            else if (strcmp(unit_cstr, "month") == 0)
-                unit = arrow::compute::CalendarUnit::MONTH;
-            else if (strcmp(unit_cstr, "week") == 0)
-                unit = arrow::compute::CalendarUnit::WEEK;
-            else if (strcmp(unit_cstr, "day") == 0)
-                unit = arrow::compute::CalendarUnit::DAY;
-            else if (strcmp(unit_cstr, "hour") == 0)
-                unit = arrow::compute::CalendarUnit::HOUR;
-            else if (strcmp(unit_cstr, "minute") == 0)
-                unit = arrow::compute::CalendarUnit::MINUTE;
-            else if (strcmp(unit_cstr, "second") == 0)
-                unit = arrow::compute::CalendarUnit::SECOND;
-            else if (strcmp(unit_cstr, "millisecond") == 0)
-                unit = arrow::compute::CalendarUnit::MILLISECOND;
-            else if (strcmp(unit_cstr, "microsecond") == 0)
-                unit = arrow::compute::CalendarUnit::MICROSECOND;
-            else if (strcmp(unit_cstr, "nanosecond") == 0)
-                unit = arrow::compute::CalendarUnit::NANOSECOND;
+            static const std::unordered_map<std::string,
+                                            arrow::compute::CalendarUnit>
+                kCalendarUnitMap = {
+                    {"year", arrow::compute::CalendarUnit::YEAR},
+                    {"quarter", arrow::compute::CalendarUnit::QUARTER},
+                    {"month", arrow::compute::CalendarUnit::MONTH},
+                    {"week", arrow::compute::CalendarUnit::WEEK},
+                    {"day", arrow::compute::CalendarUnit::DAY},
+                    {"hour", arrow::compute::CalendarUnit::HOUR},
+                    {"minute", arrow::compute::CalendarUnit::MINUTE},
+                    {"second", arrow::compute::CalendarUnit::SECOND},
+                    {"millisecond", arrow::compute::CalendarUnit::MILLISECOND},
+                    {"microsecond", arrow::compute::CalendarUnit::MICROSECOND},
+                    {"nanosecond", arrow::compute::CalendarUnit::NANOSECOND},
+                };
+
+            auto it = kCalendarUnitMap.find(unit_cstr);
+            if (it == kCalendarUnitMap.end()) {
+                throw std::runtime_error(
+                    "Invalid calendar unit string for temporal rounding: " +
+                    std::string(unit_cstr));
+            }
+            arrow::compute::CalendarUnit unit = it->second;
             arrow::compute::RoundTemporalOptions opts(multiple, unit);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
