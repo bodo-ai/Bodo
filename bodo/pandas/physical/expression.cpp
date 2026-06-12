@@ -1278,4 +1278,34 @@ arrow::Datum PhysicalCalendarIntervalExpression::join_expr_internal(
         "PhysicalCalendarIntervalExpression::join_expr_internal not "
         "implemented");
 }
+
+arrow::compute::CalendarUnit getArrowCalendarUnit(const char* unit_str) {
+    if (strcmp(unit_str, "nanosecond") == 0) {
+        return arrow::compute::CalendarUnit::NANOSECOND;
+    } else if (strcmp(unit_str, "microsecond") == 0) {
+        return arrow::compute::CalendarUnit::MICROSECOND;
+    } else if (strcmp(unit_str, "millisecond") == 0) {
+        return arrow::compute::CalendarUnit::MILLISECOND;
+    } else if (strcmp(unit_str, "second") == 0) {
+        return arrow::compute::CalendarUnit::SECOND;
+    } else if (strcmp(unit_str, "minute") == 0) {
+        return arrow::compute::CalendarUnit::MINUTE;
+    } else if (strcmp(unit_str, "hour") == 0) {
+        return arrow::compute::CalendarUnit::HOUR;
+    } else if (strcmp(unit_str, "day") == 0) {
+        return arrow::compute::CalendarUnit::DAY;
+    } else if (strcmp(unit_str, "week") == 0) {
+        return arrow::compute::CalendarUnit::WEEK;
+    } else if (strcmp(unit_str, "month") == 0) {
+        return arrow::compute::CalendarUnit::MONTH;
+    } else if (strcmp(unit_str, "quarter") == 0) {
+        return arrow::compute::CalendarUnit::QUARTER;
+    } else if (strcmp(unit_str, "year") == 0) {
+        return arrow::compute::CalendarUnit::YEAR;
+    } else {
+        throw std::runtime_error("Unsupported calendar unit: " +
+                                 std::string(unit_str));
+    }
+}
+
 #undef CHECK_ARROW

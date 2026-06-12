@@ -271,8 +271,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
+            # NOTE: backend for floor_temporal sets multiple to 1
             return ArrowScalarFuncExpression(
-                input.empty_data, [input], "floor_temporal", (1, arrow_unit)
+                input.empty_data, [input], "floor_temporal", (arrow_unit,)
             )
 
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
