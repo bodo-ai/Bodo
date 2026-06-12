@@ -876,12 +876,12 @@ def test_utc_date(basic_df, memory_leak_check):
     + [
         # Format specifiers not supported in C++ backend due to PyArrow strftime limitations
         ("%f", "%f"),
-        ("%S", "%S"),
-        ("%s", "%S"),
     ]
     + [
         pytest.param(x, marks=pytest.mark.bodosql_cpp)
         for x in [
+            ("%S", "%S"),
+            ("%s", "%S"),
             ("%i", "%M"),
             ("%M", "%B"),
             ("%r", "%X %p"),

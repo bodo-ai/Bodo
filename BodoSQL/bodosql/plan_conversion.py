@@ -81,8 +81,10 @@ _MYSQL_TO_STRFTIME = {
     "%M": "%B",
     "%m": "%m",
     "%p": "%p",
-    "%r": "%I:%M:%S %p",
-    "%T": "%H:%M:%S",
+    "%r": "%H:%M:%OS %p",
+    "%T": "%H:%M:%OS",
+    "%s": "%OS",
+    "%S": "%OS",
     "%U": "%U",
     "%u": "%W",
     "%W": "%A",
@@ -298,11 +300,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                             "DATE_FORMAT with '%f' (microseconds) is not supported in the C++ backend yet "
                             "because PyArrow's strftime does not handle it correctly."
                         )
-                    if mysql_fmt[i : i + 2] in ("%S", "%s"):
-                        raise NotImplementedError(
-                            "DATE_FORMAT with '%S' or '%s' (seconds) is not supported in the C++ backend yet "
-                            "because PyArrow's strftime includes fractional seconds which breaks matching."
-                        )
                     # Unrecognized MySQL format: "%x" → output char literally
                     py_fmt_parts.append(mysql_fmt[i + 1])
                     i += 2
@@ -377,7 +374,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "MONTH": ("month", 1, 0),
                 "QUARTER": ("quarter", 3, 0),
                 "YEAR": ("year", 12, 0),
-                "WEEK": ("week", 0, 6),  # Snowflake weeks end on Saturday
+                "WEEK": ("week", 0, 7),
             }
             assert unit_str in LAST_DAY_UNITS, f"Unsupported LAST_DAY unit: {unit_str}"
             empty_data = date_expr.empty_data
