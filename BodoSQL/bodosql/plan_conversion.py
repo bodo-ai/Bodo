@@ -194,7 +194,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
-    _DOW_NAMES = {"DAYOFWEEK", "WEEKDAY", "DOW"}
+    _DOW_NAMES = {"DAYOFWEEK", "DOW"}
 
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
@@ -570,7 +570,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
-        if func_name in ("DAYOFWEEK", "WEEKDAY", "DOW"):
+        if func_name in ("DAYOFWEEK", "DOW"):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             dow_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
             # Arrow: 0=Monday. Snowflake: 0=Sunday. Convert: (dow+1)%7
