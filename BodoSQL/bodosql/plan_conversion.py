@@ -294,9 +294,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # DATEADD(FLAG(unit), amount, date) from date + int arithmetic.
                 # Only handle when first operand is an interval qualifier (FLAG).
                 first_op_str = str(java_call.getOperands()[0].toString())
-                if not first_op_str.startswith("FLAG"):
+                if first_op_str != "FLAG(DAY)":
                     raise NotImplementedError(
-                        "DATEADD with 3 string operands not supported in "
+                        "DATEADD with 3 string operands or not day unit not supported in "
                         "C++ backend yet"
                     )
                 # In Snowflake, date + integer always means date + N days.
@@ -306,7 +306,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 date_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[2], input_plan
                 )
-                if hasattr(amount_expr, "value"):
+                if isinstance(amount_expr, ConstantExpression):
                     interval_val = pd.Timedelta(days=int(amount_expr.value))
                     dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
                     interval_expr = ConstantExpression(
