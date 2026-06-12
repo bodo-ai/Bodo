@@ -738,8 +738,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                                                     bfe.children
                                                         [date_child_idx],
                                                     col_ref_map, no_scalars),
-                                                interval, ci == 0, is_sub,
-                                                result_type));
+                                                interval, is_sub, result_type));
                                     }
                                 }
                             }

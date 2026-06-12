@@ -994,12 +994,11 @@ class PhysicalCalendarIntervalExpression : public PhysicalExpression {
    public:
     PhysicalCalendarIntervalExpression(
         std::shared_ptr<PhysicalExpression> date_child,
-        duckdb::interval_t interval, bool interval_is_left, bool is_subtract,
+        duckdb::interval_t interval, bool is_subtract,
         std::shared_ptr<arrow::DataType> result_type)
         : PhysicalExpression(PhysicalExpressionType::CALENDAR_INTERVAL),
           date_child(std::move(date_child)),
           calendar_interval(interval),
-          interval_is_left(interval_is_left),
           is_subtract(is_subtract),
           result_type(std::move(result_type)) {}
 
@@ -1016,7 +1015,6 @@ class PhysicalCalendarIntervalExpression : public PhysicalExpression {
    private:
     std::shared_ptr<PhysicalExpression> date_child;
     duckdb::interval_t calendar_interval;
-    bool interval_is_left;
     bool is_subtract;
     const std::shared_ptr<arrow::DataType> result_type;
 };
