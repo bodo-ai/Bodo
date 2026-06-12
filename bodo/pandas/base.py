@@ -122,7 +122,7 @@ def from_pandas(df):
                 vals = pa.array(
                     [
                         None
-                        if pd.isna(t)
+                        if pd.isna(t) or t is None
                         else (t.hour * 3600 + t.minute * 60 + t.second) * 1_000_000_000
                         + t.microsecond * 1000
                         for t in df[col]
@@ -135,7 +135,7 @@ def from_pandas(df):
                 and hasattr(sample_val, "precision")
                 and hasattr(sample_val, "hour")
                 and hasattr(sample_val, "minute")
-                and not isinstance(sample_val, (_datetime.datetime, pd.Timestamp))
+                and type(sample_val).__module__.startswith("bodo")
             ):
                 # bodo.types.Time: value is int64 nanoseconds since midnight
                 vals = pa.array(

@@ -1305,19 +1305,18 @@ class BodoRexSimplify(
             
             val isYearMonth = intervalLiteral.type.sqlTypeName in listOf(SqlTypeName.INTERVAL_YEAR, SqlTypeName.INTERVAL_MONTH)
             
+            val millisToAdd = intervalDecimal.toLong() * signMultiplier
             if (isYearMonth) {
                 val intervalInt = intervalDecimal.toInt()
                 calendarVal.add(Calendar.MONTH, intervalInt * signMultiplier)
             } else {
                 // INTERVAL_DAY_TIME values are represented in milliseconds
-                val millisToAdd = intervalDecimal.toLong() * signMultiplier
                 calendarVal.timeInMillis += millisToAdd
             }
             
             // If the original was a DATE, but we added a time component (not a day multiple),
             // we must return a TIMESTAMP.
             val hasTimeComponent = if (!isYearMonth) {
-                val millisToAdd = intervalDecimal.toLong() * signMultiplier
                 millisToAdd % (24 * 60 * 60 * 1000) != 0L
             } else {
                 false
@@ -1903,6 +1902,7 @@ class BodoRexSimplify(
     }
 
     private fun isMySQLDateaddOp(e: RexNode): Boolean {
+        // TODO: Support 3 argument form of DATEADD once we support Snowflake style functions
         if (e is RexCall) {
             return (e.operator.name == "DATE_ADD" || e.operator.name == "DATEADD" || e.operator.name == "ADDDATE" || e.operator.name == "DATE_SUB" || e.operator.name == "SUBDATE") && e.operands.size == 2
         }

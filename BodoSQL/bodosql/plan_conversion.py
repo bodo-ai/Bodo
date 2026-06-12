@@ -56,6 +56,41 @@ _DATE_PART_ARROW_FUNCS = {
     "DOW": "day_of_week",
     "DOY": "day_of_year",
 }
+INTERVAL_UNIT_MAP = {
+    "YEAR": ("year", lambda n: (12 * n, 0, 0)),
+    "QUARTER": ("quarter", lambda n: (3 * n, 0, 0)),
+    "MONTH": ("month", lambda n: (n, 0, 0)),
+    "WEEK": ("week", lambda n: (0, 7 * n, 0)),
+    "DAY": ("day", lambda n: (0, n, 0)),
+    "HOUR": ("hour", lambda n: (0, 0, 3600 * n * 1_000_000_000)),
+    "MINUTE": ("minute", lambda n: (0, 0, 60 * n * 1_000_000_000)),
+    "SECOND": ("second", lambda n: (0, 0, n * 1_000_000_000)),
+    "MS": ("millisecond", lambda n: (0, 0, n * 1_000_000)),
+    "MICROSECOND": ("microsecond", lambda n: (0, 0, n * 1_000)),
+    "NANOSECOND": ("nanosecond", lambda n: (0, 0, n)),
+}
+_MYSQL_TO_STRFTIME = {
+    "%a": "%a",
+    "%b": "%b",
+    "%d": "%d",
+    "%H": "%H",
+    "%h": "%I",
+    "%I": "%I",
+    "%i": "%M",
+    "%j": "%j",
+    "%M": "%B",
+    "%m": "%m",
+    "%p": "%p",
+    "%r": "%I:%M:%S %p",
+    "%T": "%H:%M:%S",
+    "%U": "%U",
+    "%u": "%W",
+    "%W": "%A",
+    "%w": "%w",
+    "%Y": "%Y",
+    "%y": "%y",
+    "%%": "%%",
+}
 
 
 @dataclass
@@ -197,19 +232,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         num_operands = len(java_call.getOperands())
 
         # Date part functions wrapped in SqlNullPolicyFunction (e.g. WEEKDAY($0))
-        INTERVAL_UNIT_MAP = {
-            "YEAR": ("year", lambda n: (12 * n, 0, 0)),
-            "QUARTER": ("quarter", lambda n: (3 * n, 0, 0)),
-            "MONTH": ("month", lambda n: (n, 0, 0)),
-            "WEEK": ("week", lambda n: (0, 7 * n, 0)),
-            "DAY": ("day", lambda n: (0, n, 0)),
-            "HOUR": ("hour", lambda n: (0, 0, 3600 * n * 1_000_000_000)),
-            "MINUTE": ("minute", lambda n: (0, 0, 60 * n * 1_000_000_000)),
-            "SECOND": ("second", lambda n: (0, 0, n * 1_000_000_000)),
-            "MS": ("millisecond", lambda n: (0, 0, n * 1_000_000)),
-            "MICROSECOND": ("microsecond", lambda n: (0, 0, n * 1_000)),
-            "NANOSECOND": ("nanosecond", lambda n: (0, 0, n)),
-        }
         if func_name in _DATE_PART_ARROW_FUNCS and num_operands == 1:
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[0], input_plan
@@ -252,30 +274,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             mysql_fmt = str(java_call.getOperands()[1].toString())
             if mysql_fmt.startswith("'") and mysql_fmt.endswith("'"):
                 mysql_fmt = mysql_fmt[1:-1]
-            _MYSQL_TO_PYTHON_FMT_2 = {
-                "%a": "%a",
-                "%b": "%b",
-                "%d": "%d",
-                "%H": "%H",
-                "%h": "%b",
-                "%I": "%I",
-                "%i": "%M",
-                "%j": "%j",
-                "%M": "%B",
-                "%m": "%m",
-                "%p": "%p",
-                "%r": "%X %p",
-                "%S": "%S",
-                "%s": "%S",
-                "%T": "%X",
-                "%U": "%U",
-                "%u": "%W",
-                "%W": "%A",
-                "%w": "%w",
-                "%Y": "%Y",
-                "%y": "%y",
-                "%%": "%%",
-            }
             # Detected format issues that need post-processing (currently none, as unsupported ones raise errors)
             py_fmt_parts = []
             i = 0
@@ -287,8 +285,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         if i + length > len(mysql_fmt):
                             continue
                         spec = mysql_fmt[i : i + length]
-                        if spec in _MYSQL_TO_PYTHON_FMT_2:
-                            py_fmt_parts.append(_MYSQL_TO_PYTHON_FMT_2[spec])
+                        if spec in _MYSQL_TO_STRFTIME:
+                            py_fmt_parts.append(_MYSQL_TO_STRFTIME[spec])
                             matched = True
                             i += length
                             break
@@ -379,7 +377,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "MONTH": ("month", 1, 0),
                 "QUARTER": ("quarter", 3, 0),
                 "YEAR": ("year", 12, 0),
-                "WEEK": ("week", 0, 7),  # Snowflake weeks end on Saturday
+                "WEEK": ("week", 0, 6),  # Snowflake weeks end on Saturday
             }
             assert unit_str in LAST_DAY_UNITS, f"Unsupported LAST_DAY unit: {unit_str}"
             empty_data = date_expr.empty_data
@@ -388,31 +386,30 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # Maps unit -> (floor_temporal_unit, MonthDayNano months, MonthDayNano days)
             # Note: WEEK uses days=7; others use months; all subtract 1 day at the end
 
-            if unit_str in LAST_DAY_UNITS:
-                floor_unit, interval_months, interval_days = LAST_DAY_UNITS[unit_str]
+            floor_unit, interval_months, interval_days = LAST_DAY_UNITS[unit_str]
 
-                truncated = ArrowScalarFuncExpression(
-                    empty_data, [date_expr], "floor_temporal", (1, floor_unit)
-                )
-                next_period = ArithOpExpression(
+            truncated = ArrowScalarFuncExpression(
+                empty_data, [date_expr], "floor_temporal", (1, floor_unit)
+            )
+            next_period = ArithOpExpression(
+                empty_data,
+                truncated,
+                ConstantExpression(
                     empty_data,
-                    truncated,
-                    ConstantExpression(
-                        empty_data,
-                        input_plan,
-                        ("MonthDayNanoInterval", interval_months, interval_days, 0),
-                    ),
-                    "__add__",
-                )
-                last_day = ArithOpExpression(
-                    empty_data,
-                    next_period,
-                    ConstantExpression(
-                        empty_data, input_plan, ("MonthDayNanoInterval", 0, 1, 0)
-                    ),
-                    "__sub__",
-                )
-                return last_day
+                    input_plan,
+                    ("MonthDayNanoInterval", interval_months, interval_days, 0),
+                ),
+                "__add__",
+            )
+            last_day = ArithOpExpression(
+                empty_data,
+                next_period,
+                ConstantExpression(
+                    empty_data, input_plan, ("MonthDayNanoInterval", 0, 1, 0)
+                ),
+                "__sub__",
+            )
+            return last_day
 
         # ADD_MONTHS(date, months) -> date + months * INTERVAL '1' MONTH
         if func_name == "ADD_MONTHS" and num_operands == 2:
@@ -535,10 +532,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                             one_day_expr,
                             "__mul__",
                         )
-                    out_empty = (
-                        date_expr.empty_data.iloc[:, 0]
-                        - interval_expr.empty_data.iloc[:, 0]
-                    )
+                    out_empty = date_expr.empty_data - interval_expr.empty_data
                     return ArithOpExpression(
                         out_empty, date_expr, interval_expr, "__sub__"
                     )
@@ -1023,11 +1017,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if func_name == "NULLIF" and len(op_exprs) == 2:
             return ArrowScalarFuncExpression(
                 op_exprs[0].empty_data, op_exprs, "nullif", ()
-            )
-
-        if func_name == "TIME_SLICE":
-            raise NotImplementedError(
-                f"{func_name} requires C++ backend arrow compute function registration"
             )
 
         # If we didn't match a supported basic function, fall through to NotImplemented
