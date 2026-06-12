@@ -1673,19 +1673,57 @@ def scalarOutputNACheck(out, dtype):
 
 
 def df_to_pa_schema(df):
-    """Convert a small Pandas dataframe to a pyarrow schema.
-    Stop pyarrow from encoding columns as dictionaries."""
+    """
+    Convert a small pandas DataFrame to a pyarrow.Schema while preventing
+    pyarrow from *automatically* dictionary-encoding columns.
 
-    normal_schema = pa.Schema.from_pandas(df)
+    Behavior:
+    - If pyarrow inferred a dictionary field for column X but the original
+      pandas Series X is backed by an Arrow DictionaryArray, keep the dictionary.
+    - If pyarrow inferred a dictionary field for column X but the original
+      pandas Series X is NOT a DictionaryArray, replace the field with the
+      dictionary's value_type (i.e., decode the dictionary in the schema).
+    - Non-dictionary fields are preserved unchanged.
+
+    """
+
+    # Let pyarrow infer a schema from the pandas sample
+    normal_schema = pa.Schema.from_pandas(df, preserve_index=False)
+
     new_fields = []
     for f in normal_schema:
-        if pa.types.is_dictionary(f.type):
-            new_fields.append(
-                pa.field(
-                    f.name, f.type.value_type, nullable=f.nullable, metadata=f.metadata
-                )
-            )
-        else:
+        if not pa.types.is_dictionary(f.type):
+            # not dictionary-encoded by inference -> keep as-is
             new_fields.append(f)
+            continue
+
+        # f.type is a dictionary type inferred by Arrow
+        col_name = f.name
+
+        # Try to inspect the pandas Series' underlying Arrow array type.
+        # If the Series is Arrow-backed, pandas exposes .array._pa_array.
+        original_is_dictionary = False
+        try:
+            series = df[col_name]
+            # Some pandas versions expose the Arrow array at series.array._pa_array
+            pa_array = getattr(series.array, "_pa_array", None)
+            if pa_array is not None:
+                original_is_dictionary = pa.types.is_dictionary(pa_array.type)
+        except Exception:
+            # If anything goes wrong inspecting the Series, assume it's not dictionary-backed.
+            original_is_dictionary = False
+
+        if original_is_dictionary:
+            # The incoming df already had a dictionary Arrow array for this column:
+            # preserve the dictionary encoding in the schema.
+            new_fields.append(f)
+        else:
+            # Arrow inferred a dictionary but the original Series was not dictionary-backed:
+            # replace the field with the dictionary's value_type to avoid automatic encoding.
+            value_type = f.type.value_type
+            new_fields.append(
+                pa.field(f.name, value_type, nullable=f.nullable, metadata=f.metadata)
+            )
+
     target_schema = pa.schema(new_fields, metadata=normal_schema.metadata)
     return target_schema
