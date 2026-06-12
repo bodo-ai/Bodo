@@ -4866,7 +4866,6 @@ def test_current_date(fn_name, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 def test_months_between(date_df, memory_leak_check):
     query = "SELECT MONTHS_BETWEEN(B, A) from table1"
 
