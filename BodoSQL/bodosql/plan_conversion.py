@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import py4j
 import pyarrow as pa
+import pyarrow.compute as pc
 
 import bodo
 import bodo.pandas as bd
@@ -622,10 +623,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
         if func_name in ("LOCALTIME", "CURRENT_TIME"):
             curr_ts = pd.Timestamp.now()
+            curr_time = pc.cast(curr_ts, pa.time64("ns"))
             dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                [curr_time], dtype=pd.ArrowDtype(pa.time64("ns"))
             )
-            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+            return ConstantExpression(dummy_empty_data, input_plan, curr_time)
 
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
