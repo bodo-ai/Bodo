@@ -1675,9 +1675,10 @@ def scalarOutputNACheck(out, dtype):
 def df_to_pa_schema(df):
     """Convert a small Pandas dataframe to a pyarrow schema.
     Stop pyarrow from encoding columns as dictionaries."""
-    table = pa.Table.from_pandas(df)
+
+    normal_schema = pa.Schema.from_pandas(df)
     new_fields = []
-    for f in table.schema:
+    for f in normal_schema:
         if pa.types.is_dictionary(f.type):
             new_fields.append(
                 pa.field(
@@ -1686,5 +1687,5 @@ def df_to_pa_schema(df):
             )
         else:
             new_fields.append(f)
-    target_schema = pa.schema(new_fields)
+    target_schema = pa.schema(new_fields, metadata=normal_schema.metadata)
     return target_schema
