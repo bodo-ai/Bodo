@@ -104,7 +104,7 @@ jobs:
           BUILD_WITH_V8: ${{ (inputs.platform-build == true) && '1' || '0' }}
 
       - name: Convert Build Path (Windows Only)
-        if: ${{ inputs.runner-id == 'windows-latest' }}
+        if: ${{ runner.os == 'Windows' }}
         run: |
            echo "CONDA_BLD_PATH=`cygpath -w $CONDA_BLD_PATH`" >> $GITHUB_ENV 
         shell: bash
@@ -127,7 +127,7 @@ jobs:
           IS_RELEASE: ${{ inputs.is-release }}
           IS_GPU_BUILD: ${{ inputs.gpu-build }}
           ARTIFACTORY_CHANNEL: ${{ (inputs.platform-build == true && inputs.is-release == true) && 'bodo.ai-platform' || 'SKIP_ARTIFACTORY' }}
-          OS_DIR: ${{ format('{0}', (inputs.runner-id == 'macos-13') && 'osx-64' || (inputs.runner-id == 'macos-14') && 'osx-arm64' || (inputs.runner-id == 'windows-latest') && 'win-64' || 'linux-64') }}
+          OS_DIR: ${{ format('{0}', (inputs.runner-id == 'macos-13') && 'osx-64' || (inputs.runner-id == 'macos-14') && 'osx-arm64' || (runner.os == 'Windows') && 'win-64' || 'linux-64') }}
           USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
           TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
           ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
