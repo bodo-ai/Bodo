@@ -650,9 +650,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "SYSTIMESTAMP",
             "NOW",
         ):
-            curr_ts = pd.Timestamp.now()
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            curr_ts = pd.Timestamp.now(tz=tz)
             dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
             )
             return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
 
