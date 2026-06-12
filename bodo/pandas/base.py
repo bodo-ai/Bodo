@@ -60,6 +60,7 @@ from bodo.pandas.utils import (
     BodoLibNotImplementedException,
     arrow_to_empty_df,
     check_args_fallback,
+    df_to_pa_schema,
     ensure_datetime64ns,
     get_scalar_udf_result_type,
     wrap_module_functions_and_methods,
@@ -111,7 +112,7 @@ def from_pandas(df):
             df[col] = df[col].apply(lambda x: x.get_value() if x is not None else None)
 
     try:
-        pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
+        pa_schema = df_to_pa_schema(df.iloc[:sample_size])
     except pa.lib.ArrowInvalid as e:
         # TODO: add specific unsupported columns to message.
         raise BodoLibNotImplementedException(
@@ -208,7 +209,6 @@ def _empty_like(val):
     and returns typed output.
     """
     import numpy as np
-    import pyarrow as pa
 
     if type(val) not in (
         BodoDataFrame,
@@ -245,7 +245,7 @@ def _empty_like(val):
         val = val.reset_index(drop=True)
 
     # Reuse arrow_to_empty_df to make sure details like Index handling are correct
-    out = arrow_to_empty_df(pa.Schema.from_pandas(val))
+    out = arrow_to_empty_df(df_to_pa_schema(val))
 
     for cname in cat_cols:
         out[cname] = original_val[cname].iloc[:0]

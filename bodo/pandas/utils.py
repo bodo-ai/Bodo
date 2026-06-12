@@ -1117,7 +1117,7 @@ def arrow_table_to_pandas(arrow_table, arrow_schema=None, use_arrow_dtypes=True)
 def _get_empty_series_arrow(ser: pd.Series) -> pd.Series:
     """Create an empty Series like ser possibly converting some dtype to use
     pyarrow"""
-    empty_df = arrow_to_empty_df(pa.Schema.from_pandas(ser.to_frame()))
+    empty_df = arrow_to_empty_df(df_to_pa_schema(ser.to_frame()))
     empty_series = empty_df.squeeze()
     empty_series.name = ser.name
     return empty_series
@@ -1670,3 +1670,21 @@ def scalarOutputNACheck(out, dtype):
             # plain NumPy ints/bools can't hold NA, pandas promotes to float NaN
             return np.nan
     return out
+
+
+def df_to_pa_schema(df):
+    """Convert a small Pandas dataframe to a pyarrow schema.
+    Stop pyarrow from encoding columns as dictionaries."""
+    table = pa.Table.from_pandas(df)
+    new_fields = []
+    for f in table.schema:
+        if pa.types.is_dictionary(f.type):
+            new_fields.append(
+                pa.field(
+                    f.name, f.type.value_type, nullable=f.nullable, metadata=f.metadata
+                )
+            )
+        else:
+            new_fields.append(f)
+    target_schema = pa.schema(new_fields)
+    return target_schema

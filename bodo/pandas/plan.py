@@ -16,6 +16,7 @@ from bodo.pandas.utils import (
     arrow_to_empty_df,
     cpp_table_to_df,
     cpp_table_to_series,
+    df_to_pa_schema,
     get_n_index_arrays,
     wrap_plan,
 )
@@ -62,12 +63,12 @@ class LazyPlan:
             name = BODO_NONE_DUMMY if empty_data.name is None else empty_data.name
             self.empty_data = empty_data.to_frame(name=name)
 
-        self.pa_schema = pa.Schema.from_pandas(self.empty_data)
+        self.pa_schema = df_to_pa_schema(self.empty_data)
 
     def _update_column_names(self, new_cols):
         """Update column names in empty_data and pa_schema."""
         self.empty_data.columns = new_cols
-        self.pa_schema = pa.Schema.from_pandas(self.empty_data)
+        self.pa_schema = df_to_pa_schema(self.empty_data)
 
     def __str__(self):
         args = self.args
