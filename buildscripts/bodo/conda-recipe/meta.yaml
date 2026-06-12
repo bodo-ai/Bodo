@@ -46,7 +46,7 @@ requirements:
     - {{ compiler('cxx') }}
     - sccache
     - mold  # [linux]
-    - cmake
+    - cmake <4.0,>=3.23
     - make
     - ninja
     - {{ compiler('cuda') }}  # [gpu]
