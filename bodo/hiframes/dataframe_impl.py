@@ -6206,6 +6206,9 @@ def _parse_query_expr(
     cleaned_columns,
     index_name=None,
     join_cleaned_cols=(),
+    math__str__func=None,  # used by query() in dataframe lib
+    op__str__=None,  # used by query() in dataframe lib
+    undefined_variable_handler=None,  # used by query() in dataframe lib
 ):
     """Parses expression string for DataFrame.query() call handling.
     Patches Pandas query expr parsing code to avoid evaluating values during parsing.
@@ -6275,7 +6278,7 @@ def _parse_query_expr(
         value = node.value
         sentinel = pandas.core.computation.ops.LOCAL_TAG
 
-        if attr in ("str", "dt"):
+        if attr in ("str", "dt", "cat", "sparse"):
             # check the case where df.column.str where column is not in df
             try:
                 value_str = str(self.visit(value))
@@ -6298,7 +6301,7 @@ def _parse_query_expr(
             name = name[len(sentinel) :]
 
         # make local variable in case of C.str
-        if attr in ("str", "dt"):
+        if attr in ("str", "dt", "cat", "sparse"):
             orig_col_name = columns[cleaned_columns.index(value_str)]
             used_cols[orig_col_name] = value_str
             self.env.scope[name] = 0
@@ -6318,49 +6321,54 @@ def _parse_query_expr(
 
     # handle math calls
     def math__str__(self):
-        """makes math calls compilable by adding "np." and Series functions"""
-        # avoid change if it is a dummy attribute call
-        if self.op in new_funcs:
-            return pandas.io.formats.printing.pprint_thing(
-                "{}({})".format(self.op, ",".join(map(str, self.operands)))
-            )
+        if math__str__func is not None:
+            return math__str__func(self, new_funcs)
+        else:
+            """makes math calls compilable by adding "np." and Series functions"""
+            # avoid change if it is a dummy attribute call
+            if self.op in new_funcs:
+                return pandas.io.formats.printing.pprint_thing(
+                    "{}({})".format(self.op, ",".join(map(str, self.operands)))
+                )
 
-        op = f"np.{self.op}"
-        ind = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({str(self.operands[0])}), 1, None)"
-        return pandas.io.formats.printing.pprint_thing(
-            "bodo.hiframes.pd_series_ext.init_series({}({}), {})".format(
-                op,
-                ",".join(
-                    f"bodo.hiframes.pd_series_ext.get_series_data({str(a)})"
-                    for a in self.operands
-                ),
-                ind,
-            )
-        )
-
-    # replace 'in' operator with dummy function to convert to prange later
-    def op__str__(self):
-        if len(self.operands) == 1:
+            op = f"np.{self.op}"
+            ind = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({str(self.operands[0])}), 1, None)"
             return pandas.io.formats.printing.pprint_thing(
-                f"{self.op} ({pandas.io.formats.printing.pprint_thing(self.operands[0])})"
-            )
-
-        parened = (
-            f"({pandas.io.formats.printing.pprint_thing(opr)})" for opr in self.operands
-        )
-        if self.op == "in":
-            return pandas.io.formats.printing.pprint_thing(
-                "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(
-                    ", ".join(parened)
+                "bodo.hiframes.pd_series_ext.init_series({}({}), {})".format(
+                    op,
+                    ",".join(
+                        f"bodo.hiframes.pd_series_ext.get_series_data({str(a)})"
+                        for a in self.operands
+                    ),
+                    ind,
                 )
             )
-        if self.op == "not in":
-            return pandas.io.formats.printing.pprint_thing(
-                "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(
-                    ", ".join(parened)
+
+    if op__str__ is None:
+        # replace 'in' operator with dummy function to convert to prange later
+        def op__str__(self):
+            if len(self.operands) == 1:
+                return pandas.io.formats.printing.pprint_thing(
+                    f"{self.op} ({pandas.io.formats.printing.pprint_thing(self.operands[0])})"
                 )
+
+            parened = (
+                f"({pandas.io.formats.printing.pprint_thing(opr)})"
+                for opr in self.operands
             )
-        return pandas.io.formats.printing.pprint_thing(f" {self.op} ".join(parened))
+            if self.op == "in":
+                return pandas.io.formats.printing.pprint_thing(
+                    "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(
+                        ", ".join(parened)
+                    )
+                )
+            if self.op == "not in":
+                return pandas.io.formats.printing.pprint_thing(
+                    "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(
+                        ", ".join(parened)
+                    )
+                )
+            return pandas.io.formats.printing.pprint_thing(f" {self.op} ".join(parened))
 
     saved_rewrite_membership_op = (
         pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op  # type: ignore
@@ -6404,21 +6412,23 @@ def _parse_query_expr(
         parsed_expr_str = str(parsed_expr)
     except pandas.errors.UndefinedVariableError as e:
         # catch undefined variable error
-
-        if (
-            not is_overload_none(index_name)
-            and get_overload_const_str(index_name) == e.args[0].split("'")[1]
-        ):
-            # currently do not support named index appears in expr
-            raise BodoError(
-                "df.query(): Refering to named"
-                f" index ('{get_overload_const_str(index_name)}') by name is not supported"
-            )
+        if undefined_variable_handler is not None:
+            undefined_variable_handler(e)
         else:
-            # throw other errors
-            # this includes: columns does not exist in dataframe,
-            #                undefined local variable using @
-            raise BodoError(f"df.query(): undefined variable, {e}")
+            if (
+                not is_overload_none(index_name)
+                and get_overload_const_str(index_name) == e.args[0].split("'")[1]
+            ):
+                # currently do not support named index appears in expr
+                raise BodoError(
+                    "df.query(): Refering to named"
+                    f" index ('{get_overload_const_str(index_name)}') by name is not supported"
+                )
+            else:
+                # throw other errors
+                # this includes: columns does not exist in dataframe,
+                #                undefined local variable using @
+                raise BodoError(f"df.query(): undefined variable, {e}")
     finally:
         pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (  # type: ignore
             saved_rewrite_membership_op

@@ -275,6 +275,7 @@ def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
 # multiple processes
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q16(tpch_data, spark_info, memory_leak_check):
     BRAND = "BRAND#45"
     TYPE = "MEDIUM POLISHED"

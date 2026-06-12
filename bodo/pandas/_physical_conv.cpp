@@ -615,6 +615,13 @@ duckdb::vector<duckdb::idx_t> gen_split_filter_projection_map(
  */
 std::unique_ptr<duckdb::LogicalOperator> SplitNonEquiFromComparisonJoin(
     duckdb::LogicalComparisonJoin& comp_join) {
+    // The code below only does a correct conversion for inner joins.
+    // All other join types will use our normal machinery which we know
+    // has performance issues on occasion.
+    if (comp_join.join_type != duckdb::JoinType::INNER) {
+        return nullptr;
+    }
+
     unsigned num_equi_conds = 0;
     // Extract non-equi expressions and remove them from comp_join.conditions
     duckdb::vector<duckdb::JoinCondition> non_equi_exprs =
