@@ -255,10 +255,6 @@ jobs:
           # create Pandas manager states for testing that are not fully functional.
           BODO_ENABLE_DATAFRAME_LIBRARY: ${{ endsWith(inputs.test-type, 'spawn') && '0' || '1' }}
           BODO_ENABLE_TEST_DATAFRAME_LIBRARY: ${{ inputs.test-type == 'df_lib' && '1' || '0' }}
-          # BodoSQL C++ Backend
-          BODOSQL_CPP_BACKEND: 1
-          BODOSQL_VERBOSE_CPP_BACKEND: 1
-          BODOSQL_CPP_BACKEND_FALLBACK: 1
           # For caching tests we need to update the location of the decryption file.
           # We set the absolute path as an environment variable.
           BODO_TRACING_DECRYPTION_FILE_PATH: ${{ github.workspace }}/buildscripts/decompress_traces.py
