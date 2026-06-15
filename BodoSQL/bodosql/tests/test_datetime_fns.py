@@ -508,6 +508,10 @@ def test_getdate(query, memory_leak_check):
     )
 
 
+@pytest.mark.skipif(
+    bodo.spawn,
+    reason="Test relies on checking IR for dist_reduce, which is not supported in spawn",
+)
 def test_getdate_dist_len(memory_leak_check):
     """Make sure GETDATE() doesn't create a distributed reduction (to avoid streaming
     hang)
