@@ -1094,7 +1094,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[1]
 
             ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", str)
+            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
 
             out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
@@ -1106,7 +1106,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[1]
 
             ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", str)
+            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
 
             out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(

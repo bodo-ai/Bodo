@@ -226,7 +226,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum src2 =
         ConvertExprResultToDatum(right_res, "do_arrow_compute right");
     arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(src1, src2, comparator);
+        do_arrow_compute_binary(src1, src2, comparator, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
@@ -237,7 +237,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum src2 =
         ConvertExprResultToDatum(right_res, "do_arrow_compute right");
     arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(left_res, src2, comparator);
+        do_arrow_compute_binary(left_res, src2, comparator, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
@@ -248,7 +248,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
     arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(src1, right_res, comparator);
+        do_arrow_compute_binary(src1, right_res, comparator, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
