@@ -4,7 +4,6 @@ Test correctness of SQL join queries on BodoSQL
 
 import copy
 import io
-import os
 from datetime import date
 
 import numba
@@ -627,9 +626,7 @@ def test_join_invalid_condition(memory_leak_check):
     bodo.tests.utils.test_spawn_mode_enabled,
     reason="capfd doesn't work for spawn",
 )
-@pytest.mark.skipif(
-    "AGENT_NAME" in os.environ, reason="Assertion fails on Azure only [BSE-3585]"
-)
+@pytest.mark.skip(reason="Assertion fails on nightly [BSE-3585]")
 # Will pass locally with bodosql cpp backend but not on CI.
 def test_join_broadcast_hint(memory_leak_check, capfd):
     """

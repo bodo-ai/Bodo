@@ -29,6 +29,9 @@
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
 
+// Converts a string unit to the corresponding Arrow CalendarUnit.
+arrow::compute::CalendarUnit getArrowCalendarUnit(const char *unit_str);
+
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
  *        Physical expression tree.
@@ -994,12 +997,11 @@ class PhysicalCalendarIntervalExpression : public PhysicalExpression {
    public:
     PhysicalCalendarIntervalExpression(
         std::shared_ptr<PhysicalExpression> date_child,
-        duckdb::interval_t interval, bool interval_is_left, bool is_subtract,
+        duckdb::interval_t interval, bool is_subtract,
         std::shared_ptr<arrow::DataType> result_type)
         : PhysicalExpression(PhysicalExpressionType::CALENDAR_INTERVAL),
           date_child(std::move(date_child)),
           calendar_interval(interval),
-          interval_is_left(interval_is_left),
           is_subtract(is_subtract),
           result_type(std::move(result_type)) {}
 
@@ -1016,7 +1018,6 @@ class PhysicalCalendarIntervalExpression : public PhysicalExpression {
    private:
     std::shared_ptr<PhysicalExpression> date_child;
     duckdb::interval_t calendar_interval;
-    bool interval_is_left;
     bool is_subtract;
     const std::shared_ptr<arrow::DataType> result_type;
 };
@@ -1413,6 +1414,14 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 scalar_func_data.arrow_func_name.c_str());
             arrow::compute::StrftimeOptions opts(fmt_str);
             result = do_arrow_compute_unary(res, "strftime", &opts);
+        } else if (scalar_func_data.arrow_func_name == "floor_temporal") {
+            const char *fmt_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+            // NOTE: setting multiple to 1 for BodoSQL DATE_TRUNC use upstream
+            arrow::compute::RoundTemporalOptions opts(
+                1, getArrowCalendarUnit(fmt_str));
+            result = do_arrow_compute_unary(res, "floor_temporal", &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);

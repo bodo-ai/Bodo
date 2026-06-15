@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import py4j
 import pyarrow as pa
+import pyarrow.compute as pc
 
 import bodo
 import bodo.pandas as bd
@@ -194,7 +195,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
-    _DOW_NAMES = {"DAYOFWEEK", "WEEKDAY", "DOW"}
+    _DOW_NAMES = {"DAYOFWEEK", "DOW"}
 
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
@@ -271,8 +272,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
+            # NOTE: backend for floor_temporal sets multiple to 1
             return ArrowScalarFuncExpression(
-                input.empty_data, [input], "floor_temporal", (1, arrow_unit)
+                input.empty_data, [input], "floor_temporal", (arrow_unit,)
             )
 
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
@@ -294,9 +296,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # DATEADD(FLAG(unit), amount, date) from date + int arithmetic.
                 # Only handle when first operand is an interval qualifier (FLAG).
                 first_op_str = str(java_call.getOperands()[0].toString())
-                if not first_op_str.startswith("FLAG"):
+                if first_op_str != "FLAG(DAY)":
                     raise NotImplementedError(
-                        "DATEADD with 3 string operands not supported in "
+                        "DATEADD with 3 string operands or not day unit not supported in "
                         "C++ backend yet"
                     )
                 # In Snowflake, date + integer always means date + N days.
@@ -306,7 +308,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 date_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[2], input_plan
                 )
-                if hasattr(amount_expr, "value"):
+                if isinstance(amount_expr, ConstantExpression):
                     interval_val = pd.Timedelta(days=int(amount_expr.value))
                     dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
                     interval_expr = ConstantExpression(
@@ -569,7 +571,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
-        if func_name in ("DAYOFWEEK", "WEEKDAY", "DOW"):
+        if func_name in ("DAYOFWEEK", "DOW"):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             dow_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
             # Arrow: 0=Monday. Snowflake: 0=Sunday. Convert: (dow+1)%7
@@ -621,10 +623,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
         if func_name in ("LOCALTIME", "CURRENT_TIME"):
             curr_ts = pd.Timestamp.now()
+            curr_time = pc.cast(curr_ts, pa.time64("ns"))
             dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                [curr_time], dtype=pd.ArrowDtype(pa.time64("ns"))
             )
-            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+            return ConstantExpression(dummy_empty_data, input_plan, curr_time)
 
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
@@ -649,9 +652,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "SYSTIMESTAMP",
             "NOW",
         ):
-            curr_ts = pd.Timestamp.now()
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            curr_ts = pd.Timestamp.now(tz=tz)
             dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
             )
             return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
 
@@ -835,6 +839,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name == "SUBSTRING" and len(op_exprs) == 3:
+            # See:
+            # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
+            # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
             src = op_exprs[0]
             start_expr = op_exprs[1]
             if not isinstance(start_expr, ConstantExpression):
@@ -842,12 +849,19 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[2]
             if not isinstance(len_expr, ConstantExpression):
                 raise ValueError("len_expr not a ConstantExpression")
+            start = start_expr.value
+            length = len_expr.value
+            if start <= 0 or length < 0:
+                raise ValueError(
+                    "negative or zero start or negative length not supported in SUBSTRING in C++ backend yet"
+                )
+            start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
             out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
                 out_empty,
                 [src],
                 "utf8_slice_codeunits",
-                (start_expr.value, len_expr.value, 1),
+                (start, start + length, 1),
             )
 
     if operator_class_name == "SqlLikeOperator":
