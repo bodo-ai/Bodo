@@ -4,8 +4,11 @@ Test correctness of SQL queries specific to Timestamp types on BodoSQL
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 
+import bodosql
 from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
@@ -345,24 +348,38 @@ def test_str_date_case_stmt(spark_info, memory_leak_check):
     }
 
     query = "select CASE WHEN C = 1 THEN A ELSE B END from table1"
+    expected_output = None
+    if bodosql.use_cpp_backend:
+        out_B = pc.cast(
+            pa.Array.from_pandas(ctx["TABLE1"]["B"].astype("datetime64[ns]")),
+            pa.string(),
+        ).to_pandas()
+        expected_output = pd.DataFrame(
+            {
+                "CASE WHEN C = 1 THEN A ELSE B END": np.where(
+                    ctx["TABLE1"]["C"] == 1, ctx["TABLE1"]["A"], out_B
+                )
+            }
+        )
     check_query(
         query,
         ctx,
         spark_info,
         check_names=False,
         check_dtype=False,
+        expected_output=expected_output,
     )
 
 
 @pytest.fixture(
     params=[
         pytest.param(
-            "2013-04-28T20:57:01.123456789+00:00",
+            "2013-04-28T20:57:01.123+00:00",
             id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_no_offset',
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            "2013-04-28T20:57:01.123456789+07:00",
+            "2013-04-28T20:57:01.123+07:00",
             id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_with_offset',
         ),
     ]

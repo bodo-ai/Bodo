@@ -53,7 +53,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         return left_child, right_child
 
     def visit_in(
-        self, term: BoundTerm[Any], literals: set[Any]
+        self, term: BoundTerm, literals: set[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         from pyiceberg.io.pyarrow import schema_to_pyarrow
 
@@ -63,7 +63,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         return f"pc.field('{{{field_name}}}').isin(f0)", [("f0", array_literals)]
 
     def visit_not_in(
-        self, term: BoundTerm[Any], literals: set[Any]
+        self, term: BoundTerm, literals: set[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         from pyiceberg.io.pyarrow import schema_to_pyarrow
 
@@ -72,22 +72,22 @@ class _ConvertToArrowExpressionStringAndScalar(
         array_literals = pa.array(literals, type=type)
         return f"~pc.field('{{{field_name}}}').isin(f0)", [("f0", array_literals)]
 
-    def visit_is_nan(self, term: BoundTerm[Any]) -> tuple[str, list[tuple[str, Any]]]:
+    def visit_is_nan(self, term: BoundTerm) -> tuple[str, list[tuple[str, Any]]]:
         ref = pc.field(term.ref().field.name)
         return f"pc.is_nan('{{{ref}}}')", []
 
-    def visit_not_nan(self, term: BoundTerm[Any]) -> tuple[str, list[tuple[str, Any]]]:
+    def visit_not_nan(self, term: BoundTerm) -> tuple[str, list[tuple[str, Any]]]:
         ref = pc.field(term.ref().field.name)
         return f"~pc.is_nan('{{{ref}}}')", []
 
-    def visit_is_null(self, term: BoundTerm[Any]) -> tuple[str, list[tuple[str, Any]]]:
+    def visit_is_null(self, term: BoundTerm) -> tuple[str, list[tuple[str, Any]]]:
         return f"pc.field('{{{term.ref().field.name}}}').is_null(nan_is_null=False)", []
 
-    def visit_not_null(self, term: BoundTerm[Any]) -> tuple[str, list[tuple[str, Any]]]:
+    def visit_not_null(self, term: BoundTerm) -> tuple[str, list[tuple[str, Any]]]:
         return f"pc.field('{{{term.ref().field.name}}}').is_valid()", []
 
     def visit_equal(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         from pyiceberg.io.pyarrow import _convert_scalar
 
@@ -95,7 +95,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         return f"pc.field('{{{term.ref().field.name}}}') == f0", [("f0", scalar)]
 
     def visit_not_equal(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         from pyiceberg.io.pyarrow import _convert_scalar
 
@@ -103,7 +103,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         return f"pc.field('{{{term.ref().field.name}}}') != f0", [("f0", scalar)]
 
     def visit_greater_than_or_equal(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         from pyiceberg.io.pyarrow import _convert_scalar
 
@@ -111,7 +111,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         return f"pc.field('{{{term.ref().field.name}}}') >= f0", [("f0", scalar)]
 
     def visit_greater_than(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         from pyiceberg.io.pyarrow import _convert_scalar
 
@@ -119,7 +119,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         return f"pc.field('{{{term.ref().field.name}}}') > f0", [("f0", scalar)]
 
     def visit_less_than(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         from pyiceberg.io.pyarrow import _convert_scalar
 
@@ -127,7 +127,7 @@ class _ConvertToArrowExpressionStringAndScalar(
         return f"pc.field('{{{term.ref().field.name}}}') < f0", [("f0", scalar)]
 
     def visit_less_than_or_equal(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         from pyiceberg.io.pyarrow import _convert_scalar
 
@@ -135,14 +135,14 @@ class _ConvertToArrowExpressionStringAndScalar(
         return f"pc.field('{{{term.ref().field.name}}}') <= f0", [("f0", scalar)]
 
     def visit_starts_with(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         return f"pc.starts_with(pc.field('{{{term.ref().field.name}}}'), f0)", [
             ("f0", literal.value)
         ]
 
     def visit_not_starts_with(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple[str, list[tuple[str, Any]]]:
         return f"~pc.starts_with(pc.field('{{{term.ref().field.name}}}'), f0)", [
             ("f0", literal.value)
@@ -187,7 +187,7 @@ class _ConvertToCudfAst(BoundBooleanExpressionVisitor[tuple]):
     schema evolution, and Python native values for literals.
     """
 
-    def visit_in(self, term: BoundTerm[Any], literals: set[Any]) -> tuple:
+    def visit_in(self, term: BoundTerm, literals: set[Any]) -> tuple:
         from pyiceberg.io.pyarrow import _convert_scalar, schema_to_pyarrow
 
         schema_to_pyarrow(term.ref().field.field_type)
@@ -199,7 +199,7 @@ class _ConvertToCudfAst(BoundBooleanExpressionVisitor[tuple]):
             converted.append(scalar.as_py())
         return ("in", field_id, converted)
 
-    def visit_not_in(self, term: BoundTerm[Any], literals: set[Any]) -> tuple:
+    def visit_not_in(self, term: BoundTerm, literals: set[Any]) -> tuple:
         from pyiceberg.io.pyarrow import _convert_scalar, schema_to_pyarrow
 
         schema_to_pyarrow(term.ref().field.field_type)
@@ -210,67 +210,63 @@ class _ConvertToCudfAst(BoundBooleanExpressionVisitor[tuple]):
             converted.append(scalar.as_py())
         return ("not_in", field_id, converted)
 
-    def visit_is_nan(self, term: BoundTerm[Any]) -> tuple:
+    def visit_is_nan(self, term: BoundTerm) -> tuple:
         # Not supported by cuDF AST, skip (no-op)
         return ("true",)
 
-    def visit_not_nan(self, term: BoundTerm[Any]) -> tuple:
+    def visit_not_nan(self, term: BoundTerm) -> tuple:
         # Not supported by cuDF AST, skip (no-op)
         return ("true",)
 
-    def visit_is_null(self, term: BoundTerm[Any]) -> tuple:
+    def visit_is_null(self, term: BoundTerm) -> tuple:
         return ("is_null", term.ref().field.field_id)
 
-    def visit_not_null(self, term: BoundTerm[Any]) -> tuple:
+    def visit_not_null(self, term: BoundTerm) -> tuple:
         return ("is_not_null", term.ref().field.field_id)
 
-    def visit_equal(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+    def visit_equal(self, term: BoundTerm, literal: Literal[Any]) -> tuple:
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
         return ("eq", term.ref().field.field_id, scalar.as_py())
 
-    def visit_not_equal(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+    def visit_not_equal(self, term: BoundTerm, literal: Literal[Any]) -> tuple:
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
         return ("neq", term.ref().field.field_id, scalar.as_py())
 
     def visit_greater_than_or_equal(
-        self, term: BoundTerm[Any], literal: Literal[Any]
+        self, term: BoundTerm, literal: Literal[Any]
     ) -> tuple:
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
         return ("gte", term.ref().field.field_id, scalar.as_py())
 
-    def visit_greater_than(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+    def visit_greater_than(self, term: BoundTerm, literal: Literal[Any]) -> tuple:
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
         return ("gt", term.ref().field.field_id, scalar.as_py())
 
-    def visit_less_than(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+    def visit_less_than(self, term: BoundTerm, literal: Literal[Any]) -> tuple:
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
         return ("lt", term.ref().field.field_id, scalar.as_py())
 
-    def visit_less_than_or_equal(
-        self, term: BoundTerm[Any], literal: Literal[Any]
-    ) -> tuple:
+    def visit_less_than_or_equal(self, term: BoundTerm, literal: Literal[Any]) -> tuple:
         from pyiceberg.io.pyarrow import _convert_scalar
 
         scalar = _convert_scalar(literal.value, term.ref().field.field_type)
         return ("lte", term.ref().field.field_id, scalar.as_py())
 
-    def visit_starts_with(self, term: BoundTerm[Any], literal: Literal[Any]) -> tuple:
+    def visit_starts_with(self, term: BoundTerm, literal: Literal[Any]) -> tuple:
         # Not supported by cuDF AST, skip (no-op)
         return ("true",)
 
-    def visit_not_starts_with(
-        self, term: BoundTerm[Any], literal: Literal[Any]
-    ) -> tuple:
+    def visit_not_starts_with(self, term: BoundTerm, literal: Literal[Any]) -> tuple:
         # Not supported by cuDF AST, skip (no-op)
         return ("true",)
 

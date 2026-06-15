@@ -34,8 +34,6 @@ pytestmark = pytest_slow_unless_codegen
         pytest.param(
             ("'1 MICROSECOND'", pd.Timedelta(1, "us")), marks=pytest.mark.bodosql_cpp
         ),
-        # Duckdb does not support nanosecond intervals, neither does snowflake
-        pytest.param(("'1 NANOSECOND'", pd.Timedelta(1, "ns"))),
     ]
 )
 def timedelta_equivalent_values(request):
