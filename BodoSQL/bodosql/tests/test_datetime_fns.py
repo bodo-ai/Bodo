@@ -1819,6 +1819,7 @@ def dateadd_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_snowflake_dateadd(dateadd_df, dateadd_queries, memory_leak_check):
     """Tests the Snowflake version of DATEADD with inputs (unit, amount, dt_val).
     Currently takes in the unit as a scalar string instead of a DT unit literal.
@@ -1841,6 +1842,7 @@ def test_snowflake_dateadd(dateadd_df, dateadd_queries, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_snowflake_dateadd_fractional(
     dateadd_fractional_df, dateadd_queries, memory_leak_check
 ):
@@ -2119,6 +2121,7 @@ def dateadd_date_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_snowflake_dateadd_date(
     dateadd_date_df, dateadd_date_queries, memory_leak_check
 ):
@@ -2145,8 +2148,13 @@ def test_snowflake_dateadd_date(
 @pytest.mark.parametrize(
     "time_zone, has_case",
     [
-        pytest.param(None, False, id="no_tz-no_case"),
-        pytest.param(None, True, id="no_tz-with_case", marks=pytest.mark.slow),
+        pytest.param(None, False, id="no_tz-no_case", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            None,
+            True,
+            id="no_tz-with_case",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
         pytest.param("US/Pacific", False, id="with_tz-no_case", marks=pytest.mark.slow),
         pytest.param("Europe/Berlin", True, id="with_tz-with_case"),
     ],

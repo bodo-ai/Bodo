@@ -72,6 +72,7 @@ INTERVAL_UNIT_MAP = {
     "MINUTE": ("minute", lambda n: (0, 0, 60 * n * 1_000_000_000)),
     "SECOND": ("second", lambda n: (0, 0, n * 1_000_000_000)),
     "MS": ("millisecond", lambda n: (0, 0, n * 1_000_000)),
+    "MILLISECOND": ("millisecond", lambda n: (0, 0, n * 1_000_000)),
     "MICROSECOND": ("microsecond", lambda n: (0, 0, n * 1_000)),
     "NANOSECOND": ("nanosecond", lambda n: (0, 0, n)),
 }
@@ -450,48 +451,75 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     ],
                 )
             elif num_operands == 3:
-                # DATEADD(FLAG(unit), amount, date) from date + int arithmetic.
-                # Only handle when first operand is an interval qualifier (FLAG).
                 first_op_str = str(java_call.getOperands()[0].toString())
-                if first_op_str != "FLAG(DAY)":
+                if not first_op_str.startswith("FLAG"):
                     raise NotImplementedError(
-                        "DATEADD with 3 string operands or not day unit not supported in "
+                        "DATEADD with 3 string operands not supported in "
                         "C++ backend yet"
                     )
-                # In Snowflake, date + integer always means date + N days.
+                unit_str = first_op_str.split("(")[1].rstrip(")").upper()
+                assert unit_str in INTERVAL_UNIT_MAP, (
+                    f"Unsupported DATEADD interval unit: {unit_str}"
+                )
                 amount_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[1], input_plan
                 )
                 date_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[2], input_plan
                 )
-                if isinstance(amount_expr, ConstantExpression):
-                    interval_val = pd.Timedelta(days=int(amount_expr.value))
-                    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-                    interval_expr = ConstantExpression(
-                        dummy_empty_data, input_plan, interval_val
-                    )
-                else:
-                    one_day = pd.Timedelta(days=1)
-                    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
-                    one_day_expr = ConstantExpression(
-                        dummy_empty_data, input_plan, one_day
-                    )
-                    interval_expr = ArithOpExpression(
-                        dummy_empty_data, amount_expr, one_day_expr, "__mul__"
-                    )
-                out_empty = (
-                    date_expr.empty_data.iloc[:, 0]
-                    + interval_expr.empty_data.iloc[:, 0]
+                interval_months, interval_days, interval_nanos = INTERVAL_UNIT_MAP[
+                    unit_str
+                ][1](1)
+                date_pa_type = date_expr.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+                is_date_input = pa.types.is_date(date_pa_type)
+                preserves_date_type = (
+                    is_date_input
+                    and interval_nanos == 0
+                    and (interval_months != 0 or interval_days != 0)
                 )
-                result = ArithOpExpression(
-                    out_empty, date_expr, interval_expr, "__add__"
+                out_empty = pd.Series(
+                    dtype=date_expr.empty_data.iloc[:, 0].dtype
+                    if preserves_date_type
+                    else pd.ArrowDtype(pa.timestamp("ns"))
                 )
-                input_type = date_expr.pa_schema.field(0).type
-                if pa.types.is_date(input_type):
-                    date32_empty = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
-                    result = CastExpression(date32_empty, result)
-                return result
+
+                if (
+                    interval_months != 0
+                    and pa.types.is_timestamp(date_pa_type)
+                    and date_pa_type.tz is not None
+                    and hasattr(amount_expr, "value")
+                ):
+                    month_interval = (
+                        "MonthDayNanoInterval",
+                        interval_months
+                        * int(
+                            amount_expr.value
+                            + (0.5 if amount_expr.value >= 0 else -0.5)
+                        ),
+                        0,
+                        0,
+                    )
+                    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+                    month_interval_expr = ConstantExpression(
+                        dummy_empty_data, input_plan, month_interval
+                    )
+                    return ArithOpExpression(
+                        out_empty, date_expr, month_interval_expr, "__add__"
+                    )
+
+                int_empty = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                nanos_per_unit = interval_days * 86_400_000_000_000 + interval_nanos
+                return ArrowScalarFuncExpression(
+                    out_empty,
+                    [
+                        date_expr,
+                        amount_expr,
+                        ConstantExpression(int_empty, input_plan, interval_months),
+                        ConstantExpression(int_empty, input_plan, nanos_per_unit),
+                    ],
+                    "bodo_dateadd",
+                    (),
+                )
         if func_name in ("DATE_SUB", "SUBDATE"):
             # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
             # or DATE_SUB(date, integer_days) — Snowflake syntax.

@@ -162,7 +162,186 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
 
     arrow::Result<arrow::Datum> func_res;
 
-    if (arrow_func_name == "nullif") {
+    if (arrow_func_name == "bodo_dateadd") {
+        // DATEADD(unit, amount, date) has two pieces of behavior that Arrow
+        // compute does not provide directly: calendar month arithmetic
+        // (including month-end clamping) and Snowflake's rounding of fractional
+        // amounts before applying the interval.  Calcite lowering passes the
+        // unit as either a month multiplier or a nanosecond multiplier.
+        if (arg_datums.size() != 4) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: bodo_dateadd expects exactly 4 "
+                "arguments.");
+        }
+        int64_t num_rows = 1;
+        for (auto& datum : arg_datums) {
+            if (!datum.is_scalar()) {
+                num_rows = datum.length();
+                break;
+            }
+        }
+
+        std::shared_ptr<arrow::Array> date_arr =
+            arg_datums[0].is_scalar()
+                ? arrow::MakeArrayFromScalar(*arg_datums[0].scalar(), num_rows)
+                      .ValueOrDie()
+                : arg_datums[0].make_array();
+        arrow::Result<arrow::Datum> amount_datum_res =
+            arrow::compute::Cast(arg_datums[1], arrow::float64());
+        if (!amount_datum_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: Error in Arrow compute "
+                "(bodo_dateadd/amount_cast): " +
+                amount_datum_res.status().message());
+        }
+        arrow::Datum amount_datum = amount_datum_res.ValueOrDie();
+        std::shared_ptr<arrow::Array> amount_arr =
+            amount_datum.is_scalar()
+                ? arrow::MakeArrayFromScalar(*amount_datum.scalar(), num_rows)
+                      .ValueOrDie()
+                : amount_datum.make_array();
+        auto amount = std::static_pointer_cast<arrow::DoubleArray>(amount_arr);
+        int64_t month_scale =
+            arg_datums[2].is_scalar()
+                ? arg_datums[2].scalar_as<arrow::Int64Scalar>().value
+                : std::static_pointer_cast<arrow::Int64Array>(
+                      arg_datums[2].make_array())
+                      ->Value(0);
+        int64_t nanos_scale =
+            arg_datums[3].is_scalar()
+                ? arg_datums[3].scalar_as<arrow::Int64Scalar>().value
+                : std::static_pointer_cast<arrow::Int64Array>(
+                      arg_datums[3].make_array())
+                      ->Value(0);
+        auto round_amount = [](double value) -> int64_t {
+            // Snowflake rounds DATEADD amounts half away from zero before
+            // applying the unit, e.g. 0.5 -> 1 and -9.5 -> -10.
+            return static_cast<int64_t>(value + (value >= 0 ? 0.5 : -0.5));
+        };
+        auto nanos_per_unit = [](arrow::TimeUnit::type unit) -> int64_t {
+            switch (unit) {
+                case arrow::TimeUnit::SECOND:
+                    return 1000000000LL;
+                case arrow::TimeUnit::MILLI:
+                    return 1000000LL;
+                case arrow::TimeUnit::MICRO:
+                    return 1000LL;
+                case arrow::TimeUnit::NANO:
+                    return 1LL;
+                default:
+                    throw std::runtime_error("Unknown time unit");
+            }
+        };
+
+        if (date_arr->type_id() == arrow::Type::TIMESTAMP) {
+            auto ts_type = std::static_pointer_cast<arrow::TimestampType>(
+                date_arr->type());
+            if (!ts_type->timezone().empty()) {
+                throw std::runtime_error(
+                    "bodo_dateadd does not support timezone-aware timestamps");
+            }
+            auto ts_arr =
+                std::static_pointer_cast<arrow::TimestampArray>(date_arr);
+            int64_t mult = nanos_per_unit(ts_type->unit());
+            arrow::TimestampBuilder ts_builder(
+                arrow::timestamp(arrow::TimeUnit::NANO),
+                arrow::default_memory_pool());
+            for (int64_t i = 0; i < num_rows; i++) {
+                if (ts_arr->IsNull(i) || amount->IsNull(i)) {
+                    (void)ts_builder.AppendNull();
+                } else {
+                    int64_t rounded = round_amount(amount->Value(i));
+                    int64_t ns_val = ts_arr->Value(i) * mult;
+                    if (month_scale != 0) {
+                        // DuckDB's interval arithmetic gives the calendar-month
+                        // semantics needed for YEAR/QUARTER/MONTH units.  Keep
+                        // the nanosecond remainder because DuckDB timestamps
+                        // are microsecond-based.
+                        duckdb::timestamp_t ts(ns_val / 1000);
+                        duckdb::interval_t interval;
+                        interval.months =
+                            static_cast<int32_t>(rounded * month_scale);
+                        interval.days = 0;
+                        interval.micros = 0;
+                        duckdb::timestamp_t result =
+                            duckdb::Interval::Add(ts, interval);
+                        (void)ts_builder.Append(result.value * 1000 +
+                                                ns_val % 1000);
+                    } else {
+                        (void)ts_builder.Append(ns_val + rounded * nanos_scale);
+                    }
+                }
+            }
+            auto res_arr = ts_builder.Finish();
+            if (!res_arr.ok()) {
+                throw std::runtime_error(res_arr.status().ToString());
+            }
+            return arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                       bodo::BufferPool::DefaultPtr());
+        }
+        if (date_arr->type_id() == arrow::Type::DATE32) {
+            auto date32_arr =
+                std::static_pointer_cast<arrow::Date32Array>(date_arr);
+            const int64_t nanos_per_day = 86400000000000LL;
+            // Snowflake preserves DATE output for calendar units and whole-day
+            // offsets, but promotes DATE to TIMESTAMP for time/subsecond units.
+            bool output_date =
+                month_scale != 0 || nanos_scale % nanos_per_day == 0;
+            if (output_date) {
+                arrow::Date32Builder date_builder(arrow::default_memory_pool());
+                for (int64_t i = 0; i < num_rows; i++) {
+                    if (date32_arr->IsNull(i) || amount->IsNull(i)) {
+                        (void)date_builder.AppendNull();
+                    } else {
+                        int64_t rounded = round_amount(amount->Value(i));
+                        if (month_scale != 0) {
+                            duckdb::date_t date(date32_arr->Value(i));
+                            duckdb::interval_t interval;
+                            interval.months =
+                                static_cast<int32_t>(rounded * month_scale);
+                            interval.days = 0;
+                            interval.micros = 0;
+                            duckdb::date_t result =
+                                duckdb::Interval::Add(date, interval);
+                            (void)date_builder.Append(result.days);
+                        } else {
+                            (void)date_builder.Append(
+                                date32_arr->Value(i) +
+                                rounded * (nanos_scale / nanos_per_day));
+                        }
+                    }
+                }
+                auto res_arr = date_builder.Finish();
+                if (!res_arr.ok()) {
+                    throw std::runtime_error(res_arr.status().ToString());
+                }
+                return arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                           bodo::BufferPool::DefaultPtr());
+            }
+            arrow::TimestampBuilder ts_builder(
+                arrow::timestamp(arrow::TimeUnit::NANO),
+                arrow::default_memory_pool());
+            for (int64_t i = 0; i < num_rows; i++) {
+                if (date32_arr->IsNull(i) || amount->IsNull(i)) {
+                    (void)ts_builder.AppendNull();
+                } else {
+                    (void)ts_builder.Append(
+                        date32_arr->Value(i) * nanos_per_day +
+                        round_amount(amount->Value(i)) * nanos_scale);
+                }
+            }
+            auto res_arr = ts_builder.Finish();
+            if (!res_arr.ok()) {
+                throw std::runtime_error(res_arr.status().ToString());
+            }
+            return arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                       bodo::BufferPool::DefaultPtr());
+        }
+        throw std::runtime_error(
+            "do_arrow_compute_multi_input: bodo_dateadd unsupported input "
+            "type " +
+            date_arr->type()->ToString());
+    } else if (arrow_func_name == "nullif") {
         // SQL NULLIF(a, b): returns NULL when a == b, else a.
         // Arrow has no direct nullif kernel, so implement as:
         //   case_when(equal(a, b), null_scalar_of_a_type, a)
