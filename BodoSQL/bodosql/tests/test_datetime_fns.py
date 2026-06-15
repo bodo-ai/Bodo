@@ -762,6 +762,7 @@ def sysdate_equiv_fns(request):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_sysdate_equivalents_cols(basic_df, sysdate_equiv_fns, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp.
@@ -800,6 +801,7 @@ def test_sysdate_equivalents_cols(basic_df, sysdate_equiv_fns, memory_leak_check
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_sysdate_equivalents_case(sysdate_equiv_fns, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp in case.

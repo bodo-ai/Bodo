@@ -471,11 +471,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 result = ArithOpExpression(
                     out_empty, date_expr, interval_expr, "__add__"
                 )
-                # Cast back to date32 if input was date (date+duration → timestamp)
-                result_type = result.empty_data.iloc[:, 0].dtype
-                if hasattr(result_type, "pyarrow_dtype") and pa.types.is_timestamp(
-                    result_type.pyarrow_dtype
-                ):
+                input_type = date_expr.pa_schema.field(0).type
+                if pa.types.is_date(input_type):
                     date32_empty = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
                     result = CastExpression(date32_empty, result)
                 return result
