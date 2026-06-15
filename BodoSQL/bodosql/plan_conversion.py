@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import decimal
 import operator
 import zoneinfo
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import pandas as pd
+import py4j
 import pyarrow as pa
+import pyarrow.compute as pc
 
 import bodo
 import bodo.pandas as bd
@@ -20,6 +23,7 @@ from bodo.pandas.plan import (
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
+    LazyPlan,
     LogicalAggregate,
     LogicalComparisonJoin,
     LogicalCrossProduct,
@@ -34,6 +38,7 @@ from bodo.pandas.plan import (
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
+from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
 _DATE_PART_ARROW_FUNCS = {
@@ -227,7 +232,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
-    _DOW_NAMES = {"DAYOFWEEK", "WEEKDAY", "DOW"}
+    _DOW_NAMES = {"DAYOFWEEK", "DOW"}
 
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
@@ -449,9 +454,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # DATEADD(FLAG(unit), amount, date) from date + int arithmetic.
                 # Only handle when first operand is an interval qualifier (FLAG).
                 first_op_str = str(java_call.getOperands()[0].toString())
-                if not first_op_str.startswith("FLAG"):
+                if first_op_str != "FLAG(DAY)":
                     raise NotImplementedError(
-                        "DATEADD with 3 string operands not supported in "
+                        "DATEADD with 3 string operands or not day unit not supported in "
                         "C++ backend yet"
                     )
                 # In Snowflake, date + integer always means date + N days.
@@ -461,7 +466,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 date_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[2], input_plan
                 )
-                if hasattr(amount_expr, "value"):
+                if isinstance(amount_expr, ConstantExpression):
                     interval_val = pd.Timedelta(days=int(amount_expr.value))
                     dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
                     interval_expr = ConstantExpression(
@@ -884,10 +889,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
         if func_name in ("LOCALTIME", "CURRENT_TIME"):
             curr_ts = pd.Timestamp.now()
+            curr_time = pc.cast(curr_ts, pa.time64("ns"))
             dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                [curr_time], dtype=pd.ArrowDtype(pa.time64("ns"))
             )
-            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+            return ConstantExpression(dummy_empty_data, input_plan, curr_time)
 
     if operator_class_name == "SqlBasicFunction":
         # Map Calcite basic functions to Bodo expressions
@@ -912,9 +918,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "SYSTIMESTAMP",
             "NOW",
         ):
-            curr_ts = pd.Timestamp.now()
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            curr_ts = pd.Timestamp.now(tz=tz)
             dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
             )
             return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
 
@@ -1098,6 +1105,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name == "SUBSTRING" and len(op_exprs) == 3:
+            # See:
+            # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
+            # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
             src = op_exprs[0]
             start_expr = op_exprs[1]
             if not isinstance(start_expr, ConstantExpression):
@@ -1105,12 +1115,19 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[2]
             if not isinstance(len_expr, ConstantExpression):
                 raise ValueError("len_expr not a ConstantExpression")
+            start = start_expr.value
+            length = len_expr.value
+            if start <= 0 or length < 0:
+                raise ValueError(
+                    "negative or zero start or negative length not supported in SUBSTRING in C++ backend yet"
+                )
+            start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
             out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
                 out_empty,
                 [src],
                 "utf8_slice_codeunits",
-                (start_expr.value, len_expr.value, 1),
+                (start, start + length, 1),
             )
 
     if operator_class_name == "SqlLikeOperator":
@@ -1167,6 +1184,114 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 raise NotImplementedError(
                     "LIKE conversion does not currently support match anything."
                 )
+    if operator_class_name == "SqlSearchOperator":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        if func_name == "SEARCH" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            # search_expr is a ConstantExpression with org.apache.calcite.util.Sarg value
+            search_expr = op_exprs[1]
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            # sarg is an org.apache.calcite.util.Sarg
+            sarg = search_expr.value
+            assert sarg.getClass().getSimpleName() == "Sarg"
+            # sarg_rangeSet is a com.google.common.collect.ImmutableRangeSet
+            sarg_rangeSet = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
+            assert sarg_rangeSet.getClass().getSimpleName() == "ImmutableRangeSet"
+            # ranges_collection is a com.google.common.collect.RegularImmutableSortedSet
+            ranges_collection = sarg_rangeSet.asRanges()
+            assert (
+                ranges_collection.getClass().getSimpleName()
+                == "RegularImmutableSortedSet"
+            )
+            search_options = []
+            it = ranges_collection.iterator()
+            while it.hasNext():
+                # r is a com.google.common.collect.Range
+                r = it.next()
+                assert r.getClass().getSimpleName() == "Range"
+                search_options.append(r)
+
+            def range_type_to_python(x):
+                if isinstance(x, py4j.java_gateway.JavaObject):
+                    return x.getValue()
+                elif isinstance(x, decimal.Decimal):
+                    return float(x)
+                else:
+                    return x
+
+            def process_one_search_option(so):
+                """Generate an expression to check if src satisfies this
+                current possibility from the range set."""
+                # Get and convert the lower range endpoint if it has one else None.
+                lower_lit = (
+                    range_type_to_python(so.lowerEndpoint())
+                    if so.hasLowerBound()
+                    else None
+                )
+                # Get and convert the upper range endpoint if it has one else None.
+                upper_lit = (
+                    range_type_to_python(so.upperEndpoint())
+                    if so.hasUpperBound()
+                    else None
+                )
+                lower_inclusive = so.lowerBoundType().toString() == "CLOSED"
+                upper_inclusive = so.upperBoundType().toString() == "CLOSED"
+                # There are 9 possibilities here.  NA=Not applicable
+                # HasLower HasUpper LowerInclusive UpperInclusive
+                # F        F        NA             NA
+                # T        F        T              NA
+                # T        F        F              NA
+                # F        T        NA             T
+                # F        T        NA             F
+                # T        T        T              T
+                # T        T        T              F
+                # T        T        F              T
+                # T        T        F              F
+
+                # Also, the case of having lower and upper bound and both being
+                # inclusive can be divided up into two cases, where lower and
+                # upper are equal and where they are not equal.
+                if (
+                    lower_lit is not None
+                    and upper_lit is not None
+                    and lower_inclusive
+                    and upper_inclusive
+                    and lower_lit == upper_lit
+                ):
+                    # The exception case where we have lower and upper bounds and they are both
+                    # inclusive and the same we can simplify as equality check.
+                    const_empty_data = arrow_to_empty_df(
+                        pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
+                    )
+
+                    return ComparisonOpExpression(
+                        bool_empty_data,
+                        src,
+                        ConstantExpression(const_empty_data, input_plan, lower_lit),
+                        operator.eq,
+                    )
+
+                raise NotImplementedError(
+                    f"SEARCH operator case of hasLower {lower_lit is not None}, hasUpper {upper_lit is not None}, lowerInclusive {lower_inclusive}, upperInclusive {upper_inclusive} not supported yet."
+                )
+
+            out_expr = process_one_search_option(search_options[0])
+            # The definition of search is that the value is one of the
+            # possibilities in the range set.  so, "or" in the other
+            # possibilities below.
+            for so in search_options[1:]:
+                out_expr = ConjunctionOpExpression(
+                    bool_empty_data, out_expr, process_one_search_option(so), "__or__"
+                )
+            return out_expr
+
+        raise NotImplementedError(
+            f"Function name {func_name} not supported for SEARCH oeprator yet: "
+            + java_call.toString()
+        )
 
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
@@ -1539,6 +1664,25 @@ def is_int_type(java_type):
     )
 
 
+def gen_plan_via_bodo_dataframe(func, *args, **kwargs):
+    """Generate a Python plan for this module by wrapping input plans with
+    dataframes/series and calling a func parameter that is written in
+    regular Pandas/Bodo DataFrame library syntax.  Finally, convert the
+    dataframe returned by that function to a plan."""
+    # Wrap any LazyPlans in the args or kwargs as dataframes/series.
+    args = [arg if not isinstance(arg, LazyPlan) else wrap_plan(arg) for arg in args]
+    kwargs = {
+        k: (arg if not isinstance(arg, LazyPlan) else wrap_plan(arg))
+        for k, arg in kwargs.items()
+    }
+    # Call the func to generate a new plan.
+    output_dataframe = func(*args, **kwargs)
+    # Extract that plan from the returned dataframe.
+    assert isinstance(output_dataframe, bodo.pandas.DataFrame)
+    assert output_dataframe.is_lazy_plan()
+    return output_dataframe._plan
+
+
 def java_agg_to_python_agg(ctx, java_plan):
     """Convert a BodoSQL Java aggregation plan to a Python aggregation plan."""
     from bodo.pandas.groupby import GroupbyAggFunc, _get_agg_output_type
@@ -1565,7 +1709,10 @@ def java_agg_to_python_agg(ctx, java_plan):
         )
         return plan
 
-    for func in aggCallList:
+    # calcite supports a literal "aggregation" function but Bodo backend doesn't.
+    # So capture those functions here and treat them as projections later.
+    literal_aggs = []
+    for aggIndex, func in enumerate(aggCallList):
         if func.hasFilter():
             raise NotImplementedError("Filtered aggregations are not supported yet")
         func_name = _agg_to_func_name(func)
@@ -1614,8 +1761,9 @@ def java_agg_to_python_agg(ctx, java_plan):
             literal_for_literal_agg = java_literal_to_python_literal(
                 ctx, rexlist.get(0), input_plan
             )
-            out_types.append(literal_for_literal_agg.empty_data.dtypes[0].pyarrow_dtype)
-            exprs.append(literal_for_literal_agg)
+            # Save column index where this literal aggregation should appear
+            # and the value of the literal.
+            literal_aggs.append((aggIndex + len(keys), literal_for_literal_agg))
             continue
         else:
             raise NotImplementedError(
@@ -1634,16 +1782,57 @@ def java_agg_to_python_agg(ctx, java_plan):
             )
         )
 
+    # All column names of the desired output in order.
     names = list(java_plan.getRowType().getFieldNames())
-    new_schema = pa.schema([pa.field(name, t) for name, t in zip(names, out_types)])
-    empty_out_data = arrow_to_empty_df(new_schema)
+    agg_names = []
+    # Column indices we should skip to start with since they are literal
+    # aggregations to be added later.
+    skipped_literal_indices = [x[0] for x in literal_aggs]
+    # Get just the column names that Bodo will do as a true aggregation.
+    for nindex in range(len(names)):
+        if nindex not in skipped_literal_indices:
+            agg_names.append(names[nindex])
+    if len(agg_names) > len(keys):
+        # There is some non-literal_agg aggregate.
+        new_schema = pa.schema(
+            [pa.field(name, t) for name, t in zip(agg_names, out_types)]
+        )
+        empty_out_data = arrow_to_empty_df(new_schema)
 
-    plan = LogicalAggregate(
-        empty_out_data,
-        input_plan,
-        keys,
-        exprs,
-    )
+        # Do the real aggregations.
+        plan = LogicalAggregate(
+            empty_out_data,
+            input_plan,
+            keys,
+            exprs,
+        )
+
+        # If there is some literal_agg we have to deal with.
+        if len(agg_names) != len(names):
+
+            def add_lits_to_agg(df, names, literal_aggs):
+                # Add in the literal_agg columns.
+                for literal_agg in literal_aggs:
+                    df[names[literal_agg[0]]] = literal_agg[1].value
+                # Reorder to the originally calculated order.
+                return df[names]
+
+            plan = gen_plan_via_bodo_dataframe(
+                add_lits_to_agg, plan, names, literal_aggs
+            )
+    else:
+        # There were no non-literal aggregations so just select the keys and
+        # drop_duplicates and then add on the literal aggregation columns.
+        def select_keys_lits(plan, keys, names, literal_aggs):
+            cols = plan.columns[keys].tolist()
+            key_df = plan[cols].drop_duplicates()
+            for literal_agg in literal_aggs:
+                key_df[names[literal_agg[0]]] = literal_agg[1].value
+            return key_df
+
+        plan = gen_plan_via_bodo_dataframe(
+            select_keys_lits, input_plan, keys, names, literal_aggs
+        )
     return plan
 
 

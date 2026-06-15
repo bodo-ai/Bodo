@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import ast
 import sys
 import typing as pt
 import warnings
-from collections.abc import Callable, Hashable, Iterable, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 
 import pandas as pd
@@ -1510,6 +1511,181 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             raise TypeError("Must pass either `items`, `like`, or `regex`")
 
         return self.__getitem__(items)
+
+    @check_args_fallback(
+        supported=["expr", "local_dict", "global_dict", "resolvers", "level"]
+    )
+    def query(
+        self,
+        expr: str,
+        *,
+        parser: pt.Literal["pandas", "python"] = "pandas",
+        engine: pt.Literal["python", "numexpr"] | None = None,
+        local_dict: dict[str, pt.Any] | None = None,
+        global_dict: dict[str, pt.Any] | None = None,
+        resolvers: list[Mapping] | None = None,
+        level: int = 0,
+        inplace: bool = False,
+    ) -> BodoDataFrame | None:
+        # The pandas fallback involving local variable reference may not function correctly
+        # due to the extra function calls added by Bodo, affecting how many levels down the
+        # stack you need to go to find the referenced variable.
+
+        # Import compiler lazily
+        import bodo.decorators  # isort:skip # noqa
+
+        bodo.spawn.utils.import_compiler_on_workers()
+
+        # Lazily import _parse_query_expr() to avoid circular import
+        from bodo.hiframes.dataframe_impl import _parse_query_expr
+
+        # handle math calls by converting them to numpy calls
+        def math__str__(self_, new_funcs):
+            if self_.op not in new_funcs:
+                op = f"np.{self_.op}"
+                parens = "({})"
+            else:
+                # avoid change if it is a dummy attribute call
+                op = self_.op
+                parens = "{}"
+
+            return pd.io.formats.printing.pprint_thing(
+                op + f"({parens})".format(",".join(map(str, self_.operands)))
+            )
+
+        # Make any needed operation transformations
+        def op__str__(self_):
+            if len(self_.operands) == 1:
+                return pd.io.formats.printing.pprint_thing(
+                    f"{self_.op} ({pd.io.formats.printing.pprint_thing(self_.operands[0])})"
+                )
+
+            assert len(self_.operands) == 2
+
+            operator = self_.op
+
+            left_opr = self_.operands[0]
+            right_opr = self_.operands[1]
+
+            def is_opr_column(opr):
+                return repr(opr) in cleaned_columns
+
+            def opr_str(opr):
+                return (
+                    pd.io.formats.printing.pprint_thing(opr)
+                    if not is_opr_column(opr)
+                    else repr(opr)
+                )
+
+            def is_opr_list(opr):
+                try:
+                    sentinel = pd.core.computation.ops.LOCAL_TAG
+                    name = opr_str(opr)
+                    if name.startswith(sentinel):
+                        var_name = name.removeprefix(sentinel)
+                        opr_value = str(env.scope[var_name])
+                    else:
+                        opr_value = name
+                    # TODO: Support non-literal collection types like frozenset
+                    return isinstance(
+                        ast.literal_eval(opr_value), (list, tuple, set, dict)
+                    )
+                except (ValueError, SyntaxError):
+                    return False
+
+            if operator in ("==", "!="):
+                left_opr_is_list = is_opr_list(left_opr)
+                right_opr_is_list = is_opr_list(right_opr)
+
+                if left_opr_is_list or right_opr_is_list:
+                    if left_opr_is_list and not right_opr_is_list:
+                        if is_opr_column(right_opr):
+                            temp = left_opr
+                            left_opr = right_opr
+                            right_opr = temp
+                    elif left_opr_is_list and right_opr_is_list:
+                        # Both are lists
+                        return "False"
+
+                    # Now we have that right_opr is a list and left_opr is not a list
+                    if operator == "==":
+                        operator = "in"
+                    else:  # operator == "!="
+                        operator = "not in"
+
+            if is_opr_column(left_opr):
+                # Handle "in" and "not in" operators involving a dataframe column
+                if operator == "in":
+                    return pd.io.formats.printing.pprint_thing(
+                        f"({opr_str(left_opr)}).isin(({opr_str(right_opr)}))"
+                    )
+                elif operator == "not in":
+                    return pd.io.formats.printing.pprint_thing(
+                        f"~({opr_str(left_opr)}).isin(({opr_str(right_opr)}))"
+                    )
+
+            return pd.io.formats.printing.pprint_thing(
+                f"({opr_str(left_opr)}) {operator} ({opr_str(right_opr)})"
+            )
+
+        def undefined_variable_handler(e):
+            raise BodoLibNotImplementedException(
+                "Undefined variable or named index in df.query() expression: " + str(e)
+            )
+
+        # Parse expression and convert to bracket syntax so that we can reuse __getitem__ query handling
+
+        clean_name = pd.core.computation.parsing.clean_column_name
+        cleaned_columns = [clean_name(c) for c in self.columns]
+        # Fake values to maintain lazy evaluation
+        resolver = dict.fromkeys(cleaned_columns, 0)
+        resolver["index"] = 0
+        all_resolvers = (resolver,) + (resolvers or ())
+
+        # Get environment for variable reference
+        env = pd.core.computation.scope.ensure_scope(
+            level + 2, global_dict, local_dict, resolvers=all_resolvers
+        )
+        """Parse expression string for BodoDataFrame.query() call handling.
+        Patches Pandas query expr parsing code to avoid evaluating values during parsing.
+
+        Tweaked functions from the JIT version bodo.hiframes.dataframe_impl._parse_query_expr() for conversion to bracket syntax
+        """
+        parsed_expr, parsed_expr_str, used_cols = _parse_query_expr(
+            expr,
+            env,
+            self.columns,
+            cleaned_columns,
+            math__str__func=math__str__,
+            op__str__=op__str__,
+            undefined_variable_handler=undefined_variable_handler,
+        )
+
+        # Replace local/global variable references with their real values
+        sentinel = pd.core.computation.ops.LOCAL_TAG
+        for name in parsed_expr.names:
+            if isinstance(name, str) and name.startswith(sentinel):
+                var_name = name.removeprefix(sentinel)
+                parsed_expr_str = parsed_expr_str.replace(
+                    name, str(env.scope[var_name])
+                )
+
+        parsed_expr_str = parsed_expr_str.replace("(index)", "self.index")
+
+        for column_name, clean_column_name in used_cols.items():
+            parsed_expr_str = parsed_expr_str.replace(
+                f"({clean_column_name})", f"self['{column_name}']"
+            )
+            for series_accessor in ["str", "dt", "cat", "sparse"]:
+                parsed_expr_str = parsed_expr_str.replace(
+                    f"{clean_column_name}.{series_accessor}",
+                    f"self['{column_name}'].{series_accessor}",
+                )
+
+        try:
+            return eval(f"self.__getitem__({parsed_expr_str})")
+        except Exception as e:
+            raise BodoLibNotImplementedException("Unsupported query usage: " + str(e))
 
     @check_args_fallback(supported=["by", "ascending", "na_position", "kind"])
     def sort_values(

@@ -29,6 +29,9 @@
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr);
 
+// Converts a string unit to the corresponding Arrow CalendarUnit.
+arrow::compute::CalendarUnit getArrowCalendarUnit(const char *unit_str);
+
 /**
  * @brief Superclass for possible results returned by nodes in Bodo
  *        Physical expression tree.
@@ -994,12 +997,11 @@ class PhysicalCalendarIntervalExpression : public PhysicalExpression {
    public:
     PhysicalCalendarIntervalExpression(
         std::shared_ptr<PhysicalExpression> date_child,
-        duckdb::interval_t interval, bool interval_is_left, bool is_subtract,
+        duckdb::interval_t interval, bool is_subtract,
         std::shared_ptr<arrow::DataType> result_type)
         : PhysicalExpression(PhysicalExpressionType::CALENDAR_INTERVAL),
           date_child(std::move(date_child)),
           calendar_interval(interval),
-          interval_is_left(interval_is_left),
           is_subtract(is_subtract),
           result_type(std::move(result_type)) {}
 
@@ -1016,7 +1018,6 @@ class PhysicalCalendarIntervalExpression : public PhysicalExpression {
    private:
     std::shared_ptr<PhysicalExpression> date_child;
     duckdb::interval_t calendar_interval;
-    bool interval_is_left;
     bool is_subtract;
     const std::shared_ptr<arrow::DataType> result_type;
 };
@@ -1435,29 +1436,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
             int64_t multiple = PyLong_AsLongLong(PyTuple_GetItem(args, 0));
             PyObject *unit_py = PyTuple_GetItem(args, 1);
             const char *unit_cstr = PyUnicode_AsUTF8(unit_py);
-            static const std::unordered_map<std::string,
-                                            arrow::compute::CalendarUnit>
-                kCalendarUnitMap = {
-                    {"year", arrow::compute::CalendarUnit::YEAR},
-                    {"quarter", arrow::compute::CalendarUnit::QUARTER},
-                    {"month", arrow::compute::CalendarUnit::MONTH},
-                    {"week", arrow::compute::CalendarUnit::WEEK},
-                    {"day", arrow::compute::CalendarUnit::DAY},
-                    {"hour", arrow::compute::CalendarUnit::HOUR},
-                    {"minute", arrow::compute::CalendarUnit::MINUTE},
-                    {"second", arrow::compute::CalendarUnit::SECOND},
-                    {"millisecond", arrow::compute::CalendarUnit::MILLISECOND},
-                    {"microsecond", arrow::compute::CalendarUnit::MICROSECOND},
-                    {"nanosecond", arrow::compute::CalendarUnit::NANOSECOND},
-                };
-
-            auto it = kCalendarUnitMap.find(unit_cstr);
-            if (it == kCalendarUnitMap.end()) {
-                throw std::runtime_error(
-                    "Invalid calendar unit string for temporal rounding: " +
-                    std::string(unit_cstr));
-            }
-            arrow::compute::CalendarUnit unit = it->second;
+            arrow::compute::CalendarUnit unit = getArrowCalendarUnit(unit_cstr);
             arrow::compute::RoundTemporalOptions opts(multiple, unit);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);

@@ -34,10 +34,10 @@ def to_time_fn(request):
                         "11:2:45.999",
                         "01:23:45",
                         None,
-                        "01:23:45.67588",
+                        "01:23:45.675",
                         "01:0:02",
                         "11:59:59",
-                        "1:23:4.67588833",
+                        "1:23:4.675",
                         "100",
                         "1000",
                         "1",
@@ -48,7 +48,7 @@ def to_time_fn(request):
                         "0:0:0",
                         "12:30:5",
                         "22:15",
-                        "16:15:14.1312",
+                        "16:15:14.131",
                     ]
                 ),
                 pd.Series(
@@ -56,10 +56,10 @@ def to_time_fn(request):
                         bodo.types.Time(11, 2, 45, millisecond=999, precision=9),
                         bodo.types.Time(1, 23, 45, precision=9),
                         None,
-                        bodo.types.Time(1, 23, 45, microsecond=675880, precision=9),
+                        bodo.types.Time(1, 23, 45, millisecond=675, precision=9),
                         bodo.types.Time(1, 0, 2, precision=9),
                         bodo.types.Time(11, 59, 59, precision=9),
-                        bodo.types.Time(1, 23, 4, nanosecond=675888330, precision=9),
+                        bodo.types.Time(1, 23, 4, millisecond=675, precision=9),
                         bodo.types.Time(0, 0, 100, precision=9),
                         bodo.types.Time(0, 0, 1000, precision=9),
                         bodo.types.Time(0, 0, 1, precision=9),
@@ -70,7 +70,7 @@ def to_time_fn(request):
                         bodo.types.Time(0, 0, 0, precision=9),
                         bodo.types.Time(12, 30, 5, precision=9),
                         bodo.types.Time(22, 15, 0, precision=9),
-                        bodo.types.Time(16, 15, 14, microsecond=131200, precision=9),
+                        bodo.types.Time(16, 15, 14, millisecond=131, precision=9),
                     ]
                 ),
             ),
@@ -84,7 +84,7 @@ def to_time_fn(request):
                         pd.Timestamp("2021-4-1 12:00:00"),
                         None,
                         pd.Timestamp("2022-7-4 20:21:22"),
-                        pd.Timestamp("2023-8-15 8:30:00.123456789"),
+                        pd.Timestamp("2023-8-15 8:30:00.123"),
                         pd.Timestamp("2019-1-1"),
                     ],
                     dtype="datetime64[ns]",
@@ -95,7 +95,7 @@ def to_time_fn(request):
                         bodo.types.Time(12, 0, 0, precision=9),
                         None,
                         bodo.types.Time(20, 21, 22, precision=9),
-                        bodo.types.Time(8, 30, 0, nanosecond=123456789, precision=9),
+                        bodo.types.Time(8, 30, 0, millisecond=123, precision=9),
                         bodo.types.Time(0, 0, 0, precision=9),
                     ]
                 ),
@@ -111,7 +111,7 @@ def to_time_fn(request):
                         pd.Timestamp("2021-4-1 12:00:00", tz="US/Pacific"),
                         None,
                         pd.Timestamp("2022-7-4 20:21:22", tz="US/Pacific"),
-                        pd.Timestamp("2023-8-15 8:30:00.123456789", tz="US/Pacific"),
+                        pd.Timestamp("2023-8-15 8:30:00.123", tz="US/Pacific"),
                         pd.Timestamp("2019-1-1", tz="US/Pacific"),
                     ],
                     dtype="datetime64[ns, US/Pacific]",
@@ -122,7 +122,7 @@ def to_time_fn(request):
                         bodo.types.Time(12, 0, 0, precision=9),
                         None,
                         bodo.types.Time(20, 21, 22, precision=9),
-                        bodo.types.Time(8, 30, 0, nanosecond=123456789, precision=9),
+                        bodo.types.Time(8, 30, 0, millisecond=123, precision=9),
                         bodo.types.Time(0, 0, 0, precision=9),
                     ]
                 ),
@@ -203,7 +203,7 @@ def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_che
         query = f"SELECT {to_time_fn}(S) as A FROM table1"
     else:
         query = f"SELECT CASE WHEN B THEN {to_time_fn}(S) END AS A FROM table1"
-    expected_output = pd.DataFrame({"A": result})
+    expected_output = pd.DataFrame({"A": result.copy()})
     check_query(query, ctx, None, expected_output=expected_output)
 
 

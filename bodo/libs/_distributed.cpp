@@ -244,6 +244,10 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             out_arr->scale = in_arr->scale;
             out_arr->precision = in_arr->precision;
         }
+        // Set precision for time type
+        if ((dtype == Bodo_CTypes::TIME) && (is_receiver || all_gather)) {
+            out_arr->precision = in_arr->precision;
+        }
     } else if (arr_type == bodo_array_type::INTERVAL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
         // Computing the total number of rows.
@@ -638,6 +642,10 @@ std::shared_ptr<array_info> scatter_array(
         // Set scale and precision for decimal type
         if (dtype == Bodo_CTypes::DECIMAL) {
             out_arr->scale = in_arr->scale;
+            out_arr->precision = in_arr->precision;
+        }
+        // Set precision for time type
+        if (dtype == Bodo_CTypes::TIME) {
             out_arr->precision = in_arr->precision;
         }
     } else if (arr_type == bodo_array_type::INTERVAL) {
