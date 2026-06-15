@@ -1414,14 +1414,20 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 scalar_func_data.arrow_func_name.c_str());
             arrow::compute::StrftimeOptions opts(fmt_str);
             result = do_arrow_compute_unary(res, "strftime", &opts);
-        } else if (scalar_func_data.arrow_func_name == "floor_temporal") {
-            const char *fmt_str = get_py_single_arg_as_cstr(
-                scalar_func_data.args,
-                scalar_func_data.arrow_func_name.c_str());
-            // NOTE: setting multiple to 1 for BodoSQL DATE_TRUNC use upstream
-            arrow::compute::RoundTemporalOptions opts(
-                1, getArrowCalendarUnit(fmt_str));
-            result = do_arrow_compute_unary(res, "floor_temporal", &opts);
+        } else if (scalar_func_data.arrow_func_name == "floor_temporal" ||
+                   scalar_func_data.arrow_func_name == "ceil_temporal" ||
+                   scalar_func_data.arrow_func_name == "round_temporal") {
+            // Args: (multiple, unit_string).
+            // multiple is the first PyLong (e.g. 1),
+            // unit_string is the second PyUnicode (e.g. "day").
+            PyObject *args = scalar_func_data.args;
+            int64_t multiple = PyLong_AsLongLong(PyTuple_GetItem(args, 0));
+            PyObject *unit_py = PyTuple_GetItem(args, 1);
+            const char *unit_cstr = PyUnicode_AsUTF8(unit_py);
+            arrow::compute::CalendarUnit unit = getArrowCalendarUnit(unit_cstr);
+            arrow::compute::RoundTemporalOptions opts(multiple, unit);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
         } else {
             result =
                 do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);

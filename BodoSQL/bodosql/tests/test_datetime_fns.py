@@ -363,6 +363,7 @@ def dt_fn_info(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_dt_fns_cols(spark_info, dt_fn_info, dt_fn_dataframe, memory_leak_check):
     """tests that the specified date_time functions work on columns"""
     bodo_fn_name = dt_fn_info[0]
@@ -447,32 +448,29 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
         pytest.param(
             "SELECT A, DATEFN from table1",
             id="no_case-just_getdate",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT A, DATEFN - interval '6' months from table1",
             id="no_case-minus_interval-month",
-            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+            marks=[pytest.mark.slow],
         ),
         pytest.param(
             "SELECT A, DATEFN + interval '5' weeks from table1",
             id="no_case-plus_interval-week",
-            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+            marks=[pytest.mark.slow],
         ),
         pytest.param(
             "SELECT A, DATEFN - interval '8 weeks' from table1",
             id="no_case-minus_interval-week-sf-syntax",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT A, DATEFN - interval '8' weeks from table1",
             id="no_case-minus_interval-week",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT A, DATEFN + interval '5' days from table1",
             id="no_case-plus_interval-day",
-            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+            marks=[pytest.mark.slow],
         ),
         pytest.param(
             "SELECT A, CASE WHEN EXTRACT(MONTH from DATEFN) = A then 'y' ELSE 'n' END from table1",
@@ -481,6 +479,7 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_getdate(query, memory_leak_check):
     """Tests the snowflake GETDATE() function"""
 
@@ -509,6 +508,10 @@ def test_getdate(query, memory_leak_check):
     )
 
 
+@pytest.mark.skipif(
+    bodo.spawn,
+    reason="Test relies on checking IR for dist_reduce, which is not supported in spawn",
+)
 def test_getdate_dist_len(memory_leak_check):
     """Make sure GETDATE() doesn't create a distributed reduction (to avoid streaming
     hang)
@@ -763,6 +766,7 @@ def sysdate_equiv_fns(request):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_sysdate_equivalents_cols(basic_df, sysdate_equiv_fns, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp.
@@ -801,6 +805,7 @@ def test_sysdate_equivalents_cols(basic_df, sysdate_equiv_fns, memory_leak_check
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_sysdate_equivalents_case(sysdate_equiv_fns, memory_leak_check):
     """
     Tests the group of equivalent functions which return the UTC timestamp in case.
@@ -860,12 +865,10 @@ def test_utc_date(basic_df, memory_leak_check):
 
 @pytest.fixture(
     params=[
-        # check the values for which the format strings are the same
-        (x, x)
+        pytest.param((x, x), marks=pytest.mark.bodosql_cpp)
         for x in [
             "%a",
             "%b",
-            "%f",
             "%H",
             "%j",
             "%m",
@@ -874,21 +877,26 @@ def test_utc_date(basic_df, memory_leak_check):
             "%Y",
             "%y",
             "%U",
-            "%S",
         ]
     ]
-    +
-    # check the values for which the format strings have a 1 to 1
-    [
-        ("%i", "%M"),
-        ("%M", "%B"),
-        ("%r", "%X %p"),
-        ("%s", "%S"),
-        ("%T", "%X"),
-        ("%u", "%W"),
-        ('% %a %\\, %%a, %%, %%%%, "%"', ' %a \\, %%a, %%, %%%%, ""'),
+    + [
+        # Format specifiers not supported in C++ backend due to PyArrow strftime limitations
+        ("%f", "%f"),
     ]
-    # TODO: add addition format characters when/if they become supported
+    + [
+        pytest.param(x, marks=pytest.mark.bodosql_cpp)
+        for x in [
+            ("%S", "%S"),
+            ("%s", "%S"),
+            ("%i", "%M"),
+            ("%M", "%B"),
+            ("%r", "%X %p"),
+            ("%T", "%X"),
+            ("%u", "%W"),
+            ('% %a %\\, %%a, %%, %%%%, "%"', ' %a \\, %%a, %%, %%%%, ""'),
+        ]
+    ]
+    # TODO: add additional format characters when/if they become supported
 )
 def python_mysql_dt_format_strings(request):
     """returns a tuple of python mysql string, and the equivalent python format string"""
@@ -954,6 +962,7 @@ def test_date_format_date(date_df, python_mysql_dt_format_strings, memory_leak_c
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_microseconds(dt_fn_dataframe, memory_leak_check):
     """spark has no equivalent MICROSECOND function, so we need to test it manually"""
 
@@ -973,6 +982,7 @@ def test_microseconds(dt_fn_dataframe, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_microsecond(tz_aware_df, memory_leak_check):
     """simplest test for microsecond on timezone aware data"""
     query = "SELECT MICROSECOND(A) as microsec_time from table1"
@@ -990,6 +1000,7 @@ def test_tz_aware_microsecond(tz_aware_df, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_microsecond_case(tz_aware_df, memory_leak_check):
     """test for microsecond within case statement on timezone aware data"""
     query = "SELECT CASE WHEN MICROSECOND(A) > 1 THEN MICROSECOND(A) ELSE -1 END as microsec_time from table1"
@@ -1430,6 +1441,7 @@ def test_date_part(query_fmt, memory_leak_check):
     ],
 )
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_date_part(tz_aware_df, query_fmt, memory_leak_check):
     selects = []
     for unit in ["year", "q", "mons", "wk", "dayofmonth", "hrs", "min", "s"]:
@@ -1459,6 +1471,7 @@ def test_tz_aware_date_part(tz_aware_df, query_fmt, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_date_part_unquoted_timeunit(memory_leak_check):
     """
     Test DATE_PART works for unquoted time unit input
@@ -2951,6 +2964,7 @@ def test_subdate_cols_td_arg1(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_subdate_td_scalars(
     subdate_equiv_fns,
     dt_fn_dataframe,
@@ -3186,6 +3200,7 @@ def test_date_trunc_day_part_handling(
         pytest.param(True, id="with_case"),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_date_trunc_date(date_df, day_part_strings, use_case, memory_leak_check):
     """
     test DATE_TRUNC works for datetime.date input
@@ -3385,6 +3400,7 @@ def test_tz_aware_yearofweekiso_scalar(tz_aware_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_weekiso(dt_fn_dataframe, memory_leak_check):
     query = "SELECT WEEKISO(timestamps) as expected from table1"
 
@@ -3401,6 +3417,7 @@ def test_weekiso(dt_fn_dataframe, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_weekiso_scalar(dt_fn_dataframe, memory_leak_check):
     query = "SELECT CASE WHEN WEEKISO(timestamps) = 0 THEN -1 ELSE WEEKISO(timestamps) END as EXPECTED from table1"
 
@@ -3548,6 +3565,7 @@ def test_next_previous_day_scalars(
 
 @pytest.mark.tz_aware
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tz_aware_day(tz_aware_df, memory_leak_check):
     query = "SELECT DAY(A) as m from table1"
     df = tz_aware_df["TABLE1"]
@@ -3556,6 +3574,7 @@ def test_tz_aware_day(tz_aware_df, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_day_case(memory_leak_check):
     query = "SELECT CASE WHEN B THEN DAY(A) END as m from table1"
     df = pd.DataFrame(
@@ -3580,6 +3599,7 @@ def test_tz_aware_day_case(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_extract_yhms(tz_aware_df, memory_leak_check):
     query = "SELECT EXTRACT(YEAR from A) as my_yr, EXTRACT(HOUR from A) as h, \
                     EXTRACT(MINUTE from A) as m, EXTRACT(SECOND from A) as s \
@@ -3597,6 +3617,7 @@ def test_tz_aware_extract_yhms(tz_aware_df, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
     query = "SELECT YEAR(A) as my_yr, HOUR(A) as h, MINUTE(A) as m, SECOND(A) as s from table1"
     df = tz_aware_df["TABLE1"]
@@ -3612,6 +3633,7 @@ def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_month(tz_aware_df, memory_leak_check):
     query = "SELECT MONTH(A) as m from table1"
     df = tz_aware_df["TABLE1"]
@@ -3621,6 +3643,7 @@ def test_tz_aware_month(tz_aware_df, memory_leak_check):
 
 @pytest.mark.tz_aware
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tz_aware_month_case(memory_leak_check):
     query = "SELECT CASE WHEN B THEN MONTH(A) END as m from table1"
     df = pd.DataFrame(
@@ -3673,6 +3696,7 @@ def large_tz_df(request):
         pytest.param(True, id="case"),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
     """Tests the BodoSQL functions WEEK, QUARTER and DAYNAME on timezone aware
     data with and without case statements. The queries are in the following
@@ -3782,6 +3806,7 @@ def test_tz_aware_dayof_fns(large_tz_df, case, memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_weekofyear(memory_leak_check):
     query = "SELECT WEEKOFYEAR(A) as m from table1"
     df = pd.DataFrame(
@@ -3797,6 +3822,7 @@ def test_tz_aware_weekofyear(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_weekofyear_case(memory_leak_check):
     query = "SELECT CASE WHEN B THEN WEEKOFYEAR(A) END as m from table1"
     df = pd.DataFrame(
@@ -4716,6 +4742,7 @@ def date_only_single_arg_fns(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def date_only_single_arg_fns_time_input_handling(
     date_only_single_arg_fns, time_df, memory_leak_check
 ):
@@ -4734,6 +4761,7 @@ def date_only_single_arg_fns_time_input_handling(
         )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 def next_previous_day_time_input_handling(next_or_prev, time_df, memory_leak_check):
     query = f"SELECT {next_or_prev}_DAY(A, 'mo') as output from table1"
@@ -4751,6 +4779,7 @@ def next_previous_day_time_input_handling(next_or_prev, time_df, memory_leak_che
         )
 
 
+@pytest.mark.bodosql_cpp
 def test_last_day_no_date_part(date_df, memory_leak_check):
     """
     Tests LAST_DAY function without specifying date units
@@ -4772,6 +4801,7 @@ def test_last_day_no_date_part(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
     """
     Tests LAST_DAY function with specifying date units
@@ -4808,6 +4838,7 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
         )
 
 
+@pytest.mark.bodosql_cpp
 def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
     """
     Tests LAST_DAY function can throw correct error when input
@@ -4827,6 +4858,7 @@ def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
 
 
 @pytest.mark.parametrize("fn_name", ["CURDATE", "CURRENT_DATE"])
+@pytest.mark.bodosql_cpp
 def test_current_date(fn_name, memory_leak_check):
     """
     Test CURRENT_DATE function and its alias CURDATE
@@ -4848,6 +4880,7 @@ def test_months_between(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_add_months(date_df, memory_leak_check):
     query = "SELECT ADD_MONTHS(A, -18) from table1"
 
@@ -4856,6 +4889,7 @@ def test_add_months(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_time_slice(memory_leak_check):
     ts = pd.Timestamp(2012, 1, 1, 12, 59, 59)
     df = pd.DataFrame({"A": pd.Series([ts] * 12, dtype="datetime64[ns]")})

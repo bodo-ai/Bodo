@@ -110,6 +110,42 @@ def from_pandas(df):
         if len(df[col]) > 0 and type(df[col].iloc[0]) is BodoScalar:
             df[col] = df[col].apply(lambda x: x.get_value() if x is not None else None)
 
+    # Convert datetime.time columns to Arrow time64[ns] so that
+    # pa.Schema.from_pandas can infer the type. PyArrow does not
+    # recognize Python datetime.time objects or bodo.types.Time natively.
+    import datetime as _datetime
+
+    for col in df.columns:
+        if len(df[col]) > 0:
+            sample_val = df[col].iloc[0]
+            if isinstance(sample_val, _datetime.time):
+                vals = pa.array(
+                    [
+                        None
+                        if pd.isna(t) or t is None
+                        else (t.hour * 3600 + t.minute * 60 + t.second) * 1_000_000_000
+                        + t.microsecond * 1000
+                        for t in df[col]
+                    ],
+                    type=pa.time64("ns"),
+                )
+                df[col] = pd.array(vals, dtype=pd.ArrowDtype(pa.time64("ns")))
+            elif (
+                # Check for bodo.types.Time by looking for attributes since we don't want to import the type to isinstance check
+                # since that would import JIT
+                hasattr(sample_val, "value")
+                and hasattr(sample_val, "precision")
+                and hasattr(sample_val, "hour")
+                and hasattr(sample_val, "minute")
+                and type(sample_val).__module__.startswith("bodo")
+            ):
+                # bodo.types.Time: value is int64 nanoseconds since midnight
+                vals = pa.array(
+                    [None if pd.isna(t) else t.value for t in df[col]],
+                    type=pa.time64("ns"),
+                )
+                df[col] = pd.array(vals, dtype=pd.ArrowDtype(pa.time64("ns")))
+
     try:
         pa_schema = pa.Schema.from_pandas(df.iloc[:sample_size])
     except pa.lib.ArrowInvalid as e:
