@@ -16,6 +16,7 @@ from bodosql.tests.utils import check_query, shrink_data
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q12(tpch_data, memory_leak_check):
     SHIPMODE1 = "MAIL"
     SHIPMODE2 = "SHIP"
@@ -426,6 +427,7 @@ def test_tpch_q18(tpch_data, memory_leak_check):
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q19(tpch_data, memory_leak_check):
     QUANTITY1 = 1
     QUANTITY2 = 10
