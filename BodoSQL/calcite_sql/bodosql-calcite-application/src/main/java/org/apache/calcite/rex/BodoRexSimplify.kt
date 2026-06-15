@@ -1920,10 +1920,6 @@ class BodoRexSimplify(
         val isPlus = !(e.operator.name == "DATE_SUB" || e.operator.name == "SUBDATE")
         val result = bodoLiteralPlusMinus(e, lit1, lit2, isPlus)
         
-        // If bodoLiteralPlusMinus couldn't simplify it, return the original
-        if (result === e) {
-            return e
-        }
         return result
     }
 

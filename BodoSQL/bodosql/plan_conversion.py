@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import decimal
 import operator
+import re
 import zoneinfo
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -98,6 +99,22 @@ _MYSQL_TO_STRFTIME = {
     "%y": "%y",
     "%%": "%%",
 }
+_MYSQL_FORMAT_TOKEN_RE = re.compile(r"%(.)|%$")
+
+
+def _mysql_date_format_to_arrow_format(mysql_fmt: str) -> str:
+    def replace_mysql_token(match):
+        mysql_token = match.group(0)
+        if mysql_token == "%f":
+            raise NotImplementedError(
+                "DATE_FORMAT with '%f' (microseconds) is not supported in the C++ backend yet "
+                "because PyArrow's strftime does not handle it correctly."
+            )
+        if mysql_token == "%":
+            return "%%"
+        return _MYSQL_TO_STRFTIME.get(mysql_token, mysql_token[1])
+
+    return _MYSQL_FORMAT_TOKEN_RE.sub(replace_mysql_token, mysql_fmt)
 
 
 @dataclass
@@ -272,52 +289,17 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
 
         if func_name == "DATE_FORMAT" and num_operands == 2:
-            # DATE_FORMAT(timestamp, mysql_format_str)
-            # Convert MySQL format string to Python strftime format string
-            # and use Arrow's strftime function.
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[0], input_plan
             )
             mysql_fmt = str(java_call.getOperands()[1].toString())
             if mysql_fmt.startswith("'") and mysql_fmt.endswith("'"):
                 mysql_fmt = mysql_fmt[1:-1]
-            # Detected format issues that need post-processing (currently none, as unsupported ones raise errors)
-            py_fmt_parts = []
-            i = 0
-            while i < len(mysql_fmt):
-                if mysql_fmt[i] == "%" and i + 1 < len(mysql_fmt):
-                    # Try longest match first
-                    matched = False
-                    for length in (2, 1):
-                        if i + length > len(mysql_fmt):
-                            continue
-                        spec = mysql_fmt[i : i + length]
-                        if spec in _MYSQL_TO_STRFTIME:
-                            py_fmt_parts.append(_MYSQL_TO_STRFTIME[spec])
-                            matched = True
-                            i += length
-                            break
-                    if matched:
-                        continue
-                    # Check for special Arrow-unsupported format specs
-                    if mysql_fmt[i : i + 2] == "%f":
-                        raise NotImplementedError(
-                            "DATE_FORMAT with '%f' (microseconds) is not supported in the C++ backend yet "
-                            "because PyArrow's strftime does not handle it correctly."
-                        )
-                    # Unrecognized MySQL format: "%x" → output char literally
-                    py_fmt_parts.append(mysql_fmt[i + 1])
-                    i += 2
-                elif mysql_fmt[i] == "%" and i + 1 == len(mysql_fmt):
-                    # Trailing "%" → literal "%"
-                    py_fmt_parts.append("%%")
-                    i += 1
-                else:
-                    py_fmt_parts.append(mysql_fmt[i])
-                    i += 1
-            py_fmt = "".join(py_fmt_parts)
+            arrow_fmt = _mysql_date_format_to_arrow_format(mysql_fmt)
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-            return ArrowScalarFuncExpression(empty_data, [input], "strftime", (py_fmt,))
+            return ArrowScalarFuncExpression(
+                empty_data, [input], "strftime", (arrow_fmt,)
+            )
 
         if func_name == "MAKEDATE" and num_operands == 2:
             # MAKEDATE(year, dayofyear) → Jan 1 of year + (doy-1) days
