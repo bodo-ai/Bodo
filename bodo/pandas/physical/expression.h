@@ -1369,18 +1369,6 @@ class PhysicalArrowExpression : public PhysicalExpression {
 
             arrow::compute::MatchSubstringOptions opts(pattern);
             result = do_arrow_compute_unary(res, func_name, &opts);
-        } else if (scalar_func_data.arrow_func_name ==
-                   "replace_substring_regex") {
-            // Args: (pattern_string, replacement_string)
-            PyObject *args = scalar_func_data.args;
-            const char *pattern_cstr =
-                PyUnicode_AsUTF8(PyTuple_GetItem(args, 0));
-            const char *replacement_cstr =
-                PyUnicode_AsUTF8(PyTuple_GetItem(args, 1));
-            arrow::compute::ReplaceSubstringOptions opts(pattern_cstr,
-                                                         replacement_cstr);
-            result =
-                do_arrow_compute_unary(res, "replace_substring_regex", &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
             int64_t digits = get_py_round_arg(scalar_func_data.args);
 

@@ -131,6 +131,8 @@ def from_pandas(df):
                 )
                 df[col] = pd.array(vals, dtype=pd.ArrowDtype(pa.time64("ns")))
             elif (
+                # Check for bodo.types.Time by looking for attributes since we don't want to import the type to isinstance check
+                # since that would import JIT
                 hasattr(sample_val, "value")
                 and hasattr(sample_val, "precision")
                 and hasattr(sample_val, "hour")

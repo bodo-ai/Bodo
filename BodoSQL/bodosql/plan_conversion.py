@@ -309,9 +309,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             doy_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
-            assert hasattr(year_expr, "value") and hasattr(doy_expr, "value"), (
-                "MAKEDATE requires constant integer arguments in C++ backend"
-            )
+            assert isinstance(year_expr, ConstantExpression) and isinstance(
+                doy_expr, ConstantExpression
+            ), "MAKEDATE requires constant integer arguments in C++ backend"
             result_date = datetime(int(year_expr.value), 1, 1).date() + timedelta(
                 days=int(doy_expr.value) - 1
             )
@@ -354,7 +354,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             if num_operands == 2:
                 # EXTRACT(FLAG(MONTH), date) → month
                 unit_str = str(java_call.getOperands()[1].toString()).upper()
-                # Strip "FLAG(" / ")" or "INTERVAL_" prefix from unit string
+                # Strip "FLAG(" / ")" from unit string
                 if "(" in unit_str:
                     unit_str = unit_str.split("(")[1].rstrip(")")
             LAST_DAY_UNITS = {
@@ -403,7 +403,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             months_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
-            assert hasattr(months_expr, "value") and isinstance(
+            assert isinstance(months_expr, ConstantExpression) and isinstance(
                 months_expr.value, int
             ), "ADD_MONTHS requires constant integer for months argument in C++ backend"
             month_interval = ("MonthDayNanoInterval", months_expr.value, 0, 0)
@@ -494,7 +494,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
                 if is_int_type(amount_type):
                     # DATE_SUB(date, N) → date - N days
-                    if hasattr(amount_expr, "value"):
+                    if isinstance(amount_expr, ConstantExpression):
                         interval_val = pd.Timedelta(days=int(amount_expr.value))
                         dummy_empty_data = pd.Series(
                             dtype=pd.ArrowDtype(pa.duration("ns"))
@@ -548,7 +548,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 ctx, java_call.getOperands()[1], input_plan
             )
             unit_str = str(java_call.getOperands()[2].toString()).upper().strip("'")
-            # Strip "FLAG(" / ")" or "INTERVAL_" prefix from unit string
+            # Strip "FLAG(" / ")" from unit string
             if "(" in unit_str:
                 unit_str = unit_str.split("(")[1].rstrip(")")
             start_or_end = "START"
@@ -559,7 +559,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 assert start_or_end in ("START", "END"), (
                     f"Unsupported TIME_SLICE 4th operand: {start_or_end}"
                 )
-            assert hasattr(interval_expr, "value"), (
+            assert isinstance(interval_expr, ConstantExpression), (
                 "TIME_SLICE interval must be a constant in C++ backend"
             )
             slice_length = int(interval_expr.value)
@@ -756,7 +756,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # EXTRACT(FLAG(MONTH), date) → month(date)
         unit_str = str(java_call.getOperands()[0].toString()).upper()
         input = java_expr_to_python_expr(ctx, java_call.getOperands()[1], input_plan)
-        # Strip parentheses from unit if it's in the form FLAG(unit)
+        # Strip FLAG from unit if it's in the form FLAG(unit)
         if "(" in unit_str:
             unit_str = unit_str.split("(")[1].rstrip(")")
         arrow_func = _DATE_PART_ARROW_FUNCS.get(unit_str)
@@ -804,11 +804,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
-        if func_name in ("WEEK", "WEEKOFYEAR", "WEEKISO"):
-            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-
-        if func_name == "DAYOFYEAR":
+        if func_name in ("WEEK", "WEEKOFYEAR", "WEEKISO", "DAYOFYEAR"):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
@@ -915,7 +911,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             total_months = 0
             total_nanos = 0
             for expr in op_exprs:
-                assert hasattr(expr, "value"), (
+                assert isinstance(expr, ConstantExpression), (
                     "COMBINE_INTERVALS requires constant interval arguments in C++ backend"
                 )
                 val = expr.value
