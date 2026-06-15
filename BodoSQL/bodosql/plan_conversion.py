@@ -785,30 +785,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name in ("LPAD", "RPAD") and len(op_exprs) in (2, 3):
             src = op_exprs[0]
-            length = op_exprs[1]
+            ensure_type_of_expr(src, "src", str)
 
-            if not isinstance(length, bodo.pandas.plan.ConstantExpression):
-                raise ValueError(
-                    f"length should be ConstantExpression but instead was {type(length)}"
-                )
-            if not isinstance(length.value, int):
-                raise ValueError(
-                    f"length.value should be integer but instead was {type(length.value)}"
-                )
+            length = op_exprs[1]
+            ensure_arg_is_const_expr_of_type(length, "length", int)
 
             arrow_func_args = (length.value,)
 
             if len(op_exprs) == 3:
                 pattern = op_exprs[2]
-
-                if not isinstance(pattern, bodo.pandas.plan.ConstantExpression):
-                    raise ValueError(
-                        f"pattern should be ConstantExpression but instead was {type(pattern)}"
-                    )
-                if not isinstance(pattern.value, str):
-                    raise ValueError(
-                        f"pattern.value should be string but instead was {type(pattern.value)}"
-                    )
+                ensure_arg_is_const_expr_of_type(pattern, "pattern", str)
                 arrow_func_args += (pattern.value,)
 
             return ArrowScalarFuncExpression(
@@ -846,25 +832,27 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
-            left = op_exprs[0]
+            src = op_exprs[0]
             len_expr = op_exprs[1]
-            if not isinstance(len_expr, ConstantExpression):
-                raise ValueError("len_expr not a ConstantExpression")
 
-            out_empty = left.empty_data.iloc[:, 0]
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", str)
+
+            out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
-                out_empty, [left], "utf8_slice_codeunits", (0, len_expr.value, 1)
+                out_empty, [src], "utf8_slice_codeunits", (0, len_expr.value, 1)
             )
         elif func_name == "RIGHT" and len(op_exprs) == 2:
             # Implement RIGHT as substr(-len,...)
-            left = op_exprs[0]
+            src = op_exprs[0]
             len_expr = op_exprs[1]
-            if not isinstance(len_expr, ConstantExpression):
-                raise ValueError("len_expr not a ConstantExpression")
 
-            out_empty = left.empty_data.iloc[:, 0]
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", str)
+
+            out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
-                out_empty, [left], "utf8_slice_codeunits", (-len_expr.value, None, 1)
+                out_empty, [src], "utf8_slice_codeunits", (-len_expr.value, None, 1)
             )
         elif func_name == "STARTSWITH" and len(op_exprs) == 2:
             src = op_exprs[0]
@@ -939,14 +927,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             if len(op_exprs) == 2:
                 delim_expr = op_exprs[1]
-                if not isinstance(delim_expr, bodo.pandas.plan.ConstantExpression):
-                    raise ValueError(
-                        f"delim_expr should be ConstantExpression but instead was {type(delim_expr)}"
-                    )
-                if not isinstance(delim_expr.value, str):
-                    raise ValueError(
-                        f"delim_expr.value should be string but instead was {type(delim_expr.value)}"
-                    )
+                ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", str)
                 raise ValueError("Delimiter argument to INITCAP not yet supported")
             # Note that Arrow's utf8_title considers numbers to be delimiters, which may differ from some implementations of INITCAP
             return ArrowScalarFuncExpression(
