@@ -342,6 +342,17 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
+            input_type = input.pa_schema.field(0).type
+            if pa.types.is_time(input_type) and arrow_unit in (
+                "year",
+                "quarter",
+                "month",
+                "week",
+                "day",
+            ):
+                raise NotImplementedError(
+                    f"Unsupported unit for DATE_TRUNC with TIME input: {unit_raw}"
+                )
             empty_data = pd.Series(
                 [],
                 dtype=pd.ArrowDtype(
