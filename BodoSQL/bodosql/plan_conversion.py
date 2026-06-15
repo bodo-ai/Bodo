@@ -342,8 +342,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
+            empty_data = pd.Series([], dtype=pd.ArrowDtype(pa.timestamp("ns")))
             return ArrowScalarFuncExpression(
-                input.empty_data, [input], "floor_temporal", (1, arrow_unit)
+                empty_data, [input], "floor_temporal", (1, arrow_unit)
             )
 
         if func_name == "LAST_DAY":
