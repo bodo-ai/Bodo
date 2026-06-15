@@ -342,7 +342,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
-            empty_data = pd.Series([], dtype=pd.ArrowDtype(pa.timestamp("ns")))
+            empty_data = pd.Series(
+                [],
+                dtype=pd.ArrowDtype(
+                    sql_type_to_pa_type(ctx, java_call.getType().getSqlTypeName())
+                ),
+            )
             return ArrowScalarFuncExpression(
                 empty_data, [input], "floor_temporal", (1, arrow_unit)
             )
