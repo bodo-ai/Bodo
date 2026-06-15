@@ -13,6 +13,7 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_codegen
 
 
+@pytest.mark.bodosql_cpp
 def test_like(bodosql_string_types, regex_string, like_expression, memory_leak_check):
     """
     tests that like works for a variety of different possible regex strings
@@ -26,6 +27,7 @@ def test_like(bodosql_string_types, regex_string, like_expression, memory_leak_c
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_like_ilike_non_literal_pattern(bodosql_string_types, memory_leak_check):
     """
     tests that like and ilike works for non-literal patterns
@@ -74,6 +76,7 @@ def test_like_ilike_arr_pattern(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_like_ilike_basic_escape(memory_leak_check):
     """
     tests that like and like works for a couple different possible regex strings
@@ -99,10 +102,8 @@ def test_like_ilike_basic_escape(memory_leak_check):
     ctx = {"TABLE1": df}
     query1 = "select A from table1 where A like '%w^%%' escape '^'"
     query2 = "select A from table1 where A ilike '%w^_%' escape '^'"
-    # Spark doesn't support ilike
     query3 = "select A from table1 where A like '^%R%' escape '^'"
     query4 = "select A from table1 where A ilike '^_X%' escape '^'"
-    # Spark doesn't support ilike
 
     check_query(
         query1,
@@ -130,6 +131,7 @@ def test_like_ilike_basic_escape(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_like_ilike_non_constant_basic_escape(memory_leak_check):
     """
     tests that like and ilike works for a couple different possible regex strings
@@ -188,6 +190,7 @@ def test_like_ilike_arr_escape(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_ilike(bodosql_string_types, regex_string, memory_leak_check):
     """
     tests that ilike works for a variety of different possible regex strings
@@ -202,6 +205,7 @@ def test_ilike(bodosql_string_types, regex_string, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_like_any_all(
     bodosql_multiple_string_types,
     regex_strings,
@@ -221,6 +225,7 @@ def test_like_any_all(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_like_scalar(
     bodosql_string_types, regex_string, like_expression, memory_leak_check
 ):
@@ -238,6 +243,7 @@ def test_like_scalar(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_like_with_logical_operators(
     bodosql_string_types, regex_string, like_expression, memory_leak_check
 ):
@@ -258,6 +264,7 @@ def test_like_with_logical_operators(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_like_cols(
     basic_df, regex_string, spark_info, like_expression, memory_leak_check
 ):
@@ -271,6 +278,7 @@ def test_like_cols(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_like_constants(
     basic_df,
     regex_string,
@@ -292,12 +300,14 @@ def test_like_constants(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_nested_upper_lower(bodosql_string_types, memory_leak_check):
     """
     Tests that lower/upper calls nest properly
     """
     check_query(
         "select lower(upper(lower(upper(A)))) from table1",
+        # "select upper(A) from table1",
         bodosql_string_types,
         None,
         check_names=False,
@@ -306,6 +316,7 @@ def test_nested_upper_lower(bodosql_string_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_upper_lower_scalars(basic_df, string_constants, memory_leak_check):
     """
     Tests that lower/upper calls work on scalar values
@@ -335,6 +346,7 @@ def test_upper_lower_scalars(basic_df, string_constants, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_upper_lower_scalars_nested(basic_df, string_constants, memory_leak_check):
     """
     Tests that nested lower/upper calls work on scalar values
@@ -351,6 +363,7 @@ def test_upper_lower_scalars_nested(basic_df, string_constants, memory_leak_chec
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_upper_lower_like_constants(
     basic_df,
     regex_string,
@@ -385,6 +398,7 @@ def test_upper_lower_like_constants(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_pythonic_regex(
     bodosql_string_types,
     pythonic_regex,
@@ -403,6 +417,7 @@ def test_pythonic_regex(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_all_percent(
     bodosql_string_types,
     like_expression,
@@ -420,6 +435,7 @@ def test_all_percent(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_all_percent_scalar(
     bodosql_string_types,
     like_expression,
@@ -439,6 +455,7 @@ def test_all_percent_scalar(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_leading_percent(
     bodosql_string_types,
     like_expression,
@@ -463,6 +480,7 @@ def test_leading_percent(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_leading_percent_scalar(
     bodosql_string_types,
     like_expression,
@@ -482,6 +500,7 @@ def test_leading_percent_scalar(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_trailing_percent(
     bodosql_string_types,
     like_expression,
@@ -506,6 +525,7 @@ def test_trailing_percent(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_trailing_percent_scalar(
     bodosql_string_types,
     like_expression,
@@ -525,6 +545,7 @@ def test_trailing_percent_scalar(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_both_percent(
     bodosql_string_types,
     like_expression,
@@ -549,6 +570,7 @@ def test_both_percent(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_both_percent_scalar(
     bodosql_string_types,
     like_expression,
@@ -576,6 +598,7 @@ def test_both_percent_scalar(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_utf_scalar():
     check_query(
         "select 'ǖǘǚǜ'",

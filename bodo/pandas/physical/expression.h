@@ -192,6 +192,26 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
+ * @brief Run arrow compute on the left Datum and right ExprResult after
+ * converting the ExprResult to an Arrow Datum.
+ *
+ */
+std::shared_ptr<array_info> do_arrow_compute_binary(
+    arrow::Datum left_res, std::shared_ptr<ExprResult> right_res,
+    const std::string &comparator,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
+
+/**
+ * @brief Run arrow compute on the left ExprResult and right Datum after
+ * converting the ExprResult to an Arrow Datum.
+ *
+ */
+std::shared_ptr<array_info> do_arrow_compute_binary(
+    std::shared_ptr<ExprResult> left_res, arrow::Datum right_res,
+    const std::string &comparator,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
+
+/**
  * @brief Convert ExprResult to arrow and cast to the requested type.
  *
  */
@@ -219,9 +239,10 @@ arrow::Datum do_arrow_compute_unary(
  * @brief Run arrow compute operation on two Datums.
  *
  */
-arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
-                                     arrow::Datum right_res,
-                                     const std::string &comparator);
+arrow::Datum do_arrow_compute_binary(
+    arrow::Datum left_res, arrow::Datum right_res,
+    const std::string &comparator,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Run cast on arrow Datum.
@@ -1029,8 +1050,10 @@ class PhysicalCaseExpression : public PhysicalExpression {
    public:
     PhysicalCaseExpression(std::shared_ptr<PhysicalExpression> when_expr,
                            std::shared_ptr<PhysicalExpression> then_expr,
-                           std::shared_ptr<PhysicalExpression> else_expr)
-        : PhysicalExpression(PhysicalExpressionType::CASE) {
+                           std::shared_ptr<PhysicalExpression> else_expr,
+                           std::shared_ptr<arrow::DataType> result_type)
+        : PhysicalExpression(PhysicalExpressionType::CASE),
+          result_type(std::move(result_type)) {
         children.push_back(when_expr);
         children.push_back(then_expr);
         children.push_back(else_expr);
@@ -1053,6 +1076,24 @@ class PhysicalCaseExpression : public PhysicalExpression {
             children[2]->ProcessBatch(input_batch);
 
         auto result = do_arrow_compute_case(when_res, then_res, else_res);
+
+        // Cast result to expected type if different
+        if (result_type) {
+            std::shared_ptr<arrow::Array> arrow_arr =
+                prepare_arrow_compute(result);
+            if (!arrow_arr->type()->Equals(result_type)) {
+                arrow::Result<arrow::Datum> cast_res =
+                    arrow::compute::Cast(arrow_arr, result_type);
+                if (!cast_res.ok()) [[unlikely]] {
+                    throw std::runtime_error(
+                        "PhysicalCaseExpression cast failed: " +
+                        cast_res.status().message());
+                }
+                result = arrow_array_to_bodo(cast_res.ValueOrDie().make_array(),
+                                             bodo::BufferPool::DefaultPtr());
+            }
+        }
+
         auto when_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(when_res);
         auto then_as_scalar =
@@ -1088,6 +1129,9 @@ class PhysicalCaseExpression : public PhysicalExpression {
         }
         return cmp_res.ValueOrDie();
     }
+
+   private:
+    const std::shared_ptr<arrow::DataType> result_type;
 };
 
 /**
@@ -1350,10 +1394,25 @@ class PhysicalArrowExpression : public PhysicalExpression {
                        "match_substring_regex_first" ||
                    scalar_func_data.arrow_func_name == "match_substring" ||
                    scalar_func_data.arrow_func_name == "starts_with" ||
-                   scalar_func_data.arrow_func_name == "ends_with") {
-            const char *c_str = get_py_single_arg_as_cstr(
-                scalar_func_data.args,
-                scalar_func_data.arrow_func_name.c_str());
+                   scalar_func_data.arrow_func_name == "ends_with" ||
+                   scalar_func_data.arrow_func_name == "find_substring") {
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            size_t num_args = PyTuple_Size(scalar_func_data.args);
+            const char *c_str;
+            bool ignore_case = false;
+            if (num_args == 1) {
+                // Only string was passed
+                c_str = get_py_single_arg_as_cstr(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str());
+            } else {
+                // string and ignore_case passed
+                std::tie(c_str, ignore_case) = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_cstr, get_py_object_as_bool);
+            }
 
             std::string func_name = scalar_func_data.arrow_func_name;
             std::string pattern(c_str);
@@ -1366,7 +1425,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 pattern = "^(" + pattern + ")";
             }
 
-            arrow::compute::MatchSubstringOptions opts(pattern);
+            arrow::compute::MatchSubstringOptions opts(pattern, ignore_case);
             result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
             int64_t digits = get_py_round_arg(scalar_func_data.args);
@@ -1396,6 +1455,54 @@ class PhysicalArrowExpression : public PhysicalExpression {
 
             arrow::compute::TrimOptions opts(c_str);
             result = do_arrow_compute_unary(res, "utf8_trim", &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_lpad" ||
+                   scalar_func_data.arrow_func_name == "utf8_rpad") {
+            int64_t width;
+            const char *padding;
+
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            if (PyTuple_Size(scalar_func_data.args) > 1) {
+                std::tie(width, padding) = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_int64, get_py_object_as_cstr);
+            } else {
+                std::tie(width) = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_int64);
+                padding = " ";
+            }
+
+            std::string padding_str(padding);
+
+            arrow::compute::PadOptions opts(width, padding_str);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "binary_repeat") {
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            auto [num_repeats] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_int64);
+            arrow::Datum num_repeats_datum(
+                std::make_shared<arrow::Int64Scalar>(num_repeats));
+            result = do_arrow_compute_binary(res, num_repeats_datum,
+                                             "binary_repeat");
+        } else if (scalar_func_data.arrow_func_name == "replace_substring") {
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            auto [pattern, replacement] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_cstr);
+
+            std::string pattern_str(pattern);
+            std::string replacement_str(replacement);
+
+            arrow::compute::ReplaceSubstringOptions opts(pattern, replacement);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "is_in") {
             std::shared_ptr<arrow::Array> values_array =
                 get_py_isin_arg_as_arrow_array(scalar_func_data.args);

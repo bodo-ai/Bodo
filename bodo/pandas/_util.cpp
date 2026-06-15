@@ -17,6 +17,7 @@
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/optional_filter.hpp"
+#include "physical/expression.h"
 
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
@@ -957,6 +958,41 @@ PyObject *duckdbFilterSetToPyicebergFilter(
     return ret;
 }
 
+std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum) {
+    if (datum.is_scalar()) {
+        return arrow_array_to_bodo(
+            arrow::MakeArrayFromScalar(*datum.scalar(), 1).ValueOrDie(),
+            bodo::BufferPool::DefaultPtr());
+    }
+
+    std::shared_ptr<arrow::Array> arrow_arr = datum.make_array();
+    return arrow_array_to_bodo(arrow_arr, bodo::BufferPool::DefaultPtr());
+}
+
+arrow::Datum ConvertExprResultToDatum(std::shared_ptr<ExprResult> res,
+                                      std::string res_name) {
+    // Try to convert the results of our children into array
+    // or scalar results to see which one they are.
+
+    std::shared_ptr<ArrayExprResult> res_as_array =
+        std::dynamic_pointer_cast<ArrayExprResult>(res);
+    std::shared_ptr<ScalarExprResult> res_as_scalar =
+        std::dynamic_pointer_cast<ScalarExprResult>(res);
+
+    arrow::Datum src;
+    if (res_as_array) {
+        src = arrow::Datum(prepare_arrow_compute(res_as_array->result));
+    } else if (res_as_scalar) {
+        src = arrow::MakeScalar(prepare_arrow_compute(res_as_scalar->result)
+                                    ->GetScalar(0)
+                                    .ValueOrDie());
+    } else {
+        throw std::runtime_error(res_name + " is neither array nor scalar.");
+    }
+
+    return src;
+}
+
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type) {
     using arrow::Type;
@@ -1178,26 +1214,46 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     return filters;
 }
 
-const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name) {
-    if (!PyTuple_Check(args) || PyTuple_Size(args) != 1) {
-        throw std::runtime_error(
-            fmt::format("{} args not a 1-element tuple.", func_name));
+void assert_py_args_is_tuple(PyObject *args, const char *err_context) {
+    if (!PyTuple_Check(args)) {
+        throw std::runtime_error(fmt::format("Args for {} is not a tuple.",
+                                             std::string(err_context)));
     }
+}
 
-    // Get the first element (borrowed reference)
-    PyObject *py_str = PyTuple_GetItem(args, 0);
+int64_t get_py_object_as_int64(PyObject *py_int, const char *err_context) {
+    if (!PyLong_Check(py_int)) {
+        throw std::runtime_error("Object is not a Python int: " +
+                                 std::string(err_context));
+    }
+    return PyLong_AsLongLong(py_int);
+}
 
+const char *get_py_object_as_cstr(PyObject *py_str, const char *err_context) {
     if (!PyUnicode_Check(py_str)) {
-        throw std::runtime_error(
-            fmt::format("{} args element is not a Python string.", func_name));
+        throw std::runtime_error("Object is not a Python string: " +
+                                 std::string(err_context));
     }
-
     // Convert to UTF‑8 C string
     const char *c_str = PyUnicode_AsUTF8(py_str);
     if (!c_str) {
         throw std::runtime_error(
-            fmt::format("{} error extracting Python string.", func_name));
+            fmt::format("Error for {} extracting Python string.",
+                        std::string(err_context)));
     }
+    return c_str;
+}
+
+bool get_py_object_as_bool(PyObject *py_bool, const char *err_context) {
+    if (py_bool != Py_True && py_bool != Py_False) {
+        throw std::runtime_error("Object is not a Python bool: " +
+                                 std::string(err_context));
+    }
+    return py_bool == Py_True;
+}
+
+const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name) {
+    auto [c_str] = get_py_args_as_types(args, func_name, get_py_object_as_cstr);
     return c_str;
 }
 
@@ -1207,11 +1263,7 @@ int64_t get_py_round_arg(PyObject *args) {
         // Get the first element (borrowed reference)
         PyObject *py_digits = PyTuple_GetItem(args, 0);
 
-        if (!PyLong_Check(py_digits)) {
-            throw std::runtime_error("round args element is not a Python int.");
-        }
-
-        digits = PyLong_AsLong(py_digits);
+        digits = get_py_object_as_int64(py_digits, "round args element");
     }
     return digits;
 }

@@ -221,72 +221,35 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator,
     const std::shared_ptr<arrow::DataType> result_type) {
-    // Try to convert the results of our children into array
-    // or scalar results to see which one they are.
-    std::shared_ptr<ArrayExprResult> left_as_array =
-        std::dynamic_pointer_cast<ArrayExprResult>(left_res);
-    std::shared_ptr<ScalarExprResult> left_as_scalar =
-        std::dynamic_pointer_cast<ScalarExprResult>(left_res);
-    std::shared_ptr<ArrayExprResult> right_as_array =
-        std::dynamic_pointer_cast<ArrayExprResult>(right_res);
-    std::shared_ptr<ScalarExprResult> right_as_scalar =
-        std::dynamic_pointer_cast<ScalarExprResult>(right_res);
+    arrow::Datum src1 =
+        ConvertExprResultToDatum(left_res, "do_arrow_compute left");
+    arrow::Datum src2 =
+        ConvertExprResultToDatum(right_res, "do_arrow_compute right");
+    arrow::Datum cmp_res_datum =
+        do_arrow_compute_binary(src1, src2, comparator);
+    return ConvertDatumToArrayInfo(cmp_res_datum);
+}
 
-    arrow::Datum src1;
-    if (left_as_array) {
-        src1 = arrow::Datum(prepare_arrow_compute(left_as_array->result));
-    } else if (left_as_scalar) {
-        src1 = arrow::MakeScalar(prepare_arrow_compute(left_as_scalar->result)
-                                     ->GetScalar(0)
-                                     .ValueOrDie());
-    } else {
-        throw std::runtime_error(
-            "do_arrow_compute left is neither array nor scalar.");
-    }
+std::shared_ptr<array_info> do_arrow_compute_binary(
+    arrow::Datum left_res, std::shared_ptr<ExprResult> right_res,
+    const std::string& comparator,
+    const std::shared_ptr<arrow::DataType> result_type) {
+    arrow::Datum src2 =
+        ConvertExprResultToDatum(right_res, "do_arrow_compute right");
+    arrow::Datum cmp_res_datum =
+        do_arrow_compute_binary(left_res, src2, comparator);
+    return ConvertDatumToArrayInfo(cmp_res_datum);
+}
 
-    arrow::Datum src2;
-    if (right_as_array) {
-        src2 = arrow::Datum(prepare_arrow_compute(right_as_array->result));
-    } else if (right_as_scalar) {
-        src2 = arrow::MakeScalar(prepare_arrow_compute(right_as_scalar->result)
-                                     ->GetScalar(0)
-                                     .ValueOrDie());
-    } else {
-        throw std::runtime_error(
-            "do_arrow_compute right is neither array nor scalar.");
-    }
-
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction(comparator, {src1, src2});
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_arrow_compute_binary cmp_res: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    auto cmp_datum = cmp_res.ValueOrDie();
-    std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
-    if (result_type && cmp_dtype != result_type) {
-        // Cast to result type if available and different from current type.
-        arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(cmp_datum, result_type);
-        if (!cast_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
-                cast_res.status().message());
-        }
-        cmp_res = cast_res;
-    }
-
-    auto res = cmp_res.ValueOrDie();
-    if (res.is_scalar()) {
-        return arrow_array_to_bodo(
-            arrow::MakeArrayFromScalar(*res.scalar(), 1).ValueOrDie(),
-            bodo::BufferPool::DefaultPtr());
-    }
-
-    std::shared_ptr<arrow::Array> arrow_arr = cmp_res.ValueOrDie().make_array();
-    return arrow_array_to_bodo(arrow_arr, bodo::BufferPool::DefaultPtr());
+std::shared_ptr<array_info> do_arrow_compute_binary(
+    std::shared_ptr<ExprResult> left_res, arrow::Datum right_res,
+    const std::string& comparator,
+    const std::shared_ptr<arrow::DataType> result_type) {
+    arrow::Datum src1 =
+        ConvertExprResultToDatum(left_res, "do_arrow_compute left");
+    arrow::Datum cmp_res_datum =
+        do_arrow_compute_binary(src1, right_res, comparator);
+    return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_unary(
@@ -368,15 +331,31 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
                                bodo::BufferPool::DefaultPtr());
 }
 
-arrow::Datum do_arrow_compute_binary(arrow::Datum left_res,
-                                     arrow::Datum right_res,
-                                     const std::string& comparator) {
+arrow::Datum do_arrow_compute_binary(
+    arrow::Datum left_res, arrow::Datum right_res,
+    const std::string& comparator,
+    const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {left_res, right_res});
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_array_compute_binary: Error in Arrow compute: " +
             cmp_res.status().message());
+    }
+
+    arrow::Datum cmp_datum = cmp_res.ValueOrDie();
+
+    std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
+    if (result_type && cmp_dtype != result_type) {
+        // Cast to result type if available and different from current type.
+        arrow::Result<arrow::Datum> cast_res =
+            arrow::compute::Cast(cmp_datum, result_type);
+        if (!cast_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
+                cast_res.status().message());
+        }
+        cmp_res = cast_res;
     }
 
     return cmp_res.ValueOrDie();
@@ -818,7 +797,8 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                     buildPhysicalExprTree(caseCheck.then_expr, col_ref_map,
                                           no_scalars),
                     buildPhysicalExprTree(bce.else_expr, col_ref_map,
-                                          no_scalars)));
+                                          no_scalars),
+                    duckdbTypeToArrow(bce.return_type)));
         } break;  // suppress wrong fallthrough error
         default:
             throw std::runtime_error(
@@ -914,6 +894,21 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
         result = this->do_arrow_compute(res);
         this->metrics.arrow_compute_time += end_timer(start_init_time);
     }
+
+    // Broadcast scalar result to batch size
+    if (result->length == 1 && input_batch->nrows() > 1) {
+        std::shared_ptr<arrow::Array> arrow_arr = prepare_arrow_compute(result);
+        auto scalar = arrow_arr->GetScalar(0).ValueOrDie();
+        auto broadcast =
+            arrow::MakeArrayFromScalar(*scalar, input_batch->nrows());
+        if (!broadcast.ok()) {
+            throw std::runtime_error("Failed to broadcast scalar: " +
+                                     broadcast.status().message());
+        }
+        result = arrow_array_to_bodo(broadcast.ValueOrDie(),
+                                     bodo::BufferPool::DefaultPtr());
+    }
+
     return std::make_shared<ArrayExprResult>(result, "Arrow Scalar");
 }
 
