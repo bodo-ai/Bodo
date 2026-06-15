@@ -279,6 +279,41 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             return arrow_array_to_bodo(res_arr.ValueOrDie(),
                                        bodo::BufferPool::DefaultPtr());
         }
+        if (date_arr->type_id() == arrow::Type::TIME64) {
+            if (month_scale != 0) {
+                throw std::runtime_error(
+                    "bodo_dateadd does not support calendar units for TIME");
+            }
+            auto time_arr =
+                std::static_pointer_cast<arrow::Time64Array>(date_arr);
+            const int64_t nanos_per_day = 86400000000000LL;
+            auto time_type =
+                std::static_pointer_cast<arrow::Time64Type>(date_arr->type());
+            int64_t mult = nanos_per_unit(time_type->unit());
+            arrow::Time64Builder time_builder(
+                arrow::time64(arrow::TimeUnit::NANO),
+                arrow::default_memory_pool());
+            for (int64_t i = 0; i < num_rows; i++) {
+                if (time_arr->IsNull(i) || amount->IsNull(i)) {
+                    (void)time_builder.AppendNull();
+                } else {
+                    int64_t out =
+                        (time_arr->Value(i) * mult +
+                         round_amount(amount->Value(i)) * nanos_scale) %
+                        nanos_per_day;
+                    if (out < 0) {
+                        out += nanos_per_day;
+                    }
+                    (void)time_builder.Append(out);
+                }
+            }
+            auto res_arr = time_builder.Finish();
+            if (!res_arr.ok()) {
+                throw std::runtime_error(res_arr.status().ToString());
+            }
+            return arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                       bodo::BufferPool::DefaultPtr());
+        }
         if (date_arr->type_id() == arrow::Type::DATE32) {
             auto date32_arr =
                 std::static_pointer_cast<arrow::Date32Array>(date_arr);

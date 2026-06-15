@@ -435,20 +435,29 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 date_expr.empty_data, date_expr, month_interval_expr, "__add__"
             )
 
-        if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
+        if func_name in ("DATEADD", "DATE_ADD", "ADDDATE", "TIMEADD", "TIMESTAMPADD"):
             # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
             # For 2 operands: (date, interval) → date + interval
             # For 3 operands: (unit, amount, date) → date + (unit * amount)
             if num_operands == 2:
-                return java_binop_to_python_expr(
-                    ctx,
-                    SqlKind.PLUS,
+                date_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[0], input_plan
+                )
+                amount_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                int_empty = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+                return ArrowScalarFuncExpression(
+                    out_empty,
                     [
-                        java_expr_to_python_expr(
-                            ctx, java_call.getOperands()[i], input_plan
-                        )
-                        for i in range(num_operands)
+                        date_expr,
+                        amount_expr,
+                        ConstantExpression(int_empty, input_plan, 0),
+                        ConstantExpression(int_empty, input_plan, 86_400_000_000_000),
                     ],
+                    "bodo_dateadd",
+                    (),
                 )
             elif num_operands == 3:
                 first_op_str = str(java_call.getOperands()[0].toString())
@@ -480,6 +489,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 out_empty = pd.Series(
                     dtype=date_expr.empty_data.iloc[:, 0].dtype
                     if preserves_date_type
+                    else pd.ArrowDtype(pa.time64("ns"))
+                    if pa.types.is_time64(date_pa_type)
                     else pd.ArrowDtype(pa.timestamp("ns"))
                 )
 
