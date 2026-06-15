@@ -644,7 +644,7 @@ std::shared_ptr<array_info> scatter_array(
             out_arr->scale = in_arr->scale;
             out_arr->precision = in_arr->precision;
         }
-        // Set precision for timel type
+        // Set precision for time type
         if (dtype == Bodo_CTypes::TIME) {
             out_arr->precision = in_arr->precision;
         }
