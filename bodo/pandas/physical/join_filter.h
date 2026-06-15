@@ -132,7 +132,11 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
                 continue;
             }
 
-            join_state_t join_state_ = (*join_filter_states)[filter_id];
+            auto join_filter_iter = join_filter_states->find(filter_id);
+            if (join_filter_iter == join_filter_states->end()) {
+                continue;
+            }
+            join_state_t join_state_ = join_filter_iter->second;
             // GPU Joins don't create bloom filters so only run against
             // CPU JoinStates
             std::visit(
