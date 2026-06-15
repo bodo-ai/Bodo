@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import decimal
 import operator
+import re
 import zoneinfo
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -63,6 +64,59 @@ _DATE_PART_ARROW_FUNCS = {
     "DOW": "day_of_week",
     "DOY": "day_of_year",
 }
+INTERVAL_UNIT_MAP = {
+    "YEAR": ("year", lambda n: (12 * n, 0, 0)),
+    "QUARTER": ("quarter", lambda n: (3 * n, 0, 0)),
+    "MONTH": ("month", lambda n: (n, 0, 0)),
+    "WEEK": ("week", lambda n: (0, 7 * n, 0)),
+    "DAY": ("day", lambda n: (0, n, 0)),
+    "HOUR": ("hour", lambda n: (0, 0, 3600 * n * 1_000_000_000)),
+    "MINUTE": ("minute", lambda n: (0, 0, 60 * n * 1_000_000_000)),
+    "SECOND": ("second", lambda n: (0, 0, n * 1_000_000_000)),
+    "MS": ("millisecond", lambda n: (0, 0, n * 1_000_000)),
+    "MICROSECOND": ("microsecond", lambda n: (0, 0, n * 1_000)),
+    "NANOSECOND": ("nanosecond", lambda n: (0, 0, n)),
+}
+_MYSQL_TO_STRFTIME = {
+    "%a": "%a",
+    "%b": "%b",
+    "%d": "%d",
+    "%H": "%H",
+    "%h": "%I",
+    "%I": "%I",
+    "%i": "%M",
+    "%j": "%j",
+    "%M": "%B",
+    "%m": "%m",
+    "%p": "%p",
+    "%r": "%H:%M:%OS %p",
+    "%T": "%H:%M:%OS",
+    "%s": "%OS",
+    "%S": "%OS",
+    "%U": "%U",
+    "%u": "%W",
+    "%W": "%A",
+    "%w": "%w",
+    "%Y": "%Y",
+    "%y": "%y",
+    "%%": "%%",
+}
+_MYSQL_FORMAT_TOKEN_RE = re.compile(r"%(.)|%$")
+
+
+def _mysql_date_format_to_arrow_format(mysql_fmt: str) -> str:
+    def replace_mysql_token(match):
+        mysql_token = match.group(0)
+        if mysql_token == "%f":
+            raise NotImplementedError(
+                "DATE_FORMAT with '%f' (microseconds) is not supported in the C++ backend yet "
+                "because PyArrow's strftime does not handle it correctly."
+            )
+        if mysql_token == "%":
+            return "%%"
+        return _MYSQL_TO_STRFTIME.get(mysql_token, mysql_token[1])
+
+    return _MYSQL_FORMAT_TOKEN_RE.sub(replace_mysql_token, mysql_fmt)
 
 
 @dataclass
@@ -211,12 +265,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             arrow_func = _DATE_PART_ARROW_FUNCS[func_name]
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-            if func_name in _DOW_NAMES:
-                # Arrow: 0=Monday. Snowflake: 0=Sunday → (dow+1)%7
+            if func_name in ("DAYOFWEEK", "DOW"):
+                # PyArrow default: 0=Monday, 6=Sunday.
+                # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
                 one = ConstantExpression(empty_data, input_plan, 1)
                 seven = ConstantExpression(empty_data, input_plan, 7)
                 raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
                 raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+            # For WEEKDAY, PyArrow default (0=Monday..6=Sunday) exactly matches
+            # Spark/Snowflake WEEKDAY, so no transformation is needed.
             return raw_expr
 
         if func_name == "DAYNAME" and num_operands == 1:
@@ -233,6 +290,19 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
             return ArrowScalarFuncExpression(empty_data, [input], "strftime", ("%b",))
 
+        if func_name == "DATE_FORMAT" and num_operands == 2:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            mysql_fmt = str(java_call.getOperands()[1].toString())
+            if mysql_fmt.startswith("'") and mysql_fmt.endswith("'"):
+                mysql_fmt = mysql_fmt[1:-1]
+            arrow_fmt = _mysql_date_format_to_arrow_format(mysql_fmt)
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            return ArrowScalarFuncExpression(
+                empty_data, [input], "strftime", (arrow_fmt,)
+            )
+
         if func_name == "MAKEDATE" and num_operands == 2:
             # MAKEDATE(year, dayofyear) → Jan 1 of year + (doy-1) days
             year_expr = java_expr_to_python_expr(
@@ -241,9 +311,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             doy_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
-            assert hasattr(year_expr, "value") and hasattr(doy_expr, "value"), (
-                "MAKEDATE requires constant integer arguments in C++ backend"
-            )
+            assert isinstance(year_expr, ConstantExpression) and isinstance(
+                doy_expr, ConstantExpression
+            ), "MAKEDATE requires constant integer arguments in C++ backend"
             result_date = datetime(int(year_expr.value), 1, 1).date() + timedelta(
                 days=int(doy_expr.value) - 1
             )
@@ -274,9 +344,96 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             input = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
-            # NOTE: backend for floor_temporal sets multiple to 1
+            input_type = input.pa_schema.field(0).type
+            if pa.types.is_time(input_type) and arrow_unit in (
+                "year",
+                "quarter",
+                "month",
+                "week",
+                "day",
+            ):
+                raise NotImplementedError(
+                    f"Unsupported unit for DATE_TRUNC with TIME input: {unit_raw}"
+                )
+            empty_data = pd.Series(
+                [],
+                dtype=pd.ArrowDtype(
+                    sql_type_to_pa_type(ctx, java_call.getType().getSqlTypeName())
+                ),
+            )
             return ArrowScalarFuncExpression(
-                input.empty_data, [input], "floor_temporal", (arrow_unit,)
+                empty_data, [input], "floor_temporal", (1, arrow_unit)
+            )
+
+        if func_name == "LAST_DAY":
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            unit_str = "MONTH"
+            if num_operands == 2:
+                # EXTRACT(FLAG(MONTH), date) → month
+                unit_str = str(java_call.getOperands()[1].toString()).upper()
+                # Strip "FLAG(" / ")" from unit string
+                if "(" in unit_str:
+                    unit_str = unit_str.split("(")[1].rstrip(")")
+            LAST_DAY_UNITS = {
+                "MONTH": ("month", 1, 0),
+                "QUARTER": ("quarter", 3, 0),
+                "YEAR": ("year", 12, 0),
+                "WEEK": ("week", 0, 7),
+            }
+            assert unit_str in LAST_DAY_UNITS, f"Unsupported LAST_DAY unit: {unit_str}"
+            empty_data = date_expr.empty_data
+
+            # Arrow doesn't have last day built in so emulate with date_trunc + interval + date arithmetic
+            # Maps unit -> (floor_temporal_unit, MonthDayNano months, MonthDayNano days)
+            # Note: WEEK uses days=7; others use months; all subtract 1 day at the end
+
+            floor_unit, interval_months, interval_days = LAST_DAY_UNITS[unit_str]
+
+            truncated = ArrowScalarFuncExpression(
+                empty_data, [date_expr], "floor_temporal", (1, floor_unit)
+            )
+            next_period = ArithOpExpression(
+                empty_data,
+                truncated,
+                ConstantExpression(
+                    empty_data,
+                    input_plan,
+                    ("MonthDayNanoInterval", interval_months, interval_days, 0),
+                ),
+                "__add__",
+            )
+            last_day = ArithOpExpression(
+                empty_data,
+                next_period,
+                ConstantExpression(
+                    empty_data, input_plan, ("MonthDayNanoInterval", 0, 1, 0)
+                ),
+                "__sub__",
+            )
+            return last_day
+
+        # ADD_MONTHS(date, months) -> date + months * INTERVAL '1' MONTH
+        if func_name == "ADD_MONTHS" and num_operands == 2:
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            months_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            assert isinstance(months_expr, ConstantExpression) and isinstance(
+                months_expr.value, int
+            ), "ADD_MONTHS requires constant integer for months argument in C++ backend"
+            month_interval = ("MonthDayNanoInterval", months_expr.value, 0, 0)
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+            month_interval_expr = ConstantExpression(
+                dummy_empty_data, input_plan, month_interval
+            )
+
+            # Add to date (output type is same as input date type)
+            return ArithOpExpression(
+                date_expr.empty_data, date_expr, month_interval_expr, "__add__"
             )
 
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE"):
@@ -333,27 +490,59 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 result = ArithOpExpression(
                     out_empty, date_expr, interval_expr, "__add__"
                 )
-                # Cast back to date32 if input was date (date+duration → timestamp)
-                result_type = result.empty_data.iloc[:, 0].dtype
-                if hasattr(result_type, "pyarrow_dtype") and pa.types.is_timestamp(
-                    result_type.pyarrow_dtype
-                ):
+                input_type = date_expr.pa_schema.field(0).type
+                if pa.types.is_date(input_type):
                     date32_empty = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
                     result = CastExpression(date32_empty, result)
                 return result
         if func_name in ("DATE_SUB", "SUBDATE"):
             # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
+            # or DATE_SUB(date, integer_days) — Snowflake syntax.
             if num_operands == 2:
+                date_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[0], input_plan
+                )
+                amount_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                # Check if the second argument is an integer (number of days)
+                # rather than an INTERVAL literal.
+                amount_type = java_call.getOperands()[1].getType()
+                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+                if is_int_type(amount_type):
+                    # DATE_SUB(date, N) → date - N days
+                    if isinstance(amount_expr, ConstantExpression):
+                        interval_val = pd.Timedelta(days=int(amount_expr.value))
+                        dummy_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.duration("ns"))
+                        )
+                        interval_expr = ConstantExpression(
+                            dummy_empty_data, input_plan, interval_val
+                        )
+                    else:
+                        one_day = pd.Timedelta(days=1)
+                        dummy_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.duration("ns"))
+                        )
+                        one_day_expr = ConstantExpression(
+                            dummy_empty_data, input_plan, one_day
+                        )
+                        interval_expr = ArithOpExpression(
+                            dummy_empty_data,
+                            amount_expr,
+                            one_day_expr,
+                            "__mul__",
+                        )
+                    out_empty = date_expr.empty_data - interval_expr.empty_data
+                    return ArithOpExpression(
+                        out_empty, date_expr, interval_expr, "__sub__"
+                    )
+                # Otherwise DATE_SUB(date, interval) — direct subtraction.
                 return java_binop_to_python_expr(
                     ctx,
                     SqlKind.MINUS,
                     "-",
-                    [
-                        java_expr_to_python_expr(
-                            ctx, java_call.getOperands()[i], input_plan
-                        )
-                        for i in range(num_operands)
-                    ],
+                    [date_expr, amount_expr],
                 )
             elif num_operands == 3:
                 return java_binop_to_python_expr(
@@ -369,6 +558,61 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         ),
                     ],
                 )
+        if func_name == "TIME_SLICE":
+            # TIME_SLICE(date, interval) → floor_temporal(date, interval)
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            interval_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            unit_str = str(java_call.getOperands()[2].toString()).upper().strip("'")
+            # Strip "FLAG(" / ")" from unit string
+            if "(" in unit_str:
+                unit_str = unit_str.split("(")[1].rstrip(")")
+            start_or_end = "START"
+            if num_operands == 4:
+                start_or_end = (
+                    str(java_call.getOperands()[3].toString()).upper().strip("'")
+                )
+                assert start_or_end in ("START", "END"), (
+                    f"Unsupported TIME_SLICE 4th operand: {start_or_end}"
+                )
+            assert isinstance(interval_expr, ConstantExpression), (
+                "TIME_SLICE interval must be a constant in C++ backend"
+            )
+            slice_length = int(interval_expr.value)
+            assert unit_str in INTERVAL_UNIT_MAP, (
+                f"Unsupported TIME_SLICE interval unit: {unit_str}"
+            )
+            empty_data = date_expr.empty_data
+
+            arrow_unit, interval_fn = INTERVAL_UNIT_MAP[unit_str]
+            interval_months, interval_days, interval_nanos = interval_fn(slice_length)
+
+            truncated = ArrowScalarFuncExpression(
+                empty_data, [date_expr], "floor_temporal", (slice_length, arrow_unit)
+            )
+
+            if start_or_end == "START":
+                return truncated
+
+            # END: return start of next slice
+            return ArithOpExpression(
+                empty_data,
+                truncated,
+                ConstantExpression(
+                    empty_data,
+                    input_plan,
+                    (
+                        "MonthDayNanoInterval",
+                        interval_months,
+                        interval_days,
+                        interval_nanos,
+                    ),
+                ),
+                "__add__",
+            )
 
     if operator_class_name in (
         "SqlMonotonicBinaryOperator",
@@ -531,7 +775,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # EXTRACT(FLAG(MONTH), date) → month(date)
         unit_str = str(java_call.getOperands()[0].toString()).upper()
         input = java_expr_to_python_expr(ctx, java_call.getOperands()[1], input_plan)
-        # Strip parentheses from unit if it's in the form FLAG(unit)
+        # Strip FLAG from unit if it's in the form FLAG(unit)
         if "(" in unit_str:
             unit_str = unit_str.split("(")[1].rstrip(")")
         arrow_func = _DATE_PART_ARROW_FUNCS.get(unit_str)
@@ -539,12 +783,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
         empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
         raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-        if unit_str in _DOW_NAMES:
-            # Arrow: 0=Monday. Snowflake: 0=Sunday → (dow+1)%7
+        if unit_str in ("DAYOFWEEK", "DOW"):
+            # PyArrow default: 0=Monday, 6=Sunday.
+            # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
             one = ConstantExpression(empty_data, input_plan, 1)
             seven = ConstantExpression(empty_data, input_plan, 7)
             raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
             raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+        # For WEEKDAY, PyArrow default (0=Monday..6=Sunday) exactly matches
+        # Spark/Snowflake WEEKDAY, so no transformation is needed.
         return raw_expr
     if (
         operator_class_name == "SqlDatePartFunction"
@@ -576,14 +823,25 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
+        if func_name in ("WEEK", "WEEKOFYEAR", "WEEKISO", "DAYOFYEAR"):
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+
         if func_name in ("DAYOFWEEK", "DOW"):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             dow_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-            # Arrow: 0=Monday. Snowflake: 0=Sunday. Convert: (dow+1)%7
+            # PyArrow default: 0=Monday, 6=Sunday.
+            # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
             one_const = ConstantExpression(empty_data, input_plan, 1)
             seven_const = ConstantExpression(empty_data, input_plan, 7)
             plus_one = ArithOpExpression(empty_data, dow_expr, one_const, "__add__")
             return ArithOpExpression(empty_data, plus_one, seven_const, "__mod__")
+
+        if func_name == "WEEKDAY":
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            # PyArrow default (0=Monday..6=Sunday) exactly matches
+            # Spark/Snowflake WEEKDAY, so no transformation is needed.
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
@@ -672,7 +930,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             total_months = 0
             total_nanos = 0
             for expr in op_exprs:
-                assert hasattr(expr, "value"), (
+                assert isinstance(expr, ConstantExpression), (
                     "COMBINE_INTERVALS requires constant interval arguments in C++ backend"
                 )
                 val = expr.value

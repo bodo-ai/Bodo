@@ -679,8 +679,10 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                                 bfe.function.name));
                     } break;
                     case 2: {
-                        // Check for month-bearing calendar interval constants
-                        // that Arrow's duration-based add cannot handle.
+                        // Check for calendar interval constants that
+                        // Arrow's duration-based add cannot handle
+                        // (because Arrow always promotes DATE to TIMESTAMP,
+                        // and cannot handle month-bearing intervals at all).
                         for (int ci = 0; ci < 2; ci++) {
                             if (bfe.children[ci]->GetExpressionClass() ==
                                 duckdb::ExpressionClass::BOUND_CONSTANT) {
@@ -1224,40 +1226,122 @@ std::shared_ptr<ExprResult> PhysicalCalendarIntervalExpression::ProcessBatch(
                                                  "CalendarInterval");
     } else if (arrow_type->id() == arrow::Type::DATE32) {
         auto date_arr = std::static_pointer_cast<arrow::Date32Array>(arrow_arr);
-        // DATE + year/month interval produces TIMESTAMP in DuckDB (dates lack
-        // the hour/minute/second precision to represent interval-added values).
-        // Convert the date_t result to a nanosecond timestamp at midnight.
-        arrow::TimestampBuilder ts_builder(
-            arrow::timestamp(arrow::TimeUnit::NANO),
-            arrow::default_memory_pool());
-        for (int64_t i = 0; i < num_rows; i++) {
-            if (date_arr->IsNull(i)) {
-                CHECK_ARROW(ts_builder.AppendNull(),
-                            "Failed to append null to timestamp builder");
-            } else {
-                int32_t days = date_arr->Value(i);
-                duckdb::date_t date(days);
-                // DuckDB's Interval::Add on date_t applies year/month
-                // adjustments with month-end clamping and returns a date_t.
-                duckdb::date_t date_res =
-                    duckdb::Interval::Add(date, effective_interval);
-                // Convert days-since-epoch to nanoseconds at midnight.
-                int64_t ts_ns = int64_t(date_res.days) * 86400000000000LL;
-                (void)ts_builder.Append(ts_ns);
+        if (effective_interval.micros == 0) {
+            // Day/month interval with no time component → produce DATE32.
+            arrow::Date32Builder date_builder(arrow::default_memory_pool());
+            for (int64_t i = 0; i < num_rows; i++) {
+                if (date_arr->IsNull(i)) {
+                    (void)date_builder.AppendNull();
+                } else {
+                    int32_t days = date_arr->Value(i);
+                    duckdb::date_t date(days);
+                    duckdb::date_t date_res =
+                        duckdb::Interval::Add(date, effective_interval);
+                    (void)date_builder.Append(date_res.days);
+                }
             }
+            arrow::Result<std::shared_ptr<arrow::Array>> res_arr =
+                date_builder.Finish();
+            if (!res_arr.ok()) {
+                throw std::runtime_error(res_arr.status().ToString());
+            }
+            auto bodo_arr = arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                                bodo::BufferPool::DefaultPtr());
+            if (is_scalar) {
+                return std::make_shared<ScalarExprResult>(std::move(bodo_arr));
+            }
+            return std::make_shared<ArrayExprResult>(std::move(bodo_arr),
+                                                     "CalendarInterval");
+        } else {
+            // Time-bearing interval → produce TIMESTAMP at midnight.
+            arrow::TimestampBuilder ts_builder(
+                arrow::timestamp(arrow::TimeUnit::NANO),
+                arrow::default_memory_pool());
+            for (int64_t i = 0; i < num_rows; i++) {
+                if (date_arr->IsNull(i)) {
+                    (void)ts_builder.AppendNull();
+                } else {
+                    int32_t days = date_arr->Value(i);
+                    duckdb::date_t date(days);
+                    duckdb::date_t date_res =
+                        duckdb::Interval::Add(date, effective_interval);
+                    int64_t ts_ns = int64_t(date_res.days) * 86400000000000LL;
+                    (void)ts_builder.Append(ts_ns);
+                }
+            }
+            arrow::Result<std::shared_ptr<arrow::Array>> res_arr =
+                ts_builder.Finish();
+            if (!res_arr.ok()) {
+                throw std::runtime_error(res_arr.status().ToString());
+            }
+            auto bodo_arr = arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                                bodo::BufferPool::DefaultPtr());
+            if (is_scalar) {
+                return std::make_shared<ScalarExprResult>(std::move(bodo_arr));
+            }
+            return std::make_shared<ArrayExprResult>(std::move(bodo_arr),
+                                                     "CalendarInterval");
         }
-        arrow::Result<std::shared_ptr<arrow::Array>> res_arr =
-            ts_builder.Finish();
-        if (!res_arr.ok()) {
-            throw std::runtime_error(res_arr.status().ToString());
+    } else if (arrow_type->id() == arrow::Type::INT64) {
+        // Some operations (e.g., TO_DATE) may produce an int64 array
+        // representing days since epoch instead of native DATE32.
+        auto int_arr = std::static_pointer_cast<arrow::Int64Array>(arrow_arr);
+        if (effective_interval.micros == 0) {
+            // Day/month interval with no time component → produce DATE32.
+            arrow::Date32Builder date_builder(arrow::default_memory_pool());
+            for (int64_t i = 0; i < num_rows; i++) {
+                if (int_arr->IsNull(i)) {
+                    (void)date_builder.AppendNull();
+                } else {
+                    int32_t days = static_cast<int32_t>(int_arr->Value(i));
+                    duckdb::date_t date(days);
+                    duckdb::date_t date_res =
+                        duckdb::Interval::Add(date, effective_interval);
+                    (void)date_builder.Append(date_res.days);
+                }
+            }
+            arrow::Result<std::shared_ptr<arrow::Array>> res_arr =
+                date_builder.Finish();
+            if (!res_arr.ok()) {
+                throw std::runtime_error(res_arr.status().ToString());
+            }
+            auto bodo_arr = arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                                bodo::BufferPool::DefaultPtr());
+            if (is_scalar) {
+                return std::make_shared<ScalarExprResult>(std::move(bodo_arr));
+            }
+            return std::make_shared<ArrayExprResult>(std::move(bodo_arr),
+                                                     "CalendarInterval");
+        } else {
+            // Time-bearing interval → produce TIMESTAMP at midnight.
+            arrow::TimestampBuilder ts_builder(
+                arrow::timestamp(arrow::TimeUnit::NANO),
+                arrow::default_memory_pool());
+            for (int64_t i = 0; i < num_rows; i++) {
+                if (int_arr->IsNull(i)) {
+                    (void)ts_builder.AppendNull();
+                } else {
+                    int32_t days = static_cast<int32_t>(int_arr->Value(i));
+                    duckdb::date_t date(days);
+                    duckdb::date_t date_res =
+                        duckdb::Interval::Add(date, effective_interval);
+                    int64_t ts_ns = int64_t(date_res.days) * 86400000000000LL;
+                    (void)ts_builder.Append(ts_ns);
+                }
+            }
+            arrow::Result<std::shared_ptr<arrow::Array>> res_arr =
+                ts_builder.Finish();
+            if (!res_arr.ok()) {
+                throw std::runtime_error(res_arr.status().ToString());
+            }
+            auto bodo_arr = arrow_array_to_bodo(res_arr.ValueOrDie(),
+                                                bodo::BufferPool::DefaultPtr());
+            if (is_scalar) {
+                return std::make_shared<ScalarExprResult>(std::move(bodo_arr));
+            }
+            return std::make_shared<ArrayExprResult>(std::move(bodo_arr),
+                                                     "CalendarInterval");
         }
-        auto bodo_arr = arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                            bodo::BufferPool::DefaultPtr());
-        if (is_scalar) {
-            return std::make_shared<ScalarExprResult>(std::move(bodo_arr));
-        }
-        return std::make_shared<ArrayExprResult>(std::move(bodo_arr),
-                                                 "CalendarInterval");
     }
 
     throw std::runtime_error(
