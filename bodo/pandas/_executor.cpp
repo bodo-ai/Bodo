@@ -264,7 +264,18 @@ class DevicePlanNode {
                 }
                 op.estimated_cardinality =
                     (uint64_t)(limit.limit_val.GetConstantValue());
+            } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_FILTER) {
+                op.has_estimated_cardinality = true;
+                op.estimated_cardinality = rows_in;
+            } else if (op.type == duckdb::LogicalOperatorType::
+                                      LOGICAL_EXTENSION_OPERATOR) {
+                // Estimate cardinality for join filter.
+                op.has_estimated_cardinality = true;
+                op.estimated_cardinality = rows_in;
             } else {
+                op.has_estimated_cardinality = true;
+                op.estimated_cardinality = rows_in;
+#if 0
 #ifdef DEBUG_GPU_SELECTOR
                 std::cout
                     << "DevicePlanNode operator didn't have cardinality.\n"
@@ -273,6 +284,7 @@ class DevicePlanNode {
                 throw std::runtime_error(
                     "DevicePlanNode operator didn't have cardinality.\n" +
                     op.ToString());
+#endif
             }
         }
         rows_out = op.estimated_cardinality;

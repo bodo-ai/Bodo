@@ -142,25 +142,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
             uint64_t col_idx;
             if (agg_expr.function.name == "size" &&
                 agg_expr.children.size() == 0) {
-                for (col_idx = 0;
-                     col_idx < in_table_schema->column_types.size();
-                     ++col_idx) {
-                    bool found = false;
-                    for (unsigned i = 0; i < keys.size(); ++i) {
-                        if (col_idx == keys[i]) {
-                            found = true;
-                        }
-                    }
-                    if (!found) {
-                        break;
-                    }
-                }
-                if (col_idx == in_table_schema->column_types.size()) {
-                    throw std::runtime_error(
-                        "Didn't find non-key column to use for size "
-                        "aggregated");
-                }
-                std::cout << "Found non-key column " << col_idx << std::endl;
+                col_idx = keys[0];
             } else {
                 if (agg_expr.children.size() != 1) {
                     throw std::runtime_error(
