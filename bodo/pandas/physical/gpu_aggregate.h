@@ -147,8 +147,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
                      ++col_idx) {
                     bool found = false;
                     for (unsigned i = 0; i < keys.size(); ++i) {
-                        std::cout << "testing " << col_idx << " " << keys[i]
-                                  << std::endl;
                         if (col_idx == keys[i]) {
                             found = true;
                         }

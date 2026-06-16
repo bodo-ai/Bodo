@@ -1616,16 +1616,14 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
 
         case arrow::Type::DATE32: {
             auto ds = std::static_pointer_cast<arrow::Date32Scalar>(s);
-            // arrow::Date32Scalar::value is days since epoch (int32_t)
-            return std::make_unique<cudf::numeric_scalar<int32_t>>(
-                static_cast<int32_t>(ds->value), true);
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_D>>(
+                ds->value, true);
         }
 
         case arrow::Type::DATE64: {
             auto ds = std::static_pointer_cast<arrow::Date64Scalar>(s);
-            // arrow::Date64Scalar::value is milliseconds since epoch (int64_t)
-            return std::make_unique<cudf::numeric_scalar<int64_t>>(
-                static_cast<int64_t>(ds->value), true);
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ms>>(
+                ds->value, true);
         }
 
         // ---------------- TIMESTAMPS ----------------
