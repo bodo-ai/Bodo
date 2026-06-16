@@ -1020,7 +1020,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 op_exprs[0].empty_data, op_exprs, "nullif", ()
             )
 
-        if func_name in ("CHAR_LENGTH", "CHARACTER_LENGTH") and len(op_exprs) == 1:
+        if func_name == "CHAR_LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
             ensure_type_of_expr(src, "src", str)
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
@@ -1154,7 +1154,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "match_substring",
                 (match_expr.value,),
             )
-        elif func_name in ("LENGTH", "LEN") and len(op_exprs) == 1:
+        elif func_name == "LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
             ensure_type_of_expr(src, "src", str)
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))

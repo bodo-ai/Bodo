@@ -307,7 +307,6 @@ def test_nested_upper_lower(bodosql_string_types, memory_leak_check):
     """
     check_query(
         "select lower(upper(lower(upper(A)))) from table1",
-        # "select upper(A) from table1",
         bodosql_string_types,
         None,
         check_names=False,
