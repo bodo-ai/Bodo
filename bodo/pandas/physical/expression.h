@@ -1431,17 +1431,29 @@ class PhysicalArrowExpression : public PhysicalExpression {
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+            arrow::Type::type res_type = GetArrowTypeOfRes(res);
+            std::string func_name = (res_type == arrow::Type::BINARY ||
+                                     res_type == arrow::Type::LARGE_BINARY)
+                                        ? "binary_slice"
+                                        : "utf8_slice_codeunits";
+
             auto [start, stop, step] = get_py_slice_args(scalar_func_data.args);
 
             arrow::compute::SliceOptions opts(start, stop, step);
-            result = do_arrow_compute_unary(res, "utf8_slice_codeunits", &opts);
-        } else if (scalar_func_data.arrow_func_name == "utf8_trim") {
+            result = do_arrow_compute_unary(res, func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_trim" ||
+                   scalar_func_data.arrow_func_name == "utf8_ltrim" ||
+                   scalar_func_data.arrow_func_name == "utf8_rtrim" ||
+                   scalar_func_data.arrow_func_name == "ascii_trim" ||
+                   scalar_func_data.arrow_func_name == "ascii_ltrim" ||
+                   scalar_func_data.arrow_func_name == "ascii_rtrim") {
             const char *c_str = get_py_single_arg_as_cstr(
                 scalar_func_data.args,
                 scalar_func_data.arrow_func_name.c_str());
 
             arrow::compute::TrimOptions opts(c_str);
-            result = do_arrow_compute_unary(res, "utf8_trim", &opts);
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "utf8_lpad" ||
                    scalar_func_data.arrow_func_name == "utf8_rpad") {
             int64_t width;
@@ -1490,6 +1502,24 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::ReplaceSubstringOptions opts(pattern, replacement);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "utf8_replace_slice") {
+            arrow::Type::type res_type = GetArrowTypeOfRes(res);
+            std::string func_name = (res_type == arrow::Type::BINARY ||
+                                     res_type == arrow::Type::LARGE_BINARY)
+                                        ? "binary_replace_slice"
+                                        : "utf8_replace_slice";
+
+            assert_py_args_is_tuple(scalar_func_data.args, func_name.c_str());
+            auto [start, stop, replacement] = get_py_args_as_types(
+                scalar_func_data.args, func_name.c_str(),
+                get_py_object_as_int64, get_py_object_as_int64,
+                get_py_object_as_cstr);
+
+            std::string replacement_str(replacement);
+
+            arrow::compute::ReplaceSliceOptions opts(start, stop,
+                                                     replacement_str);
+            result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "is_in") {
             std::shared_ptr<arrow::Array> values_array =
                 get_py_isin_arg_as_arrow_array(scalar_func_data.args);
@@ -1522,8 +1552,18 @@ class PhysicalArrowExpression : public PhysicalExpression {
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else {
-            result =
-                do_arrow_compute_unary(res, scalar_func_data.arrow_func_name);
+            std::string func_name = scalar_func_data.arrow_func_name;
+            arrow::Type::type res_type = GetArrowTypeOfRes(res);
+            if (res_type == arrow::Type::BINARY ||
+                res_type == arrow::Type::LARGE_BINARY) {
+                if (func_name == "utf8_length") {
+                    func_name = "binary_length";
+                } else if (func_name == "utf8_reverse") {
+                    func_name = "binary_reverse";
+                }
+            }
+
+            result = do_arrow_compute_unary(res, func_name);
         }
         return result;
     }

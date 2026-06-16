@@ -1062,20 +1062,27 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 arrow_func_args,
             )
 
-        if func_name == "REPLACE" and len(op_exprs) == 3:
+        if func_name == "REPLACE" and len(op_exprs) in (2, 3):
             src = op_exprs[0]
             search_expr = op_exprs[1]
-            replacement_expr = op_exprs[2]
 
             ensure_type_of_expr(src, "src", str)
             ensure_arg_is_const_expr_of_type(search_expr, "search_expr", str)
-            ensure_arg_is_const_expr_of_type(replacement_expr, "replacement_expr", str)
+
+            if len(op_exprs) == 3:
+                replacement_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(
+                    replacement_expr, "replacement_expr", str
+                )
+                replacement_val = replacement_expr.value
+            else:
+                replacement_val = ""
 
             return ArrowScalarFuncExpression(
                 src.empty_data,
                 [src],
                 "replace_substring",
-                (search_expr.value, replacement_expr.value),
+                (search_expr.value, replacement_val),
             )
 
         # If we didn't match a supported basic function, fall through to NotImplemented
@@ -1164,23 +1171,92 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "utf8_length",
                 (),
             )
-        elif func_name == "INSTR" and len(op_exprs) == 2:
+        elif (
+            func_name == "INSTR"
+            and len(op_exprs) in (2, 3, 4)
+            or func_name == "CHARINDEX"
+            and len(op_exprs) in (2, 3)
+        ):
+            # TODO: Investigate what the proper outputs should be in various exceptional conditions
+
             src = op_exprs[0]
             match_expr = op_exprs[1]
 
             ensure_type_of_expr(src, "src", str)
             ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
-
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            zero_indexed_expr = ArrowScalarFuncExpression(
-                int_empty_data,
+            if len(match_expr.value) == 0:
+                return ConstantExpression(int_empty_data, input_plan, 0)
+
+            if len(op_exprs) > 2:
+                start_expr = op_exprs[2]
+                ensure_type_of_expr(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                else:
+                    start = start_expr.value
+            else:
+                start = 0
+
+            if len(op_exprs) == 4:
+                # Need to search for the position of the op_exprs[3] occurrence of the substring
+                occurrence_expr = op_exprs[3]
+                ensure_type_of_expr(occurrence_expr, "occurrence_expr", int)
+                occurrence_num = occurrence_expr.value
+                if occurrence_num.value < 1:
+                    raise ValueError(
+                        f"{func_name} occurences argument must be 1 or greater"
+                    )
+            else:
+                occurrence_num = 1
+
+            without_start_expr = ArrowScalarFuncExpression(
+                src.empty_data,
                 [src],
+                "utf8_slice_codeunits",
+                (start, None, 1),
+            )
+
+            # Since Arrow only has a compute function to search for the first occurrence, we must workaround this.
+            # Our solution is to slightly rename earlier occurrences so that find_substring can find the first of those remaining
+            # The index should be the same since we do not delete any characters
+
+            # Replace occurrences of the substring before the one we want the position of
+            if occurrence_num > 1:
+                first_char_replacement = "_" if match_expr.value[0] != "_" else "-"
+                occurences_replaced_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "replace_substring",
+                    (
+                        match_expr.value,
+                        first_char_replacement + match_expr.value[1:],
+                        occurrence_num - 1,
+                    ),
+                )
+            else:
+                occurences_replaced_expr = without_start_expr
+
+            # Find the first occurrence of the substring in the sliced string (without prior occurrences)
+            substring_pos_expr = ArrowScalarFuncExpression(
+                int_empty_data,
+                [occurences_replaced_expr],
                 "find_substring",
                 (match_expr.value,),
             )
-            # Add 1 to find_substring expression since find_substring is 0-indexed instead of 1-based like INSTR
+
+            start_const_expr = ConstantExpression(int_empty_data, input_plan, start)
+            occurrence_pos_expr = ArithOpExpression(
+                int_empty_data, substring_pos_expr, start_const_expr, "__add__"
+            )
+
+            # Add 1 to find_substring expression since Arrow's find_substring is 0-indexed instead of 1-based like INSTR/CHARINDEX
             one = ConstantExpression(int_empty_data, input_plan, 1)
-            return ArithOpExpression(int_empty_data, zero_indexed_expr, one, "__add__")
+            return ArithOpExpression(
+                int_empty_data, occurrence_pos_expr, one, "__add__"
+            )
+
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
             src = op_exprs[0]
             if len(op_exprs) == 2:
@@ -1196,8 +1272,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "CONCAT" and len(op_exprs) > 0:
             src = op_exprs[0]
-
             ensure_type_of_expr(src, "src", str)
+
+            if len(op_exprs) == 1:
+                # Nothing to concatenate, just return the input string
+                return src
 
             separator = bodo.pandas.plan.ConstantExpression(
                 src.empty_data,
@@ -1224,6 +1303,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             separator = op_exprs[0]
             ensure_type_of_expr(separator, "separator", str)
 
+            if len(op_exprs) == 2:
+                # Nothing to concatenate, just return the input string
+                return op_exprs[1]
+
             input_exprs = []
             for str_src in op_exprs[1:]:
                 ensure_type_of_expr(str_src, "str_src", str)
@@ -1231,7 +1314,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             input_exprs.append(separator)
 
             return ArrowScalarFuncExpression(
-                separator.empty_data,
+                input_exprs[0].empty_data,
                 input_exprs,
                 "binary_join_element_wise",
                 (
@@ -1266,6 +1349,54 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(src, "src", str)
 
             return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
+        elif func_name == "STRCMP" and len(op_exprs) == 2:
+            left_expr = op_exprs[0]
+            right_expr = op_exprs[1]
+
+            ensure_type_of_expr(left_expr, "left_expr", str)
+            ensure_arg_is_const_expr_of_type(right_expr, "right_expr", str)
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(
+                int_empty_data,
+                [left_expr],
+                "compare",
+                (right_expr.value,),  # FIXME
+            )
+        elif func_name == "RTRIMMED_LENGTH" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", str)
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            # Use utf8_rtrim instead of utf8_rtrim_whitespace so that only regular space characters are removed
+            rtrimmed_expr = ArrowScalarFuncExpression(
+                src.empty_data, [src], "utf8_rtrim", (" ",)
+            )
+            return ArrowScalarFuncExpression(
+                int_empty_data, [rtrimmed_expr], "utf8_length", ()
+            )
+        elif func_name == "INSERT" and len(op_exprs) == 4:
+            src = op_exprs[0]
+            start_expr = op_exprs[1]
+            len_expr = op_exprs[2]
+            inserted_str_expr = op_exprs[3]
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+            ensure_arg_is_const_expr_of_type(
+                inserted_str_expr, "inserted_str_expr", str
+            )
+
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "utf8_replace_slice",
+                (
+                    start_expr.value - 1,
+                    start_expr.value - 1 + len_expr.value,
+                    inserted_str_expr.value,
+                ),
+            )
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()

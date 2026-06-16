@@ -371,6 +371,24 @@ arrow::Datum ConvertExprResultToDatum(std::shared_ptr<ExprResult> res,
  */
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type);
+
+/**
+ * @brief Get the Arrow type (arrow::Type::type) of the input res
+ *
+ * @param res The input ExprResult to get the Arrow type of (after converting to
+ * a Datum)
+ * @return arrow::Type::type the Arrow type
+ */
+arrow::Type::type GetArrowTypeOfRes(std::shared_ptr<ExprResult> res);
+
+/**
+ * @brief Get the Arrow type (arrow::Type::type) of the input res
+ *
+ * @param res The input datum to get the Arrow type of
+ * @return arrow::Type::type the Arrow type
+ */
+arrow::Type::type GetArrowTypeOfRes(arrow::Datum res);
+
 #ifdef USE_CUDF
 using join_state_t = std::variant<JoinState *, CudaJoin *>;
 #else

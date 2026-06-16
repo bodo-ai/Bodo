@@ -181,6 +181,29 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
 
         func_res = arrow::compute::CallFunction(
             "case_when", {cond, null_datum, arg_datums[0]});
+    } else if (arrow_func_name == "binary_join_element_wise") {
+        // binary_join_element_wise appears to require all arguments to have the
+        // same type. Cast all arguments to match the first argument's type
+        auto target_type = arg_datums[0].type();
+        std::vector<arrow::Datum> casted_datums;
+        for (auto& datum : arg_datums) {
+            if (datum.type()->Equals(target_type)) {
+                casted_datums.push_back(datum);
+            } else {
+                auto cast_opts = arrow::compute::CastOptions::Safe(target_type);
+                auto cast_res =
+                    arrow::compute::CallFunction("cast", {datum}, &cast_opts);
+                if (!cast_res.ok()) [[unlikely]] {
+                    throw std::runtime_error(
+                        "do_arrow_compute_multi_input: Error casting argument "
+                        "to match "
+                        "binary_join_element_wise: " +
+                        cast_res.status().message());
+                }
+                casted_datums.push_back(cast_res.ValueOrDie());
+            }
+        }
+        func_res = arrow::compute::CallFunction(arrow_func_name, casted_datums);
     } else {
         func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums);
     }
