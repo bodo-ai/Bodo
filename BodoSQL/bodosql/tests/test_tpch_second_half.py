@@ -547,6 +547,7 @@ def test_tpch_q20(tpch_data, memory_leak_check):
 
 @pytest.mark.timeout(900)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q21(tpch_data, memory_leak_check):
     NATION = "SAUDI ARABIA"
     tpch_query = f"""select
@@ -613,6 +614,7 @@ def test_tpch_q21(tpch_data, memory_leak_check):
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q22(tpch_data, memory_leak_check):
     I1 = 13
     I2 = 31

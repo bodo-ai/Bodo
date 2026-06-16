@@ -839,6 +839,9 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
 #endif  // USE_CUDF
 
     bool found_join_on_same_device = false;
+    // If might be the case that all the join filters
+    // don't exist and if so then we don't need this node.
+    bool node_needed = false;
 
     // Make sure all filter generators used by this
     // join filter run before this pipeline.
@@ -849,13 +852,23 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
         }
         found_join_on_same_device = true;
 #endif  // USE_CUDF
-        std::shared_ptr<Pipeline> filter_pipeline =
-            (*join_filter_pipelines)[filter_id];
-        if (!filter_pipeline) {
-            throw std::runtime_error(
-                "Pipeline for given filter id not found in "
-                "join_filter_states.");
+        auto join_filter_iter = join_filter_pipelines->find(filter_id);
+        std::shared_ptr<Pipeline> filter_pipeline;
+        if (join_filter_iter == join_filter_pipelines->end()) {
+            // If we convert a join into a cross-product/filter
+            // then there will be no join node to generate a bloom filter
+            // and the join_id will be missing in join_filter_pipelines.
+            // Since no bloom filter we can ignore these cases.
+            continue;
+        } else {
+            filter_pipeline = join_filter_iter->second;
+            if (!filter_pipeline) {
+                throw std::runtime_error(
+                    "Pipeline for given filter id is null in "
+                    "join_filter_states.");
+            }
         }
+        node_needed = true;
         // Make sure generator of the filter runs before
         // this consumer of the filter.
         this->active_pipeline->addRunBefore(filter_pipeline);
@@ -864,7 +877,7 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
     // the same device type.  We could change this later but it is much
     // more complicated and involves transferring and transforming the
     // bloom filters.
-    if (!found_join_on_same_device) {
+    if (!found_join_on_same_device || !node_needed) {
         return;
     }
 
