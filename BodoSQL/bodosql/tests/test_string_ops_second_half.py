@@ -724,7 +724,7 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT SUBSTRING(source, -5, 3) from table1",
             id="SUBSTRING_scalar_int_2",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT SUBSTR('alphabet soup is delicious', start_pos, length) from table1",

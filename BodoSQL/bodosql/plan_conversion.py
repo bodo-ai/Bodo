@@ -1279,13 +1279,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             start_expr = op_exprs[1]
             ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
-            if start_expr.value <= 0:
-                raise ValueError(
-                    "negative or zero start not supported in SUBSTRING in C++ backend yet"
-                )
-            # start = max(start_expr.value - 1, 0)
+
             start = start_expr.value
-            start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
+            if (
+                start > 0
+            ):  # start_expr.value = 0 is treated the same as start_expr.value = 1
+                start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
+            # Arrow's utf8_slice_codeunits will handle the wraparound for negative start index
 
             if len(op_exprs) == 3:
                 len_expr = op_exprs[2]
@@ -1294,10 +1294,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     raise ValueError(
                         "negative length not allowed in SUBSTRING in C++ backend"
                     )
-                # stop = max(start + len_expr.value, 0)
                 stop = start + len_expr.value
                 # Deal with negative start index and length beyond the end of the string
-                if start_expr.value < 0 and stop >= 0:
+                if start < 0 and stop >= 0:
                     stop = None
             else:
                 stop = None
