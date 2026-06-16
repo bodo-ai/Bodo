@@ -1349,20 +1349,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(src, "src", str)
 
             return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
-        elif func_name == "STRCMP" and len(op_exprs) == 2:
-            left_expr = op_exprs[0]
-            right_expr = op_exprs[1]
-
-            ensure_type_of_expr(left_expr, "left_expr", str)
-            ensure_arg_is_const_expr_of_type(right_expr, "right_expr", str)
-
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(
-                int_empty_data,
-                [left_expr],
-                "compare",
-                (right_expr.value,),  # FIXME
-            )
         elif func_name == "RTRIMMED_LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
             ensure_type_of_expr(src, "src", str)
