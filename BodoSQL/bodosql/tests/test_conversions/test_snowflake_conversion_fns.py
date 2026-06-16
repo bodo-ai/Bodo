@@ -532,9 +532,31 @@ def test_time_to_char(use_case, memory_leak_check):
         ]
     )
     if use_case:
-        S = pd.Series(["00:01:02", None, "12:30:00", "01:45:59", "23:59:05"])
+        if bodosql.use_cpp_backend:
+            S = pd.Series(
+                [
+                    "00:01:02.000000000",
+                    None,
+                    "12:30:00.000000000",
+                    "01:45:59.999999999",
+                    "23:59:05.000250000",
+                ]
+            )
+        else:
+            S = pd.Series(["00:01:02", None, "12:30:00", "01:45:59", "23:59:05"])
     else:
-        S = pd.Series(["x", None, "12:30:00", "01:45:59", "23:59:05"])
+        if bodosql.use_cpp_backend:
+            S = pd.Series(
+                [
+                    "x",
+                    None,
+                    "12:30:00.000000000",
+                    "01:45:59.999999999",
+                    "23:59:05.000250000",
+                ]
+            )
+        else:
+            S = pd.Series(["x", None, "12:30:00", "01:45:59", "23:59:05"])
 
     ctx = {"TABLE1": pd.DataFrame({"T": T})}
     expected_output = pd.DataFrame({0: S})
