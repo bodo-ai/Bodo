@@ -56,6 +56,10 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
             return false;
         }
 
+        if (agg_expr.function.name == "size" && agg_expr.children.size() == 0) {
+            continue;
+        }
+
         // Check input types of the aggregate function
         auto& child_expr = agg_expr.children[0];
         if (child_expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
@@ -135,28 +139,56 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
                     agg_expr.function.name);
             }
 
-            if (agg_expr.children.size() != 1) {
-                throw std::runtime_error(
-                    "Aggregate expression for builtin funcs must have exactly "
-                    "one child expression" +
-                    expr->ToString());
-            }
+            uint64_t col_idx;
+            if (agg_expr.function.name == "size" &&
+                agg_expr.children.size() == 0) {
+                for (col_idx = 0;
+                     col_idx < in_table_schema->column_types.size();
+                     ++col_idx) {
+                    bool found = false;
+                    for (unsigned i = 0; i < keys.size(); ++i) {
+                        std::cout << "testing " << col_idx << " " << keys[i]
+                                  << std::endl;
+                        if (col_idx == keys[i]) {
+                            found = true;
+                        }
+                    }
+                    if (!found) {
+                        break;
+                    }
+                }
+                if (col_idx == in_table_schema->column_types.size()) {
+                    throw std::runtime_error(
+                        "Didn't find non-key column to use for size "
+                        "aggregated");
+                }
+                std::cout << "Found non-key column " << col_idx << std::endl;
+            } else {
+                if (agg_expr.children.size() != 1) {
+                    throw std::runtime_error(
+                        "Aggregate expression for builtin funcs must have "
+                        "exactly "
+                        "one child expression" +
+                        expr->ToString());
+                }
 
-            auto& child_expr = agg_expr.children[0];
-            if (child_expr->type != duckdb::ExpressionType::BOUND_COLUMN_REF) {
-                throw std::runtime_error(
-                    "Aggregate expression must have only col ref "
-                    "expression children" +
-                    expr->ToString());
+                auto& child_expr = agg_expr.children[0];
+                if (child_expr->type !=
+                    duckdb::ExpressionType::BOUND_COLUMN_REF) {
+                    throw std::runtime_error(
+                        "Aggregate expression must have only col ref "
+                        "expression children" +
+                        expr->ToString());
+                }
+                auto& colref =
+                    child_expr->Cast<duckdb::BoundColumnRefExpression>();
+
+                col_idx = col_ref_map.at(
+                    {colref.binding.table_index, colref.binding.column_index});
             }
-            auto& colref = child_expr->Cast<duckdb::BoundColumnRefExpression>();
             // Extract bind_info
             BodoAggFunctionData& bind_info =
                 agg_expr.bind_info->Cast<BodoAggFunctionData>();
-            std::unique_ptr<bodo::DataType> out_arr_type;
-
-            uint64_t col_idx = col_ref_map.at(
-                {colref.binding.table_index, colref.binding.column_index});
 
             auto ftype = function_to_ftype.at(agg_expr.function.name);
             column_agg_funcs.push_back({col_idx, ftype});
@@ -166,9 +198,10 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
                     in_table_schema->column_types[col_idx]->c_type);
             std::string timezone =
                 in_table_schema->column_types[col_idx]->timezone;
-            out_arr_type = std::make_unique<bodo::DataType>(
-                std::get<0>(output_dtype), std::get<1>(output_dtype), -1, -1,
-                timezone);
+            std::unique_ptr<bodo::DataType> out_arr_type =
+                std::make_unique<bodo::DataType>(std::get<0>(output_dtype),
+                                                 std::get<1>(output_dtype), -1,
+                                                 -1, timezone);
 
             this->output_schema->append_column(std::move(out_arr_type));
             this->output_schema->column_names.push_back(agg_expr.function.name);

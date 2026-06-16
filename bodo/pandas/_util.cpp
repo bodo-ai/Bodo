@@ -1550,7 +1550,7 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
 
             default:
                 throw std::runtime_error(
-                    "Unsupported Arrow type for null scalar");
+                    "Unsupported Arrow type for null scalar " + t->ToString());
         }
     }
 
@@ -1614,6 +1614,20 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
                                                          true);
         }
 
+        case arrow::Type::DATE32: {
+            auto ds = std::static_pointer_cast<arrow::Date32Scalar>(s);
+            // arrow::Date32Scalar::value is days since epoch (int32_t)
+            return std::make_unique<cudf::numeric_scalar<int32_t>>(
+                static_cast<int32_t>(ds->value), true);
+        }
+
+        case arrow::Type::DATE64: {
+            auto ds = std::static_pointer_cast<arrow::Date64Scalar>(s);
+            // arrow::Date64Scalar::value is milliseconds since epoch (int64_t)
+            return std::make_unique<cudf::numeric_scalar<int64_t>>(
+                static_cast<int64_t>(ds->value), true);
+        }
+
         // ---------------- TIMESTAMPS ----------------
         case arrow::Type::TIMESTAMP: {
             auto ts = std::static_pointer_cast<arrow::TimestampScalar>(s);
@@ -1644,7 +1658,8 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
         }
 
         default:
-            throw std::runtime_error("Unsupported Arrow scalar type");
+            throw std::runtime_error("Unsupported Arrow scalar type " +
+                                     s->type->ToString());
     }
 }
 
