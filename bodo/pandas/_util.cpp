@@ -964,6 +964,8 @@ PyObject *duckdbFilterSetToPyicebergFilter(
 }
 
 std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum) {
+    // DuckDB's optimizer may evaluate expressions with scalar input, see
+    // test_tpch_q22
     if (datum.is_scalar()) {
         return arrow_array_to_bodo(
             arrow::MakeArrayFromScalar(*datum.scalar(), 1).ValueOrDie(),

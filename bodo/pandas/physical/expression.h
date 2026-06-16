@@ -228,7 +228,8 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
  */
 std::shared_ptr<array_info> do_arrow_compute_case(
     std::shared_ptr<ExprResult> when_res, std::shared_ptr<ExprResult> then_res,
-    std::shared_ptr<ExprResult> else_res);
+    std::shared_ptr<ExprResult> else_res,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Run arrow compute operation on unary Datum.
@@ -1049,12 +1050,13 @@ class PhysicalCalendarIntervalExpression : public PhysicalExpression {
  */
 class PhysicalCaseExpression : public PhysicalExpression {
    public:
-    PhysicalCaseExpression(std::shared_ptr<PhysicalExpression> when_expr,
-                           std::shared_ptr<PhysicalExpression> then_expr,
-                           std::shared_ptr<PhysicalExpression> else_expr,
-                           std::shared_ptr<arrow::DataType> result_type)
+    PhysicalCaseExpression(
+        std::shared_ptr<PhysicalExpression> when_expr,
+        std::shared_ptr<PhysicalExpression> then_expr,
+        std::shared_ptr<PhysicalExpression> else_expr,
+        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
         : PhysicalExpression(PhysicalExpressionType::CASE),
-          result_type(std::move(result_type)) {
+          result_type(_result_type) {
         children.push_back(when_expr);
         children.push_back(then_expr);
         children.push_back(else_expr);
@@ -1076,24 +1078,8 @@ class PhysicalCaseExpression : public PhysicalExpression {
         std::shared_ptr<ExprResult> else_res =
             children[2]->ProcessBatch(input_batch);
 
-        auto result = do_arrow_compute_case(when_res, then_res, else_res);
-
-        // Cast result to expected type if different
-        if (result_type) {
-            std::shared_ptr<arrow::Array> arrow_arr =
-                prepare_arrow_compute(result);
-            if (!arrow_arr->type()->Equals(result_type)) {
-                arrow::Result<arrow::Datum> cast_res =
-                    arrow::compute::Cast(arrow_arr, result_type);
-                if (!cast_res.ok()) [[unlikely]] {
-                    throw std::runtime_error(
-                        "PhysicalCaseExpression cast failed: " +
-                        cast_res.status().message());
-                }
-                result = arrow_array_to_bodo(cast_res.ValueOrDie().make_array(),
-                                             bodo::BufferPool::DefaultPtr());
-            }
-        }
+        auto result =
+            do_arrow_compute_case(when_res, then_res, else_res, result_type);
 
         auto when_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(when_res);
