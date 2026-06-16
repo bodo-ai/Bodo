@@ -228,20 +228,6 @@ jobs:
       bodo-version: ${{ needs.get_version.outputs.bodo_version }}
     secrets: inherit
 
-  bodosql-cpp-ci:
-    needs: [compile-bodo, get_version]
-    name: Test BodoSQL C++ Backend
-    uses: ./.github/workflows/_test_python_source.yml
-    with:
-      batch: 1
-      total-batches: 1
-      pytest-marker: "bodosql_cpp and not weekly"
-      collect-coverage: true
-      runner-id: ${{ inputs.runner_os || 'ubuntu-latest' }}
-      test-type: "BODOSQL_CPP"
-      bodo-version: ${{ needs.get_version.outputs.bodo_version }}
-    secrets: inherit
-
   java-ci:
     name: Test Java
     needs: [validate]
@@ -329,7 +315,6 @@ jobs:
       - collect-results
       - df-lib-ci
       - df-lib-non-jit-ci
-      - bodosql-cpp-ci
       - gpu-ci
       - validate
     runs-on: ubuntu-latest

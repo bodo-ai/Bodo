@@ -895,11 +895,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name in ("UTC_TIMESTAMP", "UTC_DATE"):
-            curr_ts = pd.Timestamp.now(tz="UTC")
+            curr_ts = pd.Timestamp.now()
             if func_name == "UTC_DATE":
                 curr_ts = curr_ts.normalize()
             dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz="UTC"))
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns"))
             )
             return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
 
@@ -1189,6 +1189,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # sarg is an org.apache.calcite.util.Sarg
             sarg = search_expr.value
             assert sarg.getClass().getSimpleName() == "Sarg"
+            if (
+                sarg.getClass().getDeclaredField("nullAs").get(sarg).toString()
+                != "UNKNOWN"
+            ):
+                raise NotImplementedError(
+                    "SEARCH operator with nullAs not UNKNOWN not supported in C++ backend yet"
+                )
             # sarg_rangeSet is a com.google.common.collect.ImmutableRangeSet
             sarg_rangeSet = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
             assert sarg_rangeSet.getClass().getSimpleName() == "ImmutableRangeSet"
