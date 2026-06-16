@@ -872,6 +872,7 @@ def test_tpch_q10(tpch_data, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_tpch_q11(tpch_data, memory_leak_check):
     NATION = "GERMANY"
     FRACTION = 0.0001

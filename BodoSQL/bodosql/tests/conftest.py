@@ -1253,7 +1253,6 @@ def tpch_data_helper(datapath):
     return dataframe_dict
 
 
-@bodo.jit(returns_maybe_distributed=False, cache=True)
 def load_tpch_data(dir_name):
     """Load the necessary TPCH DataFrames given a root directory.
     We use bodo.jit so we can read easily from a directory.
