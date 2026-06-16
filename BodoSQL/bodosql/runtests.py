@@ -9,8 +9,10 @@ import sys
 
 # first arg is the name of the testing pipeline
 pipeline_name = sys.argv[1]
-# second arg is the number of processes to run the tests with
-num_processes = int(sys.argv[2])
+# second arg is the number of workers to run the tests with
+num_workers = int(sys.argv[2])
+# NOTE: BodoSQL C++ backend always uses spawn (JIT fallback will be sequential here)
+os.environ["BODO_NUM_WORKERS"] = str(num_workers)
 # all other args go to pytest
 pytest_args = sys.argv[3:]
 # Get File-Level Timeout Info from Environment Variable (in seconds)
@@ -58,13 +60,8 @@ for i, m in enumerate(modules):
         mod_pytest_args[mark_arg_idx + 1] += " and single_mod"
     except ValueError:
         mod_pytest_args += ["-m", "single_mod"]
-    # run tests with mpiexec + pytest always. If you just use
-    # pytest then out of memory won't tell you which test failed.
+
     cmd = [
-        "mpiexec",
-        "-prepend-rank",
-        "-n",
-        str(num_processes),
         "pytest",
         "-Wignore",
         # junitxml generates test report file that can be displayed by CodeBuild website
