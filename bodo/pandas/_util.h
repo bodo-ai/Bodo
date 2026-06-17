@@ -496,15 +496,16 @@ auto _get_py_args_as_types_tuple(PyObject *args, const char *func_name,
 }
 
 /**
- * @brief Get a single argument from a Python function call
- * and convert it to a boolean.
+ * @brief Get the PyTuple of function arguments as a tuple of the arguments
+ * cast to the requested types specified by a sequence of type conversion
+ * functions.
  *
  * @param args tuple containing the function arguments
  * @param func_name Name of the function (for error messages)
  * @param converters (varargs) PyObject-to-type conversion functions to apply to
- * the respective `args` passed Number of converters must be equal to the number
- * of arguments. Example of conversion functions: get_py_object_as_cstr,
- * get_py_object_as_bool
+ * the respective `args` passed. Number of converters must be equal to the
+ * number of arguments. Example of conversion functions: get_py_object_as_cstr,
+ * get_py_object_as_bool, get_py_object_as_int64
  * @return A tuple of the passed arguments converted to the types specified by
  * the corresponding passed `converters`
  */
