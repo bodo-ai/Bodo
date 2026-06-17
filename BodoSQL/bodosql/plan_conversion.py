@@ -436,10 +436,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
         if func_name in ("DATEADD", "DATE_ADD", "ADDDATE", "TIMEADD", "TIMESTAMPADD"):
-            # DATE_ADD(date, interval) or DATE_ADD(unit, amount, date)
+            # DATEADD(date, interval) or DATEADD(unit, amount, date)
             # For 2 operands: (date, interval) → date + interval
             # For 3 operands: (unit, amount, date) → date + (unit * amount)
             if num_operands == 2:
+                # 2-operand form: DATEADD(date, interval) → date + interval
+                # This path handles Snowflake-style DATEADD with a date/timestamp
+                # and an interval literal. Default to DAY-based units
+                # (86_400_000_000_000 nanos per day) for the scalar fallback.
                 date_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[0], input_plan
                 )
@@ -460,6 +464,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     (),
                 )
             elif num_operands == 3:
+                # 3-operand form: DATEADD(unit, amount, date) → date + (unit * amount)
+                # First operand is a FLAG(unit) interval qualifier from the Java
+                # planner (e.g. FLAG(DAY), FLAG(MONTH)).
                 first_op_str = str(java_call.getOperands()[0].toString())
                 if not first_op_str.startswith("FLAG"):
                     raise NotImplementedError(
@@ -476,16 +483,18 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 date_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[2], input_plan
                 )
+                # Decompose the interval unit into (months, days, nanos) for
+                # per-unit values. E.g. YEAR → (12, 0, 0), DAY → (0, 1, 0).
                 interval_months, interval_days, interval_nanos = INTERVAL_UNIT_MAP[
                     unit_str
                 ][1](1)
                 date_pa_type = date_expr.empty_data.iloc[:, 0].dtype.pyarrow_dtype
                 is_date_input = pa.types.is_date(date_pa_type)
-                preserves_date_type = (
-                    is_date_input
-                    and interval_nanos == 0
-                    and (interval_months != 0 or interval_days != 0)
-                )
+                # Preserve the date output type when the input is a date (not
+                # timestamp) and the interval has only month/day components
+                # (no sub-day precision). E.g. DATEADD(DAY, 5, date_col)
+                # returns a date.
+                preserves_date_type = is_date_input and interval_nanos == 0
                 out_empty = pd.Series(
                     dtype=date_expr.empty_data.iloc[:, 0].dtype
                     if preserves_date_type
@@ -494,12 +503,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     else pd.ArrowDtype(pa.timestamp("ns"))
                 )
 
+                # Special case: tz-aware timestamps with month-based intervals
+                # (YEAR/QUARTER/MONTH). The C++ bodo_dateadd scalar function
+                # doesn't handle tz-aware timestamps with month intervals,
+                # so fall back to ArrowArithOpExpression which delegates to
+                # Arrow's month interval arithmetic. Only works for constant
+                # amounts since Arrow requires a literal month interval.
                 if (
                     interval_months != 0
                     and pa.types.is_timestamp(date_pa_type)
                     and date_pa_type.tz is not None
-                    and hasattr(amount_expr, "value")
+                    and isinstance(amount_expr, ConstantExpression)
                 ):
+                    # MonthDayNanoInterval tuple: (unit, months, days, nanos).
+                    # Days and nanos are always zero here because this branch
+                    # only runs for month-based units (YEAR/QUARTER/MONTH) which
+                    # only produce non-zero months component from INTERVAL_UNIT_MAP.
                     month_interval = (
                         "MonthDayNanoInterval",
                         interval_months
@@ -507,8 +526,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                             amount_expr.value
                             + (0.5 if amount_expr.value >= 0 else -0.5)
                         ),
-                        0,
-                        0,
+                        0,  # days: always 0 for month-based units
+                        0,  # nanos: always 0 for month-based units
                     )
                     dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
                     month_interval_expr = ConstantExpression(
@@ -518,6 +537,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         out_empty, date_expr, month_interval_expr, "__add__"
                     )
 
+                # General path: convert the interval unit to nanos-per-unit
+                # and pass (months, nanos_per_unit) to bodo_dateadd.
+                # nanos_per_unit is zero for month-based units and non-zero
+                # for day/time-based units.
                 int_empty = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
                 nanos_per_unit = interval_days * 86_400_000_000_000 + interval_nanos
                 return ArrowScalarFuncExpression(
