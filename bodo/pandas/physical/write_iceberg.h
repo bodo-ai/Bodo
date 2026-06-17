@@ -11,11 +11,10 @@
 #include "_bodo_write_function.h"
 #include "physical/operator.h"
 
-// Forward declaration for theta sketch utility functions (defined in
-// theta_utils.cpp, extern "C").
-extern "C" {
-void bodo_theta_utils_delete_merged(uintptr_t ptr);
-}
+// Forward declaration for theta sketch compact+serialize function (defined in
+// theta_utils.cpp, extern "C"). Used in FinalizeSink to compact sketches
+// before passing to Python, avoiding the MPI inside merge_parallel_sketches().
+extern "C" PyObject* bodo_theta_utils_compact_serialize(uintptr_t ptr);
 
 struct PhysicalWriteIcebergMetrics {
     using stat_t = MetricBase::StatValue;
@@ -188,11 +187,17 @@ class PhysicalWriteIceberg : public PhysicalSink {
     void FinalizeSink() override {
         time_pt start_finalize_time = start_timer();
 
-        // Pass theta sketch pointer to Python for puffin write.
+        // Compact and serialize theta sketches to bytes before passing to
+        // Python. This avoids the MPI inside merge_parallel_sketches() which
+        // would crash in the df_lib path (workers have already finished).
         if (theta_sketches != nullptr) {
-            PyObject* sketch_int = PyLong_FromVoidPtr((void*)theta_sketches);
-            PyList_Append(iceberg_files_info_py, sketch_int);
-            Py_DECREF(sketch_int);
+            PyObject* serialized =
+                bodo_theta_utils_compact_serialize((uintptr_t)theta_sketches);
+            if (serialized) {
+                PyList_Append(iceberg_files_info_py, serialized);
+                Py_DECREF(serialized);
+            }
+            delete theta_sketches;
             theta_sketches = nullptr;
         }
 

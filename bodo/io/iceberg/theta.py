@@ -6,10 +6,8 @@ from __future__ import annotations
 
 import sys
 import typing as pt
-from uuid import uuid4
 
 import llvmlite.binding as ll
-import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
@@ -21,7 +19,6 @@ from numba.extending import (
 
 import bodo
 from bodo.io.iceberg.catalog import conn_str_to_catalog
-from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.libs import puffin_file, theta_sketches
 from bodo.libs.array import (
     array_info_type,
@@ -34,11 +31,10 @@ from bodo.spawn.utils import run_rank0
 from bodo.utils.py_objs import install_py_obj_class
 
 if pt.TYPE_CHECKING:  # pragma: no cover
-    from pyiceberg.table import Transaction
-    from pyiceberg.table.metadata import TableMetadata
     from pyiceberg.table.statistics import StatisticsFile
 
 # Create a type for the Iceberg StatisticsFile object
+# if we have the connector.
 statistics_file_type = None
 try:
     from pyiceberg.table.statistics import StatisticsFile
@@ -108,8 +104,10 @@ def _init_theta_sketches(
 ):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer()],
+            lir.IntType(8).as_pointer(),  # table_info*
+            [
+                lir.IntType(8).as_pointer(),
+            ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="init_theta_sketches"
@@ -130,6 +128,10 @@ def get_supported_theta_sketch_columns(iceberg_pyarrow_schema):  # pragma: no co
 
 @overload(get_supported_theta_sketch_columns)
 def overload_get_supported_theta_sketch_columns(iceberg_pyarrow_schema):
+    """
+    Returns a boolean array indicating which columns have types that can
+    support theta sketches.
+    """
     arr_type = bodo.types.boolean_array_type
 
     def impl(iceberg_pyarrow_schema):  # pragma: no cover
@@ -145,8 +147,10 @@ def overload_get_supported_theta_sketch_columns(iceberg_pyarrow_schema):
 def _get_supported_theta_sketch_columns(typingctx, iceberg_pyarrow_schema_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer()],
+            lir.IntType(8).as_pointer(),  # array_info*
+            [
+                lir.IntType(8).as_pointer(),
+            ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="get_supported_theta_sketch_columns"
@@ -168,6 +172,10 @@ def get_default_theta_sketch_columns(iceberg_pyarrow_schema):  # pragma: no cove
 
 @overload(get_default_theta_sketch_columns)
 def overload_get_default_theta_sketch_columns(iceberg_pyarrow_schema):
+    """
+    Returns a boolean array indicating which columns have types that output
+    theta sketches by default.
+    """
     arr_type = bodo.types.boolean_array_type
 
     def impl(iceberg_pyarrow_schema):  # pragma: no cover
@@ -183,8 +191,10 @@ def overload_get_default_theta_sketch_columns(iceberg_pyarrow_schema):
 def _get_default_theta_sketch_columns(typingctx, iceberg_pyarrow_schema_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer()],
+            lir.IntType(8).as_pointer(),  # array_info*
+            [
+                lir.IntType(8).as_pointer(),
+            ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="get_default_theta_sketch_columns"
@@ -206,6 +216,18 @@ def init_theta_sketches_wrapper(column_bitmask):  # pragma: no cover
 
 @overload(init_theta_sketches_wrapper)
 def overload_init_theta_sketches_wrapper(column_bit_mask):
+    """
+    Creates a new theta sketch collection when starting to write an Iceberg table.
+
+    Args:
+        column_bit_mask (Boolean Array): An array of booleans indicating which columns
+            have theta sketches enabled.
+
+    Returns:
+        C++ Object: A new theta sketch collection object, which is effectively a pointer
+            to an array of theta sketches, with null entries for columns without sketches.
+    """
+
     def impl(column_bit_mask):  # pragma: no cover
         return _init_theta_sketches(array_to_info(column_bit_mask))
 
@@ -216,8 +238,10 @@ def overload_init_theta_sketches_wrapper(column_bit_mask):
 def _iceberg_writer_fetch_theta(typingctx, array_info_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer()],
+            lir.IntType(8).as_pointer(),  # array_info*
+            [
+                lir.IntType(8).as_pointer(),
+            ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="fetch_ndv_approximations"
@@ -238,6 +262,12 @@ def iceberg_writer_fetch_theta(writer):
 
 @overload(iceberg_writer_fetch_theta)
 def overload_iceberg_writer_fetch_theta(writer):
+    """
+    Fetches the current values of the theta sketch approximations
+    of NDV for each column in an iceberg writer. For each column
+    that does not have a theta sketch, returns null instead. Largely
+    used for testing purposes.
+    """
     arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(writer):  # pragma: no cover
@@ -253,16 +283,15 @@ def overload_iceberg_writer_fetch_theta(writer):
 def _read_puffin_file_ndvs(typingctx, puffin_loc_t, bucket_region_t, iceberg_schema_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
+            lir.IntType(8).as_pointer(),  # array_info*
             [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="read_puffin_file_ndvs"
         )
+
         ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
@@ -280,6 +309,10 @@ def read_puffin_file_ndvs(puffin_file_loc):  # pragma: no cover
 
 @overload(read_puffin_file_ndvs)
 def overload_read_puffin_file_ndvs(puffin_file_loc, iceberg_schema):
+    """
+    Reads the NDV values from a puffin file. This is used for testing purposes
+    to verify that the theta sketches are being written correctly.
+    """
     arr_type = bodo.types.FloatingArrayType(types.float64)
 
     def impl(puffin_file_loc, iceberg_schema):  # pragma: no cover
@@ -324,14 +357,14 @@ def _write_puffin_file(
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),  # puffin_file_loc
+                lir.IntType(8).as_pointer(),  # bucket_region
+                lir.IntType(64),  # snapshot_id
+                lir.IntType(64),  # sequence_number
+                lir.IntType(8).as_pointer(),  # theta_sketches
+                lir.IntType(8).as_pointer(),  # output_pyarrow_schema
+                lir.IntType(8).as_pointer(),  # arrow_fs
+                lir.IntType(8).as_pointer(),  # exist_puffin_loc
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -351,6 +384,7 @@ def _write_puffin_file(
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        # Wrap the PyObject* in a version that can track reference counts.
         return bodo.utils.py_objs.create_struct_from_pyobject(
             sig.return_type, ret, context, builder, context.get_python_api(builder)
         )
@@ -358,33 +392,17 @@ def _write_puffin_file(
     _ensure_pyarrow_types()
     return (
         types.statistics_file_type(
-            types.voidptr,
-            types.voidptr,
+            types.voidptr,  # Pass UTF-8 string as void*
+            types.voidptr,  # const Pass UTF-8 string as void*
             types.int64,
             types.int64,
             theta_sketch_collection_type,
             output_pyarrow_schema_t,
             _pyarrow_fs_type,
-            types.voidptr,
+            types.voidptr,  # Pass UTF-8 string as void*
         ),
         codegen,
     )
-
-
-@run_rank0
-def fetch_puffin_metadata(txn: Transaction) -> tuple[int, int, str]:
-    metadata = txn.table_metadata
-    snapshot_id = metadata.current_snapshot_id
-    assert snapshot_id is not None
-    snapshot = metadata.current_snapshot()
-    assert snapshot is not None
-    sequence_number = snapshot.sequence_number
-    assert sequence_number is not None
-    location = _format_data_loc(
-        f"{metadata.location}/metadata/{snapshot_id}-{uuid4()}.stats",
-        _fs_from_file_path(metadata.location, txn._table.io),
-    )
-    return snapshot_id, sequence_number, location
 
 
 @run_rank0
@@ -396,56 +414,6 @@ def commit_statistics_file(
     table = conn_str_to_catalog(conn_str).load_table(table_id).refresh()
     with table.update_statistics() as update:
         update.set_statistics(statistics_file)
-
-
-@run_rank0
-def table_columns_have_theta_sketches(
-    table_metadata: TableMetadata,
-) -> pd.arrays.BooleanArray:
-    cols = table_metadata.schema().columns
-    snap_id = table_metadata.current_snapshot_id
-    have_theta_sketches = [False] * len(cols)
-    if snap_id is None:
-        return pd.array(have_theta_sketches)
-    field_id_to_idx = {col.field_id: i for i, col in enumerate(cols)}
-    for stat_file in table_metadata.statistics:
-        if stat_file.snapshot_id == snap_id:
-            for blob_metadata in stat_file.blob_metadata:
-                if blob_metadata.type != "apache-datasketches-theta-v1":
-                    continue
-                if len(blob_metadata.fields) != 1:
-                    continue
-                field = blob_metadata.fields[0]
-                if field in field_id_to_idx:
-                    have_theta_sketches[field_id_to_idx[field]] = True
-            break
-    return pd.array(have_theta_sketches, dtype="boolean")
-
-
-@run_rank0
-def table_columns_enabled_theta_sketches(txn: Transaction) -> pd.arrays.BooleanArray:
-    cols = txn.table_metadata.schema().columns
-    props = txn.table_metadata.properties
-    enabled = [
-        props.get(f"bodo.write.theta_sketch_enabled.{col.name}", "true") == "true"
-        for col in cols
-    ]
-    return pd.array(enabled, dtype="boolean")
-
-
-@run_rank0
-def get_old_statistics_file_path(txn: Transaction) -> str:
-    snap_id = txn.table_metadata.current_snapshot_id
-    if snap_id is None:
-        raise RuntimeError(
-            "Table does not have a snapshot. Cannot get statistics file location."
-        )
-    for stat_file in txn.table_metadata.statistics:
-        if stat_file.snapshot_id == snap_id:
-            return stat_file.statistics_path
-    raise RuntimeError(
-        "Table does not have a valid statistics file. Cannot get statistics file location."
-    )
 
 
 def delete_theta_sketches(theta_sketches):  # pragma: no cover
@@ -477,130 +445,4 @@ def _delete_theta_sketches(typingctx, theta_sketches_t):
     return (
         types.void(theta_sketch_collection_type),
         codegen,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Non-JIT helpers for the pandas/physical write path.
-# ---------------------------------------------------------------------------
-
-import ctypes as _ctypes
-
-
-def get_default_theta_sketch_columns_py(iceberg_pyarrow_schema):
-    """Non-JIT version: returns a list of booleans indicating which columns
-    have types that output theta sketches by default."""
-    import pyarrow as pa
-
-    default_excluded = {pa.float32(), pa.float64()}
-    result = []
-    for i in range(len(iceberg_pyarrow_schema)):
-        field = iceberg_pyarrow_schema.field(i)
-        dtype = field.type
-        supported_types = {
-            pa.int32(),
-            pa.int64(),
-            pa.date32(),
-            pa.time64("us"),
-            pa.timestamp("us"),
-            pa.large_string(),
-            pa.large_binary(),
-            pa.decimal128(38, 0),
-            pa.float32(),
-            pa.float64(),
-        }
-        is_supported = dtype in supported_types or pa.types.is_dictionary(dtype)
-        if is_supported:
-            result.append(dtype not in default_excluded)
-        else:
-            result.append(False)
-    return result
-
-
-def get_supported_theta_sketch_columns_py(iceberg_pyarrow_schema):
-    """Non-JIT version: returns a list of booleans indicating which columns
-    have types that can support theta sketches."""
-    import pyarrow as pa
-
-    supported_types = {
-        pa.int32(),
-        pa.int64(),
-        pa.date32(),
-        pa.time64("us"),
-        pa.timestamp("us"),
-        pa.large_string(),
-        pa.large_binary(),
-        pa.decimal128(38, 0),
-        pa.float32(),
-        pa.float64(),
-    }
-    result = []
-    for i in range(len(iceberg_pyarrow_schema)):
-        field = iceberg_pyarrow_schema.field(i)
-        dtype = field.type
-        result.append(dtype in supported_types or pa.types.is_dictionary(dtype))
-    return result
-
-
-def _load_theta_utils_lib():
-    """Load the Bodo extension module for theta_utils C functions."""
-    import sys as _sys
-
-    ext_module = _sys.modules.get("bodo.ext")
-    if ext_module is None:
-        raise RuntimeError("bodo.ext module not loaded")
-    return _ctypes.CDLL(ext_module.__file__)
-
-
-_lib = None
-
-
-def _get_lib():
-    global _lib
-    if _lib is None:
-        _lib = _load_theta_utils_lib()
-    return _lib
-
-
-def delete_sketches(ptr):
-    """Delete an UpdateSketchCollection via C function."""
-    if ptr == 0:
-        return
-    lib = _get_lib()
-    lib.bodo_theta_utils_delete_sketches.argtypes = [_ctypes.c_void_p]
-    lib.bodo_theta_utils_delete_sketches(ptr)
-
-
-def write_puffin_file_from_sketches(
-    sketch_ptr,
-    puffin_file_loc,
-    bucket_region,
-    snapshot_id,
-    sequence_number,
-    iceberg_schema,
-    arrow_fs,
-    existing_puffin_loc="",
-):
-    """Write puffin file using the existing C entry point."""
-    lib = _get_lib()
-    lib.bodo_theta_utils_write_puffin.restype = _ctypes.py_object
-    lib.bodo_theta_utils_write_puffin.argtypes = [
-        _ctypes.c_void_p,
-        _ctypes.c_char_p,
-        _ctypes.c_char_p,
-        _ctypes.c_int64,
-        _ctypes.c_int64,
-        _ctypes.py_object,
-        _ctypes.py_object,
-        _ctypes.c_char_p,
-    ]
-    return lib.bodo_theta_utils_write_puffin(
-        _ctypes.c_void_p(sketch_ptr),
-        puffin_file_loc.encode(),
-        bucket_region.encode(),
-        _ctypes.c_int64(snapshot_id),
-        _ctypes.c_int64(sequence_number),
-        iceberg_schema,
-        arrow_fs,
-        existing_puffin_loc.encode(),
     )

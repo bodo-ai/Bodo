@@ -72,52 +72,106 @@ def write_puffin_file_from_sketches(
     )
 
 
-def get_default_theta_sketch_columns_py(iceberg_pyarrow_schema):
+def _type_supports_theta_sketch(dtype):
+    """Check if a PyArrow type supports theta sketches.
+
+    Mirrors the C++ type_supports_theta_sketch() in _theta_sketches.h.
+    """
     import pyarrow as pa
 
-    default_excluded = {pa.float32(), pa.float64()}
-    result = []
-    for i in range(len(iceberg_pyarrow_schema)):
-        field = iceberg_pyarrow_schema.field(i)
-        dtype = field.type
-        supported_types = {
-            pa.int32(),
-            pa.int64(),
-            pa.date32(),
-            pa.time64("us"),
-            pa.timestamp("us"),
-            pa.large_string(),
-            pa.large_binary(),
-            pa.decimal128(38, 0),
-            pa.float32(),
-            pa.float64(),
-        }
-        is_supported = dtype in supported_types or pa.types.is_dictionary(dtype)
-        result.append(is_supported and dtype not in default_excluded)
-    return result
+    return (
+        pa.types.is_int32(dtype)
+        or pa.types.is_int64(dtype)
+        or pa.types.is_date32(dtype)
+        or pa.types.is_time64(dtype)
+        or pa.types.is_timestamp(dtype)
+        or pa.types.is_large_string(dtype)
+        or pa.types.is_large_binary(dtype)
+        or pa.types.is_dictionary(dtype)
+        or pa.types.is_decimal(dtype)
+        or pa.types.is_float32(dtype)
+        or pa.types.is_float64(dtype)
+    )
+
+
+def _is_default_theta_sketch_type(dtype):
+    """Check if a PyArrow type enables theta sketches by default.
+
+    Mirrors the C++ is_default_theta_sketch_type() in _theta_sketches.h.
+    Same as supported, but excludes float32/float64.
+    """
+    import pyarrow as pa
+
+    if not _type_supports_theta_sketch(dtype):
+        return False
+    return not (pa.types.is_float32(dtype) or pa.types.is_float64(dtype))
+
+
+def get_default_theta_sketch_columns_py(iceberg_pyarrow_schema):
+    return [
+        _is_default_theta_sketch_type(iceberg_pyarrow_schema.field(i).type)
+        for i in range(len(iceberg_pyarrow_schema))
+    ]
 
 
 def get_supported_theta_sketch_columns_py(iceberg_pyarrow_schema):
-    import pyarrow as pa
+    return [
+        _type_supports_theta_sketch(iceberg_pyarrow_schema.field(i).type)
+        for i in range(len(iceberg_pyarrow_schema))
+    ]
 
-    supported_types = {
-        pa.int32(),
-        pa.int64(),
-        pa.date32(),
-        pa.time64("us"),
-        pa.timestamp("us"),
-        pa.large_string(),
-        pa.large_binary(),
-        pa.decimal128(38, 0),
-        pa.float32(),
-        pa.float64(),
-    }
-    result = []
-    for i in range(len(iceberg_pyarrow_schema)):
-        field = iceberg_pyarrow_schema.field(i)
-        dtype = field.type
-        result.append(dtype in supported_types or pa.types.is_dictionary(dtype))
-    return result
+
+def compact_serialize_sketches(ptr):
+    """Compact an UpdateSketchCollection and serialize to bytes.
+
+    This is a local (non-MPI) operation. The returned bytes can be gathered
+    across ranks via Python/MPI and later merged on rank 0.
+    """
+    if ptr == 0:
+        return None
+    lib = _get_lib()
+    lib.bodo_theta_utils_compact_serialize.restype = _ctypes.py_object
+    lib.bodo_theta_utils_compact_serialize.argtypes = [_ctypes.c_void_p]
+    return lib.bodo_theta_utils_compact_serialize(_ctypes.c_void_p(ptr))
+
+
+def merge_and_write_puffin(
+    serialized_list,
+    puffin_file_loc,
+    bucket_region,
+    snapshot_id,
+    sequence_number,
+    iceberg_schema,
+    arrow_fs,
+    existing_puffin_loc="",
+):
+    """Merge pre-serialized CompactSketchCollections and write puffin file.
+
+    This is a rank-0-only, non-MPI operation. Each element of
+    serialized_list is a bytes object from compact_serialize_sketches().
+    """
+    lib = _get_lib()
+    lib.bodo_theta_utils_merge_and_write_puffin.restype = _ctypes.py_object
+    lib.bodo_theta_utils_merge_and_write_puffin.argtypes = [
+        _ctypes.py_object,
+        _ctypes.c_char_p,
+        _ctypes.c_char_p,
+        _ctypes.c_int64,
+        _ctypes.c_int64,
+        _ctypes.py_object,
+        _ctypes.py_object,
+        _ctypes.c_char_p,
+    ]
+    return lib.bodo_theta_utils_merge_and_write_puffin(
+        serialized_list,
+        puffin_file_loc.encode(),
+        bucket_region.encode(),
+        _ctypes.c_int64(snapshot_id),
+        _ctypes.c_int64(sequence_number),
+        iceberg_schema,
+        arrow_fs,
+        existing_puffin_loc.encode(),
+    )
 
 
 @run_rank0

@@ -285,3 +285,15 @@ PyObject *write_puffin_file_py_entrypt(
     int64_t sequence_number, UpdateSketchCollection *sketches,
     PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
     const char *existing_puffin_file_loc);
+
+/**
+ * @brief Write a Puffin file from an already-merged CompactSketchCollection.
+ * Unlike write_puffin_file_py_entrypt, this does NOT call
+ * merge_parallel_sketches() — the caller is responsible for merging.
+ */
+PyObject *write_puffin_from_compact_sketches_py_entrypt(
+    const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
+    int64_t sequence_number,
+    std::shared_ptr<CompactSketchCollection> merged_sketches,
+    PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
+    const char *existing_puffin_file_loc);
