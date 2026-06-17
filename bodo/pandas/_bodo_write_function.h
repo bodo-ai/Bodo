@@ -83,7 +83,8 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
                              PyObject *partition_tuples, PyObject *sort_tuples,
                              std::string iceberg_schema_str,
                              std::shared_ptr<arrow::Schema> iceberg_schema,
-                             std::shared_ptr<arrow::fs::FileSystem> fs)
+                             std::shared_ptr<arrow::fs::FileSystem> fs,
+                             PyObject *theta_columns_bitmask = nullptr)
         : in_schema(arrow_schema),
           table_loc(std::move(table_loc)),
           bucket_region(std::move(bucket_region)),
@@ -93,14 +94,21 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
           sort_tuples(sort_tuples),
           iceberg_schema_str(std::move(iceberg_schema_str)),
           iceberg_schema(iceberg_schema),
-          fs(fs) {
+          fs(fs),
+          theta_columns_bitmask(theta_columns_bitmask) {
         Py_INCREF(partition_tuples);
         Py_INCREF(sort_tuples);
+        if (theta_columns_bitmask) {
+            Py_INCREF(theta_columns_bitmask);
+        }
     }
 
     ~IcebergWriteFunctionData() override {
         Py_DECREF(partition_tuples);
         Py_DECREF(sort_tuples);
+        if (theta_columns_bitmask) {
+            Py_DECREF(theta_columns_bitmask);
+        }
     }
 
     bool Equals(const FunctionData &other_p) const override {
@@ -125,7 +133,7 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
             this->in_schema, this->table_loc, this->bucket_region,
             this->max_pq_chunksize, this->compression, this->partition_tuples,
             this->sort_tuples, this->iceberg_schema_str, this->iceberg_schema,
-            this->fs);
+            this->fs, this->theta_columns_bitmask);
     }
 
     std::variant<std::shared_ptr<PhysicalSink>,
@@ -145,6 +153,9 @@ struct IcebergWriteFunctionData : public BodoWriteFunctionData {
     std::string iceberg_schema_str;
     std::shared_ptr<arrow::Schema> iceberg_schema;
     std::shared_ptr<arrow::fs::FileSystem> fs;
+    // Boolean array (PyObject*) indicating which columns have theta sketches
+    // enabled. nullptr if theta sketches are disabled.
+    PyObject *theta_columns_bitmask;
 };
 
 /**

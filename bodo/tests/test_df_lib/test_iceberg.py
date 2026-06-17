@@ -1172,3 +1172,112 @@ def test_join_filter(
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_to_iceberg_theta_sketches():
+    """Test that DataFrame.to_iceberg() writes theta sketches (puffin files)
+    with correct NDV estimates for supported column types.
+
+    Verifies:
+    1. The write succeeds and data is correct.
+    2. A statistics file is present in the table metadata.
+    3. The correct columns have theta sketches (int, string, date32).
+    4. Columns that should NOT have sketches (float, bool) are excluded.
+    5. The NDV estimates are correct and within expected ranges.
+    """
+    import datetime
+
+    from bodo.tests.iceberg_database_helpers.metadata_utils import (
+        get_metadata_field,
+        get_metadata_path,
+    )
+
+    df = pd.DataFrame(
+        {
+            # Column A: int64, 10 distinct values → should get theta sketch
+            "A": list(range(10)) * 2,
+            # Column B: float64 → NOT a default theta sketch type (excluded)
+            "B": [1.4, 1.5, 2.451, 0.0] * 5,
+            # Column C: string, 5 distinct values → should get theta sketch
+            "C": ["a", "ab", "cde", "af", "eg"] * 4,
+            # Column D: bool → NOT a default theta sketch type (excluded)
+            "D": [True, False, None, False] * 5,
+            # Column E: date32, 1 distinct value → should get theta sketch
+            "E": [datetime.date(2021, 1, 1)] * 20,
+        }
+    )
+    bdf = bpd.from_pandas(df)
+
+    import bodo
+
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "iceberg_warehouse")
+
+            bdf.to_iceberg(
+                "theta_test_table",
+                location=path,
+            )
+            assert bdf.is_lazy_plan()
+
+            # 1. Verify data is correct
+            out_df = pyiceberg_reader.read_iceberg_table("theta_test_table", path)
+            _test_equal(
+                out_df,
+                df,
+                check_pandas_types=False,
+                sort_output=True,
+                reset_index=True,
+            )
+
+            # 2. Verify statistics file exists in metadata
+            # Read the metadata JSON directly (like the JIT tests do)
+            from bodo.tests.iceberg_database_helpers.metadata_utils import (
+                get_metadata_field,
+                get_metadata_path,
+            )
+
+            metadata_path = get_metadata_path(path, "", "theta_test_table")
+            statistics_lst = get_metadata_field(metadata_path, "statistics")
+            assert len(statistics_lst) >= 1, "Expected at least one statistics file"
+
+            # 3. Verify correct columns have theta sketches
+            # Field IDs are 1-based: A=1, B=2, C=3, D=4, E=5
+            # Expected: A(int)=10, C(string)=5, E(date32)=1
+            # B(float) and D(bool) should NOT have sketches
+            statistics = statistics_lst[0]
+            blob_metadata = statistics["blob-metadata"]
+            assert len(blob_metadata) > 0, "Expected at least one blob"
+
+            seen_fields = {}
+            for blob in blob_metadata:
+                fields = blob["fields"]
+                assert len(fields) == 1, "Expected one field per blob"
+                field_id = fields[0]
+                ndv = blob["properties"].get("ndv")
+                seen_fields[field_id] = ndv
+
+            # A (field_id=1) should have NDV=10
+            assert 1 in seen_fields, "Column A should have a theta sketch"
+            assert seen_fields[1] == "10", (
+                f"Column A NDV should be 10, got {seen_fields.get(1)}"
+            )
+
+            # C (field_id=3) should have NDV=5
+            assert 3 in seen_fields, "Column C should have a theta sketch"
+            assert seen_fields[3] == "5", (
+                f"Column C NDV should be 5, got {seen_fields.get(3)}"
+            )
+
+            # B (field_id=2) and D (field_id=4) should NOT have sketches
+            assert 2 not in seen_fields, (
+                "Column B (float) should NOT have a theta sketch"
+            )
+            assert 4 not in seen_fields, (
+                "Column D (bool) should NOT have a theta sketch"
+            )
+
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta

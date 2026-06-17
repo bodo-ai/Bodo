@@ -5,10 +5,17 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/python/api.h>
 #include "../../io/iceberg_parquet_write.h"
+#include "../../libs/_theta_sketches.h"
 #include "../../libs/_utils.h"
 #include "../../libs/streaming/_shuffle.h"
 #include "_bodo_write_function.h"
 #include "physical/operator.h"
+
+// Forward declaration for theta sketch utility functions (defined in
+// theta_utils.cpp, extern "C").
+extern "C" {
+void bodo_theta_utils_delete_merged(uintptr_t ptr);
+}
 
 struct PhysicalWriteIcebergMetrics {
     using stat_t = MetricBase::StatValue;
@@ -95,6 +102,19 @@ class PhysicalWriteIceberg : public PhysicalSink {
         Py_INCREF(partition_tuples);
         Py_INCREF(sort_tuples);
 
+        // Initialize theta sketches if bitmask is provided
+        PyObject* theta_bitmask = bind_data.theta_columns_bitmask;
+        if (theta_bitmask != nullptr && PyList_Check(theta_bitmask) &&
+            PyList_Size(theta_bitmask) > 0) {
+            Py_ssize_t n_cols = PyList_Size(theta_bitmask);
+            std::vector<bool> theta_cols(n_cols);
+            for (Py_ssize_t i = 0; i < n_cols; i++) {
+                PyObject* item = PyList_GetItem(theta_bitmask, i);
+                theta_cols[i] = (item == Py_True);
+            }
+            theta_sketches = new UpdateSketchCollection(theta_cols);
+        }
+
         // Initialize the buffer and dictionary builders
         for (auto& col : in_bodo_schema->column_types) {
             dict_builders.emplace_back(
@@ -107,6 +127,12 @@ class PhysicalWriteIceberg : public PhysicalSink {
     virtual ~PhysicalWriteIceberg() {
         Py_DECREF(partition_tuples);
         Py_DECREF(sort_tuples);
+        // theta_sketches is cleaned up in FinalizeSink (compacted + merged).
+        // If FinalizeSink wasn't called (error path), clean up here.
+        if (theta_sketches != nullptr) {
+            delete theta_sketches;
+            theta_sketches = nullptr;
+        }
     };
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
@@ -142,7 +168,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
                     table_loc.c_str(), data, in_schema->field_names(),
                     partition_tuples, sort_tuples, compression.c_str(), false,
                     bucket_region.c_str(), -1, iceberg_schema_str.c_str(),
-                    iceberg_files_info_py, iceberg_schema, fs, nullptr);
+                    iceberg_files_info_py, iceberg_schema, fs, theta_sketches);
                 this->metrics.n_files_written++;
             }
             // Reset the buffer for the next batch
@@ -160,10 +186,17 @@ class PhysicalWriteIceberg : public PhysicalSink {
     }
 
     void FinalizeSink() override {
-        // Gather iceberg_files_info from all ranks using MPI
-        // Equivalent to all_infos = comm.gather(iceberg_files_info_py)
-
         time_pt start_finalize_time = start_timer();
+
+        // Pass theta sketch pointer to Python for puffin write.
+        if (theta_sketches != nullptr) {
+            PyObject* sketch_int = PyLong_FromVoidPtr((void*)theta_sketches);
+            PyList_Append(iceberg_files_info_py, sketch_int);
+            Py_DECREF(sketch_int);
+            theta_sketches = nullptr;
+        }
+
+        // Gather iceberg_files_info from all ranks using MPI
         iceberg_files_info_py =
             gather_iceberg_files_info(iceberg_files_info_py);
         this->metrics.finalize_time = end_timer(start_finalize_time);
@@ -196,6 +229,9 @@ class PhysicalWriteIceberg : public PhysicalSink {
     const std::string iceberg_schema_str;
     const std::shared_ptr<arrow::Schema> iceberg_schema;
     std::shared_ptr<arrow::fs::FileSystem> fs;
+    // Theta sketch collection for NDV estimation. Owned by this operator
+    // until destructor, then ownership transfers to the static registry.
+    UpdateSketchCollection* theta_sketches = nullptr;
 
     PyObject* iceberg_files_info_py = PyList_New(0);
 

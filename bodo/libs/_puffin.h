@@ -263,3 +263,25 @@ class PuffinFile {
     std::vector<BlobMetadata> blob_metadatas;
     std::optional<std::unordered_map<std::string, std::string>> properties;
 };
+
+/**
+ * @brief Read a Puffin file from disk and return the parsed PuffinFile object.
+ *
+ * @param puffin_loc Path to the Puffin file.
+ * @param bucket_region S3 bucket region (used for S3 paths).
+ * @return Parsed PuffinFile object.
+ */
+std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
+                                             const char *bucket_region);
+
+/**
+ * @brief Python entry point for writing a Puffin file from theta sketches.
+ * Handles compaction, parallel merge, append merge, and file writing.
+ *
+ * @return PyObject* StatisticsFile on rank 0, empty StatisticsFile on others.
+ */
+PyObject *write_puffin_file_py_entrypt(
+    const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
+    int64_t sequence_number, UpdateSketchCollection *sketches,
+    PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
+    const char *existing_puffin_file_loc);

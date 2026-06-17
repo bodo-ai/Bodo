@@ -603,7 +603,41 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
         )
         compression = properties.get("write.parquet.compression-codec", "snappy")
-        # TODO: support Theta sketches
+
+        # --- Theta sketch setup ---
+        from bodo.io.iceberg.theta_utils_py import (
+            delete_sketches,
+            fetch_puffin_metadata,
+            get_default_theta_sketch_columns_py,
+            get_old_statistics_file_path,
+            get_supported_theta_sketch_columns_py,
+            table_columns_enabled_theta_sketches,
+            table_columns_have_theta_sketches,
+            write_puffin_file_from_sketches,
+        )
+
+        use_theta = bodo.enable_theta_sketches
+        theta_columns_bitmask = None
+        if use_theta:
+            use_theta = False
+            if append:
+                existing_cols = table_columns_have_theta_sketches(txn.table_metadata)
+                possible_cols = get_supported_theta_sketch_columns_py(output_pa_schema)
+                theta_cols = existing_cols & possible_cols
+            else:
+                theta_cols = get_default_theta_sketch_columns_py(output_pa_schema)
+
+            enabled_cols = table_columns_enabled_theta_sketches(txn)
+            theta_cols = pd.array(theta_cols, dtype="boolean") & enabled_cols
+            if theta_cols.any():
+                theta_columns_bitmask = theta_cols.tolist()
+                use_theta = True
+        import sys
+
+        print(
+            f"DEBUG frame.py: use_theta={use_theta}, theta_columns_bitmask={theta_columns_bitmask}",
+            file=sys.stderr,
+        )
 
         write_plan = LogicalIcebergWrite(
             _empty_like(self),
@@ -617,8 +651,21 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             iceberg_schema_str,
             output_pa_schema,
             fs,
+            theta_columns_bitmask,
         )
         all_iceberg_files_infos = execute_plan(write_plan)
+
+        # Extract the theta sketch pointer before flattening.
+        merged_sketch_ptr = 0
+        if use_theta and all_iceberg_files_infos:
+            for rank_info in all_iceberg_files_infos:
+                if rank_info and isinstance(rank_info[-1], int):
+                    merged_sketch_ptr = rank_info[-1]
+                    rank_info.pop()
+            for i, rank_info in enumerate(all_iceberg_files_infos):
+                if i > 0 and rank_info and isinstance(rank_info[-1], int):
+                    rank_info.pop()
+
         # Flatten the list of lists
         all_iceberg_files_infos = (
             [item for sub in all_iceberg_files_infos for item in sub]
@@ -645,6 +692,48 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         if not success:
             raise ValueError("Iceberg write failed.")
+
+        # --- Theta sketch post-write: puffin write, commit ---
+        if use_theta and merged_sketch_ptr != 0:
+            try:
+                # Fetch puffin metadata from the committed transaction
+                snapshot_id, sequence_number, puffin_loc = fetch_puffin_metadata(txn)
+
+                # Get old puffin file path for append mode
+                old_puffin_path = ""
+                if append:
+                    try:
+                        old_puffin_path = get_old_statistics_file_path(txn)
+                    except (RuntimeError, Exception):
+                        pass
+
+                # Use the existing write_puffin_file_py_entrypt which handles
+                # compact, merge across ranks, puffin write, and StatisticsFile
+                # creation. The sketch pointer is an UpdateSketchCollection*.
+                from bodo.io.iceberg.theta_utils_py import (
+                    write_puffin_file_from_sketches,
+                )
+
+                stat_file = write_puffin_file_from_sketches(
+                    merged_sketch_ptr,
+                    puffin_loc,
+                    bucket_region,
+                    snapshot_id,
+                    sequence_number,
+                    output_pa_schema,
+                    fs,
+                    old_puffin_path,
+                )
+
+                if stat_file is not None:
+                    # Commit the statistics file to the table
+                    table = catalog.load_table(table_identifier).refresh()
+                    with table.update_statistics() as update:
+                        update.set_statistics(stat_file)
+            finally:
+                from bodo.io.iceberg.theta_utils_py import delete_sketches
+
+                delete_sketches(merged_sketch_ptr)
 
     @check_args_fallback(unsupported="none")
     def to_s3_vectors(

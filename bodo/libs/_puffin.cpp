@@ -611,7 +611,7 @@ PyObject *get_empty_statistics_file_metadata() {
  * @return std::unique_ptr<PuffinFile>
  */
 std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
-                                             std::string bucket_region) {
+                                             const char *bucket_region) {
     auto info = get_reader_file_system(puffin_loc, bucket_region, false);
     std::shared_ptr<arrow::fs::FileSystem> &fs = info.first;
     const std::string &updated_puffin_loc = info.second;
@@ -648,7 +648,7 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
  * @return: A StatisticsFile object with the information to forward to the
  *          Iceberg connector.
  */
-PyObject *write_puffin_file_py_entrypt(
+__attribute__((visibility("default"))) PyObject *write_puffin_file_py_entrypt(
     const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
     int64_t sequence_number, UpdateSketchCollection *sketches,
     PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
@@ -751,7 +751,7 @@ array_info *read_puffin_file_ndvs_py_entrypt(
             std::string puffin_loc(puffin_file_loc);
             std::string bucket_region(bucket_region_info);
             std::unique_ptr<PuffinFile> puffin =
-                read_puffin_file(puffin_loc, bucket_region);
+                read_puffin_file(puffin_loc, bucket_region.c_str());
             result = puffin->to_theta_sketches(iceberg_schema);
         } else {
             std::vector<bool> ndv(iceberg_schema->num_fields(), false);

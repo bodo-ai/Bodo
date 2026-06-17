@@ -584,6 +584,7 @@ set(sources_list
   "bodo/io/arrow_reader.cpp"
   "bodo/io/iceberg_parquet_reader.cpp"
   "bodo/io/iceberg_parquet_write.cpp"
+  "bodo/io/iceberg/theta_utils.cpp"
   "bodo/io/json_col_parser.cpp"
   "bodo/io/parquet_reader.cpp"
   "bodo/io/parquet_write.cpp"
@@ -667,6 +668,7 @@ endif()
 set(allow_implicit_fallthrough_list
   "bodo/io/arrow.cpp"
   "bodo/io/iceberg_parquet_write.cpp"
+  "bodo/io/iceberg/theta_utils.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/vendored/_murmurhash3.cpp"
