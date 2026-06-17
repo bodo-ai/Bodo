@@ -110,6 +110,11 @@ bool is_supported_cudf_type(const duckdb::LogicalType &type) {
     return true;
 }
 
+bool bodosql_enabled() {
+    char *env_str = std::getenv("BODOSQL_CPP_BACKEND");
+    return env_str != nullptr && std::string(env_str) != "0";
+}
+
 class DevicePlanNode {
    private:
     duckdb::LogicalOperator &op;
@@ -264,23 +269,20 @@ class DevicePlanNode {
                 }
                 op.estimated_cardinality =
                     (uint64_t)(limit.limit_val.GetConstantValue());
-            } else if (op.type == duckdb::LogicalOperatorType::LOGICAL_FILTER) {
-                op.has_estimated_cardinality = true;
-                op.estimated_cardinality = rows_in;
-            } else if (op.type == duckdb::LogicalOperatorType::
-                                      LOGICAL_EXTENSION_OPERATOR) {
-                // Estimate cardinality for join filter.
-                op.has_estimated_cardinality = true;
-                op.estimated_cardinality = rows_in;
             } else {
+                if (bodosql_enabled()) {
+                    op.has_estimated_cardinality = true;
+                    op.estimated_cardinality = rows_in;
+                } else {
 #ifdef DEBUG_GPU_SELECTOR
-                std::cout
-                    << "DevicePlanNode operator didn't have cardinality.\n"
-                    << op.ToString() << std::endl;
+                    std::cout
+                        << "DevicePlanNode operator didn't have cardinality.\n"
+                        << op.ToString() << std::endl;
 #endif
-                throw std::runtime_error(
-                    "DevicePlanNode operator didn't have cardinality.\n" +
-                    op.ToString());
+                    throw std::runtime_error(
+                        "DevicePlanNode operator didn't have cardinality.\n" +
+                        op.ToString());
+                }
             }
         }
         rows_out = op.estimated_cardinality;
