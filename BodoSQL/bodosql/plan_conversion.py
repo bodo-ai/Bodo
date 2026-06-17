@@ -1182,6 +1182,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             one = ConstantExpression(int_empty_data, input_plan, 1)
             return ArithOpExpression(int_empty_data, zero_indexed_expr, one, "__add__")
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
+            raise ValueError("INITCAP currently disabled on C++ backend")
+
             src = op_exprs[0]
             if len(op_exprs) == 2:
                 delim_expr = op_exprs[1]
@@ -1374,14 +1376,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     "match_substring",
                     (converted_like, func_name == "ILIKE"),
                 )
-
-    if operator_class_name == "SqlTranslate3Function":
-        operands = java_call.getOperands()
-        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
-        func_name = op.getName().upper()
-
-        if func_name == "TRANSLATE3" and len(op_exprs) == 3:
-            pass
 
     if operator_class_name == "SqlSearchOperator":
         operands = java_call.getOperands()
