@@ -1441,6 +1441,109 @@ class PhysicalArrowExpression : public PhysicalExpression {
 
             arrow::compute::SliceOptions opts(start, stop, step);
             result = do_arrow_compute_unary(res, func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "regexp_substr") {
+            auto [pattern, regex_params, group_to_extract] =
+                get_py_args_as_types(scalar_func_data.args,
+                                     scalar_func_data.arrow_func_name.c_str(),
+                                     get_py_object_as_cstr,
+                                     get_py_object_as_cstr,
+                                     get_py_object_as_int64);
+            std::string pattern_str(pattern);
+            std::string regex_params_str(regex_params);
+
+            bool extract_submatches =
+                regex_params_str.find('e') != std::string::npos;
+
+            std::string named_pattern;
+            int num_groups =
+                0;  // Number of groups found in regex pattern so far
+
+            // Convert all groups to _groupN format for extract_regex
+            for (size_t i = 0; i < pattern_str.length(); i++) {
+                // Handle escaped characters by reading the backslash and the
+                // following character together
+                if (pattern_str[i] == '\\' && i + 1 < pattern_str.length()) {
+                    named_pattern += pattern_str[i];
+                    named_pattern += pattern_str[i + 1];
+                    i++;
+                    // Start of group
+                } else if (pattern_str[i] == '(') {
+                    if (i + 1 < pattern_str.length() &&
+                        pattern_str[i + 1] == '?') {
+                        // Check if it's a named group of the form (?<name>...)
+                        // or (?P<name>...)
+                        int p_offset = (i + 2 < pattern_str.length() &&
+                                        pattern_str[i + 2] == 'P')
+                                           ? 1
+                                           : 0;  // Offset by 1 if it is of the
+                                                 // form (?P<name>...)
+                        if (i + 2 + p_offset < pattern_str.length() &&
+                            pattern_str[i + 2 + p_offset] == '<') {
+                            // Rename existing name to _groupN
+                            size_t close =
+                                pattern_str.find('>', i + 3 + p_offset);
+                            if (close != std::string::npos) {
+                                named_pattern += "(?<_group" +
+                                                 std::to_string(num_groups++) +
+                                                 ">";
+                                i = close;  // Skip to after the >
+                            } else {
+                                named_pattern += pattern_str[i];
+                            }
+                        } else {
+                            // Non-capturing or other special group, keep as-is
+                            named_pattern += pattern_str[i];
+                        }
+                    } else {
+                        // Unnamed group: convert to named group
+                        named_pattern +=
+                            "(?<_group" + std::to_string(num_groups++) + ">";
+                    }
+                } else {
+                    named_pattern += pattern_str[i];
+                }
+            }
+
+            if (!extract_submatches || num_groups == 0) {
+                // Wrap the whole pattern in a group
+                named_pattern = "(?<_whole>" + named_pattern + ")";
+                extract_submatches = false;
+            }
+
+            arrow::compute::ExtractRegexOptions opts(named_pattern);
+            auto extract_regex_result =
+                do_arrow_compute_unary(res, "extract_regex", &opts);
+
+            // Convert to Arrow array and extract field
+            std::shared_ptr<arrow::Array> extract_array;
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                extract_array = extract_regex_result.make_array();
+            } else {
+                extract_array = prepare_arrow_compute(extract_regex_result);
+            }
+
+            std::shared_ptr<arrow::StructArray> struct_result =
+                std::static_pointer_cast<arrow::StructArray>(extract_array);
+
+            // Extract the requested field
+            std::shared_ptr<arrow::Array> captured_field;
+            if (extract_submatches && group_to_extract < num_groups) {
+                // Valid group number requested
+                captured_field = struct_result->GetFieldByName(
+                    "_group" + std::to_string(group_to_extract));
+            } else if (!extract_submatches) {
+                // No group extraction requested, return whole match
+                captured_field = struct_result->GetFieldByName("_whole");
+            }
+            // If no field was found (regex didn't match or requested group out
+            // of bounds), return null array
+
+            // Convert field and assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = arrow::Datum(captured_field);
+            } else {
+                result = ConvertDatumToArrayInfo(arrow::Datum(captured_field));
+            }
         } else if (scalar_func_data.arrow_func_name == "utf8_trim" ||
                    scalar_func_data.arrow_func_name == "utf8_ltrim" ||
                    scalar_func_data.arrow_func_name == "utf8_rtrim" ||
@@ -1480,8 +1583,6 @@ class PhysicalArrowExpression : public PhysicalExpression {
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "binary_repeat") {
-            assert_py_args_is_tuple(scalar_func_data.args,
-                                    scalar_func_data.arrow_func_name.c_str());
             auto [num_repeats] = get_py_args_as_types(
                 scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
                 get_py_object_as_int64);
@@ -1489,17 +1590,35 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 std::make_shared<arrow::Int64Scalar>(num_repeats));
             result = do_arrow_compute_binary(res, num_repeats_datum,
                                              "binary_repeat");
-        } else if (scalar_func_data.arrow_func_name == "replace_substring") {
+        } else if (scalar_func_data.arrow_func_name == "replace_substring" ||
+                   scalar_func_data.arrow_func_name ==
+                       "replace_substring_regex") {
+            const char *pattern;
+            const char *replacement;
+            int64_t max_replacements = -1;
+
             assert_py_args_is_tuple(scalar_func_data.args,
                                     scalar_func_data.arrow_func_name.c_str());
-            auto [pattern, replacement] = get_py_args_as_types(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                get_py_object_as_cstr, get_py_object_as_cstr);
+
+            if (PyTuple_Size(scalar_func_data.args) > 2) {
+                std::tie(pattern, replacement, max_replacements) =
+                    get_py_args_as_types(
+                        scalar_func_data.args,
+                        scalar_func_data.arrow_func_name.c_str(),
+                        get_py_object_as_cstr, get_py_object_as_cstr,
+                        get_py_object_as_int64);
+            } else {
+                std::tie(pattern, replacement) = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_cstr, get_py_object_as_cstr);
+            }
 
             std::string pattern_str(pattern);
             std::string replacement_str(replacement);
 
-            arrow::compute::ReplaceSubstringOptions opts(pattern, replacement);
+            arrow::compute::ReplaceSubstringOptions opts(pattern, replacement,
+                                                         max_replacements);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "utf8_replace_slice") {
@@ -1509,7 +1628,6 @@ class PhysicalArrowExpression : public PhysicalExpression {
                                         ? "binary_replace_slice"
                                         : "utf8_replace_slice";
 
-            assert_py_args_is_tuple(scalar_func_data.args, func_name.c_str());
             auto [start, stop, replacement] = get_py_args_as_types(
                 scalar_func_data.args, func_name.c_str(),
                 get_py_object_as_int64, get_py_object_as_int64,

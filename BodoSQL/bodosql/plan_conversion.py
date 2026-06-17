@@ -1085,6 +1085,120 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (search_expr.value, replacement_val),
             )
 
+        if func_name == "REGEXP_SUBSTR" and len(op_exprs) in (2, 3, 4, 5, 6):
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", str)
+
+            if len(op_exprs) >= 3:
+                start_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                else:
+                    start = start_expr.value
+            else:
+                start = 0
+
+            if len(op_exprs) >= 4:
+                # Need to search for the substring that is the op_exprs[3]-th occurrence / regex match
+                occurrence_expr = op_exprs[3]
+                ensure_arg_is_const_expr_of_type(
+                    occurrence_expr, "occurrence_expr", int
+                )
+                occurrence_num = occurrence_expr.value
+                if occurrence_num < 1:
+                    raise ValueError(
+                        f"{func_name} occurences argument must be 1 or greater"
+                    )
+            else:
+                occurrence_num = 1
+
+            if len(op_exprs) >= 5:
+                regex_params_expr = op_exprs[4]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
+                    # Both case sensitive and case insensitive params provided; find which appears latest in the string
+                    latest_index = max(
+                        regex_params_expr.value.rfind(char) for char in ("c", "i")
+                    )
+                    latest_char = regex_params_expr.value[latest_index]
+                    # Remove occurrences of the other parameter to make the identification easier on the C++ side
+                    regex_params = regex_params_expr.value.replace(
+                        "c" if latest_char == "i" else "i", ""
+                    )
+                else:
+                    if (
+                        "c" not in regex_params_expr.value
+                        and "i" not in regex_params_expr.value
+                    ):
+                        regex_params = regex_params_expr.value + "c"
+                    else:
+                        regex_params = regex_params_expr.value
+                for character in regex_params:
+                    if character not in ("c", "i", "m", "e", "s"):
+                        raise ValueError(
+                            f"{func_name} regex parameter {character} does not exist"
+                        )
+                    if character in ("i", "m", "s"):
+                        raise ValueError(
+                            f"{func_name} regex parameter {character} is not yet supported in the C++ backend"
+                        )
+            else:
+                regex_params = "c"
+
+            if len(op_exprs) == 6:
+                group_num_expr = op_exprs[5]
+                ensure_arg_is_const_expr_of_type(group_num_expr, "group_num_expr", int)
+                if group_num_expr.value < 0:
+                    raise ValueError(
+                        f"Negative value for group_num argument of {func_name} is not permitted"
+                    )
+                group_num = group_num_expr.value
+                if group_num > 0:
+                    group_num -= 1  # Convert from 1-based to 0-based
+                regex_params = (
+                    regex_params + "e"
+                )  # 'e' is implied if group_num is passed
+            else:
+                group_num = 0
+
+            # Chop off the start so that searching begins after the provided position
+            without_start_expr = ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "utf8_slice_codeunits",
+                (start, None, 1),
+            )
+
+            # Remove earlier occurrences so that extract_regex can find the correct occurrence/substring matching the regexp
+            # TODO: How should this behave for overlapping occurrences?
+            if occurrence_num > 1:
+                occurences_replaced_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [without_start_expr],
+                    "replace_substring_regex",
+                    (
+                        regexp.value,
+                        "",
+                        occurrence_num - 1,
+                    ),
+                )
+            else:
+                occurences_replaced_expr = without_start_expr
+
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [occurences_replaced_expr],
+                "regexp_substr",  # Made up function, will redirect to extract_regex with the right group extracted
+                (regexp.value, regex_params, group_num),
+            )
+
         # If we didn't match a supported basic function, fall through to NotImplemented
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
@@ -1190,7 +1304,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             if len(op_exprs) > 2:
                 start_expr = op_exprs[2]
-                ensure_type_of_expr(start_expr, "start_expr", int)
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
 
                 if start_expr.value > 0:
                     start = start_expr.value - 1
@@ -1200,11 +1314,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 start = 0
 
             if len(op_exprs) == 4:
-                # Need to search for the position of the op_exprs[3] occurrence of the substring
+                # Need to search for the position of the op_exprs[3]-th occurrence of the substring
                 occurrence_expr = op_exprs[3]
-                ensure_type_of_expr(occurrence_expr, "occurrence_expr", int)
+                ensure_arg_is_const_expr_of_type(
+                    occurrence_expr, "occurrence_expr", int
+                )
                 occurrence_num = occurrence_expr.value
-                if occurrence_num.value < 1:
+                if occurrence_num < 1:
                     raise ValueError(
                         f"{func_name} occurences argument must be 1 or greater"
                     )
@@ -1227,7 +1343,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 first_char_replacement = "_" if match_expr.value[0] != "_" else "-"
                 occurences_replaced_expr = ArrowScalarFuncExpression(
                     src.empty_data,
-                    [src],
+                    [without_start_expr],
                     "replace_substring",
                     (
                         match_expr.value,
