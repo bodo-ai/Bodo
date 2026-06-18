@@ -246,7 +246,7 @@ jobs:
           TEST_TYPE: ${{ inputs.test-type }}
           NP: ${{ inputs.num-workers }}
           BODO_NUM_WORKERS: ${{ inputs.num-workers }}
-          BODO_SPAWN_MODE: ${{ endsWith(inputs.test-type, 'spawn') && '1' || '0' }}
+          BODO_SPAWN_MODE: ${{ (inputs.test-type != 'compiler' && inputs.test-type != 'cache') && '1' || '0' }}
           BODO_BUFFER_POOL_REMOTE_MODE: "1"
           BODO_BUFFER_POOL_DEBUG_MODE: "1"
           BODO_SF_WRITE_DEBUG: "1"
