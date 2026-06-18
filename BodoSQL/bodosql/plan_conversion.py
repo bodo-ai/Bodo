@@ -1805,6 +1805,22 @@ def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
 
 
 def ensure_type_of_expr(expr, expr_name, dtype):
+    def compare_types(obj_type, expected_type):
+        if expected_type is int:
+            return pd.api.types.is_integer_dtype(obj_type)
+        if expected_type is float:
+            return pd.api.types.is_float_dtype(obj_type)
+        if expected_type is str:
+            return pd.api.types.is_string_dtype(obj_type)
+        if expected_type is bool:
+            return pd.api.types.is_bool_dtype(obj_type)
+        if isinstance(expected_type, np.dtype):
+            return np.issubdtype(obj_type, expected_type)
+        # At this point we could try converting dtypes to pandas dtypes
+        if isinstance(expected_type, pd.api.extensions.ExtensionDtype):
+            return pd.api.types.is_dtype_equal(obj_type, expected_type)
+        return False
+
     # Type checker that accounts for pandas dtypes
     def instanceof(obj, dtype):
         if isinstance(obj, dtype):
@@ -1812,20 +1828,7 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         obj_type = (
             type(obj) if not isinstance(obj, (pd.Series, np.ndarray)) else obj.dtype
         )
-        if dtype is int:
-            return pd.api.types.is_integer_dtype(obj_type)
-        if dtype is float:
-            return pd.api.types.is_float_dtype(obj_type)
-        if dtype is str:
-            return pd.api.types.is_string_dtype(obj_type)
-        if dtype is bool:
-            return pd.api.types.is_bool_dtype(obj_type)
-        if isinstance(dtype, np.dtype):
-            return np.issubdtype(obj_type, dtype)
-        # At this point we could try converting dtypes to pandas dtypes
-        if isinstance(dtype, pd.api.extensions.ExtensionDtype):
-            return pd.api.types.is_dtype_equal(obj_type, dtype)
-        return False
+        return compare_types(obj_type, dtype)
 
     if instanceof(expr, dtype):
         return
@@ -1841,8 +1844,8 @@ def ensure_type_of_expr(expr, expr_name, dtype):
                 return
         elif isinstance(expr.empty_data, pd.DataFrame):
             assert len(expr.empty_data.columns) == 1
-            expr_dtype = expr.empty_data.columns[0].dtype
-            if instanceof(expr.empty_data.columns[0], dtype):
+            expr_dtype = expr.empty_data.dtypes[expr.empty_data.columns[0]]
+            if compare_types(expr_dtype, dtype):
                 return
         else:
             raise ValueError(
