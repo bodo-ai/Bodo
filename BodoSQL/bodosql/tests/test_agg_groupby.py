@@ -1325,7 +1325,6 @@ def test_any_value_tz_aware(memory_leak_check):
     """
     Test any_value on a tz-aware timestamp column
     """
-    print(bodosql.cpp_backend_fallback())
     df = pd.DataFrame(
         {
             # Any Value is not defined so keep everything in each group the same.
