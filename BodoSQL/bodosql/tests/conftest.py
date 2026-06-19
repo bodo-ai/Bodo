@@ -109,12 +109,10 @@ def enable_numba_alloc_stats():
 @pytest.fixture(autouse=True)
 def cpp_backend_disable_jit_fallback(request, monkeypatch):
     """Ensure that an error is thrown instead of falling back to JIT mode when a test marked BODOSQL_CPP utilizes an unsupported plan."""
-    prev_val = os.environ.get("BODOSQL_CPP_BACKEND_FALLBACK", "1")
     marker = request.node.get_closest_marker("bodosql_cpp")
     if marker:
         monkeypatch.setenv("BODOSQL_CPP_BACKEND_FALLBACK", "0")
     yield
-    monkeypatch.setenv("BODOSQL_CPP_BACKEND_FALLBACK", prev_val)
 
 
 @pytest.fixture(scope="module")
