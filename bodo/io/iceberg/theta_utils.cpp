@@ -1,7 +1,6 @@
 /**
- * @brief Plain C functions for the Iceberg theta sketch lifecycle, callable
- * from Python via ctypes. Bridges between standard Python types and C++ theta
- * sketch / puffin file infrastructure.
+ * @brief Functions for the Iceberg theta sketch lifecycle in the DataFrame
+ * library path.
  *
  * For the DataFrame library (df_lib) path, we cannot call
  * write_puffin_file_py_entrypt directly because it internally calls
@@ -29,6 +28,9 @@
 
 extern "C" {
 
+/**
+ * @brief Delete an UpdateSketchCollection.
+ */
 EXPORT void bodo_theta_utils_delete_sketches(uintptr_t ptr) {
     if (ptr == 0)
         return;
@@ -202,4 +204,4 @@ EXPORT PyObject *bodo_theta_utils_merge_and_write_puffin(
     }
 }
 
-}  // extern "C"
+} /* extern "C" */

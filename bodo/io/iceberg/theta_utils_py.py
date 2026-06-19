@@ -3,7 +3,6 @@ Non-JIT Python helpers for theta sketch lifecycle in the pandas/df_lib path.
 This module does NOT import numba or any JIT-dependent modules.
 """
 
-import ctypes as _ctypes
 import sys as _sys
 from uuid import uuid4
 
@@ -13,21 +12,11 @@ from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.spawn.utils import run_rank0
 
 
-def _load_theta_utils_lib():
+def _get_ext():
     ext_module = _sys.modules.get("bodo.ext")
     if ext_module is None:
         raise RuntimeError("bodo.ext module not loaded")
-    return _ctypes.CDLL(ext_module.__file__)
-
-
-_lib = None
-
-
-def _get_lib():
-    global _lib
-    if _lib is None:
-        _lib = _load_theta_utils_lib()
-    return _lib
+    return ext_module
 
 
 class SketchPtr:
@@ -60,7 +49,7 @@ class SketchPtr:
     def delete(self) -> None:
         """Delete the underlying sketch collection if not already deleted."""
         if self._ptr != 0:
-            delete_sketches(self._ptr)
+            _get_ext().delete_sketches_py_entrypt(self._ptr)
             self._ptr = 0
 
     def __del__(self) -> None:
@@ -73,13 +62,22 @@ class SketchPtr:
 def delete_sketches(ptr):
     if ptr == 0:
         return
-    lib = _get_lib()
-    lib.bodo_theta_utils_delete_sketches.argtypes = [_ctypes.c_void_p]
-    lib.bodo_theta_utils_delete_sketches(ptr)
+    _get_ext().delete_sketches_py_entrypt(ptr)
 
 
-def write_puffin_file_from_sketches(
-    sketch_ptr,
+def compact_serialize_sketches(ptr):
+    """Compact an UpdateSketchCollection and serialize to bytes.
+
+    This is a local (non-MPI) operation. The returned bytes can be gathered
+    across ranks via Python/MPI and later merged on rank 0.
+    """
+    if ptr == 0:
+        return None
+    return _get_ext().compact_sketches_py_entrypt(ptr)
+
+
+def merge_and_write_puffin(
+    serialized_list,
     puffin_file_loc,
     bucket_region,
     snapshot_id,
@@ -88,27 +86,20 @@ def write_puffin_file_from_sketches(
     arrow_fs,
     existing_puffin_loc="",
 ):
-    lib = _get_lib()
-    lib.bodo_theta_utils_write_puffin.restype = _ctypes.py_object
-    lib.bodo_theta_utils_write_puffin.argtypes = [
-        _ctypes.c_void_p,
-        _ctypes.c_char_p,
-        _ctypes.c_char_p,
-        _ctypes.c_int64,
-        _ctypes.c_int64,
-        _ctypes.py_object,
-        _ctypes.py_object,
-        _ctypes.c_char_p,
-    ]
-    return lib.bodo_theta_utils_write_puffin(
-        _ctypes.c_void_p(sketch_ptr),
-        puffin_file_loc.encode(),
-        bucket_region.encode(),
-        _ctypes.c_int64(snapshot_id),
-        _ctypes.c_int64(sequence_number),
+    """Merge pre-serialized CompactSketchCollections and write puffin file.
+
+    This is a rank-0-only, non-MPI operation. Each element of
+    serialized_list is a bytes object from compact_serialize_sketches().
+    """
+    return _get_ext().merge_and_write_puffin_py_entrypt(
+        serialized_list,
+        puffin_file_loc,
+        bucket_region,
+        snapshot_id,
+        sequence_number,
         iceberg_schema,
         arrow_fs,
-        existing_puffin_loc.encode(),
+        existing_puffin_loc,
     )
 
 
@@ -159,59 +150,6 @@ def get_supported_theta_sketch_columns_py(iceberg_pyarrow_schema):
         _type_supports_theta_sketch(iceberg_pyarrow_schema.field(i).type)
         for i in range(len(iceberg_pyarrow_schema))
     ]
-
-
-def compact_serialize_sketches(ptr):
-    """Compact an UpdateSketchCollection and serialize to bytes.
-
-    This is a local (non-MPI) operation. The returned bytes can be gathered
-    across ranks via Python/MPI and later merged on rank 0.
-    """
-    if ptr == 0:
-        return None
-    lib = _get_lib()
-    lib.bodo_theta_utils_compact_serialize.restype = _ctypes.py_object
-    lib.bodo_theta_utils_compact_serialize.argtypes = [_ctypes.c_void_p]
-    return lib.bodo_theta_utils_compact_serialize(_ctypes.c_void_p(ptr))
-
-
-def merge_and_write_puffin(
-    serialized_list,
-    puffin_file_loc,
-    bucket_region,
-    snapshot_id,
-    sequence_number,
-    iceberg_schema,
-    arrow_fs,
-    existing_puffin_loc="",
-):
-    """Merge pre-serialized CompactSketchCollections and write puffin file.
-
-    This is a rank-0-only, non-MPI operation. Each element of
-    serialized_list is a bytes object from compact_serialize_sketches().
-    """
-    lib = _get_lib()
-    lib.bodo_theta_utils_merge_and_write_puffin.restype = _ctypes.py_object
-    lib.bodo_theta_utils_merge_and_write_puffin.argtypes = [
-        _ctypes.py_object,
-        _ctypes.c_char_p,
-        _ctypes.c_char_p,
-        _ctypes.c_int64,
-        _ctypes.c_int64,
-        _ctypes.py_object,
-        _ctypes.py_object,
-        _ctypes.c_char_p,
-    ]
-    return lib.bodo_theta_utils_merge_and_write_puffin(
-        serialized_list,
-        puffin_file_loc.encode(),
-        bucket_region.encode(),
-        _ctypes.c_int64(snapshot_id),
-        _ctypes.c_int64(sequence_number),
-        iceberg_schema,
-        arrow_fs,
-        existing_puffin_loc.encode(),
-    )
 
 
 @run_rank0
