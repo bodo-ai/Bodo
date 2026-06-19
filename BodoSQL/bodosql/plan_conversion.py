@@ -1346,11 +1346,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "utf8_length",
                 (),
             )
-        elif (
-            func_name == "INSTR"
-            and len(op_exprs) in (2, 3, 4)
-            or func_name == "CHARINDEX"
-            and len(op_exprs) in (2, 3)
+        elif (func_name == "INSTR" and len(op_exprs) in (2, 3, 4)) or (
+            func_name == "CHARINDEX" and len(op_exprs) in (2, 3)
         ):
             # TODO: Investigate what the proper outputs should be in various exceptional conditions
 
