@@ -20,8 +20,11 @@ from bodosql.bodosql_types.s3_tables_catalog import (
 
 use_cpp_backend = os.environ.get("BODOSQL_CPP_BACKEND", "1") != "0"
 verbose_cpp_backend = os.environ.get("BODOSQL_VERBOSE_CPP_BACKEND", "0") != "0"
-# Used for testing purposes to disable fallback to JIT backend
-cpp_backend_fallback = os.environ.get("BODOSQL_CPP_BACKEND_FALLBACK", "1") != "0"
+
+# This needs to be loaded from the environment every time so we can turn it off and 
+# on for individual tests without recreating the workers.
+def cpp_backend_fallback():
+    return os.environ.get("BODOSQL_CPP_BACKEND_FALLBACK", "1") != "0"
 
 # ------------------------------ Version Import ------------------------------
 from importlib.metadata import version, PackageNotFoundError

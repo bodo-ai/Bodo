@@ -29,7 +29,7 @@ from bodo.tests.conftest import (  # noqa
     memory_leak_check,
 )
 from bodo.tests.iceberg_database_helpers.utils import get_spark
-from bodo.tests.utils import gen_nonascii_list, set_config
+from bodo.tests.utils import gen_nonascii_list
 
 # Patch to avoid PySpark's Py4j exception handler in testing.
 # See:
@@ -107,16 +107,14 @@ def enable_numba_alloc_stats():
 
 
 @pytest.fixture(autouse=True)
-def cpp_backend_disable_jit_fallback(request):
+def cpp_backend_disable_jit_fallback(request, monkeypatch):
     """Ensure that an error is thrown instead of falling back to JIT mode when a test marked BODOSQL_CPP utilizes an unsupported plan."""
-    if bodosql.cpp_backend_fallback:
-        marker = request.node.get_closest_marker("bodosql_cpp")
-        if marker:
-            set_config("bodosql.cpp_backend_fallback", False)
-            yield
-            set_config("bodosql.cpp_backend_fallback", True)
-            return
+    prev_val = os.environ.get("BODOSQL_CPP_BACKEND_FALLBACK", "1")
+    marker = request.node.get_closest_marker("bodosql_cpp")
+    if marker:
+        monkeypatch.setenv("BODO_GPU_DISABLE_CPU_FALLBACK", "0")
     yield
+    monkeypatch.setenv("BODO_GPU_DISABLE_CPU_FALLBACK", prev_val)
 
 
 @pytest.fixture(scope="module")
