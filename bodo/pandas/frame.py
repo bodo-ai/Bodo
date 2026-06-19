@@ -690,38 +690,32 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
         # --- Theta sketch post-write: puffin write, commit ---
         if use_theta and serialized_sketches_list:
-            try:
-                # Fetch puffin metadata from the committed transaction
-                snapshot_id, sequence_number, puffin_loc = fetch_puffin_metadata(txn)
+            # Fetch puffin metadata from the committed transaction
+            snapshot_id, sequence_number, puffin_loc = fetch_puffin_metadata(txn)
 
-                # Get old puffin file path for append mode
-                old_puffin_path = ""
-                if append:
-                    try:
-                        old_puffin_path = get_old_statistics_file_path(txn)
-                    except (RuntimeError, Exception):
-                        pass
+            # Get old puffin file path for append mode
+            old_puffin_path = ""
+            if append:
+                old_puffin_path = get_old_statistics_file_path(txn)
 
-                # Merge serialized sketches (non-MPI) and write puffin file.
-                serialized_list_py = serialized_sketches_list
-                stat_file = merge_and_write_puffin(
-                    serialized_list_py,
-                    puffin_loc,
-                    bucket_region,
-                    snapshot_id,
-                    sequence_number,
-                    output_pa_schema,
-                    fs,
-                    old_puffin_path,
-                )
+            # Merge serialized sketches (non-MPI) and write puffin file.
+            serialized_list_py = serialized_sketches_list
+            stat_file = merge_and_write_puffin(
+                serialized_list_py,
+                puffin_loc,
+                bucket_region,
+                snapshot_id,
+                sequence_number,
+                output_pa_schema,
+                fs,
+                old_puffin_path,
+            )
 
-                if stat_file is not None:
-                    # Commit the statistics file to the table
-                    table = catalog.load_table(table_identifier).refresh()
-                    with table.update_statistics() as update:
-                        update.set_statistics(stat_file)
-            except Exception:
-                pass
+            if stat_file is not None:
+                # Commit the statistics file to the table
+                table = catalog.load_table(table_identifier).refresh()
+                with table.update_statistics() as update:
+                    update.set_statistics(stat_file)
 
     @check_args_fallback(unsupported="none")
     def to_s3_vectors(

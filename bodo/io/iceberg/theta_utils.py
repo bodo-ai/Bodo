@@ -209,4 +209,4 @@ def get_old_statistics_file_path(txn):
     for stat_file in txn.table_metadata.statistics:
         if stat_file.snapshot_id == snap_id:
             return stat_file.statistics_path
-    raise RuntimeError("Table does not have a valid statistics file.")
+    return ""
