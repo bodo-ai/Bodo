@@ -135,8 +135,17 @@ EXPORT PyObject *bodo_theta_utils_merge_and_write_puffin(
                 continue;
             }
             const char *data = PyBytes_AS_STRING(item);
+            size_t buf_size = static_cast<size_t>(PyBytes_GET_SIZE(item));
             size_t offset = 0;
 
+            // Validate we can read n_sketches header
+            if (offset + sizeof(uint32_t) > buf_size) {
+                PyErr_SetString(
+                    PyExc_ValueError,
+                    "Theta sketch serialized data too short for "
+                    "header in bodo_theta_utils_merge_and_write_puffin");
+                return nullptr;
+            }
             uint32_t n_sketches = 0;
             memcpy(&n_sketches, data + offset, sizeof(uint32_t));
             offset += sizeof(uint32_t);
@@ -144,10 +153,26 @@ EXPORT PyObject *bodo_theta_utils_merge_and_write_puffin(
             std::vector<std::optional<std::string>> serialized_sketches;
             serialized_sketches.reserve(n_sketches);
             for (uint32_t i = 0; i < n_sketches; i++) {
+                // Validate we can read length field
+                if (offset + sizeof(uint32_t) > buf_size) {
+                    PyErr_SetString(
+                        PyExc_ValueError,
+                        "Theta sketch serialized data too short for sketch "
+                        "length in bodo_theta_utils_merge_and_write_puffin");
+                    return nullptr;
+                }
                 uint32_t len = 0;
                 memcpy(&len, data + offset, sizeof(uint32_t));
                 offset += sizeof(uint32_t);
                 if (len > 0) {
+                    // Validate we have enough bytes for the sketch data
+                    if (offset + len > buf_size) {
+                        PyErr_SetString(
+                            PyExc_ValueError,
+                            "Theta sketch serialized data too short for sketch "
+                            "data in bodo_theta_utils_merge_and_write_puffin");
+                        return nullptr;
+                    }
                     serialized_sketches.emplace_back(
                         std::string(data + offset, len));
                     offset += len;

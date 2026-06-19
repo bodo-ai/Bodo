@@ -30,6 +30,46 @@ def _get_lib():
     return _lib
 
 
+class SketchPtr:
+    """Wrapper around an opaque C pointer to an UpdateSketchCollection.
+
+    Tracks ownership to prevent double-free. The underlying C function
+    bodo_theta_utils_delete_sketches is safe to call with ptr=0 (it's a no-op),
+    but callers must ensure they don't delete the same non-zero pointer twice.
+    This wrapper makes that safe.
+    """
+
+    __slots__ = ("_ptr",)
+
+    def __init__(self, ptr: int):
+        self._ptr = ptr
+
+    @property
+    def ptr(self) -> int:
+        return self._ptr
+
+    def release(self) -> int:
+        """Release ownership of the pointer without deleting it.
+
+        Returns the raw pointer value and sets internal state to 0.
+        """
+        p = self._ptr
+        self._ptr = 0
+        return p
+
+    def delete(self) -> None:
+        """Delete the underlying sketch collection if not already deleted."""
+        if self._ptr != 0:
+            delete_sketches(self._ptr)
+            self._ptr = 0
+
+    def __del__(self) -> None:
+        self.delete()
+
+    def __repr__(self) -> str:
+        return f"SketchPtr(0x{self._ptr:x})" if self._ptr else "SketchPtr(nullptr)"
+
+
 def delete_sketches(ptr):
     if ptr == 0:
         return
