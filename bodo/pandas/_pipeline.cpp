@@ -214,6 +214,9 @@ std::string getGPUStats() {
                 if constexpr (std::is_same_v<T,                                \
                                              std::shared_ptr<table_info>>) {   \
                     DEBUG_PrintTable(out, x, true);                            \
+                } else {                                                       \
+                    auto ctable = convertGPUToTable(x);                        \
+                    DEBUG_PrintTable(out, ctable, true);                       \
                 }                                                              \
             },                                                                 \
             batch);                                                            \
