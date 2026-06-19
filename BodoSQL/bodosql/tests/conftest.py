@@ -112,9 +112,9 @@ def cpp_backend_disable_jit_fallback(request, monkeypatch):
     prev_val = os.environ.get("BODOSQL_CPP_BACKEND_FALLBACK", "1")
     marker = request.node.get_closest_marker("bodosql_cpp")
     if marker:
-        monkeypatch.setenv("BODO_GPU_DISABLE_CPU_FALLBACK", "0")
+        monkeypatch.setenv("BODOSQL_CPP_BACKEND_FALLBACK", "0")
     yield
-    monkeypatch.setenv("BODO_GPU_DISABLE_CPU_FALLBACK", prev_val)
+    monkeypatch.setenv("BODOSQL_CPP_BACKEND_FALLBACK", prev_val)
 
 
 @pytest.fixture(scope="module")
