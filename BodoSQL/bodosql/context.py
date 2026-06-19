@@ -730,7 +730,7 @@ class BodoSQLContext:
             message = error_to_string(e)
             if bodosql.verbose_cpp_backend:
                 print(f"C++ backend execution failed with error:\n{message}")
-            if not bodosql.cpp_backend_fallback():
+            if not bodosql.cpp_backend_fallback:
                 raise RuntimeError(
                     f"C++ backend execution failed with error:\n{message}"
                 ) from e
