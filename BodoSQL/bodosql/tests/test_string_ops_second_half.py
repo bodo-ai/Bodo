@@ -40,6 +40,7 @@ pytestmark = pytest_slow_unless_codegen
     ],
 )
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_contains(query, memory_leak_check):
     df = pd.DataFrame(
         {
@@ -59,6 +60,7 @@ def test_contains(query, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_concat_operator_cols(bodosql_string_types, memory_leak_check):
     """Checks that the concat operator is working for columns"""
     query = "select A || B || 'scalar' || C from table1"
@@ -72,6 +74,7 @@ def test_concat_operator_cols(bodosql_string_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_concat_operator_scalars(bodosql_string_types, memory_leak_check):
     """Checks that the concat operator is working for scalar values"""
     query = (
@@ -86,6 +89,7 @@ def test_concat_operator_scalars(bodosql_string_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_concat_fn_cols(bodosql_string_types, memory_leak_check):
     """Checks that the concat function is working for columns"""
     query = "select CONCAT(A, B, 'scalar', C) from table1"
@@ -98,6 +102,7 @@ def test_concat_fn_cols(bodosql_string_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_concat_fn_single_arg(bodosql_string_types, memory_leak_check):
     """Checks that the concat function is working for a single argument"""
     query = "select CONCAT(A) from table1"
@@ -111,6 +116,7 @@ def test_concat_fn_single_arg(bodosql_string_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_concat_fn_scalars(bodosql_string_types, memory_leak_check):
     """Checks that the concat function is working for scalar values"""
     query = "select CASE WHEN A > 'A' THEN CONCAT(B, ' case1') ELSE CONCAT(C, ' case2') END from table1"
@@ -123,6 +129,7 @@ def test_concat_fn_scalars(bodosql_string_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_concat_ws_single_arg(bodosql_string_types, memory_leak_check):
     """Checks that the concat_ws function is working for a single argument"""
     query = "select CONCAT_WS('_', A) from table1"
@@ -135,6 +142,7 @@ def test_concat_ws_single_arg(bodosql_string_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_concat_ws_cols(bodosql_string_types, memory_leak_check):
     """Checks that the concat_ws function is working for columns"""
     query = "select CONCAT_WS('_', A, B, C), CONCAT_WS(A, B) from table1"
@@ -148,6 +156,7 @@ def test_concat_ws_cols(bodosql_string_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_concat_ws_scalars(bodosql_string_types, memory_leak_check):
     """Checks that the concat_ws function is working for scalar values"""
     query = "select CASE WHEN A > 'A' THEN CONCAT_WS(' case1 ', B, C, A) ELSE CONCAT_WS(A,B,C) END from table1"
@@ -214,6 +223,7 @@ def test_concat_ws_scalars_binary(bodosql_binary_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_string_fns_cols(
     bodosql_string_fn_testing_df, string_fn_info, memory_leak_check
 ):
@@ -234,6 +244,7 @@ def test_string_fns_cols(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_string_fns_scalars(
     bodosql_string_fn_testing_df, string_fn_info, memory_leak_check
 ):
@@ -713,7 +724,7 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT SUBSTRING(source, -5, 3) from table1",
             id="SUBSTRING_scalar_int_2",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT SUBSTR('alphabet soup is delicious', start_pos, length) from table1",
@@ -723,6 +734,7 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT MID('alphabet soup is delicious', 9, 4) from table1",
             id="SUBSTRING_all_scalar",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT SUBSTRING_INDEX(source, delim, occur) from table1",
@@ -828,6 +840,7 @@ def test_substring_suffix(func, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_length(bodosql_string_types, memory_leak_check):
     query = "SELECT LENGTH(A) as OUT1 FROM table1"
     check_query(
