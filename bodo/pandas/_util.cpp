@@ -1517,10 +1517,10 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
             }
 
             case arrow::Type::DATE64: {
-                using rep = cudf::timestamp_ms::rep;
+                using rep = cudf::timestamp_D::rep;
                 return std::make_unique<
-                    cudf::timestamp_scalar<cudf::timestamp_ms>>(rep{0}, false,
-                                                                stream, mr);
+                    cudf::timestamp_scalar<cudf::timestamp_D>>(rep{0}, false,
+                                                               stream, mr);
             }
 
             case arrow::Type::TIMESTAMP: {
@@ -1622,7 +1622,7 @@ std::unique_ptr<cudf::scalar> arrow_scalar_to_cudf(
 
         case arrow::Type::DATE64: {
             auto ds = std::static_pointer_cast<arrow::Date64Scalar>(s);
-            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_ms>>(
+            return std::make_unique<cudf::timestamp_scalar<cudf::timestamp_D>>(
                 ds->value, true);
         }
 

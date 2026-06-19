@@ -270,6 +270,11 @@ class DevicePlanNode {
                 op.estimated_cardinality =
                     (uint64_t)(limit.limit_val.GetConstantValue());
             } else {
+                // When BodoSQL uses the dataframe backend, it forms a duckdb
+                // plan but doesn't optimize it and it is the optimization steps
+                // that propagates cardinality estimates throughout the plan.
+                // So, when bodosql is enabled, ignore missing cardinality
+                // estimates and rely on the bodosql optimizer.
                 if (bodosql_enabled()) {
                     op.has_estimated_cardinality = true;
                     op.estimated_cardinality = rows_in;
