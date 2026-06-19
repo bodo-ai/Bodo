@@ -31,6 +31,35 @@
 
 using table_udf_t = table_info *(*)(table_info *);
 
+// Declaration for CastIntDatumsToCommonType implementation that works with
+// vectors
+std::vector<arrow::Datum> CastIntDatumsToCommonTypeImpl(
+    const char *err_context, const std::vector<arrow::Datum> &datums);
+
+/**
+ * @brief Cast input datums, if they are integers, to a common integer type.
+ * This will increase the bit width of the input datums to the maximum bit width
+ * of any of the input datums. If at least one of the input datums are unsigned,
+ * they will all be cast to unsigned. No casting will occur if one or more input
+ * datums are not integers.
+ *
+ * @param err_context String used for error messages
+ * @param datums (varargs) The input datums which will be cast to a common
+ * integer type
+ * @return a tuple of the casted datums
+ */
+template <typename... Datums>
+auto CastIntDatumsToCommonType(const char *err_context,
+                               const Datums &...datums) {
+    std::vector<arrow::Datum> casted_datums =
+        CastIntDatumsToCommonTypeImpl(err_context, {datums...});
+
+    // Convert vector back to tuple using index_sequence
+    return [&casted_datums]<size_t... I>(std::index_sequence<I...>) {
+        return std::make_tuple(casted_datums[I]...);
+    }(std::make_index_sequence<sizeof...(Datums)>{});
+}
+
 /**
  * @brief Convert duckdb value to C++ variant.
  *
@@ -455,6 +484,20 @@ class JoinFilterColStats {
 void assert_py_args_is_tuple(PyObject *args, const char *err_context);
 
 /**
+ * @brief Get a single scalar argument from a Python function call
+ * and convert it to an arrow Datum. This involves checking all of
+ * the possible scalar datatypes for the PyObject, converting it
+ * to the corresponding Arrow::Scalar type, before finally wrapping
+ * it in an arrow::Datum.
+ *
+ * @param py_obj Python object
+ * @param err_context String used for error messages, often the name of the
+ * function the arguments came from
+ */
+arrow::Datum get_scalar_py_object_as_datum(PyObject *py_obj,
+                                           const char *err_context);
+
+/**
  * @brief Get a single argument from a Python function call
  * and convert it to an int64 (long long).
  *
@@ -464,6 +507,17 @@ void assert_py_args_is_tuple(PyObject *args, const char *err_context);
  * @return int64 representation of the Python string argument
  */
 int64_t get_py_object_as_int64(PyObject *py_int, const char *err_context);
+
+/**
+ * @brief Get a single argument from a Python function call
+ * and convert it to a uint64 (unsigned long long).
+ *
+ * @param py_int Python object
+ * @param err_context String used for error messages, often the name of the
+ * function py_int came from
+ * @return uint64 representation of the Python string argument
+ */
+uint64_t get_py_object_as_uint64(PyObject *py_int, const char *err_context);
 
 /**
  * @brief Get a single string argument from a Python function call

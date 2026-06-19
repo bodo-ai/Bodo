@@ -1072,6 +1072,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             out_empty = inp.empty_data
             return UnaryOpExpression(out_empty, inp, "round")
 
+        if func_name == "MOD" and len(op_exprs) == 2:
+            inp = op_exprs[0]
+            modulus_expr = op_exprs[1]
+            ensure_type_of_expr(inp, "MOD inp", int)
+            ensure_type_of_expr(modulus_expr, "modulus_expr", int)
+
+            return ArithOpExpression(inp.empty_data, inp, modulus_expr, "__mod__")
+
         if func_name == "IFF" and len(op_exprs) == 3:
             # IFF is equivalent to CASE with single WHEN
             return java_case_to_python_case(ctx, operands, input_plan)
@@ -1270,7 +1278,64 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        if func_name == "LEFT" and len(op_exprs) == 2:
+        if (
+            func_name in ("BITAND", "BITOR", "BITXOR", "BITSHIFTLEFT", "BITSHIFTRIGHT")
+            and len(op_exprs) == 2
+        ):
+            left_expr = op_exprs[0]
+            right_expr = op_exprs[1]
+
+            ensure_type_of_expr(left_expr, "left_expr", int)
+            ensure_arg_is_const_expr_of_type(right_expr, "right_expr", int)
+
+            empty_data = left_expr.empty_data
+
+            if func_name == "BITAND":
+                arrow_equivalent_func = "bit_wise_and"
+            elif func_name == "BITOR":
+                arrow_equivalent_func = "bit_wise_or"
+            elif func_name == "BITXOR":
+                arrow_equivalent_func = "bit_wise_xor"
+            elif func_name == "BITSHIFTLEFT":
+                arrow_equivalent_func = "shift_left"
+                # Left shift can overflow, so promote to INT64
+                empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            elif func_name == "BITSHIFTRIGHT":
+                arrow_equivalent_func = "shift_right"
+
+            return ArrowScalarFuncExpression(
+                empty_data, [left_expr], arrow_equivalent_func, (right_expr.value,)
+            )
+        elif func_name == "BITNOT" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", int)
+            return ArrowScalarFuncExpression(src.empty_data, [src], "bit_wise_not", ())
+        elif func_name == "GETBIT" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            bit_num = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", int)
+            ensure_arg_is_const_expr_of_type(bit_num, "bit_num", int)
+            if bit_num.value < 0:
+                raise ValueError("GETBIT position cannot be negative")
+
+            # Do a bitwise AND on `src` and a bitmask that is only set on the requested bit position.
+            # If the result is nonzero, the requested bit is 1, else it is 0.
+
+            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            src_with_mask = ArrowScalarFuncExpression(
+                int64_empty_data, [src], "bit_wise_and", (1 << bit_num.value,)
+            )
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            is_bit_set = ArrowScalarFuncExpression(
+                bool_empty_data, [src_with_mask], "not_equal", (0,)
+            )
+
+            return ArrowScalarFuncExpression(
+                int64_empty_data, [is_bit_set], "if_else", (1, 0)
+            )
+        elif func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
             src = op_exprs[0]
             len_expr = op_exprs[1]
@@ -1805,6 +1870,22 @@ def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
 
 
 def ensure_type_of_expr(expr, expr_name, dtype):
+    def compare_types(obj_type, expected_type):
+        if expected_type is int:
+            return pd.api.types.is_integer_dtype(obj_type)
+        if expected_type is float:
+            return pd.api.types.is_float_dtype(obj_type)
+        if expected_type is str:
+            return pd.api.types.is_string_dtype(obj_type)
+        if expected_type is bool:
+            return pd.api.types.is_bool_dtype(obj_type)
+        if isinstance(expected_type, np.dtype):
+            return np.issubdtype(obj_type, expected_type)
+        # At this point we could try converting dtypes to pandas dtypes
+        if isinstance(expected_type, pd.api.extensions.ExtensionDtype):
+            return pd.api.types.is_dtype_equal(obj_type, expected_type)
+        return False
+
     # Type checker that accounts for pandas dtypes
     def instanceof(obj, dtype):
         if isinstance(obj, dtype):
@@ -1812,20 +1893,7 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         obj_type = (
             type(obj) if not isinstance(obj, (pd.Series, np.ndarray)) else obj.dtype
         )
-        if dtype is int:
-            return pd.api.types.is_integer_dtype(obj_type)
-        if dtype is float:
-            return pd.api.types.is_float_dtype(obj_type)
-        if dtype is str:
-            return pd.api.types.is_string_dtype(obj_type)
-        if dtype is bool:
-            return pd.api.types.is_bool_dtype(obj_type)
-        if isinstance(dtype, np.dtype):
-            return np.issubdtype(obj_type, dtype)
-        # At this point we could try converting dtypes to pandas dtypes
-        if isinstance(dtype, pd.api.extensions.ExtensionDtype):
-            return pd.api.types.is_dtype_equal(obj_type, dtype)
-        return False
+        return compare_types(obj_type, dtype)
 
     if instanceof(expr, dtype):
         return
@@ -1841,8 +1909,8 @@ def ensure_type_of_expr(expr, expr_name, dtype):
                 return
         elif isinstance(expr.empty_data, pd.DataFrame):
             assert len(expr.empty_data.columns) == 1
-            expr_dtype = expr.empty_data.columns[0].dtype
-            if instanceof(expr.empty_data.columns[0], dtype):
+            expr_dtype = expr.empty_data.dtypes[expr.empty_data.columns[0]]
+            if compare_types(expr_dtype, dtype):
                 return
         else:
             raise ValueError(

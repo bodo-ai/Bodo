@@ -56,6 +56,7 @@ def bitwise_df():
             # 6148914691236517205 = 0x5555555555555555
             "SELECT CASE WHEN F IS NULL THEN -1 ELSE BITAND(F, 6148914691236517205) END FROM table1",
             id="vector_scalar_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
     ],
 )
@@ -138,6 +139,7 @@ def test_bitand(query, bitwise_df, memory_leak_check):
                 ),
             ),
             id="vector_scalar_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
     ],
 )
@@ -221,6 +223,7 @@ def test_bitor(args, bitwise_df, memory_leak_check):
                 ),
             ),
             id="vector_scalar_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
     ],
 )
@@ -236,6 +239,7 @@ def test_bitxor(args, bitwise_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -312,6 +316,7 @@ def test_bitnot(args, bitwise_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -366,6 +371,7 @@ def test_bitshiftleft(args, bitwise_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query",
     [
@@ -418,6 +424,7 @@ def test_bitshiftright(query, bitwise_df, memory_leak_check):
                 pd.DataFrame({0: pd.Series([0, 1, 1, 0, 1, 1])}),
             ),
             id="vector_scalar_uint8",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -425,6 +432,7 @@ def test_bitshiftright(query, bitwise_df, memory_leak_check):
                 pd.DataFrame({0: pd.Series([1, 1, 1, 0, 0, 2])}),
             ),
             id="vector_scalar_uint64_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
     ],
 )

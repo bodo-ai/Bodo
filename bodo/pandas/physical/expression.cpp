@@ -434,35 +434,38 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator,
-    const std::shared_ptr<arrow::DataType> result_type) {
+    const std::shared_ptr<arrow::DataType> result_type,
+    bool sync_input_int_types) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
     arrow::Datum src2 =
         ConvertExprResultToDatum(right_res, "do_arrow_compute right");
-    arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(src1, src2, comparator, result_type);
+    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
+        src1, src2, comparator, result_type, sync_input_int_types);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator,
-    const std::shared_ptr<arrow::DataType> result_type) {
+    const std::shared_ptr<arrow::DataType> result_type,
+    bool sync_input_int_types) {
     arrow::Datum src2 =
         ConvertExprResultToDatum(right_res, "do_arrow_compute right");
-    arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(left_res, src2, comparator, result_type);
+    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
+        left_res, src2, comparator, result_type, sync_input_int_types);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, arrow::Datum right_res,
     const std::string& comparator,
-    const std::shared_ptr<arrow::DataType> result_type) {
+    const std::shared_ptr<arrow::DataType> result_type,
+    bool sync_input_int_types) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
-    arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(src1, right_res, comparator, result_type);
+    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
+        src1, right_res, comparator, result_type, sync_input_int_types);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
@@ -498,7 +501,13 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string& comparator,
-    const std::shared_ptr<arrow::DataType> result_type) {
+    const std::shared_ptr<arrow::DataType> result_type,
+    bool sync_input_int_types) {
+    if (sync_input_int_types) {
+        std::tie(left_res, right_res) = CastIntDatumsToCommonType(
+            "do_arrow_compute_binary arg", left_res, right_res);
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {left_res, right_res});
     if (!cmp_res.ok()) [[unlikely]] {
@@ -512,8 +521,10 @@ arrow::Datum do_arrow_compute_binary(
     std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
     if (result_type && cmp_dtype != result_type) {
         // Cast to result type if available and different from current type.
+        arrow::compute::CastOptions cast_opts;
+        cast_opts.allow_int_overflow = true;
         arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(cmp_datum, result_type);
+            arrow::compute::Cast(cmp_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
             throw std::runtime_error(
                 "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
@@ -628,13 +639,18 @@ std::shared_ptr<array_info> do_arrow_compute_case(
     arrow::Datum src3 =
         ConvertExprResultToDatum(else_res, "do_arrow_compute else");
 
+    // Make input integer datums unsigned so that Arrow doesn't attempt a
+    // safe conversion to signed int that isn't possible
+    std::tie(src2, src3) =
+        CastIntDatumsToCommonType("do_arrow_compute_case arg", src2, src3);
+
     // NOTE: Arrow's "if_else" doesn't match our Python and SQL semantics since
     // it propagates nulls in the condition.
     arrow::Result<arrow::Datum> case_res =
         arrow::compute::CallFunction("case_when", {src1, src2, src3});
     if (!case_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_case: Error in Arrow compute: " +
+            "do_arrow_compute_case case_when: Error in Arrow compute: " +
             case_res.status().message());
     }
 
@@ -642,11 +658,13 @@ std::shared_ptr<array_info> do_arrow_compute_case(
     std::shared_ptr<arrow::DataType> case_dtype = case_datum.type();
     if (result_type && case_dtype != result_type) {
         // Cast to result type if available and different from current type.
+        arrow::compute::CastOptions cast_opts;
+        cast_opts.allow_int_overflow = true;
         arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(case_datum, result_type);
+            arrow::compute::Cast(case_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
+                "do_arrow_compute_case cast_res: Error in Arrow compute: " +
                 cast_res.status().message());
         }
         case_res = cast_res;

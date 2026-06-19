@@ -19,6 +19,128 @@
 #include "duckdb/planner/filter/optional_filter.hpp"
 #include "physical/expression.h"
 
+std::vector<arrow::Datum> CastIntDatumsToCommonTypeImpl(
+    const char *err_context, const std::vector<arrow::Datum> &datums) {
+    if (datums.empty()) {
+        return {};
+    }
+
+    auto get_bit_width = [](arrow::Type::type type_id) -> int {
+        switch (type_id) {
+            case arrow::Type::INT8:
+            case arrow::Type::UINT8:
+                return 8;
+            case arrow::Type::INT16:
+            case arrow::Type::UINT16:
+                return 16;
+            case arrow::Type::INT32:
+            case arrow::Type::UINT32:
+                return 32;
+            case arrow::Type::INT64:
+            case arrow::Type::UINT64:
+                return 64;
+            default:
+                return -1;
+        }
+    };
+
+    auto is_signed = [](arrow::Type::type type_id) -> bool {
+        return type_id == arrow::Type::INT8 || type_id == arrow::Type::INT16 ||
+               type_id == arrow::Type::INT32 || type_id == arrow::Type::INT64;
+    };
+
+    auto get_unsigned_type =
+        [](int bit_width) -> std::shared_ptr<arrow::DataType> {
+        switch (bit_width) {
+            case 8:
+                return arrow::uint8();
+            case 16:
+                return arrow::uint16();
+            case 32:
+                return arrow::uint32();
+            case 64:
+                return arrow::uint64();
+            default:
+                return nullptr;
+        }
+    };
+
+    // Determine common type from all datums
+    std::shared_ptr<arrow::DataType> common_type = datums[0].type();
+
+    for (size_t i = 1; i < datums.size(); i++) {
+        auto datum_type = datums[i].type();
+        if (!common_type->Equals(datum_type)) {
+            int common_width = get_bit_width(common_type->id());
+            int datum_width = get_bit_width(datum_type->id());
+
+            if (common_width < 0 || datum_width < 0) {
+                // There is a non-integer type, so don't do any casting
+                common_type = nullptr;
+                break;
+            }
+
+            bool common_signed = is_signed(common_type->id());
+            bool datum_signed = is_signed(datum_type->id());
+
+            // If one is signed and one is unsigned, promote to unsigned of
+            // larger width
+            if (common_signed != datum_signed) {
+                int max_width = std::max(common_width, datum_width);
+                common_type = get_unsigned_type(max_width);
+            } else if (common_signed == datum_signed &&
+                       common_width != datum_width) {
+                // Both same sign but different width: promote common type to
+                // larger Note that Arrow probably won't have a problem doing
+                // this promotion itself, but we do it here to be safe.
+                int max_width = std::max(common_width, datum_width);
+                if (common_signed) {
+                    // Both signed
+                    if (max_width == 64) {
+                        common_type = arrow::int64();
+                    } else if (max_width == 32) {
+                        common_type = arrow::int32();
+                    } else if (max_width == 16) {
+                        common_type = arrow::int16();
+                    } else {
+                        common_type = arrow::int8();
+                    }
+                } else {
+                    // Both unsigned
+                    common_type = get_unsigned_type(max_width);
+                }
+            }
+        }
+    }
+
+    // Cast all datums to common type if we determined one
+    std::vector<arrow::Datum> casted_datums;
+    if (common_type) {
+        for (const auto &datum : datums) {
+            if (datum.type()->Equals(common_type)) {
+                casted_datums.push_back(datum);
+            } else {
+                arrow::compute::CastOptions cast_opts;
+                cast_opts.allow_int_overflow = true;
+                auto cast_res =
+                    arrow::compute::Cast(datum, common_type, cast_opts);
+                if (!cast_res.ok()) [[unlikely]] {
+                    throw std::runtime_error(
+                        fmt::format("CastIntDatumsToCommonType: Error casting "
+                                    "datum for {}: ",
+                                    err_context) +
+                        cast_res.status().message());
+                }
+                casted_datums.push_back(cast_res.ValueOrDie());
+            }
+        }
+    } else {
+        casted_datums = datums;
+    }
+
+    return casted_datums;
+}
+
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
              std::shared_ptr<arrow::Scalar>>
@@ -1236,12 +1358,142 @@ void assert_py_args_is_tuple(PyObject *args, const char *err_context) {
     }
 }
 
+int64_t py_object_to_timestamp(PyObject *obj) {
+    // Assume we have already verified that PyDateTime_Check(obj) == true
+    struct tm time_struct = {0};
+    time_struct.tm_year = PyDateTime_GET_YEAR(obj) - 1900;
+    time_struct.tm_mon = PyDateTime_GET_MONTH(obj) - 1;
+    time_struct.tm_mday = PyDateTime_GET_DAY(obj);
+    time_struct.tm_hour = PyDateTime_DATE_GET_HOUR(obj);
+    time_struct.tm_min = PyDateTime_DATE_GET_MINUTE(obj);
+    time_struct.tm_sec = PyDateTime_DATE_GET_SECOND(obj);
+    time_struct.tm_isdst = -1;
+    int64_t microsecond_remainder = PyDateTime_DATE_GET_MICROSECOND(obj);
+
+    // Convert time struct down to standard epoch seconds
+    int64_t epoch_seconds = static_cast<int64_t>(mktime(&time_struct));
+    int64_t total_microseconds =
+        (epoch_seconds * 1000000LL) + microsecond_remainder;
+    return total_microseconds;
+}
+
+int64_t py_object_to_time(PyObject *obj) {
+    // Assume we have already verified that PyTime_Check(obj) == true
+    int64_t hour = PyDateTime_TIME_GET_HOUR(obj);
+    int64_t minute = PyDateTime_TIME_GET_MINUTE(obj);
+    int64_t second = PyDateTime_TIME_GET_SECOND(obj);
+    int64_t microsecond_remainder = PyDateTime_TIME_GET_MICROSECOND(obj);
+
+    // Calculate total microsecond offset from midnight
+    int64_t total_microseconds =
+        (((hour * 3600LL) + (minute * 60LL) + second) * 1000000LL) +
+        microsecond_remainder;
+    return total_microseconds;
+}
+
+int32_t py_object_to_date(PyObject *obj) {
+    // Assume we have already verified that PyDate_Check(obj) == true
+    struct tm time_struct = {0};
+    time_struct.tm_year = PyDateTime_GET_YEAR(obj) - 1900;
+    time_struct.tm_mon = PyDateTime_GET_MONTH(obj) - 1;
+    time_struct.tm_mday = PyDateTime_GET_DAY(obj);
+    time_struct.tm_isdst = -1;
+
+    // Convert time struct down to standard epoch seconds
+    time_t epoch_seconds = mktime(&time_struct);
+    int32_t total_days = static_cast<int32_t>(epoch_seconds / (24 * 3600));
+    return total_days;
+}
+
+arrow::Datum get_scalar_py_object_as_datum(PyObject *py_obj,
+                                           const char *err_context) {
+    // Is the PyObject already a PyArrow scalar?
+    if (arrow::py::is_scalar(py_obj)) {
+        arrow::Result<std::shared_ptr<arrow::Scalar>> scalar_result =
+            arrow::py::unwrap_scalar(py_obj);
+        if (scalar_result.ok()) {
+            return arrow::Datum(scalar_result.ValueOrDie());
+        }
+    }
+
+    // If not, we have to check the Python types individually, create scalar,
+    // and package in datum
+    if (py_obj == Py_None) {
+        return arrow::Datum(std::make_shared<arrow::NullScalar>());
+    } else if (PyBool_Check(py_obj)) {
+        return arrow::Datum(
+            std::make_shared<arrow::BooleanScalar>(py_obj == Py_True));
+    } else if (PyLong_Check(py_obj)) {
+        int64_t val = PyLong_AsLongLong(py_obj);
+        if (PyErr_Occurred()) {
+            PyErr_Clear();
+
+            // Conversion to signed int64 failed, try unsigned
+            uint64_t val = PyLong_AsUnsignedLongLong(py_obj);
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                throw std::runtime_error(
+                    "Integer conversion overflowed 64-bit boundaries.");
+            }
+
+            return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(val));
+        }
+        return arrow::Datum(std::make_shared<arrow::Int64Scalar>(val));
+    } else if (PyFloat_Check(py_obj)) {
+        double val = PyFloat_AsDouble(py_obj);
+        return arrow::Datum(std::make_shared<arrow::DoubleScalar>(val));
+    } else if (PyUnicode_Check(py_obj)) {
+        const char *c_str = PyUnicode_AsUTF8(py_obj);
+        if (!c_str) {
+            throw std::runtime_error(
+                fmt::format("Error for {} extracting Python string.",
+                            std::string(err_context)));
+        }
+        return arrow::Datum(
+            std::make_shared<arrow::StringScalar>(std::string(c_str)));
+    } else if (PyBytes_Check(py_obj)) {
+        const char *c_str = PyBytes_AsString(py_obj);
+        if (!c_str) {
+            throw std::runtime_error(
+                fmt::format("Error for {} extracting Python binary string.",
+                            std::string(err_context)));
+        }
+        return arrow::Datum(
+            std::make_shared<arrow::BinaryScalar>(std::string(c_str)));
+    } else if (PyDateTime_Check(py_obj)) {
+        int64_t total_microseconds = py_object_to_timestamp(py_obj);
+        auto timestamp_type = arrow::timestamp(arrow::TimeUnit::MICRO);
+        return arrow::Datum(std::make_shared<arrow::TimestampScalar>(
+            total_microseconds, timestamp_type));
+    } else if (PyDate_Check(py_obj)) {
+        int32_t total_days = py_object_to_date(py_obj);
+        return arrow::Datum(std::make_shared<arrow::Date32Scalar>(total_days));
+    } else if (PyTime_Check(py_obj)) {
+        int64_t total_microseconds = py_object_to_time(py_obj);
+        auto time_type = arrow::time64(arrow::TimeUnit::MICRO);
+        return arrow::Datum(std::make_shared<arrow::Time64Scalar>(
+            total_microseconds, time_type));
+    }
+
+    throw std::runtime_error(
+        "Unrecognized scalar type or non-scalar PyObject: " +
+        std::string(err_context));
+}
+
 int64_t get_py_object_as_int64(PyObject *py_int, const char *err_context) {
     if (!PyLong_Check(py_int)) {
         throw std::runtime_error("Object is not a Python int: " +
                                  std::string(err_context));
     }
     return PyLong_AsLongLong(py_int);
+}
+
+uint64_t get_py_object_as_uint64(PyObject *py_int, const char *err_context) {
+    if (!PyLong_Check(py_int)) {
+        throw std::runtime_error("Object is not a Python int: " +
+                                 std::string(err_context));
+    }
+    return PyLong_AsUnsignedLongLong(py_int);
 }
 
 const char *get_py_object_as_cstr(PyObject *py_str, const char *err_context) {

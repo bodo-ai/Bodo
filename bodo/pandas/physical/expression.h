@@ -192,7 +192,8 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr);
+    const std::shared_ptr<arrow::DataType> result_type = nullptr,
+    bool sync_input_int_types = false);
 
 /**
  * @brief Run arrow compute on the left Datum and right ExprResult after
@@ -202,7 +203,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr);
+    const std::shared_ptr<arrow::DataType> result_type = nullptr,
+    bool sync_input_int_types = false);
 
 /**
  * @brief Run arrow compute on the left ExprResult and right Datum after
@@ -212,7 +214,8 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, arrow::Datum right_res,
     const std::string &comparator,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr);
+    const std::shared_ptr<arrow::DataType> result_type = nullptr,
+    bool sync_input_int_types = false);
 
 /**
  * @brief Convert ExprResult to arrow and cast to the requested type.
@@ -246,7 +249,8 @@ arrow::Datum do_arrow_compute_unary(
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string &comparator,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr);
+    const std::shared_ptr<arrow::DataType> result_type = nullptr,
+    bool sync_input_int_types = false);
 
 /**
  * @brief Run cast on arrow Datum.
@@ -1111,7 +1115,7 @@ class PhysicalCaseExpression : public PhysicalExpression {
             "if_else", {when_datum, then_datum, else_datum});
         if (!cmp_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_array_compute_case: Error in Arrow compute: " +
+                "do_array_compute_case if_else: Error in Arrow compute: " +
                 cmp_res.status().message());
         }
         return cmp_res.ValueOrDie();
@@ -1370,11 +1374,79 @@ class PhysicalArrowExpression : public PhysicalExpression {
     template <typename T>
     compute_return_t<T> do_arrow_compute(T res) {
         compute_return_t<T> result;
-        if (scalar_func_data.arrow_func_name == "date") {
+
+        if (scalar_func_data.arrow_func_name == "equal" ||
+            scalar_func_data.arrow_func_name == "not_equal" ||
+            scalar_func_data.arrow_func_name == "greater" ||
+            scalar_func_data.arrow_func_name == "greater_equal" ||
+            scalar_func_data.arrow_func_name == "less" ||
+            scalar_func_data.arrow_func_name == "less_equal") {
+            auto [y_datum] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_scalar_py_object_as_datum);
+            result = do_arrow_compute_binary(res, y_datum,
+                                             scalar_func_data.arrow_func_name);
+        } else if (scalar_func_data.arrow_func_name == "if_else") {
+            auto [then_datum, else_datum] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_scalar_py_object_as_datum, get_scalar_py_object_as_datum);
+            arrow::Datum when_datum = ConvertExprResultToDatum(
+                res, scalar_func_data.arrow_func_name + " when");
+
+            arrow::Result<arrow::Datum> if_else_res =
+                arrow::compute::CallFunction(
+                    "if_else", {when_datum, then_datum, else_datum});
+            if (!if_else_res.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    "do_arrow_compute if_else: Error in Arrow compute: " +
+                    if_else_res.status().message());
+            }
+
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = if_else_res.ValueOrDie();
+            } else {
+                result = ConvertDatumToArrayInfo(if_else_res.ValueOrDie());
+            }
+        } else if (scalar_func_data.arrow_func_name == "date") {
             // The Arrow compute equivalent of Series.dt.date() is
             // year_month_day, which returns a struct. To match the output dtype
             // of Pandas, we Cast to Date32 instead.
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+        } else if (scalar_func_data.arrow_func_name == "bit_wise_and" ||
+                   scalar_func_data.arrow_func_name == "bit_wise_or" ||
+                   scalar_func_data.arrow_func_name == "bit_wise_xor") {
+            auto [y] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_uint64);
+            arrow::Datum y_datum(std::make_shared<arrow::UInt64Scalar>(y));
+            result = do_arrow_compute_binary(res, y_datum,
+                                             scalar_func_data.arrow_func_name);
+        } else if (scalar_func_data.arrow_func_name == "shift_left" ||
+                   scalar_func_data.arrow_func_name == "shift_left_checked" ||
+                   scalar_func_data.arrow_func_name == "shift_right" ||
+                   scalar_func_data.arrow_func_name == "shift_right_checked") {
+            auto [y] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_int64);
+            arrow::Datum y_datum(std::make_shared<arrow::Int64Scalar>(y));
+
+            // Cast type of result back to match the input buffer type
+            std::shared_ptr<arrow::DataType> input_type;
+            if (scalar_func_data.arrow_func_name == "shift_right" ||
+                scalar_func_data.arrow_func_name == "shift_right_checked") {
+                // Right shifts can only shrink the value, so there is no chance
+                // of overflow by sticking with the type of `res`
+                arrow::Datum res_datum =
+                    ConvertExprResultToDatum(res, "bitshiftright input");
+                input_type = res_datum.type();
+            } else {
+                // Convert result to INT64 to match buffer type set in
+                // plan_conversion.py
+                input_type = arrow::int64();
+            }
+            result = do_arrow_compute_binary(res, y_datum,
+                                             scalar_func_data.arrow_func_name,
+                                             input_type, true);
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
                    scalar_func_data.arrow_func_name ==
