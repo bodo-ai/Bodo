@@ -178,6 +178,30 @@ extern std::function<bool(int)> greater_equal_test;
 extern std::function<bool(int)> less_equal_test;
 
 /**
+ * @brief Perform an Arrow compute operation with multiple input expressions.
+ *
+ * @param in_expr_results A vector of input expression results.
+ * @param arrow_func_name The name of the Arrow function to call.
+ * @return arrow::Datum The result of the Arrow compute
+ * operation.
+ */
+arrow::Datum do_arrow_compute_multi_input_datum(
+    const std::vector<std::shared_ptr<ExprResult>> &in_expr_results,
+    const std::string &arrow_func_name);
+
+/**
+ * @brief Perform an Arrow compute operation with multiple input expressions.
+ *
+ * @param in_expr_results A vector of input expression results.
+ * @param arrow_func_name The name of the Arrow function to call.
+ * @return std::shared_ptr<array_info> The result of the Arrow compute
+ * operation.
+ */
+std::shared_ptr<array_info> do_arrow_compute_multi_input(
+    const std::vector<std::shared_ptr<ExprResult>> &in_expr_results,
+    const std::string &arrow_func_name);
+
+/**
  * @brief Convert ExprResult to arrow and run compute operation on it.
  *
  */
@@ -1455,8 +1479,8 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 regex_params_str.find('e') != std::string::npos;
 
             std::string named_pattern;
-            int num_groups =
-                0;  // Number of groups found in regex pattern so far
+            // Number of groups found in regex pattern so far
+            int num_groups = 0;
 
             // Convert all groups to _groupN format for extract_regex
             for (size_t i = 0; i < pattern_str.length(); i++) {
@@ -1466,17 +1490,16 @@ class PhysicalArrowExpression : public PhysicalExpression {
                     named_pattern += pattern_str[i];
                     named_pattern += pattern_str[i + 1];
                     i++;
-                    // Start of group
-                } else if (pattern_str[i] == '(') {
+                } else if (pattern_str[i] == '(') {  // Start of group
+                    // Check if it's a named group of the form (?<name>...)
+                    // or (?P<name>...)
                     if (i + 1 < pattern_str.length() &&
                         pattern_str[i + 1] == '?') {
-                        // Check if it's a named group of the form (?<name>...)
-                        // or (?P<name>...)
+                        // Offset by 1 if it is of the form (?P<name>...)
                         int p_offset = (i + 2 < pattern_str.length() &&
                                         pattern_str[i + 2] == 'P')
                                            ? 1
-                                           : 0;  // Offset by 1 if it is of the
-                                                 // form (?P<name>...)
+                                           : 0;
                         if (i + 2 + p_offset < pattern_str.length() &&
                             pattern_str[i + 2 + p_offset] == '<') {
                             // Rename existing name to _groupN
@@ -1526,7 +1549,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 std::static_pointer_cast<arrow::StructArray>(extract_array);
 
             // Extract the requested field
-            std::shared_ptr<arrow::Array> captured_field;
+            std::shared_ptr<arrow::Array> captured_field = nullptr;
             if (extract_submatches && group_to_extract < num_groups) {
                 // Valid group number requested
                 captured_field = struct_result->GetFieldByName(
@@ -1535,14 +1558,48 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 // No group extraction requested, return whole match
                 captured_field = struct_result->GetFieldByName("_whole");
             }
-            // If no field was found (regex didn't match or requested group out
-            // of bounds), return null array
+
+            arrow::Datum captured_field_datum;
+            if (!captured_field) {
+                // Return null array if requested group is greater than number
+                // of groups in regex
+                captured_field = arrow::MakeArrayOfNull(arrow::utf8(),
+                                                        struct_result->length())
+                                     .ValueOrDie();
+                captured_field_datum = arrow::Datum(captured_field);
+            } else if (captured_field->type_id() == arrow::Type::STRING ||
+                       captured_field->type_id() == arrow::Type::LARGE_STRING) {
+                // Convert empty strings in the extract_regex result to NULL.
+                // Despite what the Arrow documentation says, it appears that an
+                // empty string is returned for the input strings that the
+                // regexp does not match.
+                arrow::Datum empty_string =
+                    (captured_field->type_id() == arrow::Type::STRING)
+                        ? arrow::Datum(arrow::StringScalar(""))
+                        : arrow::Datum(arrow::LargeStringScalar(""));
+
+                // do_arrow_compute_multi_input only accepts a vector of
+                // ExprResults (for now)
+                std::shared_ptr<ExprResult> empty_string_expr_result =
+                    std::make_shared<ScalarExprResult>(
+                        ConvertDatumToArrayInfo(empty_string));
+                std::shared_ptr<ExprResult> captured_field_expr_result =
+                    std::make_shared<ArrayExprResult>(
+                        ConvertDatumToArrayInfo(arrow::Datum(captured_field)),
+                        "regexp_substr_captured_field");
+
+                captured_field_datum = do_arrow_compute_multi_input_datum(
+                    {captured_field_expr_result, empty_string_expr_result},
+                    "nullif");
+            } else {
+                captured_field_datum = arrow::Datum(captured_field);
+            }
 
             // Convert field and assign to result based on input type
             if constexpr (std::is_same_v<T, arrow::Datum>) {
-                result = arrow::Datum(captured_field);
+                result = captured_field_datum;
             } else {
-                result = ConvertDatumToArrayInfo(arrow::Datum(captured_field));
+                result = ConvertDatumToArrayInfo(captured_field_datum);
             }
         } else if (scalar_func_data.arrow_func_name == "utf8_trim" ||
                    scalar_func_data.arrow_func_name == "utf8_ltrim" ||
