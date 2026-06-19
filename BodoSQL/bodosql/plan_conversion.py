@@ -2342,7 +2342,7 @@ def java_values_to_python_values(ctx, java_plan):
 
     data = []
     for row in rows:
-        data.append([java_literal_to_python_literal(ctx, e, None).value for e in row])
+        data.append([java_literal_to_python_const(ctx, e) for e in row])
 
     pa_schema = pa.schema(
         [java_field_to_pa_field(ctx, f) for f in row_type.getFieldList()]
@@ -2356,6 +2356,20 @@ def java_values_to_python_values(ctx, java_plan):
         )
 
     return bd.from_pandas(df)._plan
+
+
+def java_literal_to_python_const(ctx, java_literal):
+    """Convert a BodoSQL Java literal to a Python constant value."""
+
+    lit_expr = java_literal_to_python_literal(ctx, java_literal, None)
+    assert isinstance(lit_expr, (ConstantExpression, NullExpression)), (
+        "java_literal_to_python_const: Expected ConstantExpression or NullExpression"
+    )
+
+    if isinstance(lit_expr, NullExpression):
+        return None
+
+    return lit_expr.value
 
 
 def java_field_to_pa_field(ctx, java_field):
@@ -2403,6 +2417,8 @@ def sql_type_to_pa_type(ctx, sql_type_name):
         return pa.large_string()
     if sql_type_name.equals(SqlTypeName.TIME):
         return pa.time64("ns")
+    if sql_type_name.equals(SqlTypeName.NULL):
+        return pa.null()
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
