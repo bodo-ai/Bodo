@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import sys
 import typing as pt
+from uuid import uuid4
 
 import llvmlite.binding as ll
+import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
@@ -18,7 +20,9 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.io.helpers import pyarrow_fs_type, pyarrow_schema_type
 from bodo.io.iceberg.catalog import conn_str_to_catalog
+from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.libs import puffin_file, theta_sketches
 from bodo.libs.array import (
     array_info_type,
@@ -31,7 +35,26 @@ from bodo.spawn.utils import run_rank0
 from bodo.utils.py_objs import install_py_obj_class
 
 if pt.TYPE_CHECKING:  # pragma: no cover
+    from pyiceberg.table import Transaction
+    from pyiceberg.table.metadata import TableMetadata
     from pyiceberg.table.statistics import StatisticsFile
+
+
+ll.add_symbol("init_theta_sketches", theta_sketches.init_theta_sketches_py_entrypt)
+ll.add_symbol("delete_theta_sketches", theta_sketches.delete_theta_sketches_py_entrypt)
+ll.add_symbol(
+    "fetch_ndv_approximations", theta_sketches.fetch_ndv_approximations_py_entrypt
+)
+ll.add_symbol("write_puffin_file", puffin_file.write_puffin_file_py_entrypt)
+ll.add_symbol("read_puffin_file_ndvs", puffin_file.read_puffin_file_ndvs_py_entrypt)
+ll.add_symbol(
+    "get_supported_theta_sketch_columns",
+    theta_sketches.get_supported_theta_sketch_columns_py_entrypt,
+)
+ll.add_symbol(
+    "get_default_theta_sketch_columns",
+    theta_sketches.get_default_theta_sketch_columns_py_entrypt,
+)
 
 # Create a type for the Iceberg StatisticsFile object
 # if we have the connector.
@@ -50,38 +73,6 @@ install_py_obj_class(
     module=this_module,
     class_name="StatisticsFileType",
     model_name="StatisticsFileModel",
-)
-
-
-# Lazy import for bodo.io.helpers to avoid pulling in numba/hiframes
-# when this module is imported from non-JIT code (DataFrame library).
-_pyarrow_fs_type = None
-_pyarrow_schema_type = None
-
-
-def _ensure_pyarrow_types():
-    global _pyarrow_fs_type, _pyarrow_schema_type
-    if _pyarrow_fs_type is None:
-        from bodo.io.helpers import pyarrow_fs_type, pyarrow_schema_type
-
-        _pyarrow_fs_type = pyarrow_fs_type
-        _pyarrow_schema_type = pyarrow_schema_type
-
-
-ll.add_symbol("init_theta_sketches", theta_sketches.init_theta_sketches_py_entrypt)
-ll.add_symbol("delete_theta_sketches", theta_sketches.delete_theta_sketches_py_entrypt)
-ll.add_symbol(
-    "fetch_ndv_approximations", theta_sketches.fetch_ndv_approximations_py_entrypt
-)
-ll.add_symbol("write_puffin_file", puffin_file.write_puffin_file_py_entrypt)
-ll.add_symbol("read_puffin_file_ndvs", puffin_file.read_puffin_file_ndvs_py_entrypt)
-ll.add_symbol(
-    "get_supported_theta_sketch_columns",
-    theta_sketches.get_supported_theta_sketch_columns_py_entrypt,
-)
-ll.add_symbol(
-    "get_default_theta_sketch_columns",
-    theta_sketches.get_default_theta_sketch_columns_py_entrypt,
 )
 
 
@@ -159,9 +150,8 @@ def _get_supported_theta_sketch_columns(typingctx, iceberg_pyarrow_schema_t):
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    _ensure_pyarrow_types()
     return (
-        array_info_type(_pyarrow_schema_type),
+        array_info_type(pyarrow_schema_type),
         codegen,
     )
 
@@ -203,9 +193,8 @@ def _get_default_theta_sketch_columns(typingctx, iceberg_pyarrow_schema_t):
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    _ensure_pyarrow_types()
     return (
-        array_info_type(_pyarrow_schema_type),
+        array_info_type(pyarrow_schema_type),
         codegen,
     )
 
@@ -286,6 +275,8 @@ def _read_puffin_file_ndvs(typingctx, puffin_loc_t, bucket_region_t, iceberg_sch
             lir.IntType(8).as_pointer(),  # array_info*
             [
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -296,9 +287,8 @@ def _read_puffin_file_ndvs(typingctx, puffin_loc_t, bucket_region_t, iceberg_sch
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    _ensure_pyarrow_types()
     return (
-        array_info_type(types.voidptr, types.voidptr, _pyarrow_schema_type),
+        array_info_type(types.voidptr, types.voidptr, pyarrow_schema_type),
         codegen,
     )
 
@@ -389,7 +379,6 @@ def _write_puffin_file(
             sig.return_type, ret, context, builder, context.get_python_api(builder)
         )
 
-    _ensure_pyarrow_types()
     return (
         types.statistics_file_type(
             types.voidptr,  # Pass UTF-8 string as void*
@@ -398,11 +387,46 @@ def _write_puffin_file(
             types.int64,
             theta_sketch_collection_type,
             output_pyarrow_schema_t,
-            _pyarrow_fs_type,
+            pyarrow_fs_type,
             types.voidptr,  # Pass UTF-8 string as void*
         ),
         codegen,
     )
+
+
+@run_rank0
+def fetch_puffin_metadata(txn: Transaction) -> tuple[int, int, str]:
+    """
+    Fetch the puffin file metadata that we need from the committed
+    transaction to write the puffin file. These are the:
+        1. Snapshot ID for the committed data
+        2. Sequence Number for the committed data
+        3. The Location at which to write the puffin file.
+
+    Args:
+        txn (Transaction): Transaction to get metadata from.
+
+    Returns:
+        tuple[int, int, str]: Tuple of the snapshot ID, sequence number, and
+        location at which to write the puffin file.
+    """
+    metadata = txn.table_metadata
+
+    snapshot_id = metadata.current_snapshot_id
+    assert snapshot_id is not None
+
+    snapshot = metadata.current_snapshot()
+    assert snapshot is not None
+    sequence_number = snapshot.sequence_number
+    assert sequence_number is not None
+
+    # Statistics file location
+    location = _format_data_loc(
+        f"{metadata.location}/metadata/{snapshot_id}-{uuid4()}.stats",
+        _fs_from_file_path(metadata.location, txn._table.io),
+    )
+
+    return snapshot_id, sequence_number, location
 
 
 @run_rank0
@@ -411,9 +435,92 @@ def commit_statistics_file(
     table_id: str,
     statistics_file: StatisticsFile,
 ) -> None:
+    """
+    Commit the statistics file to the iceberg table. This occurs after
+    the puffin file has already been written and records the statistic_file_info
+    in the metadata.
+
+    Args:
+        conn_str (str): The Iceberg connector string.
+        table_id (str): The iceberg table identifier.
+        statistic_file (pyiceberg.table.statistics.StatisticsFile):
+            The Python object containing the statistics file information.
+    """
     table = conn_str_to_catalog(conn_str).load_table(table_id).refresh()
     with table.update_statistics() as update:
         update.set_statistics(statistics_file)
+
+
+@run_rank0
+def table_columns_have_theta_sketches(
+    table_metadata: TableMetadata,
+) -> pd.arrays.BooleanArray:
+    cols = table_metadata.schema().columns
+    snap_id = table_metadata.current_snapshot_id
+    have_theta_sketches = [False] * len(cols)
+
+    if snap_id is None:
+        return pd.array(have_theta_sketches)  # type: ignore[return]
+
+    field_id_to_idx = {col.field_id: i for i, col in enumerate(cols)}
+
+    for stat_file in table_metadata.statistics:
+        if stat_file.snapshot_id == snap_id:
+            for blob_metadata in stat_file.blob_metadata:
+                if blob_metadata.type != "apache-datasketches-theta-v1":
+                    continue
+                if len(blob_metadata.fields) != 1:
+                    continue
+                field = blob_metadata.fields[0]
+                if field in field_id_to_idx:
+                    have_theta_sketches[field_id_to_idx[field]] = True
+
+            break
+
+    return pd.array(have_theta_sketches, dtype="boolean")  # type: ignore[return]
+
+
+@run_rank0
+def table_columns_enabled_theta_sketches(txn: Transaction) -> pd.arrays.BooleanArray:
+    """
+    Get an array of booleans indicating whether each column in the table
+    has theta sketches enabled, as per the table property of
+    'bodo.write.theta_sketch_enabled.<column_name>'.
+
+    Args:
+        conn_str (str): The Iceberg connector string.
+        db_name (str): The iceberg database name.
+        table_name (str): The iceberg table.
+    """
+    cols = txn.table_metadata.schema().columns
+    props = txn.table_metadata.properties
+
+    enabled = [
+        props.get(f"bodo.write.theta_sketch_enabled.{col.name}", "true") == "true"
+        for col in cols
+    ]
+    return pd.array(enabled, dtype="boolean")  # type: ignore[return]
+
+
+@run_rank0
+def get_old_statistics_file_path(txn: Transaction) -> str:
+    """
+    Get the old puffin file path from the connector. We know that the puffin file
+    must exist because of previous checks.
+    """
+    snap_id = txn.table_metadata.current_snapshot_id
+    if snap_id is None:
+        raise RuntimeError(
+            "Table does not have a snapshot. Cannot get statistics file location."
+        )
+
+    for stat_file in txn.table_metadata.statistics:
+        if stat_file.snapshot_id == snap_id:
+            return stat_file.statistics_path
+
+    raise RuntimeError(
+        "Table does not have a valid statistics file. Cannot get statistics file location."
+    )
 
 
 def delete_theta_sketches(theta_sketches):  # pragma: no cover
@@ -422,6 +529,8 @@ def delete_theta_sketches(theta_sketches):  # pragma: no cover
 
 @overload(delete_theta_sketches)
 def overload_delete_theta_sketches(theta_sketches):
+    """Delete the theta sketches"""
+
     def impl(theta_sketches):  # pragma: no cover
         _delete_theta_sketches(theta_sketches)
 
@@ -433,7 +542,9 @@ def _delete_theta_sketches(typingctx, theta_sketches_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.VoidType(),
-            [lir.IntType(8).as_pointer()],
+            [
+                lir.IntType(8).as_pointer(),
+            ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="delete_theta_sketches"
