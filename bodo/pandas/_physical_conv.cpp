@@ -303,8 +303,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
         bool run_on_gpu = node_run_on_gpu(op);
         if (run_on_gpu) {
-            physical_op = std::make_shared<PhysicalGPUReduce>(bodo_schema,
-                                                              function_names);
+            physical_op = std::make_shared<PhysicalGPUReduce>(
+                bodo_schema, function_names, input_column_indices);
         } else {
             physical_op = std::make_shared<PhysicalReduce>(
                 bodo_schema, function_names, input_column_indices);
