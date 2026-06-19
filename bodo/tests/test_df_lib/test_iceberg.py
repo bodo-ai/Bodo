@@ -1426,7 +1426,7 @@ def test_to_iceberg_theta_sketches_serialization_error():
     # Here we say n_sketches=1 but provide no length or data.
     import struct
 
-    from bodo.io.iceberg.theta_utils_py import merge_and_write_puffin
+    from bodo.io.iceberg.theta_utils import merge_and_write_puffin
 
     truncated = struct.pack("<I", 1)  # n_sketches = 1, but no actual sketch data
 
@@ -1451,7 +1451,7 @@ def test_sketch_ptr_double_free_safety():
     2. A second delete() is a no-op (no crash/UB).
     3. __del__ doesn't double-free.
     """
-    from bodo.io.iceberg.theta_utils_py import SketchPtr
+    from bodo.io.iceberg.theta_utils import SketchPtr
 
     # SketchPtr with ptr=0 (null)
     sp_zero = SketchPtr(0)

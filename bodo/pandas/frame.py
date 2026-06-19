@@ -605,7 +605,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         compression = properties.get("write.parquet.compression-codec", "snappy")
 
         # --- Theta sketch setup ---
-        from bodo.io.iceberg.theta_utils_py import (
+        from bodo.io.iceberg.theta_utils import (
             fetch_puffin_metadata,
             get_default_theta_sketch_columns_py,
             get_old_statistics_file_path,
