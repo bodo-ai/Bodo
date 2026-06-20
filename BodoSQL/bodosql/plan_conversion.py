@@ -1878,9 +1878,18 @@ def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
         raise ValueError(
             f"{expr_name} should be ConstantExpression but instead was {type(expr)}"
         )
-    if not isinstance(expr.value, dtype):
+    if not isinstance(dtype, (list, tuple, set)):
+        dtype = (dtype,)
+    for dtype_alternative in dtype:
+        if isinstance(expr.value, dtype_alternative):
+            return
+    if len(dtype) > 1:
         raise ValueError(
-            f"{expr_name}.value should be {str(dtype)} but instead was {type(expr.value)}"
+            f"{expr_name}.value should be one of {str(dtype)} but instead was {type(expr.value)}"
+        )
+    else:
+        raise ValueError(
+            f"{expr_name}.value should be {str(dtype[0])} but instead was {type(expr.value)}"
         )
 
 
