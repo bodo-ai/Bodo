@@ -97,43 +97,9 @@ def test_cast_str_to_numeric(basic_df, use_sf_cast_syntax, memory_leak_check):
     )
 
 
-def test_numeric_to_str(basic_df, use_sf_cast_syntax, memory_leak_check):
-    """test that you can cast numeric literals to strings"""
-
-    if use_sf_cast_syntax:
-        query1 = "SELECT 13::CHAR"
-        query2 = "SELECT -103::CHAR"
-        query3 = "SELECT 5.012::CHAR"
-    else:
-        query1 = "SELECT CAST(13 AS CHAR)"
-        query2 = "SELECT CAST(-103 AS CHAR)"
-        query3 = "SELECT CAST(5.012 AS CHAR)"
-
-    check_query(
-        query1,
-        basic_df,
-        None,
-        check_names=False,
-        use_duckdb=True,
-    )
-    check_query(
-        query2,
-        basic_df,
-        None,
-        check_names=False,
-        use_duckdb=True,
-    )
-    check_query(
-        query3,
-        basic_df,
-        None,
-        check_names=False,
-        use_duckdb=True,
-    )
-
-
 @pytest.fixture(
     params=[
+        "CHAR",
         pytest.param("VARCHAR", marks=pytest.mark.slow),
         "TEXT",
         "STRING",
@@ -151,6 +117,7 @@ def cast_str_typename(request):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_numeric_to_str(
     basic_df, use_sf_cast_syntax, cast_str_typename, memory_leak_check
 ):
@@ -189,6 +156,7 @@ def test_numeric_to_str(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_str_to_date(basic_df, use_sf_cast_syntax, memory_leak_check):
     """Tests casting str literals to date types"""
     spark_query1 = "SELECT CAST('2017-08-29' AS DATE)"
@@ -224,9 +192,19 @@ def test_str_to_date(basic_df, use_sf_cast_syntax, memory_leak_check):
 @pytest.mark.parametrize(
     "spark_query,sf_query",
     [
-        ("SELECT CAST(5 AS Int)", "SELECT 5::Int"),
-        ("SELECT CAST(-45 AS Int)", "SELECT (-45)::Int"),
-        ("SELECT CAST(3.123 AS Float)", "SELECT 3.123::Float"),
+        pytest.param(
+            "SELECT CAST(5 AS Int)", "SELECT 5::Int", marks=pytest.mark.bodosql_cpp
+        ),
+        pytest.param(
+            "SELECT CAST(-45 AS Int)",
+            "SELECT (-45)::Int",
+            marks=pytest.mark.bodosql_cpp,
+        ),
+        pytest.param(
+            "SELECT CAST(3.123 AS Float)",
+            "SELECT 3.123::Float",
+            marks=pytest.mark.bodosql_cpp,
+        ),
         pytest.param(
             f"SELECT CAST(X'{b'HELLO'.hex()}' AS VARBINARY)",
             f"SELECT X'{b'HELLO'.hex()}'::VARBINARY",
@@ -333,13 +311,19 @@ def test_binary_to_str(basic_df, use_sf_cast_syntax, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.usefixtures("numeric_type_names")
 def test_numeric_scalar_to_numeric(
+    request,
     bodosql_numeric_types,
     use_sf_cast_syntax,
-    numeric_type_names,
     memory_leak_check,
 ):
     """Tests casting int scalars (from columns) to other numeric types"""
+
+    numeric_type_names = request.getfixturevalue("numeric_type_names")
+    if numeric_type_names != "DECIMAL":
+        request.node.add_marker(pytest.mark.bodosql_cpp)
+
     spark_query = f"SELECT CASE WHEN B > 5 THEN CAST(A AS {numeric_type_names}) ELSE CAST(1 AS {numeric_type_names}) END FROM TABLE1"
 
     if use_sf_cast_syntax:
@@ -358,6 +342,7 @@ def test_numeric_scalar_to_numeric(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_numeric_nullable_scalar_to_numeric(
     bodosql_nullable_numeric_types,
     use_sf_cast_syntax,
@@ -383,13 +368,19 @@ def test_numeric_nullable_scalar_to_numeric(
 
 
 @pytest.mark.slow
+@pytest.mark.usefixtures("numeric_type_names")
 def test_string_scalar_to_numeric(
+    request,
     bodosql_integers_string_types,
     use_sf_cast_syntax,
-    numeric_type_names,
     memory_leak_check,
 ):
     """Tests casting string scalars (from columns) to numeric types"""
+
+    numeric_type_names = request.getfixturevalue("numeric_type_names")
+    if numeric_type_names != "DECIMAL":
+        request.node.add_marker(pytest.mark.bodosql_cpp)
+
     spark_query = f"SELECT CASE WHEN B = '43' THEN CAST(A AS {numeric_type_names}) ELSE CAST (1 AS {numeric_type_names}) END FROM TABLE1"
 
     if use_sf_cast_syntax:
@@ -408,6 +399,7 @@ def test_string_scalar_to_numeric(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_numeric_scalar_to_str(
     bodosql_numeric_types,
     use_sf_cast_syntax,
@@ -423,7 +415,7 @@ def test_numeric_scalar_to_str(
         query = f"SELECT CASE WHEN B > 5 THEN SUBSTRING(CAST(A AS {cast_str_typename}), 1, 3) ELSE 'OTHER' END FROM TABLE1"
 
     # Arrow float to string cast returns 3 for 3.0 so add a fraction to avoid this case
-    if bodosql_numeric_types["TABLE1"]["A"].dtype == "float64":
+    if bodosql_numeric_types["TABLE1"]["A"].dtype in ("float32", "float64"):
         bodosql_numeric_types["TABLE1"]["A"] += 0.1
 
     check_query(
@@ -437,6 +429,7 @@ def test_numeric_scalar_to_str(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_numeric_nullable_scalar_to_str(
     bodosql_nullable_numeric_types,
     use_sf_cast_syntax,
@@ -460,6 +453,7 @@ def test_numeric_nullable_scalar_to_str(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_string_scalar_to_str(
     bodosql_string_types,
     use_sf_cast_syntax,
@@ -482,6 +476,7 @@ def test_string_scalar_to_str(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_timestamp_scalar_to_str(
     bodosql_datetime_types,
     use_sf_cast_syntax,
@@ -521,6 +516,7 @@ def test_timestamp_scalar_to_str(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_numeric_nullable_scalar_to_datetime(
     bodosql_nullable_numeric_types, use_sf_cast_syntax, memory_leak_check
 ):
@@ -540,6 +536,7 @@ def test_numeric_nullable_scalar_to_datetime(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_datetime_scalar_to_datetime(
     bodosql_datetime_types,
     sql_datetime_typestrings,
@@ -561,6 +558,7 @@ def test_datetime_scalar_to_datetime(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_timestamp_col_to_str(
     bodosql_datetime_types, use_sf_cast_syntax, memory_leak_check
 ):
@@ -589,6 +587,7 @@ def test_timestamp_col_to_str(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_datetime_to_char_cast(
     tz_aware_df, use_sf_cast_syntax, memory_leak_check
@@ -600,12 +599,20 @@ def test_tz_aware_datetime_to_char_cast(
     else:
         query = "SELECT CAST(A as VARCHAR) as A from table1"
 
-    out_arr = tz_aware_df["TABLE1"]["A"].astype(str)
     if bodosql.use_cpp_backend:
+        # US/Pacific is not in Arrow's timezone database, so we swap with the equivalent America/Los_Angeles.
+        # In the future we may want a way to intercept the cast input and switch the timezones with
+        # ones recognized by Arrow before passing to Arrow's cast function.
+        if tz_aware_df["TABLE1"]["A"].dt.tz.key == "US/Pacific":
+            tz_aware_df["TABLE1"]["A"] = tz_aware_df["TABLE1"]["A"].dt.tz_convert(
+                "America/Los_Angeles"
+            )
         out_arr = pc.cast(
             pa.Array.from_pandas(tz_aware_df["TABLE1"]["A"]),
             pa.string(),
         ).to_pandas()
+    else:
+        out_arr = tz_aware_df["TABLE1"]["A"].astype(str)
     expected_output = pd.DataFrame({"A": out_arr})
     check_query(
         query,
@@ -617,6 +624,7 @@ def test_tz_aware_datetime_to_char_cast(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_datetime_to_timestamp_cast(
     tz_aware_df, use_sf_cast_syntax, memory_leak_check
@@ -626,6 +634,16 @@ def test_tz_aware_datetime_to_timestamp_cast(
         query1 = "SELECT A::Timestamp as A from table1"
     else:
         query1 = "SELECT CAST(A as Timestamp) as A from table1"
+
+    if bodosql.use_cpp_backend:
+        # US/Pacific is not in Arrow's timezone database, so we swap with the equivalent America/Los_Angeles.
+        # In the future we may want a way to intercept the cast input and switch the timezones with
+        # ones recognized by Arrow before passing to Arrow's cast function.
+        if tz_aware_df["TABLE1"]["A"].dt.tz.key == "US/Pacific":
+            tz_aware_df["TABLE1"]["A"] = tz_aware_df["TABLE1"]["A"].dt.tz_convert(
+                "America/Los_Angeles"
+            )
+
     expected_output1 = pd.DataFrame(
         {"A": tz_aware_df["TABLE1"]["A"].dt.tz_localize(None)}
     )
@@ -674,6 +692,7 @@ def test_implicit_cast_date_to_tz_aware(tz_aware_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_cast_date_scalar_to_timestamp(basic_df, use_sf_cast_syntax, memory_leak_check):
     """tests casting date scalar to timestamp"""
 
@@ -691,6 +710,7 @@ def test_cast_date_scalar_to_timestamp(basic_df, use_sf_cast_syntax, memory_leak
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_cast_scalars_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak_check):
     """tests casting date and string scalars to timestamp_ntz"""
 
@@ -708,6 +728,7 @@ def test_cast_scalars_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak_check):
     """tests casting date and string columns to timestamp_ntz"""
     ctx = {

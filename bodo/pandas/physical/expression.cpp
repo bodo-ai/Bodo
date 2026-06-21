@@ -477,18 +477,8 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     const duckdb::LogicalType& return_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
-
-    std::shared_ptr<arrow::DataType> arrow_ret_type =
-        duckdbTypeToArrow(return_type);
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(src1, arrow_ret_type);
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute_cast: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    return ConvertDatumToArrayInfo(cmp_res.ValueOrDie());
+    arrow::Datum casted = do_arrow_compute_cast(src1, return_type);
+    return ConvertDatumToArrayInfo(casted);
 }
 
 arrow::Datum do_arrow_compute_binary(
@@ -579,7 +569,7 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
         arrow::compute::Cast(left_res, arrow_ret_type);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_cast: Error in Arrow compute: " +
+            "do_arrow_compute_cast: Error in Arrow compute: " +
             cmp_res.status().message());
     }
 

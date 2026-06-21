@@ -22,7 +22,6 @@ from bodo.pandas.plan import (
     ArrowScalarFuncExpression,
     CaseExpression,
     CastExpression,
-    ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
@@ -761,10 +760,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (tz,),
             )
 
-        # Integers are assumed in seconds in BodoSQL
+        # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
         if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
             SqlTypeName.TIMESTAMP
         ):
+            # Arrow's cast_timestamp only accepts int64 input, so convert other integer types to int64 first.
+            # This likely won't work for uint64 where the input is greater than the max value of int64,
+            # but the timestamp itself is backed by signed int64 anyway
+            # in_expr_dtype = in_expr.empty_data.dtypes[in_expr.empty_data.columns[0]]
+            in_expr_dtype = get_expr_dtype(in_expr)
+            if not compare_types(in_expr_dtype, "int64"):
+                int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                in_expr = CastExpression(
+                    int64_empty_data,
+                    in_expr,
+                )
+
             cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
             in_expr = CastExpression(
                 cast_empty_data,
@@ -1790,70 +1801,98 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     )
 
 
+def compare_types(obj_type, expected_type):
+    """
+    Type checker that accounts for numpy/pandas/pyarrow dtypes.
+    Returns True if `obj_type` is a subclass of `expected_type` or are otherwise considered equivalent
+    """
+    if isinstance(obj_type, str):
+        try:
+            obj_type = eval(obj_type)
+        except Exception:
+            pass
+        obj_type = pd.api.types.pandas_dtype(obj_type)
+    if isinstance(expected_type, str):
+        try:
+            expected_type = eval(expected_type)
+        except Exception:
+            pass
+        expected_type = pd.api.types.pandas_dtype(expected_type)
+
+    if isinstance(obj_type, type) and isinstance(expected_type, type):
+        if issubclass(obj_type, expected_type):
+            return True
+    if expected_type is int:
+        return pd.api.types.is_integer_dtype(obj_type)
+    if expected_type is float:
+        return pd.api.types.is_float_dtype(obj_type)
+    if expected_type is str:
+        return pd.api.types.is_string_dtype(obj_type)
+    if expected_type is bool:
+        return pd.api.types.is_bool_dtype(obj_type)
+
+    if pd.api.types.is_dtype_equal(obj_type, expected_type):
+        return True
+
+    if isinstance(obj_type, pa.DataType) and isinstance(expected_type, pa.DataType):
+        if obj_type.equals(expected_type):
+            return True
+    if isinstance(obj_type, pa.DataType):
+        # Could also try pd.ArrowDtype(obj_type) here, in case ArrowDtype.numpy_dtype() gives a better result
+        # For example, pa.string().to_pandas_dtype() just gives np.object_
+        obj_type = obj_type.to_pandas_dtype()
+    if isinstance(expected_type, pa.DataType):
+        expected_type = expected_type.to_pandas_dtype()
+
+    # Works for most pd.api.types.ExtensionDtypes
+    # This can convert the nullable Pandas dtypes into standard numpy dtypes for easier comparison
+    if hasattr(obj_type, "numpy_dtype"):
+        obj_type = obj_type.numpy_dtype
+    if hasattr(expected_type, "numpy_dtype"):
+        expected_type = expected_type.numpy_dtype
+
+    if np.issubdtype(obj_type, expected_type):
+        return True
+
+    return False
+
+
 def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
     if not isinstance(expr, bodo.pandas.plan.ConstantExpression):
         raise ValueError(
             f"{expr_name} should be ConstantExpression but instead was {type(expr)}"
         )
-    if not isinstance(expr.value, dtype):
+    if not compare_types(type(expr.value), dtype):
         raise ValueError(
             f"{expr_name}.value should be {str(dtype)} but instead was {type(expr.value)}"
         )
 
 
-def ensure_type_of_expr(expr, expr_name, dtype):
-    def compare_types(obj_type, expected_type):
-        if expected_type is int:
-            return pd.api.types.is_integer_dtype(obj_type)
-        if expected_type is float:
-            return pd.api.types.is_float_dtype(obj_type)
-        if expected_type is str:
-            return pd.api.types.is_string_dtype(obj_type)
-        if expected_type is bool:
-            return pd.api.types.is_bool_dtype(obj_type)
-        if isinstance(expected_type, np.dtype):
-            return np.issubdtype(obj_type, expected_type)
-        # At this point we could try converting dtypes to pandas dtypes
-        if isinstance(expected_type, pd.api.extensions.ExtensionDtype):
-            return pd.api.types.is_dtype_equal(obj_type, expected_type)
-        return False
+def get_expr_dtype(expr, expr_name="Expression"):
+    if not isinstance(expr, bodo.pandas.plan.Expression):
+        return type(expr)
 
-    # Type checker that accounts for pandas dtypes
-    def instanceof(obj, dtype):
-        if isinstance(obj, dtype):
-            return True
-        obj_type = (
-            type(obj) if not isinstance(obj, (pd.Series, np.ndarray)) else obj.dtype
-        )
-        return compare_types(obj_type, dtype)
-
-    if instanceof(expr, dtype):
-        return
-    elif isinstance(expr, bodo.pandas.plan.ConstantExpression):
-        if instanceof(expr.value, dtype):
-            return
-        else:
-            expr_dtype = type(expr.value)
-    elif isinstance(expr, ColRefExpression):
-        if isinstance(expr.empty_data, pd.Series):
-            expr_dtype = expr.empty_data.dtype
-            if instanceof(expr.empty_data, dtype):
-                return
+    if isinstance(expr, bodo.pandas.plan.ConstantExpression):
+        return type(expr.value)
+    else:
+        if isinstance(expr.empty_data, (pd.Series, np.ndarray)):
+            return expr.empty_data.dtype
         elif isinstance(expr.empty_data, pd.DataFrame):
             assert len(expr.empty_data.columns) == 1
-            expr_dtype = expr.empty_data.dtypes[expr.empty_data.columns[0]]
-            if compare_types(expr_dtype, dtype):
-                return
+            return expr.empty_data.dtypes[expr.empty_data.columns[0]]
         else:
             raise ValueError(
-                f"Unsupported type of {expr_name}.empty_data:", type(expr.empty_data)
+                f"get_expr_dtype: Unsupported type of {expr_name}.empty_data:",
+                type(expr.empty_data),
             )
-    else:
-        raise ValueError(f"Unsupported type of {expr_name}:", type(expr))
 
-    raise ValueError(
-        f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype)}, instead was {expr_dtype}"
-    )
+
+def ensure_type_of_expr(expr, expr_name, dtype):
+    expr_dtype = get_expr_dtype(expr, expr_name)
+    if not compare_types(expr_dtype, dtype):
+        raise ValueError(
+            f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype)}, instead was {expr_dtype}"
+        )
 
 
 def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
