@@ -111,7 +111,8 @@ class PhysicalWriteIceberg : public PhysicalSink {
                 PyObject* item = PyList_GetItem(theta_bitmask, i);
                 theta_cols[i] = (item == Py_True);
             }
-            theta_sketches = new UpdateSketchCollection(theta_cols);
+            theta_sketches =
+                std::make_unique<UpdateSketchCollection>(theta_cols);
         }
 
         // Initialize the buffer and dictionary builders
@@ -126,12 +127,9 @@ class PhysicalWriteIceberg : public PhysicalSink {
     virtual ~PhysicalWriteIceberg() {
         Py_DECREF(partition_tuples);
         Py_DECREF(sort_tuples);
-        // theta_sketches is cleaned up in FinalizeSink (compacted + merged).
-        // If FinalizeSink wasn't called (error path), clean up here.
-        if (theta_sketches != nullptr) {
-            delete theta_sketches;
-            theta_sketches = nullptr;
-        }
+        // theta_sketches is a unique_ptr, deleted automatically.
+        // Normally cleaned up in FinalizeSink; if not reached (error path),
+        // the unique_ptr destructor handles cleanup.
     };
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
@@ -167,7 +165,8 @@ class PhysicalWriteIceberg : public PhysicalSink {
                     table_loc.c_str(), data, in_schema->field_names(),
                     partition_tuples, sort_tuples, compression.c_str(), false,
                     bucket_region.c_str(), -1, iceberg_schema_str.c_str(),
-                    iceberg_files_info_py, iceberg_schema, fs, theta_sketches);
+                    iceberg_files_info_py, iceberg_schema, fs,
+                    theta_sketches.get());
                 this->metrics.n_files_written++;
             }
             // Reset the buffer for the next batch
@@ -191,13 +190,12 @@ class PhysicalWriteIceberg : public PhysicalSink {
         // Python. This avoids the MPI inside merge_parallel_sketches() which
         // would crash in the df_lib path (workers have already finished).
         if (theta_sketches != nullptr) {
-            PyObject* serialized =
-                bodo_theta_utils_compact_serialize((uintptr_t)theta_sketches);
+            PyObject* serialized = bodo_theta_utils_compact_serialize(
+                (uintptr_t)(theta_sketches.get()));
             if (serialized) {
                 PyList_Append(iceberg_files_info_py, serialized);
                 Py_DECREF(serialized);
             }
-            delete theta_sketches;
             theta_sketches = nullptr;
         }
 
@@ -234,9 +232,8 @@ class PhysicalWriteIceberg : public PhysicalSink {
     const std::string iceberg_schema_str;
     const std::shared_ptr<arrow::Schema> iceberg_schema;
     std::shared_ptr<arrow::fs::FileSystem> fs;
-    // Theta sketch collection for NDV estimation. Owned by this operator
-    // until destructor, then ownership transfers to the static registry.
-    UpdateSketchCollection* theta_sketches = nullptr;
+    // Theta sketch collection for NDV estimation.
+    std::unique_ptr<UpdateSketchCollection> theta_sketches;
 
     PyObject* iceberg_files_info_py = PyList_New(0);
 

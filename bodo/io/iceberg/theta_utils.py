@@ -12,6 +12,19 @@ from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
 from bodo.spawn.utils import run_rank0
 
 
+def _get_theta_sketches_entry():
+    """Get the theta_sketches_entry submodule of bodo.ext.
+
+    The submodule is set as an attribute of ext via SetAttrStringFromPyInit,
+    so it's accessed through the ext module rather than sys.modules.
+    """
+    m = _get_ext()
+    entry_module = getattr(m, "theta_sketches_entry", None)
+    if entry_module is None:
+        raise RuntimeError("bodo.ext.theta_sketches_entry module not loaded")
+    return entry_module
+
+
 def _get_ext():
     ext_module = _sys.modules.get("bodo.ext")
     if ext_module is None:
@@ -49,7 +62,7 @@ class SketchPtr:
     def delete(self) -> None:
         """Delete the underlying sketch collection if not already deleted."""
         if self._ptr != 0:
-            _get_ext().delete_sketches_py_entrypt(self._ptr)
+            _get_theta_sketches_entry().delete_sketches_py_entrypt(self._ptr)
             self._ptr = 0
 
     def __del__(self) -> None:
@@ -62,7 +75,7 @@ class SketchPtr:
 def delete_sketches(ptr):
     if ptr == 0:
         return
-    _get_ext().delete_sketches_py_entrypt(ptr)
+    _get_theta_sketches_entry().delete_sketches_py_entrypt(ptr)
 
 
 def compact_serialize_sketches(ptr):
@@ -73,7 +86,7 @@ def compact_serialize_sketches(ptr):
     """
     if ptr == 0:
         return None
-    return _get_ext().compact_sketches_py_entrypt(ptr)
+    return _get_theta_sketches_entry().compact_sketches_py_entrypt(ptr)
 
 
 def merge_and_write_puffin(
@@ -91,7 +104,7 @@ def merge_and_write_puffin(
     This is a rank-0-only, non-MPI operation. Each element of
     serialized_list is a bytes object from compact_serialize_sketches().
     """
-    return _get_ext().merge_and_write_puffin_py_entrypt(
+    return _get_theta_sketches_entry().merge_and_write_puffin_py_entrypt(
         serialized_list,
         puffin_file_loc,
         bucket_region,
@@ -203,10 +216,14 @@ def table_columns_enabled_theta_sketches(txn):
 
 @run_rank0
 def get_old_statistics_file_path(txn):
-    snap_id = txn.table_metadata.current_snapshot_id
-    if snap_id is None:
-        raise RuntimeError("Table does not have a snapshot.")
-    for stat_file in txn.table_metadata.statistics:
-        if stat_file.snapshot_id == snap_id:
-            return stat_file.statistics_path
-    return ""
+    """Get the path of the most recent existing statistics file for append merge.
+
+    During append, the current snapshot is the NEW snapshot just created by
+    this write. The existing statistics files were created by PREVIOUS writes
+    and are associated with older snapshots. We find the most recent one.
+    """
+    all_stats = list(txn.table_metadata.statistics)
+    if not all_stats:
+        return ""
+    # Take the last (most recently added) statistics file path.
+    return all_stats[-1].statistics_path

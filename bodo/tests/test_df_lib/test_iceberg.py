@@ -1350,6 +1350,35 @@ def test_to_iceberg_theta_sketches_append():
             blob_metadata = latest_stats["blob-metadata"]
             assert len(blob_metadata) > 0, "Expected at least one blob after append"
 
+            # Verify NDV estimates are within expected bounds.
+            # Theta sketches provide approximate NDV estimates; we use a
+            # tolerance of ±3 (accounts for sketch approximation).
+            # df1 + df2 = column A has 20 distinct ints, column C has 7
+            # distinct strings.
+            expected_ndvs = {"A": 20, "C": 7}
+            schemas = get_metadata_field(metadata_path, "schemas")
+            latest_schema_id = get_metadata_field(metadata_path, "current-schema-id")
+            latest_schema = next(
+                s for s in schemas if s["schema-id"] == latest_schema_id
+            )
+            field_id_to_name = {f["id"]: f["name"] for f in latest_schema["fields"]}
+            for blob in blob_metadata:
+                if blob.get("type") != "apache-datasketches-theta-v1":
+                    continue
+                props = blob.get("properties", {})
+                assert "ndv" in props, (
+                    f"Blob for fields {blob.get('fields')} missing ndv property"
+                )
+                ndv_est = int(props["ndv"])
+                field_id = blob["fields"][0]
+                col_name = field_id_to_name.get(field_id, str(field_id))
+                expected = expected_ndvs.get(col_name)
+                if expected is not None:
+                    assert abs(ndv_est - expected) <= 3, (
+                        f"NDV for column '{col_name}' expected ~{expected}, "
+                        f"got {ndv_est} (diff={abs(ndv_est - expected)})"
+                    )
+
     finally:
         bodo.enable_theta_sketches = orig_enable_theta
 

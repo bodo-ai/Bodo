@@ -652,6 +652,7 @@ set(sources_list
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/_theta_sketches.cpp"
+  "bodo/libs/_theta_sketches_entry.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_io_cpu_thread_pool.cpp"
   "bodo/libs/gpu_utils.cpp"
@@ -671,6 +672,7 @@ set(allow_implicit_fallthrough_list
   "bodo/io/iceberg/theta_utils.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_theta_sketches.cpp"
+  "bodo/libs/_theta_sketches_entry.cpp"
   "bodo/libs/vendored/_murmurhash3.cpp"
 )
 
