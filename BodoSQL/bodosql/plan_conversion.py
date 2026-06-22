@@ -1139,6 +1139,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (search_expr.value, replacement_expr.value),
             )
 
+        if func_name == "PI" and len(op_exprs) == 0:
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            return ConstantExpression(dummy_empty_data, input_plan, np.pi)
+
         # If we didn't match a supported basic function, fall through to NotImplemented
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
