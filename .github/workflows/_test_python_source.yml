@@ -133,8 +133,16 @@ jobs:
                  -m "$PYTEST_MARKER" $PYTEST_IGNORE bodo/tests/
               python_multi_test_exit_code=$?
 
+              # Case 3: BodoSQL TPCH NUM_WORKERS = NUM GPUS
+              BODO_NUM_WORKERS=4 OMPI_MCA_pml=ucx PYTEST_MARKER="bodosql_cpp and not weekly" BODOSQL_CPP_BACKEND=1 BODOSQL_VERBOSE_CPP_BACKEND=1 BODOSQL_CPP_BACKEND_FALLBACK=0 python -m pytest -svW ignore BodoSQL/bodosql/tests/test_tpch_first_half.py BodoSQL/bodosql/tests/test_tpch_second_half.py
+              bodosql_tpch_exit_code=$?
+
+              # Case 4: BodoSQL TPCH NUM_WORKERS > NUM GPUS
+              BODO_NUM_WORKERS=9 OMPI_MCA_pml=ucx PYTEST_MARKER="bodosql_cpp and not weekly" BODOSQL_CPP_BACKEND=1 BODOSQL_VERBOSE_CPP_BACKEND=1 BODOSQL_CPP_BACKEND_FALLBACK=0 python -m pytest -svW ignore BodoSQL/bodosql/tests/test_tpch_first_half.py BodoSQL/bodosql/tests/test_tpch_second_half.py
+              bodosql_tpch_multi_exit_code=$?
+
               # Merge Exit Codes
-              exit $((cpp_single_gpu_exit_code + cpp_multi_gpu_exit_code + python_test_exit_code + python_multi_test_exit_code))
+              exit $((cpp_single_gpu_exit_code + cpp_multi_gpu_exit_code + python_test_exit_code + python_multi_test_exit_code + bodosql_tpch_exit_code + bodosql_tpch_multi_exit_code))
             elif [[ "${{ inputs.test-type }}" == "NARWHALS" ]]; then
               # Checkout narwhals fork
               git clone https://github.com/bodo-ai/narwhals.git
