@@ -1143,7 +1143,24 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
             return ConstantExpression(dummy_empty_data, input_plan, np.pi)
 
-        if func_name == "ACOS" and len(op_exprs) == 1:
+        if (
+            func_name
+            in (
+                "ACOS",
+                "ACOSH",
+                "ASIN",
+                "ASINH",
+                "COS",
+                "COSH",
+                "SIN",
+                "SINH",
+                "TAN",
+                "TANH",
+                "ATAN",
+                "ATANH",
+            )
+            and len(op_exprs) == 1
+        ):
             src = op_exprs[0]
             # Arrow's Trigonometric functions return float32 for float32 input and
             # float64 for float64 and decimal input:
@@ -1158,7 +1175,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return ArrowScalarFuncExpression(
                 dummy_empty_data,
                 [src],
-                "acos",
+                func_name.lower(),
                 (),
             )
 
@@ -1352,6 +1369,41 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(src, "src", str)
 
             return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
+        elif (
+            func_name
+            in (
+                "ACOS",
+                "ACOSH",
+                "ASIN",
+                "ASINH",
+                "COS",
+                "COSH",
+                "SIN",
+                "SINH",
+                "TAN",
+                "TANH",
+                "ATAN",
+                "ATANH",
+            )
+            and len(op_exprs) == 1
+        ):
+            src = op_exprs[0]
+            # Arrow's Trigonometric functions return float32 for float32 input and
+            # float64 for float64 and decimal input:
+            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                func_name.lower(),
+                (),
+            )
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()
