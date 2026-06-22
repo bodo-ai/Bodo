@@ -1819,6 +1819,7 @@ def dateadd_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_snowflake_dateadd(dateadd_df, dateadd_queries, memory_leak_check):
     """Tests the Snowflake version of DATEADD with inputs (unit, amount, dt_val).
     Currently takes in the unit as a scalar string instead of a DT unit literal.
@@ -1841,6 +1842,7 @@ def test_snowflake_dateadd(dateadd_df, dateadd_queries, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_snowflake_dateadd_fractional(
     dateadd_fractional_df, dateadd_queries, memory_leak_check
 ):
@@ -2119,6 +2121,7 @@ def dateadd_date_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_snowflake_dateadd_date(
     dateadd_date_df, dateadd_date_queries, memory_leak_check
 ):
@@ -2145,8 +2148,13 @@ def test_snowflake_dateadd_date(
 @pytest.mark.parametrize(
     "time_zone, has_case",
     [
-        pytest.param(None, False, id="no_tz-no_case"),
-        pytest.param(None, True, id="no_tz-with_case", marks=pytest.mark.slow),
+        pytest.param(None, False, id="no_tz-no_case", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            None,
+            True,
+            id="no_tz-with_case",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
         pytest.param("US/Pacific", False, id="with_tz-no_case", marks=pytest.mark.slow),
         pytest.param("Europe/Berlin", True, id="with_tz-with_case"),
     ],
@@ -2387,6 +2395,7 @@ def test_datedadd_date_literals(query, expected_output, basic_df, memory_leak_ch
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_timestamp_add_scalar(mysql_interval_str, dt_fn_dataframe, memory_leak_check):
     interval_str_to_offset_fn = {
         "SECOND": lambda x: None if pd.isna(x) else pd.Timedelta(seconds=x),
@@ -2427,6 +2436,7 @@ def test_timestamp_add_scalar(mysql_interval_str, dt_fn_dataframe, memory_leak_c
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_timestampadd_time(
     timeadd_dataframe, timeadd_arguments, use_case, memory_leak_check
 ):
@@ -2450,7 +2460,7 @@ def test_timestampadd_time(
         check_names=False,
         check_dtype=False,
         expected_output=answer,
-        only_jit_1DVar=True,
+        only_jit_1DVar=not bodosql.use_cpp_backend,
     )
 
 
@@ -2477,6 +2487,7 @@ def test_timestampadd_time(
         pytest.param("100", id="scalar_amount"),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_mysql_dateadd(
     dt_fn_dataframe, dateadd_fn, dt_val, amt_val, case, spark_info, memory_leak_check
 ):
@@ -2709,7 +2720,6 @@ def date_add_sub_date_df():
                 ),
             ),
             id="ADDDATE-vector_time_interval_with_case",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (

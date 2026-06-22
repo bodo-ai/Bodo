@@ -105,9 +105,6 @@ def test_simple_table_read(
     )
 
 
-@pytest.mark.skip(
-    reason="BSE-5453: Fix issue with iceberg dictionary encoding and reenable tests."
-)
 @pytest.mark.slow
 def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
@@ -149,7 +146,13 @@ def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn)
         )
 
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
-    check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
+    check_func(
+        impl,
+        (table_name, conn, db_schema, bodo_read_as_dict),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 @pytest.mark.skipif(
@@ -190,9 +193,6 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
     )
 
 
-@pytest.mark.skip(
-    reason="BSE-5453: Fix issue with iceberg dictionary encoding and reenable tests."
-)
 @pytest.mark.slow
 def test_explicit_dict_encoding(
     memory_leak_check, iceberg_database, iceberg_table_conn
@@ -236,7 +236,13 @@ def test_explicit_dict_encoding(
         )
 
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
-    check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
+    check_func(
+        impl,
+        (table_name, conn, db_schema, bodo_read_as_dict),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 @pytest.mark.slow
