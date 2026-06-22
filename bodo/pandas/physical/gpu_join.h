@@ -62,7 +62,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         duckdb::LogicalOperator& probeSide = *join.children[0];
 
         // If we have no equality conditions we have to do
-        //  a broadcast join.
+        // a broadcast join.
         bool no_equality = true;
         for (const duckdb::JoinCondition& cond : join.conditions) {
             if (cond.IsComparison() &&
