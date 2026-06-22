@@ -345,7 +345,6 @@ void CudaHashJoin::build_hash_table(
         this->_build_table =
             empty_table_from_arrow_schema(build_table_arrow_schema);
     }
-
     // 2. Create the hash_join object
     //    This triggers the kernel that builds the hash table on the GPU.
     //    We maintain ownership of _join_handle to reuse it for probing.
@@ -534,9 +533,37 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         // ANTI joins with an empty build table (null join handle) should output
         // all probe rows, and for other join types we can just return early
         // since we know the probe rows can't match.
-        if (probe_to_select->num_rows() == 0 ||
-            (null_handle && this->join_type != duckdb::JoinType::ANTI)) {
+        if (probe_to_select->num_rows() == 0) {
             return get_empty_output_table(global_is_last, stream);
+        }
+        if (null_handle) {
+            // build table is empty
+            if (this->join_type == duckdb::JoinType::ANTI) {
+                // intentionally do nothing
+            } else if (this->join_type == duckdb::JoinType::LEFT ||
+                       this->join_type == duckdb::JoinType::OUTER) {
+                cudf::table_view probe_kept_view = probe_to_select->select(
+                    this->probe_kept_cols.begin(), this->probe_kept_cols.end());
+                cudf::table_view build_kept_view = _build_table->select(
+                    this->build_kept_cols.begin(), this->build_kept_cols.end());
+                // Create probe_idx_view to create every probe row in the
+                // output.
+                auto seq_col = cudf::sequence(probe_to_select->num_rows(),
+                                              cudf::numeric_scalar<int32_t>(0),
+                                              cudf::numeric_scalar<int32_t>(1));
+                cudf::column_view probe_idx_view = seq_col->view();
+                // Create build_idx_view to create NA build rows in the output.
+                auto neg_one_col =
+                    cudf::sequence(probe_to_select->num_rows(),
+                                   cudf::numeric_scalar<int32_t>(-1),
+                                   cudf::numeric_scalar<int32_t>(0));
+                cudf::column_view build_idx_view = neg_one_col->view();
+                return materialize_and_output(probe_kept_view, probe_idx_view,
+                                              build_kept_view, build_idx_view,
+                                              global_is_last, stream);
+            } else {
+                return get_empty_output_table(global_is_last, stream);
+            }
         }
     }
 
