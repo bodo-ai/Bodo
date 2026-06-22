@@ -1399,18 +1399,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
     compute_return_t<T> do_arrow_compute(T res) {
         compute_return_t<T> result;
 
-        if (scalar_func_data.arrow_func_name == "equal" ||
-            scalar_func_data.arrow_func_name == "not_equal" ||
-            scalar_func_data.arrow_func_name == "greater" ||
-            scalar_func_data.arrow_func_name == "greater_equal" ||
-            scalar_func_data.arrow_func_name == "less" ||
-            scalar_func_data.arrow_func_name == "less_equal") {
-            auto [y_datum] = get_py_args_as_types(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                get_scalar_py_object_as_datum);
-            result = do_arrow_compute_binary(res, y_datum,
-                                             scalar_func_data.arrow_func_name);
-        } else if (scalar_func_data.arrow_func_name == "if_else") {
+        if (scalar_func_data.arrow_func_name == "if_else") {
             auto [then_datum, else_datum] = get_py_args_as_types(
                 scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
                 get_scalar_py_object_as_datum, get_scalar_py_object_as_datum);

@@ -1330,8 +1330,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            is_bit_set = ArrowScalarFuncExpression(
-                bool_empty_data, [src_with_mask], "not_equal", (0,)
+            zero_expr = ConstantExpression(int64_empty_data, input_plan, 0)
+            is_bit_set = ComparisonOpExpression(
+                bool_empty_data, src_with_mask, zero_expr, operator.ne
             )
 
             return ArrowScalarFuncExpression(
