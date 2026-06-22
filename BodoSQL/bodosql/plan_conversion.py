@@ -1081,8 +1081,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             # Round float inputs
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            # left_expr_rounded = UnaryOpExpression(int_empty_data, left_expr, "round")
-            # right_expr_rounded = UnaryOpExpression(int_empty_data, right_expr, "round")
             left_expr_rounded = ArrowScalarFuncExpression(
                 int_empty_data, [left_expr], "round", ()
             )
@@ -1119,7 +1117,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             # Round float inputs
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            # expr_rounded = UnaryOpExpression(int_empty_data, expr, "round")
             expr_rounded = ArrowScalarFuncExpression(
                 int_empty_data, [expr], "round", ()
             )
