@@ -139,7 +139,8 @@ std::shared_ptr<arrow::Table> cudf_scalar_to_arrow_table(
             arrow::field("scalar_col", cudf_to_arrow_type(scalar_dtype))});
 
     auto batch = GPU_DATA(std::move(scalar_table), out_schema, nullptr);
-    std::shared_ptr<arrow::Table> arrow_table = convertGPUToArrow(batch);
+    std::shared_ptr<arrow::Table> arrow_table =
+        convertGPUToArrow(batch.table->view(), batch.schema);
     return arrow_table;
 }
 
