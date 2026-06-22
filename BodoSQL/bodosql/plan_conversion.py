@@ -1246,7 +1246,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             # Remove earlier occurrences so that extract_regex can find the correct occurrence/substring matching the regexp
-            # TODO: How should this behave for overlapping occurrences?
             if occurrence_num > 1:
                 occurences_replaced_expr = ArrowScalarFuncExpression(
                     src.empty_data,
@@ -1272,6 +1271,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
         )
+
+    print("\nOPERATOR CLASS NAME:", operator_class_name)
+    print("JAVA CALL:", java_call)
 
     if operator_class_name == "SqlNullPolicyFunction":
         operands = java_call.getOperands()
@@ -1411,24 +1413,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "utf8_length",
                 (),
             )
-        elif (
-            func_name == "INSTR"
-            and len(op_exprs) in (2, 3, 4)
-            or func_name == "CHARINDEX"
-            and len(op_exprs) in (2, 3)
-        ):
-            # TODO: Investigate what the proper outputs should be in various exceptional conditions
-
-            src = op_exprs[0]
-            match_expr = op_exprs[1]
+        elif func_name in ("INSTR", "CHARINDEX") and len(op_exprs) in (2, 3):
+            if func_name == "INSTR":
+                src = op_exprs[0]
+                match_expr = op_exprs[1]
+            else:
+                # Substring to search for is the first parameter for POSITION/CHARINDEX
+                src = op_exprs[1]
+                match_expr = op_exprs[0]
 
             ensure_type_of_expr(src, "src", str)
             ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             if len(match_expr.value) == 0:
-                return ConstantExpression(int_empty_data, input_plan, 0)
+                return ConstantExpression(int_empty_data, input_plan, 1)
 
-            if len(op_exprs) > 2:
+            if len(op_exprs) == 3:
                 start_expr = op_exprs[2]
                 ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
 
@@ -1439,20 +1439,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 start = 0
 
-            if len(op_exprs) == 4:
-                # Need to search for the position of the op_exprs[3]-th occurrence of the substring
-                occurrence_expr = op_exprs[3]
-                ensure_arg_is_const_expr_of_type(
-                    occurrence_expr, "occurrence_expr", int
-                )
-                occurrence_num = occurrence_expr.value
-                if occurrence_num < 1:
-                    raise ValueError(
-                        f"{func_name} occurences argument must be 1 or greater"
-                    )
-            else:
-                occurrence_num = 1
-
+            # If start index is beyond the length of the string, we expect this to return an empty string
             without_start_expr = ArrowScalarFuncExpression(
                 src.empty_data,
                 [src],
@@ -1460,43 +1447,35 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (start, None, 1),
             )
 
-            # Since Arrow only has a compute function to search for the first occurrence, we must workaround this.
-            # Our solution is to slightly rename earlier occurrences so that find_substring can find the first of those remaining
-            # The index should be the same since we do not delete any characters
-
-            # Replace occurrences of the substring before the one we want the position of
-            if occurrence_num > 1:
-                first_char_replacement = "_" if match_expr.value[0] != "_" else "-"
-                occurences_replaced_expr = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [without_start_expr],
-                    "replace_substring",
-                    (
-                        match_expr.value,
-                        first_char_replacement + match_expr.value[1:],
-                        occurrence_num - 1,
-                    ),
-                )
-            else:
-                occurences_replaced_expr = without_start_expr
-
-            # Find the first occurrence of the substring in the sliced string (without prior occurrences)
+            # Find the first occurrence of the substring in the sliced string
             substring_pos_expr = ArrowScalarFuncExpression(
                 int_empty_data,
-                [occurences_replaced_expr],
+                [without_start_expr],
                 "find_substring",
                 (match_expr.value,),
             )
 
-            start_const_expr = ConstantExpression(int_empty_data, input_plan, start)
-            occurrence_pos_expr = ArithOpExpression(
-                int_empty_data, substring_pos_expr, start_const_expr, "__add__"
+            # find_substring emits -1 when the substring is not found.
+            # We need to return 0 in this case
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+            substring_not_found = ComparisonOpExpression(
+                bool_empty_data, substring_pos_expr, negative_one_expr, operator.eq
+            )
+
+            # Add the ignored start index to the result only if substring was found
+            offset_expr = ArrowScalarFuncExpression(
+                int_empty_data, [substring_not_found], "if_else", (0, start)
+            )
+            adjusted_substring_pos_expr = ArithOpExpression(
+                int_empty_data, substring_pos_expr, offset_expr, "__add__"
             )
 
             # Add 1 to find_substring expression since Arrow's find_substring is 0-indexed instead of 1-based like INSTR/CHARINDEX
-            one = ConstantExpression(int_empty_data, input_plan, 1)
+            # If adjusted_substring_pos_expr is -1 then this will give the correct output of 0
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
             return ArithOpExpression(
-                int_empty_data, occurrence_pos_expr, one, "__add__"
+                int_empty_data, adjusted_substring_pos_expr, one_expr, "__add__"
             )
 
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):

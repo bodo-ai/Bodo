@@ -109,7 +109,11 @@ class PhysicalGPUJoinFilter : public PhysicalGPUProcessBatch {
                 continue;
             }
 
-            join_state_t join_state_ = (*join_filter_states)[filter_id];
+            auto join_filter_iter = join_filter_states->find(filter_id);
+            if (join_filter_iter == join_filter_states->end()) {
+                continue;
+            }
+            join_state_t join_state_ = join_filter_iter->second;
             std::visit(
                 [&](const auto& join_state) {
                     if constexpr (std::is_same_v<

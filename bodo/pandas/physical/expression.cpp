@@ -127,16 +127,8 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
     return array;
 }
 
-/**
- * @brief Perform an Arrow compute operation with multiple input expressions.
- *
- * @param in_expr_results A vector of input expression results.
- * @param arrow_func_name The name of the Arrow function to call.
- * @return std::shared_ptr<array_info> The result of the Arrow compute
- * operation.
- */
-std::shared_ptr<array_info> do_arrow_compute_multi_input(
-    std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
+arrow::Datum do_arrow_compute_multi_input_datum(
+    const std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
     const std::string& arrow_func_name) {
     std::vector<arrow::Datum> arg_datums;
     for (auto& expr_res : in_expr_results) {
@@ -261,8 +253,7 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             if (!res_arr.ok()) {
                 throw std::runtime_error(res_arr.status().ToString());
             }
-            return arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                       bodo::BufferPool::DefaultPtr());
+            return res_arr.ValueOrDie();
         }
         if (date_arr->type_id() == arrow::Type::TIME64) {
             if (month_scale != 0) {
@@ -296,8 +287,7 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             if (!res_arr.ok()) {
                 throw std::runtime_error(res_arr.status().ToString());
             }
-            return arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                       bodo::BufferPool::DefaultPtr());
+            return res_arr.ValueOrDie();
         }
         if (date_arr->type_id() == arrow::Type::DATE32) {
             auto date32_arr =
@@ -335,8 +325,7 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
                 if (!res_arr.ok()) {
                     throw std::runtime_error(res_arr.status().ToString());
                 }
-                return arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                           bodo::BufferPool::DefaultPtr());
+                return res_arr.ValueOrDie();
             }
             arrow::TimestampBuilder ts_builder(
                 arrow::timestamp(arrow::TimeUnit::NANO),
@@ -354,8 +343,7 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             if (!res_arr.ok()) {
                 throw std::runtime_error(res_arr.status().ToString());
             }
-            return arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                       bodo::BufferPool::DefaultPtr());
+            return res_arr.ValueOrDie();
         }
         throw std::runtime_error(
             "do_arrow_compute_multi_input: bodo_dateadd unsupported input "
@@ -428,7 +416,15 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             func_res.status().message());
     }
 
-    return ConvertDatumToArrayInfo(func_res.ValueOrDie());
+    return func_res.ValueOrDie();
+}
+
+std::shared_ptr<array_info> do_arrow_compute_multi_input(
+    const std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
+    const std::string& arrow_func_name) {
+    arrow::Datum result_datum =
+        do_arrow_compute_multi_input_datum(in_expr_results, arrow_func_name);
+    return ConvertDatumToArrayInfo(result_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
