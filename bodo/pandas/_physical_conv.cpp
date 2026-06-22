@@ -832,13 +832,14 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
         physical_op = std::make_shared<PhysicalJoinFilter>(
             op, in_table_schema, this->join_filter_states);
     }
+    bool found_join_on_same_device = false;
 #else   // USE_CUDF
     std::shared_ptr<PhysicalJoinFilter> physical_op =
         std::make_shared<PhysicalJoinFilter>(op, in_table_schema,
                                              this->join_filter_states);
+    bool found_join_on_same_device = true;
 #endif  // USE_CUDF
 
-    bool found_join_on_same_device = false;
     // If might be the case that all the join filters
     // don't exist and if so then we don't need this node.
     bool node_needed = false;

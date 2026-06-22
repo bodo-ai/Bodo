@@ -2462,7 +2462,6 @@ def visit_iceberg_node(java_plan, read_info: IcebergReadInfo):
         return
 
     if java_class_name == "IcebergRuntimeJoinFilter":
-        # TODO: insert runtime join filters into plan above Iceberg node?
         read_info.join_filter_node = java_plan
         input = java_plan.getInput()
         visit_iceberg_node(input, read_info)
