@@ -8,8 +8,9 @@ import pytest
 
 from bodosql.tests.utils import check_query
 
+pytestmark = pytest.mark.bodosql_cpp
 
-@pytest.mark.bodosql_cpp
+
 def test_aliasing_numeric(bodosql_numeric_types, memory_leak_check):
     """test aliasing in queries"""
     table1 = bodosql_numeric_types["TABLE1"]
@@ -57,7 +58,6 @@ def test_aliasing_numeric(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_as_on_colnames(join_dataframes, memory_leak_check):
     """
     Tests that the as operator is working correctly for aliasing columns
@@ -115,7 +115,6 @@ def test_as_on_colnames(join_dataframes, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_as_on_tablenames(join_dataframes, memory_leak_check):
     """
     Tests that the as operator is working correctly for aliasing table names
@@ -173,7 +172,6 @@ def test_as_on_tablenames(join_dataframes, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_cyclic_alias(join_dataframes, memory_leak_check):
     """
     Tests that aliasing that could be interpreted as cyclic works as intended
@@ -202,7 +200,6 @@ def test_cyclic_alias(join_dataframes, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_col_aliased_to_tablename(join_dataframes, memory_leak_check):
     """
     Tests that bodosql works correctly when the column names are aliased to table names
@@ -230,7 +227,6 @@ def test_col_aliased_to_tablename(join_dataframes, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_table_aliased_to_colname(join_dataframes, memory_leak_check):
     """
     Tests that bodosql works correctly when the table names are aliased to column names
@@ -257,7 +253,6 @@ def test_table_aliased_to_colname(join_dataframes, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 def test_multi_table_renamed_projection(join_dataframes, memory_leak_check):
     """
     Test that verifies that aliased projections from two different tables
@@ -302,7 +297,6 @@ def test_multi_table_renamed_projection(join_dataframes, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_implicit_table_alias(join_dataframes, memory_leak_check):
     """
     Test that aliasing tables with the implicit syntax works as intended
@@ -335,7 +329,6 @@ def test_implicit_table_alias(join_dataframes, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_unreserved_kw(memory_leak_check):
     """Test that language/lead/user/method/rank"""
     query = "SELECT t.LANGUAGE, t.LEAD, t.USER, t.METHOD, t.RANK AS A FROM table1 t"
@@ -359,7 +352,6 @@ def test_unreserved_kw(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_unreserved_kw_pt2(memory_leak_check):
     """Test that "OUT", "FILTER", "CONDITION", "TRANSLATION", "POSITION"
     can be columns
@@ -385,7 +377,6 @@ def test_unreserved_kw_pt2(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_unreserved_kw_pt3(memory_leak_check):
     """Test that "ROW_NUMBER", "INTERVAL", "PERCENT", "COUNT", "TRANSLATE", "ROLLUP", "MATCHES", "ABS", "LAG", "MATCH_NUMBER",
     can be columns, aliases, or table names
@@ -412,7 +403,6 @@ def test_unreserved_kw_pt3(memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_unreserved_kw_agg_fns(memory_leak_check):
     """Test that no aggregation functions are reserved"""
 
