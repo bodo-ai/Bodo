@@ -2,6 +2,7 @@
 
 #include <Python.h>
 #include <arrow/api.h>
+#include <fmt/format.h>
 #include <cstdint>
 #include <limits>
 #include <map>
@@ -332,6 +333,34 @@ std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
 std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
     const duckdb::Value &value);
 
+class ExprResult;
+class ArrayExprResult;
+class ScalarExprResult;
+
+/**
+ * @brief Convert an arrow Datum into a Bodo array_info (shared pointer)
+ *
+ * @param datum arrow Datum to convert
+ * @return std::shared_ptr<array_info>, the converted arrow::Datum
+ */
+std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum);
+
+inline arrow::Datum ConvertExprResultToDatum(arrow::Datum res,
+                                             const std::string &res_name) {
+    return res;
+}
+
+/**
+ * @brief Convert an ExprResult shared pointer into an Arrow
+ * Datum.
+ *
+ * @param res shared pointer to ExprResult the value to turn into Arrow::Datum
+ * @param res_name name of the ExprResult to convert (for error messages)
+ * @return arrow::Datum the converted std::shared_ptr<ExprResult>
+ */
+arrow::Datum ConvertExprResultToDatum(std::shared_ptr<ExprResult> res,
+                                      std::string res_name);
+
 /**
  * @brief Convert a raw pointer to a value of a given arrow type into an arrow
  * Datum.
@@ -397,6 +426,85 @@ class JoinFilterColStats {
         duckdb::unique_ptr<duckdb::TableFilterSet> filters,
         const std::vector<int> column_projection);
 };
+
+/**
+ * @brief Assert that the Python objects arguments is a tuple
+ *
+ * @param args Python tuple containing the function arguments
+ * @param err_context String used for error messages, often the name of the
+ * function the arguments came from
+ */
+void assert_py_args_is_tuple(PyObject *args, const char *err_context);
+
+/**
+ * @brief Get a single argument from a Python function call
+ * and convert it to an int64 (long long).
+ *
+ * @param py_int Python object
+ * @param err_context String used for error messages, often the name of the
+ * function py_int came from
+ * @return int64 representation of the Python string argument
+ */
+int64_t get_py_object_as_int64(PyObject *py_int, const char *err_context);
+
+/**
+ * @brief Get a single string argument from a Python function call
+ * and convert it to a C string.
+ *
+ * @param py_str Python object
+ * @param err_context String used for error messages, often the name of the
+ * function py_str came from
+ * @return const char* C string representation of the Python string argument
+ */
+const char *get_py_object_as_cstr(PyObject *py_str, const char *err_context);
+
+/**
+ * @brief Get a single argument from a Python function call
+ * and convert it to a boolean.
+ *
+ * @param py_bool Python object
+ * @param err_context String used for error messages, often the name of the
+ * function py_bool came from
+ * @return bool representation of the Python argument
+ */
+bool get_py_object_as_bool(PyObject *py_bool, const char *err_context);
+
+/* Implementation detail of `get_py_args_as_types()`*/
+template <typename... Converters, std::size_t... Is>
+auto _get_py_args_as_types_tuple(PyObject *args, const char *func_name,
+                                 std::index_sequence<Is...>,
+                                 Converters... converters) {
+    return std::make_tuple(converters(PyTuple_GetItem(args, Is), func_name)...);
+}
+
+/**
+ * @brief Get the PyTuple of function arguments as a tuple of the arguments
+ * cast to the requested types specified by a sequence of type conversion
+ * functions.
+ *
+ * @param args tuple containing the function arguments
+ * @param func_name Name of the function (for error messages)
+ * @param converters (varargs) PyObject-to-type conversion functions to apply to
+ * the respective `args` passed. Number of converters must be equal to the
+ * number of arguments. Example of conversion functions: get_py_object_as_cstr,
+ * get_py_object_as_bool, get_py_object_as_int64
+ * @return A tuple of the passed arguments converted to the types specified by
+ * the corresponding passed `converters`
+ */
+template <typename... Converters>
+auto get_py_args_as_types(PyObject *args, const char *func_name,
+                          Converters... converters) {
+    assert_py_args_is_tuple(args, func_name);
+    if (PyTuple_Size(args) != sizeof...(Converters)) {
+        throw std::runtime_error(fmt::format(
+            "{} args expected to be a {}-element tuple, got {} elements.",
+            func_name, sizeof...(Converters), PyTuple_Size(args)));
+    }
+
+    return _get_py_args_as_types_tuple(args, func_name,
+                                       std::index_sequence_for<Converters...>{},
+                                       converters...);
+}
 
 /**
  * @brief Get a single string argument from a Python function call's args tuple

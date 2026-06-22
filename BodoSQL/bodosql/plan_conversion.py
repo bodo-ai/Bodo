@@ -7,6 +7,7 @@ import zoneinfo
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
 import py4j
 import pyarrow as pa
@@ -21,6 +22,7 @@ from bodo.pandas.plan import (
     ArrowScalarFuncExpression,
     CaseExpression,
     CastExpression,
+    ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
@@ -602,12 +604,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 return java_binop_to_python_expr(
                     ctx,
                     SqlKind.MINUS,
+                    "-",
                     [date_expr, amount_expr],
                 )
             elif num_operands == 3:
                 return java_binop_to_python_expr(
                     ctx,
                     SqlKind.MINUS,
+                    "-",
                     [
                         java_expr_to_python_expr(
                             ctx, java_call.getOperands()[2], input_plan
@@ -683,7 +687,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # Calcite may add more than 2 operand for the same binary operator
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         kind = op.getKind()
-        return java_binop_to_python_expr(ctx, kind, op_exprs)
+        return java_binop_to_python_expr(ctx, kind, op.getName(), op_exprs)
 
     if operator_class_name == "SqlCastFunction" and len(java_call.getOperands()) == 1:
         operand = java_call.getOperands()[0]
@@ -1079,6 +1083,64 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 op_exprs[0].empty_data, op_exprs, "nullif", ()
             )
 
+        if func_name == "CHAR_LENGTH" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", str)
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(
+                int_empty_data,
+                [src],
+                "utf8_length",
+                (),
+            )
+
+        if func_name == "LOWER" and len(op_exprs) == 1:
+            return ArrowScalarFuncExpression(
+                op_exprs[0].empty_data, op_exprs, "utf8_lower", ()
+            )
+
+        if func_name == "UPPER" and len(op_exprs) == 1:
+            return ArrowScalarFuncExpression(
+                op_exprs[0].empty_data, op_exprs, "utf8_upper", ()
+            )
+
+        if func_name in ("LPAD", "RPAD") and len(op_exprs) in (2, 3):
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", str)
+
+            length = op_exprs[1]
+            ensure_arg_is_const_expr_of_type(length, "length", int)
+
+            arrow_func_args = (length.value,)
+
+            if len(op_exprs) == 3:
+                pattern = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(pattern, "pattern", str)
+                arrow_func_args += (pattern.value,)
+
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                f"utf8_{func_name.lower()}",
+                arrow_func_args,
+            )
+
+        if func_name == "REPLACE" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            search_expr = op_exprs[1]
+            replacement_expr = op_exprs[2]
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(search_expr, "search_expr", str)
+            ensure_arg_is_const_expr_of_type(replacement_expr, "replacement_expr", str)
+
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "replace_substring",
+                (search_expr.value, replacement_expr.value),
+            )
+
         # If we didn't match a supported basic function, fall through to NotImplemented
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
@@ -1091,26 +1153,35 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
-            left = op_exprs[0]
+            src = op_exprs[0]
             len_expr = op_exprs[1]
-            if not isinstance(len_expr, ConstantExpression):
-                raise ValueError("len_expr not a ConstantExpression")
 
-            out_empty = left.empty_data.iloc[:, 0]
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+
+            out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
-                out_empty, [left], "utf8_slice_codeunits", (0, len_expr.value, 1)
+                out_empty, [src], "utf8_slice_codeunits", (0, len_expr.value, 1)
+            )
+        elif func_name == "RIGHT" and len(op_exprs) == 2:
+            # Implement RIGHT as substr(-len,...)
+            src = op_exprs[0]
+            len_expr = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+
+            out_empty = src.empty_data.iloc[:, 0]
+            return ArrowScalarFuncExpression(
+                out_empty, [src], "utf8_slice_codeunits", (-len_expr.value, None, 1)
             )
         elif func_name == "STARTSWITH" and len(op_exprs) == 2:
             src = op_exprs[0]
             match_expr = op_exprs[1]
-            if not isinstance(match_expr, bodo.pandas.plan.ConstantExpression):
-                raise ValueError(
-                    f"match_expr should be ConstantExpression but instead was {type(match_expr)}"
-                )
-            if not isinstance(match_expr.value, str):
-                raise ValueError(
-                    f"match_expr.value should be string but instead was {type(match_expr.value)}"
-                )
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
                 bool_empty_data,
@@ -1121,14 +1192,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         elif func_name == "ENDSWITH" and len(op_exprs) == 2:
             src = op_exprs[0]
             match_expr = op_exprs[1]
-            if not isinstance(match_expr, bodo.pandas.plan.ConstantExpression):
-                raise ValueError(
-                    f"match_expr should be ConstantExpression but instead was {type(match_expr)}"
-                )
-            if not isinstance(match_expr.value, str):
-                raise ValueError(
-                    f"match_expr.value should be string but instead was {type(match_expr.value)}"
-                )
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
                 bool_empty_data,
@@ -1139,14 +1206,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         elif func_name == "CONTAINS" and len(op_exprs) == 2:
             src = op_exprs[0]
             match_expr = op_exprs[1]
-            if not isinstance(match_expr, bodo.pandas.plan.ConstantExpression):
-                raise ValueError(
-                    f"match_expr should be ConstantExpression but instead was {type(match_expr)}"
-                )
-            if not isinstance(match_expr.value, str):
-                raise ValueError(
-                    f"match_expr.value should be string but instead was {type(match_expr.value)}"
-                )
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
                 bool_empty_data,
@@ -1154,36 +1217,161 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "match_substring",
                 (match_expr.value,),
             )
+        elif func_name == "LENGTH" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", str)
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(
+                int_empty_data,
+                [src],
+                "utf8_length",
+                (),
+            )
+        elif func_name == "INSTR" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            match_expr = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            zero_indexed_expr = ArrowScalarFuncExpression(
+                int_empty_data,
+                [src],
+                "find_substring",
+                (match_expr.value,),
+            )
+            # Add 1 to find_substring expression since find_substring is 0-indexed instead of 1-based like INSTR
+            one = ConstantExpression(int_empty_data, input_plan, 1)
+            return ArithOpExpression(int_empty_data, zero_indexed_expr, one, "__add__")
+        elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
+            raise ValueError("INITCAP currently disabled on C++ backend")
+
+            src = op_exprs[0]
+            if len(op_exprs) == 2:
+                delim_expr = op_exprs[1]
+                ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", str)
+                raise ValueError("Delimiter argument to INITCAP not yet supported")
+            # Note that Arrow's utf8_title considers numbers to be delimiters, which may differ from some implementations of INITCAP
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "utf8_title",
+                (),
+            )
+        elif func_name == "CONCAT" and len(op_exprs) > 0:
+            src = op_exprs[0]
+
+            ensure_type_of_expr(src, "src", str)
+
+            separator = bodo.pandas.plan.ConstantExpression(
+                src.empty_data,
+                src.source,
+                "",  # empty separator to concat without anything in between
+            )
+
+            input_exprs = [src]
+
+            if len(op_exprs) > 1:
+                for other_str_src in op_exprs[1:]:
+                    ensure_type_of_expr(other_str_src, "other_str_src", str)
+                    input_exprs.append(other_str_src)
+
+            input_exprs.append(separator)
+
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                input_exprs,
+                "binary_join_element_wise",
+                (),
+            )
+        elif func_name == "CONCAT_WS" and len(op_exprs) > 1:
+            separator = op_exprs[0]
+            ensure_type_of_expr(separator, "separator", str)
+
+            input_exprs = []
+            for str_src in op_exprs[1:]:
+                ensure_type_of_expr(str_src, "str_src", str)
+                input_exprs.append(str_src)
+            input_exprs.append(separator)
+
+            return ArrowScalarFuncExpression(
+                separator.empty_data,
+                input_exprs,
+                "binary_join_element_wise",
+                (
+                    "skip",
+                ),  # Ensure null string arguments are treated as empty / skipped
+            )
+        elif func_name == "REPEAT" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            num_repeats_expr = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
+
+            return ArrowScalarFuncExpression(
+                src.empty_data, [src], "binary_repeat", (num_repeats_expr.value,)
+            )
+        elif func_name == "SPACE" and len(op_exprs) == 1:
+            num_repeats_expr = op_exprs[0]
+            ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
+
+            str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+
+            space_expr = bodo.pandas.plan.ConstantExpression(
+                str_empty_data, input_plan, " "
+            )
+
+            return ArrowScalarFuncExpression(
+                str_empty_data, [space_expr], "binary_repeat", (num_repeats_expr.value,)
+            )
+        elif func_name == "REVERSE" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", str)
+
+            return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        if func_name == "SUBSTRING" and len(op_exprs) == 3:
+        if func_name == "SUBSTRING" and len(op_exprs) in (2, 3):
             # See:
             # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
             # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
             src = op_exprs[0]
             start_expr = op_exprs[1]
-            if not isinstance(start_expr, ConstantExpression):
-                raise ValueError("start_expr not a ConstantExpression")
-            len_expr = op_exprs[2]
-            if not isinstance(len_expr, ConstantExpression):
-                raise ValueError("len_expr not a ConstantExpression")
+            ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
             start = start_expr.value
-            length = len_expr.value
-            if start <= 0 or length < 0:
-                raise ValueError(
-                    "negative or zero start or negative length not supported in SUBSTRING in C++ backend yet"
-                )
-            start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
+            if (
+                start > 0
+            ):  # start_expr.value = 0 is treated the same as start_expr.value = 1
+                start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
+            # Arrow's utf8_slice_codeunits will handle the wraparound for negative start index
+
+            if len(op_exprs) == 3:
+                len_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+                if len_expr.value < 0:
+                    raise ValueError(
+                        "negative length not allowed in SUBSTRING in C++ backend"
+                    )
+                stop = start + len_expr.value
+                # Deal with negative start index and length beyond the end of the string
+                if start < 0 and stop >= 0:
+                    stop = None
+            else:
+                stop = None
+
             out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
                 out_empty,
                 [src],
                 "utf8_slice_codeunits",
-                (start, start + length, 1),
+                (start, stop, 1),
             )
 
     if operator_class_name == "SqlLikeOperator":
@@ -1191,20 +1379,24 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        if func_name == "LIKE" and len(op_exprs) == 2:
+        if func_name in ("LIKE", "ILIKE") and len(op_exprs) in (2, 3):
             left = op_exprs[0]
             like_expr = op_exprs[1]
-            if not isinstance(like_expr, ConstantExpression):
-                raise ValueError("lik_expr not a ConstantExpression")
+            if len(op_exprs) == 3:
+                ensure_arg_is_const_expr_of_type(op_exprs[2], "escape_expr", str)
+                escape_val = op_exprs[2].value
+            else:
+                escape_val = ""
+            ensure_arg_is_const_expr_of_type(like_expr, "like_expr", str)
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             converted_like, needs_regex, start_match, end_match, match_anything = (
                 bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
-                    like_expr.value, "", False
+                    like_expr.value, escape_val, False
                 )
             )
             if needs_regex:
-                if start_match or end_match or match_anything:
+                if match_anything:
                     raise NotImplementedError(
                         "LIKE conversion supports nothing else if regex is required."
                     )
@@ -1212,7 +1404,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     bool_empty_data,
                     [left],
                     "match_substring_regex",
-                    (converted_like,),
+                    (converted_like, func_name == "ILIKE"),
                 )
             elif start_match:
                 if end_match or match_anything:
@@ -1223,7 +1415,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     bool_empty_data,
                     [left],
                     "starts_with",
-                    (converted_like,),
+                    (converted_like, func_name == "ILIKE"),
                 )
             elif end_match:
                 if match_anything:
@@ -1234,12 +1426,20 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     bool_empty_data,
                     [left],
                     "ends_with",
-                    (converted_like,),
+                    (converted_like, func_name == "ILIKE"),
                 )
-            else:
+            elif match_anything:
                 raise NotImplementedError(
                     "LIKE conversion does not currently support match anything."
                 )
+            else:
+                return ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [left],
+                    "match_substring",
+                    (converted_like, func_name == "ILIKE"),
+                )
+
     if operator_class_name == "SqlSearchOperator":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
@@ -1352,7 +1552,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return out_expr
 
         raise NotImplementedError(
-            f"Function name {func_name} not supported for SEARCH oeprator yet: "
+            f"Function name {func_name} not supported for SEARCH operator yet: "
             + java_call.toString()
         )
 
@@ -1362,14 +1562,80 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     )
 
 
-def java_binop_to_python_expr(ctx, kind, op_exprs):
+def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
+    if not isinstance(expr, bodo.pandas.plan.ConstantExpression):
+        raise ValueError(
+            f"{expr_name} should be ConstantExpression but instead was {type(expr)}"
+        )
+    if not isinstance(expr.value, dtype):
+        raise ValueError(
+            f"{expr_name}.value should be {str(dtype)} but instead was {type(expr.value)}"
+        )
+
+
+def ensure_type_of_expr(expr, expr_name, dtype):
+    def compare_types(obj_type, expected_type):
+        if expected_type is int:
+            return pd.api.types.is_integer_dtype(obj_type)
+        if expected_type is float:
+            return pd.api.types.is_float_dtype(obj_type)
+        if expected_type is str:
+            return pd.api.types.is_string_dtype(obj_type)
+        if expected_type is bool:
+            return pd.api.types.is_bool_dtype(obj_type)
+        if isinstance(expected_type, np.dtype):
+            return np.issubdtype(obj_type, expected_type)
+        # At this point we could try converting dtypes to pandas dtypes
+        if isinstance(expected_type, pd.api.extensions.ExtensionDtype):
+            return pd.api.types.is_dtype_equal(obj_type, expected_type)
+        return False
+
+    # Type checker that accounts for pandas dtypes
+    def instanceof(obj, dtype):
+        if isinstance(obj, dtype):
+            return True
+        obj_type = (
+            type(obj) if not isinstance(obj, (pd.Series, np.ndarray)) else obj.dtype
+        )
+        return compare_types(obj_type, dtype)
+
+    if instanceof(expr, dtype):
+        return
+    elif isinstance(expr, bodo.pandas.plan.ConstantExpression):
+        if instanceof(expr.value, dtype):
+            return
+        else:
+            expr_dtype = type(expr.value)
+    elif isinstance(expr, ColRefExpression):
+        if isinstance(expr.empty_data, pd.Series):
+            expr_dtype = expr.empty_data.dtype
+            if instanceof(expr.empty_data, dtype):
+                return
+        elif isinstance(expr.empty_data, pd.DataFrame):
+            assert len(expr.empty_data.columns) == 1
+            expr_dtype = expr.empty_data.dtypes[expr.empty_data.columns[0]]
+            if compare_types(expr_dtype, dtype):
+                return
+        else:
+            raise ValueError(
+                f"Unsupported type of {expr_name}.empty_data:", type(expr.empty_data)
+            )
+    else:
+        raise ValueError(f"Unsupported type of {expr_name}:", type(expr))
+
+    raise ValueError(
+        f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype)}, instead was {expr_dtype}"
+    )
+
+
+def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
 
     left = op_exprs[0]
 
     # Calcite may add more than 2 operand for the same binary operator
     if len(op_exprs) > 2:
-        right = java_binop_to_python_expr(ctx, kind, op_exprs[1:])
+        right = java_binop_to_python_expr(ctx, kind, op_name, op_exprs[1:])
     else:
         right = op_exprs[1]
 
@@ -1422,6 +1688,23 @@ def java_binop_to_python_expr(ctx, kind, op_exprs):
 
     if kind.equals(SqlKind.OR):
         return ConjunctionOpExpression(bool_empty_data, left, right, "__or__")
+
+    if kind.equals(SqlKind.OTHER):
+        if op_name == "||":  # string concatenation
+            for op_expr in (left, right):
+                ensure_type_of_expr(op_expr, "op_expr (|| arg)", str)
+
+            separator = bodo.pandas.plan.ConstantExpression(
+                left.empty_data,
+                left.source,
+                "",  # empty separator
+            )
+            return ArrowScalarFuncExpression(
+                left.empty_data,
+                [left, right, separator],
+                "binary_join_element_wise",
+                (),
+            )
 
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 

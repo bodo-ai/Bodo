@@ -279,6 +279,8 @@ jobs:
           AZURE_CLIENT_ID:  ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
+          # Don't let UCX try to use RDMA, sometimes it fails to initialize because of this
+          UCX_TLS: "tcp,self,sm"
 
       - name: Upload JUnit Reports
         uses: actions/upload-artifact@v4
