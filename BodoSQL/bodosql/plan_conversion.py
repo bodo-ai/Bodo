@@ -1272,9 +1272,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
         )
 
-    print("\nOPERATOR CLASS NAME:", operator_class_name)
-    print("JAVA CALL:", java_call)
-
     if operator_class_name == "SqlNullPolicyFunction":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]

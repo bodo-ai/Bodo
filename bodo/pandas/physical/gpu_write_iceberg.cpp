@@ -405,12 +405,10 @@ void PhysicalGPUWriteIceberg::detect_partition_groups(
     auto xfrm_arrow_schema = arrow::schema(xfrm_fields);
     auto orig_arrow_schema = arrow::schema(orig_fields);
 
-    auto xfrm_arrow_table = convertGPUToArrow(
-        GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered_xfrm)),
-                 xfrm_arrow_schema, se));
-    auto orig_arrow_table = convertGPUToArrow(
-        GPU_DATA(std::shared_ptr<cudf::table>(std::move(gathered_orig)),
-                 orig_arrow_schema, se));
+    auto xfrm_arrow_table =
+        convertGPUToArrow(gathered_xfrm->view(), xfrm_arrow_schema);
+    auto orig_arrow_table =
+        convertGPUToArrow(gathered_orig->view(), orig_arrow_schema);
 
     groups.reserve(n_groups);
     for (cudf::size_type gi = 0; gi < n_groups; gi++) {
@@ -1211,12 +1209,8 @@ void PhysicalGPUWriteIceberg::compute_field_metrics_gpu(
         auto max_table = std::make_unique<cudf::table>(std::move(max_cols));
         auto bound_schema = arrow::schema(bound_fields);
 
-        auto min_arrow = convertGPUToArrow(
-            GPU_DATA(std::shared_ptr<cudf::table>(std::move(min_table)),
-                     bound_schema, se));
-        auto max_arrow = convertGPUToArrow(
-            GPU_DATA(std::shared_ptr<cudf::table>(std::move(max_table)),
-                     bound_schema, se));
+        auto min_arrow = convertGPUToArrow(min_table->view(), bound_schema);
+        auto max_arrow = convertGPUToArrow(max_table->view(), bound_schema);
 
         for (size_t bi = 0; bi < bound_indices.size(); bi++) {
             size_t orig_i = bound_indices[bi];
