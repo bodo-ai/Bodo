@@ -1201,6 +1201,36 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "__mul__",
             )
 
+        if func_name == "COT" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            # Return float32 for float32 input and float64 for float64 and decimal input
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            # COT is defined as 1 / tan(x):
+            # https://github.com/bodo-ai/Bodo/blob/d8a047024e8cfd12993c8ad4e8d781c4f2723348/BodoSQL/bodosql/kernels/trig_array_kernels.py#L251
+            one_expr = ConstantExpression(
+                dummy_empty_data,
+                input_plan,
+                1.0,
+            )
+            tan_expr = ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                "tan",
+                (),
+            )
+            return ArithOpExpression(
+                dummy_empty_data,
+                one_expr,
+                tan_expr,
+                "__truediv__",
+            )
+
         # If we didn't match a supported basic function, fall through to NotImplemented
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
