@@ -25,6 +25,7 @@ from bodosql.tests.utils import check_query
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q1(tpch_data, memory_leak_check):
     tpch_query = """select
                       l_returnflag,
@@ -106,6 +107,7 @@ def test_tpch_q1(tpch_data, memory_leak_check):
 @pytest.mark.timeout(900)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q2(tpch_data, memory_leak_check):
     SIZE = 15
     TYPE = "BRASS"
@@ -211,6 +213,7 @@ def test_tpch_q2(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q3(tpch_data, memory_leak_check):
     tpch_query = """select
                       l_orderkey,
@@ -290,10 +293,6 @@ def test_tpch_q3(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
-    if bodosql.use_cpp_backend:
-        # Don't run test when using cpp backend.
-        return
-
     tpch_query = """select
                       l_orderkey,
                       sum(l_extendedprice * (1 - l_discount)) as revenue,
@@ -350,6 +349,7 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q4(tpch_data, memory_leak_check):
     DATE = "1993-07-01"
     tpch_query = f"""select
@@ -400,6 +400,7 @@ def test_tpch_q4(tpch_data, memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q5(tpch_data, memory_leak_check):
     tpch_query = """select
                       n_name,
@@ -450,6 +451,7 @@ def test_tpch_q5(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q6(tpch_data, memory_leak_check):
     tpch_query = """select
                       sum(l_extendedprice * l_discount) as revenue
@@ -476,6 +478,7 @@ def test_tpch_q6(tpch_data, memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q7(tpch_data, memory_leak_check):
     NATION1 = "FRANCE"
     NATION2 = "GERMANY"
@@ -543,6 +546,7 @@ def test_tpch_q7(tpch_data, memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q8(tpch_data, memory_leak_check):
     NATION = "BRAZIL"
     REGION = "AMERICA"
@@ -603,6 +607,7 @@ def test_tpch_q8(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q9(tpch_data, spark_info, memory_leak_check):
     COLOR = "green"
     tpch_query = f"""select
@@ -650,6 +655,7 @@ def test_tpch_q9(tpch_data, spark_info, memory_leak_check):
 @pytest.mark.timeout(700)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q10(tpch_data, memory_leak_check):
     tpch_query = """select
                       c_custkey,
@@ -877,6 +883,7 @@ def test_tpch_q10(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q11(tpch_data, memory_leak_check):
     NATION = "GERMANY"
     FRACTION = 0.0001
