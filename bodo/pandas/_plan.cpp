@@ -1598,9 +1598,26 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_name,
     PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, int64_t snapshot_id,
-    uint64_t table_len_estimate) {
+    PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
+    std::optional<std::vector<int>> selected_columns_opt,
+    std::optional<int64_t> limit_opt,
+    std::optional<JoinFilterInfo> join_info_opt) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
+
+    if (join_info_opt.has_value()) {
+        auto join_info = join_info_opt.value();
+        for (int i = 0; i < join_info.join_ids.size(); i++) {
+            std::cout << "join filter id: " << join_info.join_ids[i]
+                      << std::endl;
+            for (int j = 0; j < join_info.equality_columns[i].size(); j++) {
+                std::cout << "  equality filter column: "
+                          << join_info.equality_columns[i][j]
+                          << ", is_first_location: "
+                          << join_info.all_equality_keys_ready[i][j]
+                          << std::endl;
+            }
+        }
+    }
 
     // Convert Arrow schema to DuckDB
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
@@ -1611,7 +1628,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoIcebergScanFunctionData>(
             arrow_schema, pyiceberg_catalog, table_name, iceberg_filter,
-            iceberg_schema, snapshot_id);
+            iceberg_schema, snapshot_id, std::nullopt);
 
     duckdb::virtual_column_map_t virtual_columns;
 

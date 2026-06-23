@@ -7,6 +7,7 @@ from libcpp.memory cimport unique_ptr, make_unique, dynamic_pointer_cast
 from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
+from libcpp.optional cimport optional
 from libcpp cimport bool as c_bool
 import operator
 import datetime
@@ -323,6 +324,11 @@ cdef extern from "duckdb/planner/operator/logical_copy_to_file.hpp" namespace "d
         pass
 
 cdef extern from "_plan.h" nogil:
+    cdef cppclass JoinFilterInfo:
+        vector[int] join_ids
+        vector[vector[int]] equality_columns
+        vector[vector[c_bool]] all_equality_keys_ready
+
     cdef cppclass CLogicalJoinFilter" bodo::LogicalJoinFilter"(CLogicalOperator):
         pass
 
@@ -330,7 +336,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, c_bool has_partitioning) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
-    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate) except +
+    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate, optional[vector[int]] selected_columns_opt, optional[int64_t] limit_opt, optional[JoinFilterInfo] join_info_opt) except +
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id, c_bool force_broadcast) except +
@@ -1126,18 +1132,71 @@ cdef class LogicalGetPandasReadParallel(LogicalOperator):
     def getCardinality(self):
         return self.nrows
 
+
+cdef JoinFilterInfo convert_join_filter_info(
+    object py_info
+):
+    cdef JoinFilterInfo info
+    cdef int join_id
+    cdef list cols
+    cdef list ready
+    cdef int c
+    cdef c_bool b
+    cdef vector[int] col_vec
+    cdef vector[c_bool] bool_vec
+
+    for join_id in py_info.filter_ids:
+        info.join_ids.push_back(join_id)
+
+    for cols in py_info.equality_filter_columns:
+        col_vec.clear()
+        for c in cols:
+            col_vec.push_back(c)
+        info.equality_columns.push_back(col_vec)
+
+    for ready in py_info.equality_is_first_locations:
+        bool_vec.clear()
+        for b in ready:
+            bool_vec.push_back(b)
+        info.all_equality_keys_ready.push_back(bool_vec)
+
+    return info
+
+
 cdef class LogicalGetIcebergRead(LogicalOperator):
     """
     Wrapper around DuckDB's LogicalGet for reading Iceberg datasets.
     """
     cdef readonly str table_identifier
 
-    def __cinit__(self, object out_schema, str table_identifier, object catalog_name, object catalog_properties, object iceberg_filter, object iceberg_schema, object snapshot_id, uint64_t table_len_estimate):
+    def __cinit__(self, object out_schema, str table_identifier, object catalog_name,
+        object catalog_properties, object iceberg_filter, object iceberg_schema,
+        object snapshot_id, uint64_t table_len_estimate, object selected_columns,
+        object limit, object join_filter_info):
         import pyiceberg.catalog
+
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
         self.out_schema = out_schema
         self.table_identifier = table_identifier
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id, table_len_estimate)
+
+        cdef optional[JoinFilterInfo] c_join_info
+        cdef optional[int64_t] c_limit
+        cdef vector[int] col_vec
+        cdef optional[vector[int]] c_selected_columns
+        cdef vector[int] selected_vec
+
+        if join_filter_info is not None:
+            c_join_info = convert_join_filter_info(join_filter_info)
+
+        if selected_columns is not None:
+            for c in selected_columns:
+                selected_vec.push_back(c)
+            c_selected_columns = selected_vec
+
+        if limit is not None:
+            c_limit = <int64_t>limit
+
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id, table_len_estimate, c_selected_columns, c_limit, c_join_info)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):

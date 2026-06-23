@@ -16,6 +16,11 @@ import pyarrow.compute as pc
 import bodo
 import bodo.pandas as bd
 import bodosql
+from bodo.pandas.iceberg_utils import (
+    JoinFilterInfo,
+    build_iceberg_read_plan,
+    get_projection_limit_plan,
+)
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
@@ -125,7 +130,7 @@ class IcebergReadInfo:
     """Information extracted from Iceberg read plan nodes."""
 
     scan_node: object = None
-    join_filter_node: object = None
+    join_filter_info: JoinFilterInfo = None
     filters: list[object] = None
     # Columns to read from the table, in the order they should appear in output.
     colmap: list[int] = None
@@ -179,7 +184,7 @@ def java_plan_to_python_plan(ctx, java_plan):
         # Initialize all columns to be in the original location (updated top-down based
         # on IcebergProject nodes)
         read_info.colmap = list(range(input.getRowType().getFieldCount()))
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return generate_iceberg_read(ctx, read_info)
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
@@ -205,7 +210,8 @@ def java_plan_to_python_plan(ctx, java_plan):
 
     if java_class_name == "BodoPhysicalRuntimeJoinFilter":
         input_python_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
-        return java_rtjf_to_python_rtjf(ctx, java_plan, input_python_plan)
+        join_info = java_rtjf_to_join_info(ctx, java_plan)
+        return generate_runtime_join_filter(join_info, input_python_plan)
 
     if java_class_name == "BodoPhysicalFilter":
         return java_filter_to_python_filter(ctx, java_plan)
@@ -1813,7 +1819,7 @@ def java_subplan_to_python_subplan(ctx, java_subplan):
     return subplan
 
 
-def java_rtjf_to_python_rtjf(ctx, java_plan, input_python_plan: LazyPlan):
+def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
     """Convert a BodoSQL Java runtime join filter node to a Python runtime join filter
     node.
     """
@@ -1854,12 +1860,23 @@ def java_rtjf_to_python_rtjf(ctx, java_plan, input_python_plan: LazyPlan):
         new_equality_filter_columns.append(filter_cols)
         new_equality_is_first_locations.append(is_first)
 
+    return JoinFilterInfo(
+        filter_ids=new_filter_ids,
+        equality_filter_columns=new_equality_filter_columns,
+        equality_is_first_locations=new_equality_is_first_locations,
+    )
+
+
+def generate_runtime_join_filter(
+    join_info: JoinFilterInfo, input_plan: LazyPlan
+) -> LogicalJoinFilter:
+    """Contruct an instance of a runtime join filter plan node from the given join filter info and input plan."""
     return LogicalJoinFilter(
-        input_python_plan.empty_data,
-        input_python_plan,
-        new_filter_ids,
-        new_equality_filter_columns,
-        new_equality_is_first_locations,
+        input_plan.empty_data,
+        input_plan,
+        join_info.filter_ids,
+        join_info.equality_filter_columns,
+        join_info.equality_is_first_locations,
     )
 
 
@@ -2407,7 +2424,7 @@ def sql_type_to_pa_type(ctx, sql_type_name):
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
 
-def visit_iceberg_node(java_plan, read_info: IcebergReadInfo):
+def visit_iceberg_node(ctx, java_plan, read_info: IcebergReadInfo):
     """Visit Iceberg-related plan nodes to extract read information like filters.
     For example:
     CombineStreamsExchange
@@ -2426,7 +2443,7 @@ def visit_iceberg_node(java_plan, read_info: IcebergReadInfo):
         if read_info.filters is None:
             read_info.filters = []
         read_info.filters.append(java_plan.getCondition())
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     if java_class_name == "IcebergProject":
@@ -2444,7 +2461,7 @@ def visit_iceberg_node(java_plan, read_info: IcebergReadInfo):
 
         read_info.colmap = new_colmap
         input = java_plan.getInput()
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     if java_class_name == "IcebergSort":
@@ -2458,13 +2475,13 @@ def visit_iceberg_node(java_plan, read_info: IcebergReadInfo):
                 limit if read_info.limit is None else min(read_info.limit, limit)
             )
         input = java_plan.getInput()
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     if java_class_name == "IcebergRuntimeJoinFilter":
-        read_info.join_filter_node = java_plan
+        read_info.join_filter_info = java_rtjf_to_join_info(ctx, java_plan)
         input = java_plan.getInput()
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     raise NotImplementedError(
@@ -2472,7 +2489,7 @@ def visit_iceberg_node(java_plan, read_info: IcebergReadInfo):
     )
 
 
-def generate_iceberg_read(ctx, read_info):
+def generate_iceberg_read(ctx, read_info: IcebergReadInfo):
     """Generate a Python plan for reading Iceberg table with the given read info."""
     scan_node = read_info.scan_node
     catalog_table = scan_node.getCatalogTable()
@@ -2496,20 +2513,27 @@ def generate_iceberg_read(ctx, read_info):
     uri = file_path.toUri()
     path_str = uri.getRawPath()
 
-    df = bd.read_iceberg(
+    plan, empty_df, arrow_schema = build_iceberg_read_plan(
         # path_str has the schema in it so it's not needed in table id
         # TODO: update when supporting other catalog types
         full_table_path[-1],
         location=path_str,
         row_filter=row_filter,
+        join_filter_info=read_info.join_filter_info,
         selected_fields=read_fields,
         limit=read_info.limit,
     )
-    plan = df._plan
+    plan = get_projection_limit_plan(
+        plan,
+        arrow_schema,
+        empty_df,
+        read_fields,
+        read_info.limit,
+    )
 
     # Insert Runtime Join Filters on top of the read if needed
-    if read_info.join_filter_node is not None:
-        plan = java_rtjf_to_python_rtjf(ctx, read_info.join_filter_node, plan)
+    if read_info.join_filter_info is not None:
+        plan = generate_runtime_join_filter(read_info.join_filter_info, plan)
 
     return plan
 

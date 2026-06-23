@@ -1146,6 +1146,7 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
 
 std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
 JoinFilterColStats::collect_all() {
+    std::cout << " CALLING collect_all " << std::endl;
     // Cache the collection
     if (result.has_value()) {
         return result.value();
@@ -1155,6 +1156,12 @@ JoinFilterColStats::collect_all() {
     std::unordered_map<int64_t, std::vector<col_stats_collector>>
         join_col_stats_map;
 
+    if (!join_state_map) {
+        std::cout << "join_state_map is not set" << std::endl;
+    } else {
+        std::cout << "join state map size: " << join_state_map->size()
+                  << std::endl;
+    }
     // Create col_stats_collectors for every filter column in the
     // join_filter_program_state
     for (const auto &[join_id, col_info] : this->join_filter_program_state) {
@@ -1195,6 +1202,7 @@ JoinFilterColStats::collect_all() {
 duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     duckdb::unique_ptr<duckdb::TableFilterSet> filters,
     const std::vector<int> column_projection) {
+    std::cout << " CALLING insert_filters " << std::endl;
     for (const auto &[col_idx, min_max_vec] : this->collect_all()) {
         for (const auto &[min, max] : min_max_vec) {
             if (min->is_valid) {

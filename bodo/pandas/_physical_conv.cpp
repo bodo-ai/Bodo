@@ -63,6 +63,10 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     BodoScanFunctionData& scan_data =
         op.bind_data->Cast<BodoScanFunctionData>();
 
+    for (auto col : selected_columns) {
+        std::cout << " selected columns " << col << std::endl;
+    }
+
     bool run_on_gpu = node_run_on_gpu(op);
     auto physical_op = scan_data.CreatePhysicalOperator(
         selected_columns, op.table_filters, op.extra_info.limit_val,
@@ -806,7 +810,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
 #else   // USE_CUDF
     physical_join->buildProbeSchemas(op, op.conditions, build_table_schema,
                                      probe_table_schema);
+    std::cout << "join filter states size: " << this->join_filter_states->size()
+              << std::endl;
     (*this->join_filter_states)[op.join_id] = physical_join->getJoinStatePtr();
+    std::cout << "join filter states size: " << this->join_filter_states->size()
+              << std::endl;
     this->active_pipeline->AddOperator(physical_join);
 #endif  // USE_CUDF
     // Build side pipeline runs before probe side.

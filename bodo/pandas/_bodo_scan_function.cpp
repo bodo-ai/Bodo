@@ -1,6 +1,8 @@
 #include "_bodo_scan_function.h"
 
 #include "../libs/_utils.h"
+#include "duckdb/common/helper.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 #include "physical/read_iceberg.h"
 #include "physical/read_pandas.h"
 #include "physical/read_parquet.h"
@@ -89,6 +91,16 @@ PhysicalCpuGpuSource BodoIcebergScanFunctionData::CreatePhysicalOperator(
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
     std::shared_ptr<std::unordered_map<int, join_state_t>> join_filter_states,
     bool run_on_gpu) {
+    // If converting from Calcite, we need to override the selected columns
+    // and limit_val since the duckdb optimizer does not run.
+    if (selected_fields_opt.has_value()) {
+        selected_columns = selected_fields_opt.value();
+    }
+    if (limit_opt.has_value()) {
+        auto limit = duckdb::BoundLimitNode::ConstantValue(limit_opt.value());
+        limit_val = duckdb::make_uniq<duckdb::BoundLimitNode>(std::move(limit));
+    }
+
     JoinFilterColStats join_filter_col_stats =
         this->rtjf_state_map.has_value()
             ? JoinFilterColStats(join_filter_states,

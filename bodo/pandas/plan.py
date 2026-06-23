@@ -502,6 +502,9 @@ class LogicalGetIcebergRead(LogicalOperatorLeaf):
         pyiceberg_schema,
         snapshot_id,
         table_len_estimate,
+        join_filter_info,
+        selected_fields,
+        limit,
         *,
         arrow_schema,
     ):
@@ -514,6 +517,9 @@ class LogicalGetIcebergRead(LogicalOperatorLeaf):
             pyiceberg_schema,
             snapshot_id,
             table_len_estimate,
+            selected_fields,
+            limit,
+            join_filter_info,
         )
         # Iceberg needs schema metadata
         # TODO: avoid this to support operations like renaming columns
