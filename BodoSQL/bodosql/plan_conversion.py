@@ -1291,6 +1291,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_arg_is_const_expr_of_type(right_expr, "right_expr", int)
 
             empty_data = left_expr.empty_data
+            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
             if func_name == "BITAND":
                 arrow_equivalent_func = "bit_wise_and"
@@ -1300,14 +1301,24 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 arrow_equivalent_func = "bit_wise_xor"
             elif func_name == "BITSHIFTLEFT":
                 arrow_equivalent_func = "shift_left"
-                # Left shift can overflow, so promote to INT64
-                empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                # For bitshifting, result type should be INT64 to match Snowflake and output on C++ side.
+                empty_data = int64_empty_data
             elif func_name == "BITSHIFTRIGHT":
                 arrow_equivalent_func = "shift_right"
+                empty_data = int64_empty_data
 
-            return ArrowScalarFuncExpression(
+            result = ArrowScalarFuncExpression(
                 empty_data, [left_expr], arrow_equivalent_func, (right_expr.value,)
             )
+
+            if func_name in ("BITSHIFTLEFT, BITSHIFTRIGHT"):
+                left_opr_sql_type = operands[0].getType()
+                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+                # Retain original bit width after shifting left/right if BINARY type.
+                # This discards bits that were shifted past the left end.
+                if left_opr_sql_type.getSqlTypeName().equals(SqlTypeName.BINARY):
+                    return CastExpression(left_expr.empty_data, result)
+            return result
         elif func_name == "BITNOT" and len(op_exprs) == 1:
             src = op_exprs[0]
             ensure_type_of_expr(src, "src", int)

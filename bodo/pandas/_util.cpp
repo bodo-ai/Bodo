@@ -25,30 +25,6 @@ std::vector<arrow::Datum> CastIntDatumsToCommonTypeImpl(
         return {};
     }
 
-    auto get_bit_width = [](arrow::Type::type type_id) -> int {
-        switch (type_id) {
-            case arrow::Type::INT8:
-            case arrow::Type::UINT8:
-                return 8;
-            case arrow::Type::INT16:
-            case arrow::Type::UINT16:
-                return 16;
-            case arrow::Type::INT32:
-            case arrow::Type::UINT32:
-                return 32;
-            case arrow::Type::INT64:
-            case arrow::Type::UINT64:
-                return 64;
-            default:
-                return -1;
-        }
-    };
-
-    auto is_signed = [](arrow::Type::type type_id) -> bool {
-        return type_id == arrow::Type::INT8 || type_id == arrow::Type::INT16 ||
-               type_id == arrow::Type::INT32 || type_id == arrow::Type::INT64;
-    };
-
     auto get_unsigned_type =
         [](int bit_width) -> std::shared_ptr<arrow::DataType> {
         switch (bit_width) {
@@ -66,32 +42,37 @@ std::vector<arrow::Datum> CastIntDatumsToCommonTypeImpl(
     };
 
     // Determine common type from all datums
-    std::shared_ptr<arrow::DataType> common_type = datums[0].type();
+    std::shared_ptr<arrow::DataType> common_type = nullptr;
 
-    for (size_t i = 1; i < datums.size(); i++) {
-        auto datum_type = datums[i].type();
+    for (size_t i = 0; i < datums.size(); i++) {
+        std::shared_ptr<arrow::DataType> datum_type = datums[i].type();
+
+        if (!arrow::is_integer(datum_type->id())) {
+            // There is a non-integer type, so don't do any casting
+            common_type = nullptr;
+            break;
+        }
+
+        if (!common_type) {
+            common_type = datum_type;
+            continue;
+        }
+
         if (!common_type->Equals(datum_type)) {
-            int common_width = get_bit_width(common_type->id());
-            int datum_width = get_bit_width(datum_type->id());
+            int common_width = common_type->bit_width();
+            int datum_width = datum_type->bit_width();
 
-            if (common_width < 0 || datum_width < 0) {
-                // There is a non-integer type, so don't do any casting
-                common_type = nullptr;
-                break;
-            }
-
-            bool common_signed = is_signed(common_type->id());
-            bool datum_signed = is_signed(datum_type->id());
+            bool common_signed = arrow::is_signed_integer(common_type->id());
+            bool datum_signed = arrow::is_signed_integer(datum_type->id());
 
             // If one is signed and one is unsigned, promote to unsigned of
             // larger width
             if (common_signed != datum_signed) {
                 int max_width = std::max(common_width, datum_width);
                 common_type = get_unsigned_type(max_width);
-            } else if (common_signed == datum_signed &&
-                       common_width != datum_width) {
+            } else if (common_width != datum_width) {
                 // Both same sign but different width: promote common type to
-                // larger Note that Arrow probably won't have a problem doing
+                // larger. Note that Arrow probably won't have a problem doing
                 // this promotion itself, but we do it here to be safe.
                 int max_width = std::max(common_width, datum_width);
                 if (common_signed) {
@@ -1371,7 +1352,8 @@ int64_t py_object_to_timestamp(PyObject *obj) {
     int64_t microsecond_remainder = PyDateTime_DATE_GET_MICROSECOND(obj);
 
     // Convert time struct down to standard epoch seconds
-    int64_t epoch_seconds = static_cast<int64_t>(mktime(&time_struct));
+    // timegm interprets input as UTC
+    int64_t epoch_seconds = static_cast<int64_t>(timegm(&time_struct));
     int64_t total_microseconds =
         (epoch_seconds * 1000000LL) + microsecond_remainder;
     return total_microseconds;
@@ -1400,7 +1382,8 @@ int32_t py_object_to_date(PyObject *obj) {
     time_struct.tm_isdst = -1;
 
     // Convert time struct down to standard epoch seconds
-    time_t epoch_seconds = mktime(&time_struct);
+    time_t epoch_seconds =
+        timegm(&time_struct);  // timegm interprets input as UTC
     int32_t total_days = static_cast<int32_t>(epoch_seconds / (24 * 3600));
     return total_days;
 }
@@ -1433,7 +1416,8 @@ arrow::Datum get_scalar_py_object_as_datum(PyObject *py_obj,
             if (PyErr_Occurred()) {
                 PyErr_Clear();
                 throw std::runtime_error(
-                    "Integer conversion overflowed 64-bit boundaries.");
+                    "Integer conversion overflowed 64-bit boundaries for " +
+                    std::string(err_context));
             }
 
             return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(val));
@@ -1485,7 +1469,14 @@ int64_t get_py_object_as_int64(PyObject *py_int, const char *err_context) {
         throw std::runtime_error("Object is not a Python int: " +
                                  std::string(err_context));
     }
-    return PyLong_AsLongLong(py_int);
+    int64_t val = PyLong_AsLongLong(py_int);
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        throw std::runtime_error(
+            "Integer conversion overflowed signed 64-bit boundaries for " +
+            std::string(err_context));
+    }
+    return val;
 }
 
 uint64_t get_py_object_as_uint64(PyObject *py_int, const char *err_context) {
@@ -1493,7 +1484,14 @@ uint64_t get_py_object_as_uint64(PyObject *py_int, const char *err_context) {
         throw std::runtime_error("Object is not a Python int: " +
                                  std::string(err_context));
     }
-    return PyLong_AsUnsignedLongLong(py_int);
+    uint64_t val = PyLong_AsUnsignedLongLong(py_int);
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        throw std::runtime_error(
+            "Integer conversion overflowed unsigned 64-bit boundaries for " +
+            std::string(err_context));
+    }
+    return val;
 }
 
 const char *get_py_object_as_cstr(PyObject *py_str, const char *err_context) {

@@ -586,8 +586,13 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
                                    const duckdb::LogicalType& return_type) {
     std::shared_ptr<arrow::DataType> arrow_ret_type =
         duckdbTypeToArrow(return_type);
+
+    // Globally set the allow_int_overflow cast option to true; in the future,
+    // CaseExpressions should support these options.
+    arrow::compute::CastOptions cast_opts;
+    cast_opts.allow_int_overflow = true;
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(left_res, arrow_ret_type);
+        arrow::compute::Cast(left_res, arrow_ret_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_array_compute_cast: Error in Arrow compute: " +
