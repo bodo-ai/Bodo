@@ -670,6 +670,7 @@ set(allow_implicit_fallthrough_list
   "bodo/io/arrow.cpp"
   "bodo/io/iceberg_parquet_write.cpp"
   "bodo/io/iceberg/theta_utils.cpp"
+  "bodo/pandas/_bodo_write_function.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_theta_sketches_entry.cpp"
