@@ -290,6 +290,10 @@ def test_tpch_q3(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
+    if bodosql.use_cpp_backend:
+        # Don't run test when using cpp backend.
+        return
+
     tpch_query = """select
                       l_orderkey,
                       sum(l_extendedprice * (1 - l_discount)) as revenue,
