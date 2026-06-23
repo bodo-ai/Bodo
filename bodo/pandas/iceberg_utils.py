@@ -27,9 +27,9 @@ class JoinFilterInfo:
 
 def selected_fields_idxs_from_fields(
     arrow_schema: pa.Schema, selected_fields: list[str]
-) -> set[int]:
+) -> list[int]:
     """Return the indices of the selected fields in the given Arrow schema."""
-    return {arrow_schema.get_field_index(field_name) for field_name in selected_fields}
+    return [arrow_schema.get_field_index(field_name) for field_name in selected_fields]
 
 
 def build_iceberg_read_plan(
