@@ -99,6 +99,7 @@ struct JoinFilterInfo {
     std::vector<int> join_ids;
     std::vector<std::vector<int>> equality_columns;
     std::vector<std::vector<bool>> all_equality_keys_ready;
+    std::vector<std::vector<int>> orig_build_keys;
 };
 
 /**

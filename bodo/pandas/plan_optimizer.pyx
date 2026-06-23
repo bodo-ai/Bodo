@@ -328,6 +328,7 @@ cdef extern from "_plan.h" nogil:
         vector[int] join_ids
         vector[vector[int]] equality_columns
         vector[vector[c_bool]] all_equality_keys_ready
+        vector[vector[int]] orig_build_keys
 
     cdef cppclass CLogicalJoinFilter" bodo::LogicalJoinFilter"(CLogicalOperator):
         pass
@@ -1154,6 +1155,12 @@ cdef JoinFilterInfo convert_join_filter_info(
             col_vec.push_back(c)
         info.equality_columns.push_back(col_vec)
 
+    for cols in py_info.orig_build_key_cols:
+        col_vec.clear()
+        for c in cols:
+            col_vec.push_back(c)
+        info.orig_build_keys.push_back(col_vec)
+
     for ready in py_info.equality_is_first_locations:
         bool_vec.clear()
         for b in ready:
@@ -1278,8 +1285,8 @@ cdef class LogicalJoinFilter(LogicalOperator):
     def __cinit__(self, object out_schema, LogicalOperator source,
             vector[int] join_filter_ids,
             vector[vector[int64_t]] equality_filter_columns,
-            vector[vector[c_bool]] equality_is_first_locations):
-        cdef vector[vector[int64_t]] orig_build_key_cols
+            vector[vector[c_bool]] equality_is_first_locations,
+            vector[vector[int64_t]] orig_build_key_cols):
 
         cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations, orig_build_key_cols)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_join_filter.release())

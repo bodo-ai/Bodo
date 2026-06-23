@@ -412,6 +412,7 @@ class LogicalJoinFilter(LogicalOperator):
         filter_ids,
         equality_filter_columns,
         equality_is_first_locations,
+        orig_build_key_cols,
     ):
         self.source = source
         self.filter_ids = filter_ids
@@ -423,6 +424,7 @@ class LogicalJoinFilter(LogicalOperator):
             filter_ids,
             equality_filter_columns,
             equality_is_first_locations,
+            orig_build_key_cols,
         )
 
 

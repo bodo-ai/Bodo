@@ -22,14 +22,20 @@ from bodo.pandas.utils import (
 class JoinFilterInfo:
     filter_ids: list[int]
     equality_filter_columns: list[list[int]]
+    orig_build_key_cols: list[list[int]]
     equality_is_first_locations: list[list[bool]]
 
 
 def selected_fields_idxs_from_fields(
     arrow_schema: pa.Schema, selected_fields: list[str]
 ) -> list[int]:
-    """Return the indices of the selected fields in the given Arrow schema."""
-    return [arrow_schema.get_field_index(field_name) for field_name in selected_fields]
+    """Return the indices of the selected fields in the given Arrow schema,
+    with duplicates removed."""
+    return list(
+        dict.fromkeys(
+            arrow_schema.get_field_index(field_name) for field_name in selected_fields
+        )
+    )
 
 
 def build_iceberg_read_plan(
