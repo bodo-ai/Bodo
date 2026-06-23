@@ -101,8 +101,6 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         std::shared_ptr<table_info> input_batch,
         OperatorResult prev_op_result) override {
         this->metrics.input_row_count += input_batch->nrows();
-        // std::cout << input_batch->nrows() << " rows in join filter input
-        // batch" << std::endl;
 
         // No filters can be applied, just pass through
         if (std::ranges::all_of(this->can_apply_bloom_filters,
@@ -200,8 +198,6 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         }
 
         this->metrics.filtering_time += end_timer(start_filtering);
-        // std::cout << input_batch->nrows() << " rows in join filter output
-        // batch" << std::endl;
         this->metrics.output_row_count += input_batch->nrows();
 
         // Just propagate the FINISHED flag to other operators (like join) or

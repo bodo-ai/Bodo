@@ -1635,11 +1635,12 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
         auto rtjf_state_map = JoinFilterProgramState();
         auto join_info = join_info_opt.value();
 
-        for (auto join_id : join_info.join_ids) {
+        for (int i = 0; i < join_info.join_ids.size(); i++) {
+            int join_id = join_info.join_ids[i];
             rtjf_state_map[join_id] =
-                JoinColumnInfo(join_info.equality_columns[join_id],
-                               join_info.all_equality_keys_ready[join_id],
-                               join_info.orig_build_key_cols[join_id]);
+                JoinColumnInfo(join_info.equality_columns[i],
+                               join_info.all_equality_keys_ready[i],
+                               join_info.orig_build_key_cols[i]);
         }
 
         scan_function_data->rtjf_state_map = rtjf_state_map;
