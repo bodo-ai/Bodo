@@ -12,9 +12,6 @@ import pyarrow as pa
 
 from bodo.pandas.plan import (
     LogicalGetIcebergRead,
-    LogicalLimit,
-    LogicalProjection,
-    make_col_ref_exprs,
 )
 from bodo.pandas.utils import (
     arrow_to_empty_df,
@@ -31,32 +28,8 @@ class JoinFilterInfo:
 def selected_fields_idxs_from_fields(
     arrow_schema: pa.Schema, selected_fields: list[str]
 ) -> set[int]:
+    """Return the indices of the selected fields in the given Arrow schema."""
     return {arrow_schema.get_field_index(field_name) for field_name in selected_fields}
-
-
-def get_projection_limit_plan(plan, arrow_schema, empty_df, selected_fields, limit):
-    if selected_fields is not None:
-        col_idxs = selected_fields_idxs_from_fields(arrow_schema, selected_fields)
-        empty_df = empty_df[list(selected_fields)]
-    else:
-        # Adds logical projection layer to enable rename.
-        col_idxs = range(len(empty_df.columns))
-
-    exprs = make_col_ref_exprs(col_idxs, plan)
-    plan = LogicalProjection(
-        empty_df,
-        plan,
-        exprs,
-    )
-
-    if limit is not None:
-        plan = LogicalLimit(
-            empty_df,
-            plan,
-            limit,
-        )
-
-    return plan
 
 
 def build_iceberg_read_plan(
@@ -123,6 +96,7 @@ def build_iceberg_read_plan(
         filter_selectivity_estimate = 0.2
         table_len_estimate = int(table_len_estimate * filter_selectivity_estimate)
 
+    # None here implies all fields should be selected
     selected_idxs = None
     if selected_fields is not None:
         selected_idxs = selected_fields_idxs_from_fields(arrow_schema, selected_fields)

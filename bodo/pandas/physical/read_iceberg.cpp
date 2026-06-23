@@ -27,7 +27,6 @@ PhysicalReadIceberg::PhysicalReadIceberg(
           this->arrow_schema->metadata()->values())),
       out_column_names(
           this->create_out_column_names(selected_columns, this->arrow_schema)) {
-    std::cout << "Columns " << selected_columns.size() << std::endl;
     Py_INCREF(this->catalog);
     Py_INCREF(this->iceberg_filter);
     Py_INCREF(this->iceberg_schema);
@@ -115,7 +114,6 @@ PhysicalReadIceberg::create_internal_reader() {
     std::vector<bool> is_nullable(selected_columns.size(), true);
 
     // Insert join filter min/max stats into the duckdb table filters
-    std::cout << "Inserting join filter stats into duckdb filters" << std::endl;
     this->filter_exprs = join_filter_col_stats.insert_filters(
         std::move(this->filter_exprs), this->selected_columns);
 

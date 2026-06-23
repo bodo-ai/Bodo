@@ -229,9 +229,11 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         std::shared_ptr<arrow::Schema> _arrow_schema, PyObject *_catalog,
         const std::string _table_id, PyObject *_iceberg_filter,
         PyObject *_iceberg_schema, int64_t _snapshot_id,
-        std::optional<std::vector<int>> _selected_fields_opt)
+        std::optional<std::vector<int>> _selected_fields_opt,
+        std::optional<int64_t> _limit_opt)
         : BodoScanFunctionData(BodoScanFunctionType::ICEBERG_SCAN),
           selected_fields_opt(std::move(_selected_fields_opt)),
+          limit_opt(std::move(_limit_opt)),
           arrow_schema(std::move(_arrow_schema)),
           catalog(_catalog),
           iceberg_filter(_iceberg_filter),

@@ -19,7 +19,6 @@ import bodosql
 from bodo.pandas.iceberg_utils import (
     JoinFilterInfo,
     build_iceberg_read_plan,
-    get_projection_limit_plan,
 )
 from bodo.pandas.plan import (
     AggregateExpression,
@@ -2513,7 +2512,7 @@ def generate_iceberg_read(ctx, read_info: IcebergReadInfo):
     uri = file_path.toUri()
     path_str = uri.getRawPath()
 
-    plan, empty_df, arrow_schema = build_iceberg_read_plan(
+    plan, _, _ = build_iceberg_read_plan(
         # path_str has the schema in it so it's not needed in table id
         # TODO: update when supporting other catalog types
         full_table_path[-1],
@@ -2522,13 +2521,6 @@ def generate_iceberg_read(ctx, read_info: IcebergReadInfo):
         join_filter_info=read_info.join_filter_info,
         selected_fields=read_fields,
         limit=read_info.limit,
-    )
-    plan = get_projection_limit_plan(
-        plan,
-        arrow_schema,
-        empty_df,
-        read_fields,
-        read_info.limit,
     )
 
     # Insert Runtime Join Filters on top of the read if needed

@@ -267,7 +267,6 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
                 getOpId(), -1, JOIN_MAX_PARTITION_DEPTH,
                 /*is_na_equal*/ true, is_mark_join);
         }
-
         this->initOutputSchema(build_table_schema_reordered,
                                probe_table_schema_reordered,
                                logical_join.GetColumnBindings().size(),

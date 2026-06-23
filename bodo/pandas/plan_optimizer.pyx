@@ -1196,7 +1196,9 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
         if limit is not None:
             c_limit = <int64_t>limit
 
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema, table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id, table_len_estimate, c_selected_columns, c_limit, c_join_info)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema,
+            table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id,
+            table_len_estimate, c_selected_columns, c_limit, c_join_info)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
