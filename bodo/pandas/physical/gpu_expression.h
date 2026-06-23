@@ -1106,14 +1106,38 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     PhysicalGPUArrowExpressionMetrics metrics;
 
     void extract_string_arg_from_python() {
-        const char *c_str = get_py_single_arg_as_cstr(
-            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str());
-
         if (scalar_func_data.arrow_func_name == "match_substring_regex" ||
             scalar_func_data.arrow_func_name == "match_substring_regex_first") {
-            regex_prog =
-                cudf::strings::regex_program::create(std::string(c_str));
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            size_t num_args = PyTuple_Size(scalar_func_data.args);
+            const char *c_str;
+            bool ignore_case = false;
+            std::string sstr;
+            if (num_args == 1) {
+                // Only string was passed
+                c_str = get_py_single_arg_as_cstr(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str());
+                sstr = std::string(c_str);
+            } else {
+                // string and ignore_case passed
+                std::tie(c_str, ignore_case) = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_cstr, get_py_object_as_bool);
+                sstr = std::string(c_str);
+                if (ignore_case) {
+                    sstr = "(?i)" + sstr;
+                }
+            }
+
+            regex_prog = cudf::strings::regex_program::create(sstr);
         } else {
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+
             str_scalar_in =
                 std::make_shared<cudf::string_scalar>(std::string(c_str), true);
         }
