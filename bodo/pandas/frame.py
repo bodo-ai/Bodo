@@ -603,8 +603,34 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             bodo.io.iceberg.ICEBERG_WRITE_PARQUET_CHUNK_SIZE,
         )
         compression = properties.get("write.parquet.compression-codec", "snappy")
-        # TODO: support Theta sketches
 
+        # --- Theta sketch setup ---
+        from bodo.io.iceberg.theta_utils import (
+            fetch_puffin_metadata,
+            get_default_theta_sketch_columns_py,
+            get_old_statistics_file_path,
+            get_supported_theta_sketch_columns_py,
+            merge_and_write_puffin,
+            table_columns_enabled_theta_sketches,
+            table_columns_have_theta_sketches,
+        )
+
+        use_theta = bodo.enable_theta_sketches
+        theta_columns_bitmask = None
+        if use_theta:
+            use_theta = False
+            if append:
+                existing_cols = table_columns_have_theta_sketches(txn.table_metadata)
+                possible_cols = get_supported_theta_sketch_columns_py(output_pa_schema)
+                theta_cols = existing_cols & possible_cols
+            else:
+                theta_cols = get_default_theta_sketch_columns_py(output_pa_schema)
+
+            enabled_cols = table_columns_enabled_theta_sketches(txn)
+            theta_cols = pd.array(theta_cols, dtype="boolean") & enabled_cols
+            if theta_cols.any():
+                theta_columns_bitmask = theta_cols.tolist()
+                use_theta = True
         write_plan = LogicalIcebergWrite(
             _empty_like(self),
             self._plan,
@@ -617,8 +643,24 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             iceberg_schema_str,
             output_pa_schema,
             fs,
+            theta_columns_bitmask,
         )
         all_iceberg_files_infos = execute_plan(write_plan)
+
+        # Extract serialized theta sketch bytes before flattening.
+        # Each rank's FinalizeSink compacts its sketches and appends
+        # serialized bytes as the last element of its info list.
+        serialized_sketches_list = []
+        if use_theta and all_iceberg_files_infos:
+            for rank_info in all_iceberg_files_infos:
+                if rank_info and isinstance(rank_info[-1], bytes):
+                    serialized_sketches_list.append(rank_info.pop())
+                else:
+                    serialized_sketches_list.append(b"")
+            for i, rank_info in enumerate(all_iceberg_files_infos):
+                if i > 0 and rank_info and isinstance(rank_info[-1], bytes):
+                    rank_info.pop()
+
         # Flatten the list of lists
         all_iceberg_files_infos = (
             [item for sub in all_iceberg_files_infos for item in sub]
@@ -645,6 +687,35 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         )
         if not success:
             raise ValueError("Iceberg write failed.")
+
+        # --- Theta sketch post-write: puffin write, commit ---
+        if use_theta and serialized_sketches_list:
+            # Fetch puffin metadata from the committed transaction
+            snapshot_id, sequence_number, puffin_loc = fetch_puffin_metadata(txn)
+
+            # Get old puffin file path for append mode
+            old_puffin_path = ""
+            if append:
+                old_puffin_path = get_old_statistics_file_path(txn)
+
+            # Merge serialized sketches (non-MPI) and write puffin file.
+            serialized_list_py = serialized_sketches_list
+            stat_file = merge_and_write_puffin(
+                serialized_list_py,
+                puffin_loc,
+                bucket_region,
+                snapshot_id,
+                sequence_number,
+                output_pa_schema,
+                fs,
+                old_puffin_path,
+            )
+
+            if stat_file is not None:
+                # Commit the statistics file to the table
+                table = catalog.load_table(table_identifier).refresh()
+                with table.update_statistics() as update:
+                    update.set_statistics(stat_file)
 
     @check_args_fallback(unsupported="none")
     def to_s3_vectors(

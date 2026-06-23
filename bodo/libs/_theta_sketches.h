@@ -1,3 +1,5 @@
+#pragma once
+
 #include <arrow/array.h>
 #include <arrow/table.h>
 #include <theta_sketch.hpp>
