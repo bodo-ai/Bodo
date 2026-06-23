@@ -326,9 +326,9 @@ cdef extern from "duckdb/planner/operator/logical_copy_to_file.hpp" namespace "d
 cdef extern from "_plan.h" nogil:
     cdef cppclass JoinFilterInfo:
         vector[int] join_ids
-        vector[vector[int]] equality_columns
+        vector[vector[int64_t]] equality_columns
         vector[vector[c_bool]] all_equality_keys_ready
-        vector[vector[int]] orig_build_keys
+        vector[vector[int64_t]] orig_build_key_cols
 
     cdef cppclass CLogicalJoinFilter" bodo::LogicalJoinFilter"(CLogicalOperator):
         pass
@@ -1141,9 +1141,9 @@ cdef JoinFilterInfo convert_join_filter_info(
     cdef int join_id
     cdef list cols
     cdef list ready
-    cdef int c
+    cdef int64_t c
     cdef c_bool b
-    cdef vector[int] col_vec
+    cdef vector[int64_t] col_vec
     cdef vector[c_bool] bool_vec
 
     for join_id in py_info.filter_ids:
@@ -1159,7 +1159,7 @@ cdef JoinFilterInfo convert_join_filter_info(
         col_vec.clear()
         for c in cols:
             col_vec.push_back(c)
-        info.orig_build_keys.push_back(col_vec)
+        info.orig_build_key_cols.push_back(col_vec)
 
     for ready in py_info.equality_is_first_locations:
         bool_vec.clear()
@@ -1188,7 +1188,6 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
 
         cdef optional[JoinFilterInfo] c_join_info
         cdef optional[int64_t] c_limit
-        cdef vector[int] col_vec
         cdef optional[vector[int]] c_selected_columns
         cdef vector[int] selected_vec
 

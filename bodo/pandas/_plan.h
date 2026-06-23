@@ -97,9 +97,9 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
 
 struct JoinFilterInfo {
     std::vector<int> join_ids;
-    std::vector<std::vector<int>> equality_columns;
+    std::vector<std::vector<int64_t>> equality_columns;
     std::vector<std::vector<bool>> all_equality_keys_ready;
-    std::vector<std::vector<int>> orig_build_keys;
+    std::vector<std::vector<int64_t>> orig_build_key_cols;
 };
 
 /**

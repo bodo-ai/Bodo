@@ -1628,6 +1628,23 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
             arrow_schema, pyiceberg_catalog, table_name, iceberg_filter,
             iceberg_schema, snapshot_id, selected_columns_opt, limit_opt);
 
+    // Create Join filter state map if converting from calcite plan
+    if (join_info_opt.has_value()) {
+        BodoScanFunctionData *scan_function_data =
+            dynamic_cast<BodoScanFunctionData *>(bind_data1.get());
+        auto rtjf_state_map = JoinFilterProgramState();
+        auto join_info = join_info_opt.value();
+
+        for (auto join_id : join_info.join_ids) {
+            rtjf_state_map[join_id] =
+                JoinColumnInfo(join_info.equality_columns[join_id],
+                               join_info.all_equality_keys_ready[join_id],
+                               join_info.orig_build_key_cols[join_id]);
+        }
+
+        scan_function_data->rtjf_state_map = rtjf_state_map;
+    }
+
     duckdb::virtual_column_map_t virtual_columns;
 
     duckdb::unique_ptr<duckdb::LogicalGet> out_get =

@@ -1844,12 +1844,12 @@ def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
     new_filter_ids = []
     new_equality_filter_columns = []
     new_equality_is_first_locations = []
-    new_orig_build_key_locs = []
+    new_orig_build_keys = []
     for fid, eq_cols, is_first_cols in sorted_filter_data:
         if fid not in ctx.join_filter_info:
             raise ValueError(f"Join filter ID {fid} not found in join filter info")
 
-        orig_key_locs, orig_build_key_locs = ctx.join_filter_info[fid]
+        orig_key_locs, orig_build_keys = ctx.join_filter_info[fid]
         filter_cols = [-1] * len(eq_cols)
         is_first = [False] * len(is_first_cols)
 
@@ -1860,12 +1860,12 @@ def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
         new_filter_ids.append(fid)
         new_equality_filter_columns.append(filter_cols)
         new_equality_is_first_locations.append(is_first)
-        new_orig_build_key_locs.append(list(orig_build_key_locs))
+        new_orig_build_keys.append(list(orig_build_keys))
 
     return JoinFilterInfo(
         filter_ids=new_filter_ids,
         equality_filter_columns=new_equality_filter_columns,
-        orig_build_key_cols=new_orig_build_key_locs,
+        orig_build_key_cols=new_orig_build_keys,
         equality_is_first_locations=new_equality_is_first_locations,
     )
 
