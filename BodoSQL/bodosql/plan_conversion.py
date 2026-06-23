@@ -1179,7 +1179,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (),
             )
 
-        if func_name == "RADIANS" and len(op_exprs) == 1:
+        if func_name in ("RADIANS", "DEGREES") and len(op_exprs) == 1:
             src = op_exprs[0]
             # Return float32 for float32 input and float64 for float64 and decimal input
             src_dtype = src.empty_data.dtypes.iloc[0]
@@ -1189,7 +1189,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 else pa.float64()
             )
             dummy_empty_data = pd.Series(dtype=out_dtype)
-            ceof_expr = ConstantExpression(dummy_empty_data, input_plan, np.pi / 180.0)
+            ceof_expr = ConstantExpression(
+                dummy_empty_data,
+                input_plan,
+                (np.pi / 180.0) if func_name == "RADIANS" else (180.0 / np.pi),
+            )
             return ArithOpExpression(
                 dummy_empty_data,
                 src,
