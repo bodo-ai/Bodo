@@ -336,9 +336,9 @@ def read_iceberg(
     )
 
     if selected_fields is not None:
-        col_idxs = {
+        col_idxs = [
             arrow_schema.get_field_index(field_name) for field_name in selected_fields
-        }
+        ]
         empty_df = empty_df[list(selected_fields)]
     else:
         # Adds logical projection layer to enable rename.

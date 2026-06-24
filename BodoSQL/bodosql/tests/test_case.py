@@ -552,7 +552,7 @@ def test_null_array_to_timezone_aware(memory_leak_check):
     )
 
 
-# TODO: Mark as bodosql_cpp once REPLACE is supported in the C++ backend
+@pytest.mark.bodosql_cpp
 def test_case_proper_character_escape(memory_leak_check):
     """Tests that the case statement properly handles escaping characters"""
 
@@ -586,7 +586,7 @@ def test_case_proper_character_escape(memory_leak_check):
     )
 
 
-# TODO: Mark as bodosql_cpp once REGEXP_SUBSTR is supported in the C++ backend
+@pytest.mark.bodosql_cpp
 def test_case_proper_character_escape_regex(memory_leak_check):
     """Tests that the case statement properly handles escaping regex characters if needed"""
 
