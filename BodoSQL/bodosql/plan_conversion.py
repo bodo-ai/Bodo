@@ -1920,6 +1920,19 @@ def compare_types(obj_type, expected_type):
     if isinstance(obj_type, type) and isinstance(expected_type, type):
         if issubclass(obj_type, expected_type):
             return True
+
+    if isinstance(obj_type, pa.DataType) and isinstance(expected_type, pa.DataType):
+        if obj_type.equals(expected_type):
+            return True
+    # Convert pyarrow datatype objects to pandas.
+    # This helps with compatibility with, e.g., pd.api.types.is_integer_dtype and the .numpy_dtype accessor below.
+    if isinstance(obj_type, pa.DataType):
+        # Note that wrapping pyarrow types in pd.ArrowDtype seems to behave better than pa.DataType.to_pandas_dtype()
+        # For example, pa.string().to_pandas_dtype() just gives np.object_
+        obj_type = pd.ArrowDtype(obj_type)
+    if isinstance(expected_type, pa.DataType):
+        expected_type = pd.ArrowDtype(expected_type)
+
     if expected_type is int:
         return pd.api.types.is_integer_dtype(obj_type)
     if expected_type is float:
@@ -1931,16 +1944,6 @@ def compare_types(obj_type, expected_type):
 
     if pd.api.types.is_dtype_equal(obj_type, expected_type):
         return True
-
-    if isinstance(obj_type, pa.DataType) and isinstance(expected_type, pa.DataType):
-        if obj_type.equals(expected_type):
-            return True
-    if isinstance(obj_type, pa.DataType):
-        # Could also try pd.ArrowDtype(obj_type) here, in case ArrowDtype.numpy_dtype() gives a better result
-        # For example, pa.string().to_pandas_dtype() just gives np.object_
-        obj_type = obj_type.to_pandas_dtype()
-    if isinstance(expected_type, pa.DataType):
-        expected_type = expected_type.to_pandas_dtype()
 
     # Works for most pd.api.types.ExtensionDtypes
     # This can convert the nullable Pandas dtypes into standard numpy dtypes for easier comparison
