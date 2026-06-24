@@ -2198,26 +2198,24 @@ def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
         if fid not in ctx.join_filter_info:
             raise ValueError(f"Join filter ID {fid} not found in join filter info")
 
-        orig_key_locs, orig_build_keys = ctx.join_filter_info[fid]
-        if len(orig_build_keys) != len(eq_cols):
+        orig_key_locs, java_build_keys = ctx.join_filter_info[fid]
+        if len(java_build_keys) != len(eq_cols):
             raise ValueError(
-                f"Join filter ID {fid} has {len(orig_build_keys)} original build keys but {len(eq_cols)} equality filter columns"
+                f"Join filter ID {fid} has {len(java_build_keys)} original build keys but {len(eq_cols)} equality filter columns"
             )
 
         filter_cols = [-1] * len(eq_cols)
         is_first = [False] * len(is_first_cols)
-        build_cols = [-1] * len(eq_cols)
 
         for loc_ind, key in enumerate(orig_key_locs):
             filter_cols[key] = eq_cols[loc_ind]
             is_first[key] = is_first_cols[loc_ind]
-            build_cols[key] = orig_build_keys[loc_ind]
 
         # orig_build_key_cols for JoinFilterInfo requires a list of indexes
         # corresponding to the order of the build keys appear in the
         # build table.
-        sorted_build_keys = sorted(set(orig_build_keys))
-        build_cols_idxs = [sorted_build_keys.index(k) for k in build_cols]
+        sorted_build_keys = sorted(set(java_build_keys))
+        build_cols_idxs = [sorted_build_keys.index(k) for k in java_build_keys]
 
         new_filter_ids.append(fid)
         new_equality_filter_columns.append(filter_cols)
