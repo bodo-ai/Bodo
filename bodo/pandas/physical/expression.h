@@ -1549,15 +1549,6 @@ class PhysicalArrowExpression : public PhysicalExpression {
             // year_month_day, which returns a struct. To match the output dtype
             // of Pandas, we Cast to Date32 instead.
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
-        } else if (scalar_func_data.arrow_func_name == "bit_wise_and" ||
-                   scalar_func_data.arrow_func_name == "bit_wise_or" ||
-                   scalar_func_data.arrow_func_name == "bit_wise_xor") {
-            auto [y] = get_py_args_as_types(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                get_py_object_as_uint64);
-            arrow::Datum y_datum(std::make_shared<arrow::UInt64Scalar>(y));
-            result = do_arrow_compute_binary(res, y_datum,
-                                             scalar_func_data.arrow_func_name);
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
                    scalar_func_data.arrow_func_name ==
