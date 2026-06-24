@@ -591,7 +591,7 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
         arrow::compute::Cast(left_res, arrow_ret_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_cast: Error in Arrow compute: " +
+            "do_arrow_compute_cast: Error in Arrow compute: " +
             cmp_res.status().message());
     }
 
