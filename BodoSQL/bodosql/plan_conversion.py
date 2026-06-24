@@ -1179,6 +1179,27 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (),
             )
 
+        if func_name == "ATAN2" and len(op_exprs) == 2:
+            src1 = op_exprs[0]
+            src2 = op_exprs[1]
+            src_dtype = src1.empty_data.dtypes.iloc[0]
+            src2_dtype = src2.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if (
+                    src_dtype.pyarrow_dtype == pa.float32()
+                    and src2_dtype.pyarrow_dtype == pa.float32()
+                )
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src1, src2],
+                "atan2",
+                (),
+            )
+
         if func_name in ("RADIANS", "DEGREES") and len(op_exprs) == 1:
             src = op_exprs[0]
             # Return float32 for float32 input and float64 for float64 and decimal input
