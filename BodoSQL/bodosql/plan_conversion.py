@@ -1850,6 +1850,11 @@ def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
             raise ValueError(f"Join filter ID {fid} not found in join filter info")
 
         orig_key_locs, orig_build_keys = ctx.join_filter_info[fid]
+        if len(orig_build_keys) != len(eq_cols):
+            raise ValueError(
+                f"Join filter ID {fid} has {len(orig_build_keys)} original build keys but {len(eq_cols)} equality filter columns"
+            )
+
         filter_cols = [-1] * len(eq_cols)
         is_first = [False] * len(is_first_cols)
 

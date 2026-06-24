@@ -17,6 +17,7 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
+#include "optimizer/runtime_join_filter.h"
 
 namespace bodo {
 
@@ -94,13 +95,6 @@ class LogicalJoinFilter : public duckdb::LogicalOperator {
 };
 
 }  // namespace bodo
-
-struct JoinFilterInfo {
-    std::vector<int> join_ids;
-    std::vector<std::vector<int64_t>> equality_columns;
-    std::vector<std::vector<bool>> all_equality_keys_ready;
-    std::vector<std::vector<int64_t>> orig_build_key_cols;
-};
 
 /**
  * @brief Optimize a DuckDB logical plan by applying the DuckDB optimizer.
@@ -628,7 +622,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
     std::optional<std::vector<int>> selected_columns_opt,
     std::optional<int64_t> limit_opt,
-    std::optional<JoinFilterInfo> join_info_opt);
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt);
 
 /**
  * @brief Returns a statically created DuckDB database.

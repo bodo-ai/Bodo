@@ -8,6 +8,7 @@ from libcpp.utility cimport move, pair
 from libcpp.string cimport string as c_string
 from libcpp.vector cimport vector
 from libcpp.optional cimport optional
+from libcpp.unordered_map cimport unordered_map
 from libcpp cimport bool as c_bool
 import operator
 import datetime
@@ -323,13 +324,15 @@ cdef extern from "duckdb/planner/operator/logical_copy_to_file.hpp" namespace "d
     cdef cppclass CLogicalCopyToFile" duckdb::LogicalCopyToFile"(CLogicalOperator):
         pass
 
-cdef extern from "_plan.h" nogil:
-    cdef cppclass JoinFilterInfo:
-        vector[int] join_ids
-        vector[vector[int64_t]] equality_columns
-        vector[vector[c_bool]] all_equality_keys_ready
-        vector[vector[int64_t]] orig_build_key_cols
+cdef extern from "optimizer/runtime_join_filter.h" nogil:
+    cdef cppclass JoinColumnInfo:
+        vector[int64_t] filter_columns
+        vector[c_bool] is_first_locations
+        vector[int64_t] orig_build_key_cols
 
+    ctypedef unordered_map[int, JoinColumnInfo] JoinFilterProgramState
+
+cdef extern from "_plan.h" nogil:
     cdef cppclass CLogicalJoinFilter" bodo::LogicalJoinFilter"(CLogicalOperator):
         pass
 
@@ -337,7 +340,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, c_bool has_partitioning) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
-    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate, optional[vector[int]] selected_columns_opt, optional[int64_t] limit_opt, optional[JoinFilterInfo] join_info_opt) except +
+    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate, optional[vector[int]] selected_columns_opt, optional[int64_t] limit_opt, optional[JoinFilterProgramState] join_info_opt) except +
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id, c_bool force_broadcast) except +
@@ -1134,40 +1137,33 @@ cdef class LogicalGetPandasReadParallel(LogicalOperator):
         return self.nrows
 
 
-cdef JoinFilterInfo convert_join_filter_info(
-    object py_info
-):
-    cdef JoinFilterInfo info
+cdef JoinFilterProgramState convert_join_filter_info(object py_info):
+    """ Convert a Python JoinFilterInfo object to a C++ JoinFilterProgramState object.
+    """
+    cdef JoinFilterProgramState state
+    cdef JoinColumnInfo col_info
     cdef int join_id
-    cdef list cols
-    cdef list ready
+    cdef Py_ssize_t i
     cdef int64_t c
     cdef c_bool b
-    cdef vector[int64_t] col_vec
-    cdef vector[c_bool] bool_vec
 
-    for join_id in py_info.filter_ids:
-        info.join_ids.push_back(join_id)
+    for i, join_id in enumerate(py_info.filter_ids):
+        col_info.filter_columns.clear()
+        col_info.is_first_locations.clear()
+        col_info.orig_build_key_cols.clear()
 
-    for cols in py_info.equality_filter_columns:
-        col_vec.clear()
-        for c in cols:
-            col_vec.push_back(c)
-        info.equality_columns.push_back(col_vec)
+        for c in py_info.equality_filter_columns[i]:
+            col_info.filter_columns.push_back(c)
 
-    for cols in py_info.orig_build_key_cols:
-        col_vec.clear()
-        for c in cols:
-            col_vec.push_back(c)
-        info.orig_build_key_cols.push_back(col_vec)
+        for b in py_info.equality_is_first_locations[i]:
+            col_info.is_first_locations.push_back(b)
 
-    for ready in py_info.equality_is_first_locations:
-        bool_vec.clear()
-        for b in ready:
-            bool_vec.push_back(b)
-        info.all_equality_keys_ready.push_back(bool_vec)
+        for c in py_info.orig_build_key_cols[i]:
+            col_info.orig_build_key_cols.push_back(c)
 
-    return info
+        state[join_id] = col_info
+
+    return state
 
 
 cdef class LogicalGetIcebergRead(LogicalOperator):
@@ -1186,13 +1182,13 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
         self.out_schema = out_schema
         self.table_identifier = table_identifier
 
-        cdef optional[JoinFilterInfo] c_join_info
+        cdef optional[JoinFilterProgramState] c_rtjf_program_state
         cdef optional[int64_t] c_limit
         cdef optional[vector[int]] c_selected_columns
         cdef vector[int] selected_vec
 
         if join_filter_info is not None:
-            c_join_info = convert_join_filter_info(join_filter_info)
+            c_rtjf_program_state = convert_join_filter_info(join_filter_info)
 
         if selected_columns is not None:
             for c in selected_columns:
@@ -1204,7 +1200,7 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
 
         cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema,
             table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id,
-            table_len_estimate, c_selected_columns, c_limit, c_join_info)
+            table_len_estimate, c_selected_columns, c_limit, c_rtjf_program_state)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):

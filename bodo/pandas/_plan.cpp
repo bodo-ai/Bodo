@@ -44,7 +44,6 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "duckdb/planner/operator/logical_top_n.hpp"
-#include "optimizer/runtime_join_filter.h"
 
 #include "../libs/gpu_utils.h"
 
@@ -1601,7 +1600,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
     std::optional<std::vector<int>> selected_columns_opt,
     std::optional<int64_t> limit_opt,
-    std::optional<JoinFilterInfo> join_info_opt) {
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
@@ -1628,22 +1627,12 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
             arrow_schema, pyiceberg_catalog, table_name, iceberg_filter,
             iceberg_schema, snapshot_id, selected_columns_opt, limit_opt);
 
-    // Create Join filter state map if converting from calcite plan
-    if (join_info_opt.has_value()) {
+    // Set the runtime join filter state map if provided by Calcite planner
+    if (rtjf_state_map_opt.has_value()) {
         BodoScanFunctionData *scan_function_data =
             dynamic_cast<BodoScanFunctionData *>(bind_data1.get());
-        auto rtjf_state_map = JoinFilterProgramState();
-        auto join_info = join_info_opt.value();
 
-        for (int i = 0; i < join_info.join_ids.size(); i++) {
-            int join_id = join_info.join_ids[i];
-            rtjf_state_map[join_id] =
-                JoinColumnInfo(join_info.equality_columns[i],
-                               join_info.all_equality_keys_ready[i],
-                               join_info.orig_build_key_cols[i]);
-        }
-
-        scan_function_data->rtjf_state_map = rtjf_state_map;
+        scan_function_data->rtjf_state_map = rtjf_state_map_opt.value();
     }
 
     duckdb::virtual_column_map_t virtual_columns;
