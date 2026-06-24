@@ -1096,6 +1096,14 @@ arrow::Datum ConvertToDatum(void *raw_ptr,
     }
 }
 
+arrow::Type::type GetArrowTypeOfRes(std::shared_ptr<ExprResult> res) {
+    return GetArrowTypeOfRes(ConvertExprResultToDatum(res, "res"));
+}
+
+arrow::Type::type GetArrowTypeOfRes(arrow::Datum res) {
+    return res.type()->id();
+}
+
 std::optional<JoinFilterColStats::col_min_max_t>
 JoinFilterColStats::col_stats_collector::collect_min_max() const {
     return std::visit(

@@ -453,6 +453,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-2-no_flags-no_group",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -493,7 +494,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="medium_pattern-no_pos-no_occur-no_flags-no_group",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             (
@@ -521,6 +522,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="medium_pattern-1-2-no_flags-2",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -544,7 +546,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="CASE-medium_pattern-31-1-extract-12",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
     ],
 )
