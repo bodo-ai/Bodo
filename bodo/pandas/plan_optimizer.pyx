@@ -365,7 +365,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size) except +
     cdef unique_ptr[CLogicalCopyToFile] make_iceberg_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string table_loc,
         c_string bucket_region, int64_t max_pq_chunksize, c_string compression, object partition_tuples, object sort_tuples, c_string iceberg_schema_str,
-        object output_pa_schema, object fs) except +
+        object output_pa_schema, object fs, object theta_columns_bitmask) except +
     cdef unique_ptr[CLogicalCopyToFile] make_s3_vectors_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string vector_bucket_name,
         c_string index_name, object region) except +
     cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
@@ -1164,6 +1164,7 @@ cdef class LogicalIcebergWrite(LogicalOperator):
     """
     Wrapper around DuckDB's LogicalCopyToFile for writing Iceberg datasets.
     """
+    cdef readonly object theta_columns_bitmask
 
     def __cinit__(self, object out_schema, LogicalOperator source,
             str table_loc,
@@ -1174,12 +1175,14 @@ cdef class LogicalIcebergWrite(LogicalOperator):
             object sort_tuples,
             str iceberg_schema_str,
             object output_pa_schema,
-            object fs):
+            object fs,
+            object theta_columns_bitmask=None):
         self.out_schema = out_schema
         self.sources = [source]
+        self.theta_columns_bitmask = theta_columns_bitmask
 
         cdef unique_ptr[CLogicalCopyToFile] c_logical_copy_to_file = make_iceberg_write_node(source.c_logical_operator, out_schema, table_loc.encode(),
-                bucket_region.encode(), max_pq_chunksize, compression.encode(), partition_tuples, sort_tuples, iceberg_schema_str.encode(), output_pa_schema, fs)
+                bucket_region.encode(), max_pq_chunksize, compression.encode(), partition_tuples, sort_tuples, iceberg_schema_str.encode(), output_pa_schema, fs, theta_columns_bitmask)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_copy_to_file.release())
 
     def __str__(self):

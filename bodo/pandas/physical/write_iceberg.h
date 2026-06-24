@@ -5,10 +5,16 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/python/api.h>
 #include "../../io/iceberg_parquet_write.h"
+#include "../../libs/_theta_sketches.h"
 #include "../../libs/_utils.h"
 #include "../../libs/streaming/_shuffle.h"
 #include "_bodo_write_function.h"
 #include "physical/operator.h"
+
+// Forward declaration for theta sketch compact+serialize function (defined in
+// theta_utils.cpp, extern "C"). Used in FinalizeSink to compact sketches
+// before passing to Python, avoiding the MPI inside merge_parallel_sketches().
+extern "C" PyObject* bodo_theta_utils_compact_serialize(uintptr_t ptr);
 
 struct PhysicalWriteIcebergMetrics {
     using stat_t = MetricBase::StatValue;
@@ -95,6 +101,20 @@ class PhysicalWriteIceberg : public PhysicalSink {
         Py_INCREF(partition_tuples);
         Py_INCREF(sort_tuples);
 
+        // Initialize theta sketches if bitmask is provided
+        PyObject* theta_bitmask = bind_data.theta_columns_bitmask;
+        if (theta_bitmask != nullptr && PyList_Check(theta_bitmask) &&
+            PyList_Size(theta_bitmask) > 0) {
+            Py_ssize_t n_cols = PyList_Size(theta_bitmask);
+            std::vector<bool> theta_cols(n_cols);
+            for (Py_ssize_t i = 0; i < n_cols; i++) {
+                PyObject* item = PyList_GetItem(theta_bitmask, i);
+                theta_cols[i] = (item == Py_True);
+            }
+            theta_sketches =
+                std::make_unique<UpdateSketchCollection>(theta_cols);
+        }
+
         // Initialize the buffer and dictionary builders
         for (auto& col : in_bodo_schema->column_types) {
             dict_builders.emplace_back(
@@ -107,6 +127,9 @@ class PhysicalWriteIceberg : public PhysicalSink {
     virtual ~PhysicalWriteIceberg() {
         Py_DECREF(partition_tuples);
         Py_DECREF(sort_tuples);
+        // theta_sketches is a unique_ptr, deleted automatically.
+        // Normally cleaned up in FinalizeSink; if not reached (error path),
+        // the unique_ptr destructor handles cleanup.
     };
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
@@ -142,7 +165,8 @@ class PhysicalWriteIceberg : public PhysicalSink {
                     table_loc.c_str(), data, in_schema->field_names(),
                     partition_tuples, sort_tuples, compression.c_str(), false,
                     bucket_region.c_str(), -1, iceberg_schema_str.c_str(),
-                    iceberg_files_info_py, iceberg_schema, fs, nullptr);
+                    iceberg_files_info_py, iceberg_schema, fs,
+                    theta_sketches.get());
                 this->metrics.n_files_written++;
             }
             // Reset the buffer for the next batch
@@ -160,10 +184,22 @@ class PhysicalWriteIceberg : public PhysicalSink {
     }
 
     void FinalizeSink() override {
-        // Gather iceberg_files_info from all ranks using MPI
-        // Equivalent to all_infos = comm.gather(iceberg_files_info_py)
-
         time_pt start_finalize_time = start_timer();
+
+        // Compact and serialize theta sketches to bytes before passing to
+        // Python. This avoids the MPI inside merge_parallel_sketches() which
+        // would crash in the df_lib path (workers have already finished).
+        if (theta_sketches != nullptr) {
+            PyObject* serialized = bodo_theta_utils_compact_serialize(
+                (uintptr_t)(theta_sketches.get()));
+            if (serialized) {
+                PyList_Append(iceberg_files_info_py, serialized);
+                Py_DECREF(serialized);
+            }
+            theta_sketches = nullptr;
+        }
+
+        // Gather iceberg_files_info from all ranks using MPI
         iceberg_files_info_py =
             gather_iceberg_files_info(iceberg_files_info_py);
         this->metrics.finalize_time = end_timer(start_finalize_time);
@@ -196,6 +232,8 @@ class PhysicalWriteIceberg : public PhysicalSink {
     const std::string iceberg_schema_str;
     const std::shared_ptr<arrow::Schema> iceberg_schema;
     std::shared_ptr<arrow::fs::FileSystem> fs;
+    // Theta sketch collection for NDV estimation.
+    std::unique_ptr<UpdateSketchCollection> theta_sketches;
 
     PyObject* iceberg_files_info_py = PyList_New(0);
 
