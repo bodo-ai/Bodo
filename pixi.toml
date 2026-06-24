@@ -244,8 +244,10 @@ xlsxwriter = "*"
 openpyxl = "*"
 cx_oracle = "*"
 pyzmq = "*"
+
 # Setting explicitly since Conda solve sets a newer version but PyIceberg installed from pip wants <15.0 (TODO: remove when unnecessary)
 rich = "<15.0"
+cachetools = ">=5.5,<7.0"
 
 [target.linux-64.dependencies]
 libutf8proc = "*"
