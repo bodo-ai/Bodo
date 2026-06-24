@@ -26,18 +26,6 @@ class JoinFilterInfo:
     equality_is_first_locations: list[list[bool]]
 
 
-def selected_fields_idxs_from_fields(
-    arrow_schema: pa.Schema, selected_fields: list[str]
-) -> list[int]:
-    """Return the indices of the selected fields in the given Arrow schema,
-    with duplicates removed."""
-    return list(
-        dict.fromkeys(
-            arrow_schema.get_field_index(field_name) for field_name in selected_fields
-        )
-    )
-
-
 def build_iceberg_read_plan(
     table_identifier: str,
     catalog_name: str | None = None,
@@ -105,7 +93,9 @@ def build_iceberg_read_plan(
     # None here implies all fields should be selected
     selected_idxs = None
     if selected_fields is not None:
-        selected_idxs = selected_fields_idxs_from_fields(arrow_schema, selected_fields)
+        selected_idxs = [
+            arrow_schema.get_field_index(field_name) for field_name in selected_fields
+        ]
         empty_df = empty_df[list(selected_fields)]
 
     plan = LogicalGetIcebergRead(

@@ -180,6 +180,10 @@ def get_iceberg_file_list_parallel(
         - Schema group identifier to schema mapping
     """
 
+    print("#" * 20)
+    print(filters)
+    print("#" * 20)
+
     ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
     if tracing.is_tracing():  # pragma: no cover
         ev_iceberg_fl.add_attribute("g_filters", filters)
