@@ -767,7 +767,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # Arrow's cast_timestamp only accepts int64 input, so convert other integer types to int64 first.
             # This likely won't work for uint64 where the input is greater than the max value of int64,
             # but the timestamp itself is backed by signed int64 anyway
-            # in_expr_dtype = in_expr.empty_data.dtypes[in_expr.empty_data.columns[0]]
             in_expr_dtype = get_expr_dtype(in_expr)
             if not compare_types(in_expr_dtype, "int64"):
                 int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
