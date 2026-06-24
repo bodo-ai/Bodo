@@ -8,6 +8,8 @@ import pytest
 
 from bodosql.tests.utils import check_query
 
+pytestmark = pytest.mark.bodosql_cpp
+
 
 def test_aliasing_numeric(bodosql_numeric_types, memory_leak_check):
     """test aliasing in queries"""
