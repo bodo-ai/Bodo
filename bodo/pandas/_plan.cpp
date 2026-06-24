@@ -1469,8 +1469,8 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
     std::string table_loc, std::string bucket_region, int64_t max_pq_chunksize,
     std::string compression, PyObject *partition_tuples, PyObject *sort_tuples,
-    std::string iceberg_schema_str, PyObject *output_pa_schema,
-    PyObject *pyfs) {
+    std::string iceberg_schema_str, PyObject *output_pa_schema, PyObject *pyfs,
+    PyObject *theta_columns_bitmask) {
     auto source_duck = to_duckdb(source);
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1494,7 +1494,7 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
         duckdb::make_uniq<IcebergWriteFunctionData>(
             arrow_schema, table_loc, bucket_region, max_pq_chunksize,
             compression, partition_tuples, sort_tuples, iceberg_schema_str,
-            iceberg_schema, fs);
+            iceberg_schema, fs, theta_columns_bitmask);
 
     duckdb::unique_ptr<duckdb::LogicalCopyToFile> copy_node =
         duckdb::make_uniq<duckdb::LogicalCopyToFile>(

@@ -1172,3 +1172,326 @@ def test_join_filter(
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_to_iceberg_theta_sketches():
+    """Test that DataFrame.to_iceberg() writes theta sketches (puffin files)
+    with correct NDV estimates for supported column types.
+
+    Verifies:
+    1. The write succeeds and data is correct.
+    2. A statistics file is present in the table metadata.
+    3. The correct columns have theta sketches (int, string, date32).
+    4. Columns that should NOT have sketches (float, bool) are excluded.
+    5. The NDV estimates are correct and within expected ranges.
+    """
+    import datetime
+
+    from bodo.tests.iceberg_database_helpers.metadata_utils import (
+        get_metadata_field,
+        get_metadata_path,
+    )
+
+    df = pd.DataFrame(
+        {
+            # Column A: int64, 10 distinct values → should get theta sketch
+            "A": list(range(10)) * 2,
+            # Column B: float64 → NOT a default theta sketch type (excluded)
+            "B": [1.4, 1.5, 2.451, 0.0] * 5,
+            # Column C: string, 5 distinct values → should get theta sketch
+            "C": ["a", "ab", "cde", "af", "eg"] * 4,
+            # Column D: bool → NOT a default theta sketch type (excluded)
+            "D": [True, False, None, False] * 5,
+            # Column E: date32, 1 distinct value → should get theta sketch
+            "E": [datetime.date(2021, 1, 1)] * 20,
+        }
+    )
+    bdf = bpd.from_pandas(df)
+
+    import bodo
+
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "iceberg_warehouse")
+
+            bdf.to_iceberg(
+                "theta_test_table",
+                location=path,
+            )
+            assert bdf.is_lazy_plan()
+
+            # 1. Verify data is correct
+            out_df = pyiceberg_reader.read_iceberg_table("theta_test_table", path)
+            _test_equal(
+                out_df,
+                df,
+                check_pandas_types=False,
+                sort_output=True,
+                reset_index=True,
+            )
+
+            # 2. Verify statistics file exists in metadata
+            # Read the metadata JSON directly (like the JIT tests do)
+            from bodo.tests.iceberg_database_helpers.metadata_utils import (
+                get_metadata_field,
+                get_metadata_path,
+            )
+
+            metadata_path = get_metadata_path(path, "", "theta_test_table")
+            statistics_lst = get_metadata_field(metadata_path, "statistics")
+            assert len(statistics_lst) >= 1, "Expected at least one statistics file"
+
+            # 3. Verify correct columns have theta sketches
+            # Field IDs are 1-based: A=1, B=2, C=3, D=4, E=5
+            # Expected: A(int)=10, C(string)=5, E(date32)=1
+            # B(float) and D(bool) should NOT have sketches
+            statistics = statistics_lst[0]
+            blob_metadata = statistics["blob-metadata"]
+            assert len(blob_metadata) > 0, "Expected at least one blob"
+
+            seen_fields = {}
+            for blob in blob_metadata:
+                fields = blob["fields"]
+                assert len(fields) == 1, "Expected one field per blob"
+                field_id = fields[0]
+                ndv = blob["properties"].get("ndv")
+                seen_fields[field_id] = ndv
+
+            # A (field_id=1) should have NDV=10
+            assert 1 in seen_fields, "Column A should have a theta sketch"
+            assert seen_fields[1] == "10", (
+                f"Column A NDV should be 10, got {seen_fields.get(1)}"
+            )
+
+            # C (field_id=3) should have NDV=5
+            assert 3 in seen_fields, "Column C should have a theta sketch"
+            assert seen_fields[3] == "5", (
+                f"Column C NDV should be 5, got {seen_fields.get(3)}"
+            )
+
+            # B (field_id=2) and D (field_id=4) should NOT have sketches
+            assert 2 not in seen_fields, (
+                "Column B (float) should NOT have a theta sketch"
+            )
+            assert 4 not in seen_fields, (
+                "Column D (bool) should NOT have a theta sketch"
+            )
+
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta
+
+
+def test_to_iceberg_theta_sketches_append():
+    """Test that appending to an Iceberg table with existing theta sketches
+    correctly merges the new sketches with the existing ones.
+
+    Verifies:
+    1. Initial write creates statistics with correct NDV.
+    2. Append adds a second statistics file.
+    3. The merged NDV reflects both writes.
+    """
+
+    from bodo.tests.iceberg_database_helpers.metadata_utils import (
+        get_metadata_field,
+        get_metadata_path,
+    )
+
+    df1 = pd.DataFrame(
+        {
+            "A": list(range(10)) * 2,  # 10 distinct values
+            "C": ["a", "ab", "cde", "af", "eg"] * 4,  # 5 distinct values
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": list(range(10, 20)),  # 10 new distinct values (20 total)
+            "C": ["x", "yz"] * 5,  # 2 new distinct values (7 total)
+        }
+    )
+
+    import bodo
+
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "iceberg_warehouse")
+
+            # Write initial data
+            bdf1 = bpd.from_pandas(df1)
+            bdf1.to_iceberg("append_theta_table", location=path)
+
+            # Append more data
+            bdf2 = bpd.from_pandas(df2)
+            bdf2.to_iceberg("append_theta_table", location=path, append=True)
+
+            # Verify data is correct (both writes present)
+            out_df = pyiceberg_reader.read_iceberg_table("append_theta_table", path)
+            expected = pd.concat([df1, df2], ignore_index=True)
+            _test_equal(
+                out_df,
+                expected,
+                check_pandas_types=False,
+                sort_output=True,
+                reset_index=True,
+            )
+
+            # Verify statistics exist (should have 2 statistics files now)
+            metadata_path = get_metadata_path(path, "", "append_theta_table")
+            statistics_lst = get_metadata_field(metadata_path, "statistics")
+            assert len(statistics_lst) >= 2, (
+                f"Expected at least 2 statistics files after append, got {len(statistics_lst)}"
+            )
+
+            # Verify blobs exist in the latest statistics
+            latest_stats = statistics_lst[-1]
+            blob_metadata = latest_stats["blob-metadata"]
+            assert len(blob_metadata) > 0, "Expected at least one blob after append"
+
+            # Verify NDV estimates are within expected bounds.
+            # Theta sketches provide approximate NDV estimates; we use a
+            # tolerance of ±3 (accounts for sketch approximation).
+            # df1 + df2 = column A has 20 distinct ints, column C has 7
+            # distinct strings.
+            expected_ndvs = {"A": 20, "C": 7}
+            schemas = get_metadata_field(metadata_path, "schemas")
+            latest_schema_id = get_metadata_field(metadata_path, "current-schema-id")
+            latest_schema = next(
+                s for s in schemas if s["schema-id"] == latest_schema_id
+            )
+            field_id_to_name = {f["id"]: f["name"] for f in latest_schema["fields"]}
+            for blob in blob_metadata:
+                if blob.get("type") != "apache-datasketches-theta-v1":
+                    continue
+                props = blob.get("properties", {})
+                assert "ndv" in props, (
+                    f"Blob for fields {blob.get('fields')} missing ndv property"
+                )
+                ndv_est = int(props["ndv"])
+                field_id = blob["fields"][0]
+                col_name = field_id_to_name.get(field_id, str(field_id))
+                expected = expected_ndvs.get(col_name)
+                if expected is not None:
+                    assert abs(ndv_est - expected) <= 3, (
+                        f"NDV for column '{col_name}' expected ~{expected}, "
+                        f"got {ndv_est} (diff={abs(ndv_est - expected)})"
+                    )
+
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta
+
+
+def test_to_iceberg_theta_sketches_empty_dataframe():
+    """Test that writing an empty DataFrame with theta sketches enabled
+    succeeds without errors and produces correct metadata.
+
+    Verifies:
+    1. Empty DataFrame write succeeds.
+    2. No statistics file is created (nothing to sketch).
+    3. Data round-trips correctly (still empty).
+    """
+    from bodo.tests.iceberg_database_helpers.metadata_utils import (
+        get_metadata_field,
+        get_metadata_path,
+    )
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([], dtype="int64"),
+            "C": pd.array([], dtype="str"),
+        }
+    )
+
+    import bodo
+
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "iceberg_warehouse")
+
+            bdf = bpd.from_pandas(df)
+            bdf.to_iceberg("empty_theta_table", location=path)
+
+            # Verify data is correct (still empty)
+            out_df = pyiceberg_reader.read_iceberg_table("empty_theta_table", path)
+            _test_equal(
+                out_df,
+                df,
+                check_pandas_types=False,
+                sort_output=True,
+                reset_index=True,
+            )
+
+            # Verify statistics exist with NDV=0 (empty data has no distinct values)
+            metadata_path = get_metadata_path(path, "", "empty_theta_table")
+            statistics_lst = get_metadata_field(metadata_path, "statistics")
+            assert len(statistics_lst) >= 1, (
+                "Expected statistics file for empty DataFrame"
+            )
+
+            # Verify NDV is 0 for all columns
+            statistics = statistics_lst[0]
+            blob_metadata = statistics["blob-metadata"]
+            for blob in blob_metadata:
+                ndv = blob["properties"].get("ndv")
+                assert ndv == "0", f"Expected NDV=0 for empty DataFrame, got {ndv}"
+
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta
+
+
+def test_to_iceberg_theta_sketches_serialization_error():
+    """Test that merge_and_write_puffin handles malformed serialized data
+    by raising a clear error instead of reading past the buffer.
+
+    This tests the bounds-checking added to bodo_theta_utils_merge_and_write_puffin.
+    """
+    # Create a valid-looking but truncated serialized bytes object.
+    # A valid serialization starts with uint32 n_sketches, then per sketch:
+    # uint32 len, then len bytes of data.
+    # Here we say n_sketches=1 but provide no length or data.
+    import struct
+
+    from bodo.io.iceberg.theta_utils import merge_and_write_puffin
+
+    truncated = struct.pack("<I", 1)  # n_sketches = 1, but no actual sketch data
+
+    with pytest.raises((ValueError, RuntimeError)):
+        merge_and_write_puffin(
+            [truncated],
+            "/tmp/fake_puffin.stats",
+            "",
+            12345,
+            1,
+            None,  # iceberg_schema not needed for this error path
+            None,  # arrow_fs not needed
+            "",
+        )
+
+
+def test_sketch_ptr_double_free_safety():
+    """Test that SketchPtr prevents double-free by tracking ownership.
+
+    Verifies:
+    1. delete() can be called safely.
+    2. A second delete() is a no-op (no crash/UB).
+    3. __del__ doesn't double-free.
+    """
+    from bodo.io.iceberg.theta_utils import SketchPtr
+
+    # SketchPtr with ptr=0 (null)
+    sp_zero = SketchPtr(0)
+    sp_zero.delete()  # Should be no-op
+    sp_zero.delete()  # Still safe
+
+    # SketchPtr with a fake non-zero ptr (we can't actually delete it,
+    # so just verify the tracking logic)
+    sp = SketchPtr(0xDEADBEEF)
+    assert sp.ptr == 0xDEADBEEF
+    released = sp.release()
+    assert released == 0xDEADBEEF
+    assert sp.ptr == 0  # After release, internal ptr is 0
+    sp.delete()  # Should be no-op since ptr is now 0

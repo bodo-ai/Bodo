@@ -611,7 +611,7 @@ PyObject *get_empty_statistics_file_metadata() {
  * @return std::unique_ptr<PuffinFile>
  */
 std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
-                                             std::string bucket_region) {
+                                             const char *bucket_region) {
     auto info = get_reader_file_system(puffin_loc, bucket_region, false);
     std::shared_ptr<arrow::fs::FileSystem> &fs = info.first;
     const std::string &updated_puffin_loc = info.second;
@@ -634,11 +634,80 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
 }
 
 /**
+ * @brief Write a Puffin file from an already-merged CompactSketchCollection.
+ * Handles append merge with existing puffin file, serialization, and disk
+ * write. Shared by write_puffin_file_py_entrypt (JIT path) and
+ * write_puffin_from_compact_sketches_py_entrypt (df_lib path).
+ */
+static PyObject *write_merged_sketches_to_puffin(
+    std::shared_ptr<CompactSketchCollection> merged_sketches,
+    const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
+    int64_t sequence_number, PyObject *iceberg_arrow_schema_py,
+    PyObject *pyarrow_fs, const char *existing_puffin_file_loc) {
+    try {
+        std::shared_ptr<arrow::Schema> iceberg_schema;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
+
+        std::string existing_puffin_path(existing_puffin_file_loc);
+        if (!existing_puffin_path.empty()) {
+            auto existing_puffin =
+                read_puffin_file(existing_puffin_path, bucket_region);
+            merged_sketches = CompactSketchCollection::merge_sketches(
+                {existing_puffin->to_theta_sketches(iceberg_schema),
+                 std::move(merged_sketches)});
+        }
+        std::string puffin_loc(puffin_file_loc);
+        int n_pes;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        auto puff = PuffinFile::from_theta_sketches(
+            merged_sketches, iceberg_schema, snapshot_id, sequence_number);
+        auto serialized_result = puff->serialize();
+        std::string &serialized = serialized_result.first;
+        int32_t footer_size = serialized_result.second;
+        std::string path_name;
+        std::string dirname = "";
+        std::string fname = "";
+        Bodo_Fs::FsEnum fs_option;
+        extract_fs_dir_path(puffin_file_loc, false, "", "", 0, n_pes,
+                            &fs_option, &dirname, &fname, &puffin_loc,
+                            &path_name);
+        std::shared_ptr<::arrow::io::OutputStream> out_stream;
+
+        if (arrow::py::import_pyarrow_wrappers()) {
+            throw std::runtime_error("Importing pyarrow_wrappers failed!");
+        }
+        std::shared_ptr<arrow::fs::FileSystem> arrow_fs;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_filesystem(pyarrow_fs),
+            "Error during Iceberg write: Failed to unwrap Arrow filesystem",
+            arrow_fs);
+
+        std::filesystem::path out_path(dirname);
+        out_path /= fname;
+        arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+            arrow_fs->OpenOutputStream(out_path.string());
+        CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", out_stream);
+
+        CHECK_ARROW(out_stream->Write(serialized.data(), serialized.size()),
+                    "Failed to write puffin data");
+        CHECK_ARROW(out_stream->Close(), "Failed to close puffin files");
+        return get_statistics_file_metadata(puff, puffin_loc, snapshot_id,
+                                            serialized.size(), footer_size);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * Entrypoint from Python to initialize a PuffinFile write.
  * @param puffin_file_loc: Where to write the puffin file.
  * @param bucket_region: AWS bucket region.
  * @param snapshot_id: the snapshot_id to use for the PuffinFile metadata.
- * @param snapshot_id: the sequence_number to use for the PuffinFile metadata.
+ * @param sequence_number: the sequence_number to use for the PuffinFile
+ * metadata.
  * @param sketches: the collection of theta sketches to write.
  * @param iceberg_arrow_schema_py: the schema of the table being written.
  *        This is needed to determine the field_id for each column.
@@ -648,75 +717,24 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
  * @return: A StatisticsFile object with the information to forward to the
  *          Iceberg connector.
  */
-PyObject *write_puffin_file_py_entrypt(
+__attribute__((visibility("default"))) PyObject *write_puffin_file_py_entrypt(
     const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
     int64_t sequence_number, UpdateSketchCollection *sketches,
     PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
     const char *existing_puffin_file_loc) {
     try {
-        std::shared_ptr<arrow::Schema> iceberg_schema;
-        CHECK_ARROW_AND_ASSIGN(
-            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
-            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
-
         // Gather the theta sketches onto rank 0
         std::shared_ptr<CompactSketchCollection> compact_sketches =
             sketches->compact_sketches();
         std::shared_ptr<CompactSketchCollection> merged_sketches =
             compact_sketches->merge_parallel_sketches();
-        std::string existing_puffin_path(existing_puffin_file_loc);
         int rank;
-        int n_pes;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         if (rank == 0) {
-            if (!existing_puffin_path.empty()) {
-                auto existing_puffin =
-                    read_puffin_file(existing_puffin_path, bucket_region);
-                merged_sketches = CompactSketchCollection::merge_sketches(
-                    {existing_puffin->to_theta_sketches(iceberg_schema),
-                     std::move(merged_sketches)});
-            }
-            std::string puffin_loc(puffin_file_loc);
-            auto puff = PuffinFile::from_theta_sketches(
-                merged_sketches, iceberg_schema, snapshot_id, sequence_number);
-            // TODO: Should we write directly to the output buffer instead?
-            auto serialized_result = puff->serialize();
-            std::string &serialized = serialized_result.first;
-            int32_t footer_size = serialized_result.second;
-            // TODO: Refactor this old code into simpler/logical APIs.
-            // This function does too much.
-            std::string path_name;
-            // Unused but we need to pass the directory.
-            std::string dirname = "";
-            std::string fname = "";
-            Bodo_Fs::FsEnum fs_option;
-            extract_fs_dir_path(puffin_file_loc, false, "", "", 0, n_pes,
-                                &fs_option, &dirname, &fname, &puffin_loc,
-                                &path_name);
-            std::shared_ptr<::arrow::io::OutputStream> out_stream;
-
-            if (arrow::py::import_pyarrow_wrappers()) {
-                throw std::runtime_error("Importing pyarrow_wrappers failed!");
-            }
-            std::shared_ptr<arrow::fs::FileSystem> arrow_fs;
-            CHECK_ARROW_AND_ASSIGN(
-                arrow::py::unwrap_filesystem(pyarrow_fs),
-                "Error during Iceberg write: Failed to unwrap Arrow filesystem",
-                arrow_fs);
-
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;  // append file name to output path
-            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
-                arrow_fs->OpenOutputStream(out_path.string());
-            CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open",
-                                   out_stream);
-
-            CHECK_ARROW(out_stream->Write(serialized.data(), serialized.size()),
-                        "Failed to write puffin data");
-            CHECK_ARROW(out_stream->Close(), "Failed to close puffin files");
-            return get_statistics_file_metadata(puff, puffin_loc, snapshot_id,
-                                                serialized.size(), footer_size);
+            return write_merged_sketches_to_puffin(
+                merged_sketches, puffin_file_loc, bucket_region, snapshot_id,
+                sequence_number, iceberg_arrow_schema_py, pyarrow_fs,
+                existing_puffin_file_loc);
         } else {
             return get_empty_statistics_file_metadata();
         }
@@ -724,6 +742,25 @@ PyObject *write_puffin_file_py_entrypt(
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
     }
+}
+
+/**
+ * @brief Write a Puffin file from an already-merged CompactSketchCollection.
+ * Unlike write_puffin_file_py_entrypt, this does NOT call
+ * merge_parallel_sketches() — the caller is responsible for merging.
+ * Used by the DataFrame library path where MPI merge must be done differently.
+ */
+__attribute__((visibility("default"))) PyObject *
+write_puffin_from_compact_sketches_py_entrypt(
+    const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
+    int64_t sequence_number,
+    std::shared_ptr<CompactSketchCollection> merged_sketches,
+    PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
+    const char *existing_puffin_file_loc) {
+    return write_merged_sketches_to_puffin(
+        merged_sketches, puffin_file_loc, bucket_region, snapshot_id,
+        sequence_number, iceberg_arrow_schema_py, pyarrow_fs,
+        existing_puffin_file_loc);
 }
 
 /**
@@ -751,7 +788,7 @@ array_info *read_puffin_file_ndvs_py_entrypt(
             std::string puffin_loc(puffin_file_loc);
             std::string bucket_region(bucket_region_info);
             std::unique_ptr<PuffinFile> puffin =
-                read_puffin_file(puffin_loc, bucket_region);
+                read_puffin_file(puffin_loc, bucket_region.c_str());
             result = puffin->to_theta_sketches(iceberg_schema);
         } else {
             std::vector<bool> ndv(iceberg_schema->num_fields(), false);
