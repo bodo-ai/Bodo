@@ -1079,17 +1079,44 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(left_expr, "left_expr", (int, float))
             ensure_type_of_expr(right_expr, "right_expr", (int, float))
 
-            # Round float inputs
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            left_expr_rounded = ArrowScalarFuncExpression(
-                int_empty_data, [left_expr], "round", ()
+            left_expr_is_int = pa.types.is_integer(
+                left_expr.empty_data.dtypes[
+                    left_expr.empty_data.columns[0]
+                ].pyarrow_dtype
             )
-            right_expr_rounded = ArrowScalarFuncExpression(
-                int_empty_data, [right_expr], "round", ()
+            right_expr_is_int = pa.types.is_integer(
+                right_expr.empty_data.dtypes[
+                    right_expr.empty_data.columns[0]
+                ].pyarrow_dtype
             )
 
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+            if not left_expr_is_int:
+                # Round float inputs.
+                # This is required because, according to the docs,
+                # Snowflake interprets floats in BOOLAND as integers
+                # by rounding. Thus, a float like 0.3 should be considered 0
+                # whereas a float like 0.7 would be non-zero.
+
+                left_expr_rounded = ArrowScalarFuncExpression(
+                    float_empty_data, [left_expr], "round", ()
+                )
+            else:
+                left_expr_rounded = left_expr
+
+            if not right_expr_is_int:
+                right_expr_rounded = ArrowScalarFuncExpression(
+                    float_empty_data, [right_expr], "round", ()
+                )
+            else:
+                right_expr_rounded = right_expr
+
             # Get nonzero values as True, zero values as False
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            zero_expr = ConstantExpression(
+                int_empty_data if left_expr_is_int else float_empty_data, input_plan, 0
+            )
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             left_expr_bool = ComparisonOpExpression(
                 bool_empty_data, left_expr_rounded, zero_expr, operator.ne
@@ -1136,11 +1163,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             values_equal = ComparisonOpExpression(
                 bool_empty_data, left_expr, right_expr, operator.eq
             )
-            # Replace nulls with False so nulls don't dominate over booleans in the "or" expression
-            false_expr = ConstantExpression(bool_empty_data, input_plan, False)
-            values_equal_no_null = ArrowScalarFuncExpression(
-                bool_empty_data, [values_equal, false_expr], "coalesce", ()
-            )
 
             left_is_null = UnaryOpExpression(bool_empty_data, left_expr, "isnull")
             right_is_null = UnaryOpExpression(bool_empty_data, right_expr, "isnull")
@@ -1148,9 +1170,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 bool_empty_data, left_is_null, right_is_null, "__and__"
             )
 
-            return ConjunctionOpExpression(
-                bool_empty_data, values_equal_no_null, both_null, "__or__"
-            )
+            # CASE WHEN values_equal THEN TRUE ELSE both_null
+            # The case statement interprets nulls as false, so we avoid the coalesce step
+            true_expr = ConstantExpression(bool_empty_data, input_plan, True)
+            return CaseExpression(bool_empty_data, values_equal, true_expr, both_null)
 
         if func_name == "IFF" and len(op_exprs) == 3:
             # IFF is equivalent to CASE with single WHEN
