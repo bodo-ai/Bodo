@@ -2720,7 +2720,6 @@ def date_add_sub_date_df():
                 ),
             ),
             id="ADDDATE-vector_time_interval_with_case",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (

@@ -325,6 +325,7 @@ void CudaJoin::sort_build_table() {
 
 void CudaHashJoin::build_hash_table(
     const std::vector<std::shared_ptr<cudf::table>>& build_chunks) {
+    build_se = make_stream_and_event(g_use_async);
     std::vector<cudf::table_view> build_views;
     // 1. Concatenate all build chunks into one contiguous table
     //    This is necessary because cudf::hash_join expects a single table_view
@@ -332,7 +333,7 @@ void CudaHashJoin::build_hash_table(
         build_views.push_back(chunk->view());
     }
     if (build_views.size() > 0) {
-        this->_build_table = cudf::concatenate(build_views);
+        this->_build_table = cudf::concatenate(build_views, build_se->stream);
 
         if (this->is_broadcast_join &&
             duckdb::PropagatesBuildSide(this->join_type)) {
@@ -345,7 +346,6 @@ void CudaHashJoin::build_hash_table(
         this->_build_table =
             empty_table_from_arrow_schema(build_table_arrow_schema);
     }
-
     // 2. Create the hash_join object
     //    This triggers the kernel that builds the hash table on the GPU.
     //    We maintain ownership of _join_handle to reuse it for probing.
@@ -360,10 +360,10 @@ void CudaHashJoin::build_hash_table(
                 selected_build_view, this->null_equality,
                 /* default args otherwise the compiler can't figure out which
                    constructor to call */
-                cudf::set_as_build_table::RIGHT, 0.5);
+                cudf::set_as_build_table::RIGHT, 0.5, build_se->stream);
         } else {
             this->_join_handle = std::make_unique<cudf::hash_join>(
-                selected_build_view, this->null_equality);
+                selected_build_view, this->null_equality, build_se->stream);
         }
     }
 
@@ -372,17 +372,17 @@ void CudaHashJoin::build_hash_table(
     if (build_view.num_rows() != 0) {
         this->_build_bloom_filter = build_bloom_filter_from_table(
             build_view.select(this->build_key_indices), build_total_size,
-            FALSE_POSITIVE_RATE, cudf::get_default_stream());
+            FALSE_POSITIVE_RATE, build_se->stream);
     } else {
         this->_build_bloom_filter = build_empty_bloom_filter(
-            build_total_size, FALSE_POSITIVE_RATE, cudf::get_default_stream());
+            build_total_size, FALSE_POSITIVE_RATE, build_se->stream);
     }
 
     if (!is_broadcast_join) {
         // Get all GPU nodes' bloom filters.
         std::vector<std::unique_ptr<rmm::device_buffer>> all_blooms =
             gather_blooms.all_gather_device_buffers(
-                this->_build_bloom_filter->bitset, cudf::get_default_stream());
+                this->_build_bloom_filter->bitset, build_se->stream);
         // AtomicOR them all together.
         for (auto& one_bloom : all_blooms) {
             if (one_bloom) {
@@ -393,10 +393,11 @@ void CudaHashJoin::build_hash_table(
                         "64-bits");
                 }
                 mergeBloomBitset(this->_build_bloom_filter->bitset, *one_bloom,
-                                 cudf::get_default_stream());
+                                 build_se->stream);
             }
         }
     }
+    build_se->event.record(build_se->stream);
 }
 
 void CudaHashJoin::runtime_filter(
@@ -436,7 +437,8 @@ void CudaHashJoin::FinalizeBuild() {
             GPU_DATA stats_gpu_data = {
                 stats_table, std::make_shared<arrow::Schema>(std::move(fields)),
                 make_stream_and_event(false)};
-            local_stats = convertGPUToArrow(stats_gpu_data);
+            local_stats = convertGPUToArrow(stats_gpu_data.table->view(),
+                                            stats_gpu_data.schema);
         } else {
             // If we don't have a GPU, we still need to participate in the
             // global stats reduction, so we create an table with null vals
@@ -481,6 +483,10 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
     rmm::cuda_stream_view& stream, bool local_is_last) {
     bool global_is_last;
     std::shared_ptr<cudf::table> probe_to_select;
+
+    if (build_se) {
+        build_se->event.wait(input_stream_event->stream);
+    }
 
     if (is_broadcast_join) {
         // In broadcast join mode, we don't need to wait for other workers to
@@ -534,9 +540,37 @@ std::pair<std::unique_ptr<cudf::table>, bool> CudaHashJoin::ProbeProcessBatch(
         // ANTI joins with an empty build table (null join handle) should output
         // all probe rows, and for other join types we can just return early
         // since we know the probe rows can't match.
-        if (probe_to_select->num_rows() == 0 ||
-            (null_handle && this->join_type != duckdb::JoinType::ANTI)) {
+        if (probe_to_select->num_rows() == 0) {
             return get_empty_output_table(global_is_last, stream);
+        }
+        if (null_handle) {
+            // build table is empty
+            if (this->join_type == duckdb::JoinType::ANTI) {
+                // intentionally do nothing
+            } else if (this->join_type == duckdb::JoinType::LEFT ||
+                       this->join_type == duckdb::JoinType::OUTER) {
+                cudf::table_view probe_kept_view = probe_to_select->select(
+                    this->probe_kept_cols.begin(), this->probe_kept_cols.end());
+                cudf::table_view build_kept_view = _build_table->select(
+                    this->build_kept_cols.begin(), this->build_kept_cols.end());
+                // Create probe_idx_view to create every probe row in the
+                // output.
+                auto seq_col = cudf::sequence(probe_to_select->num_rows(),
+                                              cudf::numeric_scalar<int32_t>(0),
+                                              cudf::numeric_scalar<int32_t>(1));
+                cudf::column_view probe_idx_view = seq_col->view();
+                // Create build_idx_view to create NA build rows in the output.
+                auto neg_one_col =
+                    cudf::sequence(probe_to_select->num_rows(),
+                                   cudf::numeric_scalar<int32_t>(-1),
+                                   cudf::numeric_scalar<int32_t>(0));
+                cudf::column_view build_idx_view = neg_one_col->view();
+                return materialize_and_output(probe_kept_view, probe_idx_view,
+                                              build_kept_view, build_idx_view,
+                                              global_is_last, stream);
+            } else {
+                return get_empty_output_table(global_is_last, stream);
+            }
         }
     }
 

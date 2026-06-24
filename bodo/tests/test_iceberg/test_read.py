@@ -338,9 +338,6 @@ def test_column_pruning(iceberg_database, iceberg_table_conn, memory_leak_check)
 
 
 @pytest.mark.slow
-@pytest.mark.skip(
-    reason="BSE-5453: Fix issue with iceberg dictionary encoding and reenable tests."
-)
 @pytest.mark.parametrize(
     "dict_encode_in_bodo",
     [
@@ -406,7 +403,13 @@ def test_dict_encoded_string_arrays(
         )
         return df
 
-    check_func(impl1, (table_name, conn, db_schema), py_output=df)
+    check_func(
+        impl1,
+        (table_name, conn, db_schema),
+        py_output=df,
+        sort_output=True,
+        reset_index=True,
+    )
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -421,7 +424,13 @@ def test_dict_encoded_string_arrays(
         )
         return df[["B", "D"]]
 
-    check_func(impl2, (table_name, conn, db_schema), py_output=df[["B", "D"]])
+    check_func(
+        impl2,
+        (table_name, conn, db_schema),
+        py_output=df[["B", "D"]],
+        sort_output=True,
+        reset_index=True,
+    )
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -440,7 +449,13 @@ def test_dict_encoded_string_arrays(
         )  # type: ignore
         return df[["B", "C", "D", "E"]]
 
-    check_func(impl3, (table_name, conn, db_schema), py_output=df[["B", "C", "D", "E"]])
+    check_func(
+        impl3,
+        (table_name, conn, db_schema),
+        py_output=df[["B", "C", "D", "E"]],
+        sort_output=True,
+        reset_index=True,
+    )
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -554,7 +569,13 @@ def test_dict_encoded_string_arrays(
         df = df[df.F >= 10000]
         return df
 
-    check_func(impl7, (table_name, conn, db_schema), py_output=df)
+    check_func(
+        impl7,
+        (table_name, conn, db_schema),
+        py_output=df,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 @pytest.mark.parametrize("dict_encode_in_bodo", [True, False])

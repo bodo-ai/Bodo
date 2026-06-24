@@ -622,6 +622,13 @@ class PhysicalGPUCastExpression : public PhysicalGPUExpression {
     cudf::data_type return_type;
 };
 
+enum GPU_UNARY_MODE {
+    CUDF_UNARY = 0,
+    IS_NOT_NULL = 1,
+    IS_NULL = 2,
+    IS_TRUE = 3
+};
+
 /**
  * @brief Physical expression tree node type for unary of array.
  *
@@ -639,7 +646,19 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
                 // Will do separate is_null and then apply NOT.
                 // Will not show up as right column name.
                 comparator = cudf::unary_operator::NOT;
-                is_not_null = true;
+                mode = GPU_UNARY_MODE::IS_NOT_NULL;
+                break;
+            case duckdb::ExpressionType::OPERATOR_IS_NULL:
+                // Will not show up as right column name.
+                comparator = cudf::unary_operator::NOT;  // unused
+                mode = GPU_UNARY_MODE::IS_NULL;
+                break;
+            case duckdb::ExpressionType::OPERATOR_IS_TRUE:
+                comparator = cudf::unary_operator::NOT;  // unused
+                mode = GPU_UNARY_MODE::IS_TRUE;
+                break;
+            case duckdb::ExpressionType::OPERATOR_NEG:
+                comparator = cudf::unary_operator::NEGATE;
                 break;
             default:
                 throw std::runtime_error("Unhandled unary op expression type.");
@@ -668,7 +687,7 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
         std::shared_ptr<ExprGPUResult> left_res =
             children[0]->ProcessBatch(input_batch, se);
         std::variant<GPU_COLUMN, GPU_SCALAR> op_res;
-        if (is_not_null) {
+        if (mode == GPU_UNARY_MODE::IS_NOT_NULL) {
             std::shared_ptr<ArrayExprGPUResult> left_as_array =
                 std::dynamic_pointer_cast<ArrayExprGPUResult>(left_res);
             if (left_as_array) {
@@ -677,6 +696,53 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
                                                se->stream);
             } else {
                 throw std::runtime_error("Left must be array for is_not_null.");
+            }
+        } else if (mode == GPU_UNARY_MODE::IS_NULL) {
+            std::shared_ptr<ArrayExprGPUResult> left_as_array =
+                std::dynamic_pointer_cast<ArrayExprGPUResult>(left_res);
+            if (left_as_array) {
+                op_res = cudf::is_null(left_as_array->result->view());
+            } else {
+                throw std::runtime_error("Left must be array for is_null.");
+            }
+        } else if (mode == GPU_UNARY_MODE::IS_TRUE) {
+            std::shared_ptr<ArrayExprGPUResult> left_as_array =
+                std::dynamic_pointer_cast<ArrayExprGPUResult>(left_res);
+            if (left_as_array) {
+                // Cast to boolean column if necessary.
+                std::unique_ptr<cudf::column> bool_col_ptr;
+                if (left_as_array->result->type().id() !=
+                    cudf::type_id::BOOL8) {
+                    // Cast to boolean (this will produce a new column)
+                    bool_col_ptr = cudf::cast(
+                        left_as_array->result->view(),
+                        cudf::data_type{cudf::type_id::BOOL8}, se->stream);
+                    if (!bool_col_ptr) {
+                        throw std::runtime_error("cast to BOOL8 failed");
+                    }
+                }
+
+                cudf::column_view bool_view =
+                    bool_col_ptr ? bool_col_ptr->view()
+                                 : left_as_array->result->view();
+
+                // Create a boolean scalar 'false' to replace nulls
+                std::unique_ptr<cudf::scalar> false_scalar =
+                    cudf::make_numeric_scalar(
+                        cudf::data_type{cudf::type_id::BOOL8});
+                // set the scalar value to false
+                static_cast<cudf::numeric_scalar<bool> *>(false_scalar.get())
+                    ->set_value(false);
+
+                // Replace nulls with false.
+                std::unique_ptr<cudf::column> result =
+                    cudf::replace_nulls(bool_view, *false_scalar, se->stream);
+                if (!result) {
+                    throw std::runtime_error("fill_nulls failed");
+                }
+                op_res = std::move(result);
+            } else {
+                throw std::runtime_error("Left must be array for is_true.");
             }
         } else {
             op_res = do_cudf_compute_unary(left_res, comparator, se);
@@ -711,7 +777,7 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
 
    protected:
     cudf::unary_operator comparator;
-    bool is_not_null = false;
+    GPU_UNARY_MODE mode = GPU_UNARY_MODE::CUDF_UNARY;
 };
 
 /**
@@ -1040,14 +1106,38 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     PhysicalGPUArrowExpressionMetrics metrics;
 
     void extract_string_arg_from_python() {
-        const char *c_str = get_py_single_arg_as_cstr(
-            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str());
-
         if (scalar_func_data.arrow_func_name == "match_substring_regex" ||
             scalar_func_data.arrow_func_name == "match_substring_regex_first") {
-            regex_prog =
-                cudf::strings::regex_program::create(std::string(c_str));
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            size_t num_args = PyTuple_Size(scalar_func_data.args);
+            const char *c_str;
+            bool ignore_case = false;
+            std::string sstr;
+            if (num_args == 1) {
+                // Only string was passed
+                c_str = get_py_single_arg_as_cstr(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str());
+                sstr = std::string(c_str);
+            } else {
+                // string and ignore_case passed
+                std::tie(c_str, ignore_case) = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_cstr, get_py_object_as_bool);
+                sstr = std::string(c_str);
+                if (ignore_case) {
+                    sstr = "(?i)" + sstr;
+                }
+            }
+
+            regex_prog = cudf::strings::regex_program::create(sstr);
         } else {
+            const char *c_str = get_py_single_arg_as_cstr(
+                scalar_func_data.args,
+                scalar_func_data.arrow_func_name.c_str());
+
             str_scalar_in =
                 std::make_shared<cudf::string_scalar>(std::string(c_str), true);
         }

@@ -233,6 +233,8 @@ struct CudaHashJoin : public CudaJoin {
 
     cudf::null_equality null_equality = cudf::null_equality::EQUAL;
 
+    std::shared_ptr<StreamAndEvent> build_se;
+
    public:
     CudaHashJoin(std::vector<cudf::size_type> build_keys,
                  std::vector<cudf::size_type> probe_keys,

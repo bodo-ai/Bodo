@@ -51,6 +51,7 @@ BodoSQLContextCls = None
 
 env_var_prefix = (
     "BODO_",
+    "BODOSQL_",
     "AWS_",
     "AZURE_",
     "LD_",

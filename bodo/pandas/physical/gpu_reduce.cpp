@@ -61,7 +61,8 @@ void GPUReductionFunction::ConsumeBatch(
         std::unique_ptr<cudf::reduce_aggregation> agg =
             get_reduce_agg(function_name);
 
-        cudf::column_view input_column = input_table->get_column(0).view();
+        cudf::column_view input_column =
+            input_table->get_column(input_col_idx).view();
         std::unique_ptr<cudf::scalar> out_scalar =
             cudf::reduce(input_column, *agg, out_dtype, output_stream);
 
@@ -139,7 +140,8 @@ std::shared_ptr<arrow::Table> cudf_scalar_to_arrow_table(
             arrow::field("scalar_col", cudf_to_arrow_type(scalar_dtype))});
 
     auto batch = GPU_DATA(std::move(scalar_table), out_schema, nullptr);
-    std::shared_ptr<arrow::Table> arrow_table = convertGPUToArrow(batch);
+    std::shared_ptr<arrow::Table> arrow_table =
+        convertGPUToArrow(batch.table->view(), batch.schema);
     return arrow_table;
 }
 
@@ -211,35 +213,42 @@ OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
     if (iter == 0) {
         for (size_t i = 0; i < this->function_names.size(); i++) {
             const std::string func_name = this->function_names[i];
+            const int input_col_idx = this->input_column_indices[i];
             if (func_name == "max") {
                 reduction_functions.push_back(
                     std::make_unique<GPUReductionFunctionMax>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
 
             } else if (func_name == "min") {
                 reduction_functions.push_back(
                     std::make_unique<GPUReductionFunctionMin>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
             } else if (func_name == "sum") {
                 reduction_functions.push_back(
                     std::make_unique<GPUReductionFunctionSum>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
             } else if (func_name == "product") {
                 reduction_functions.push_back(
                     std::make_unique<GPUReductionFunctionProduct>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
             } else if (func_name == "count") {
                 reduction_functions.push_back(
                     std::make_unique<GPUReductionFunctionCount>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
             } else if (func_name == "mean") {
                 reduction_functions.push_back(
                     std::make_unique<GPUReductionFunctionMean>(
+                        input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
 

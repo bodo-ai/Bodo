@@ -51,6 +51,7 @@ struct PhysicalGPUReduceMetrics {
 };
 
 struct GPUReductionFunction {
+    int input_col_idx;
     std::vector<std::string> function_names;
     std::vector<std::string> reduction_names;
     std::vector<GPUReductionType> reduction_types;
@@ -58,12 +59,13 @@ struct GPUReductionFunction {
     cudf::data_type out_dtype;
     MPI_Op mpi_reduce_op;
     GPUReductionFunction(
-        std::vector<std::string> function_names,
+        int input_col_idx, std::vector<std::string> function_names,
         std::vector<std::string> reduction_names,
         std::vector<GPUReductionType> reduction_types,
         std::vector<std::unique_ptr<cudf::scalar>> initial_results,
         std::shared_ptr<arrow::DataType> dt, MPI_Op mpi_reduce_op)
-        : function_names(std::move(function_names)),
+        : input_col_idx(input_col_idx),
+          function_names(std::move(function_names)),
           reduction_names(std::move(reduction_names)),
           reduction_types(std::move(reduction_types)),
           results(std::move(initial_results)),
@@ -108,56 +110,64 @@ std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_two_cudf_scalars(
     std::unique_ptr<cudf::scalar> scalar2);
 
 struct GPUReductionFunctionMax : public GPUReductionFunction {
-    GPUReductionFunctionMax(std::shared_ptr<arrow::DataType> dt,
+    GPUReductionFunctionMax(int input_col_idx,
+                            std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
-        : GPUReductionFunction({"max"}, {"greater"},
+        : GPUReductionFunction(input_col_idx, {"max"}, {"greater"},
                                {GPUReductionType::COMPARISON},
                                make_vector_of_one_nullptr(), dt, MPI_MAX) {}
 };
 
 struct GPUReductionFunctionMin : public GPUReductionFunction {
-    GPUReductionFunctionMin(std::shared_ptr<arrow::DataType> dt,
+    GPUReductionFunctionMin(int input_col_idx,
+                            std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
-        : GPUReductionFunction({"min"}, {"less"},
+        : GPUReductionFunction(input_col_idx, {"min"}, {"less"},
                                {GPUReductionType::COMPARISON},
                                make_vector_of_one_nullptr(), dt, MPI_MIN) {}
 };
 
 struct GPUReductionFunctionSum : public GPUReductionFunction {
-    GPUReductionFunctionSum(std::shared_ptr<arrow::DataType> dt,
+    GPUReductionFunctionSum(int input_col_idx,
+                            std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
-              {"sum"}, {"add"}, {GPUReductionType::AGGREGATION},
+              input_col_idx, {"sum"}, {"add"}, {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   arrow::MakeScalar(dt, 0).ValueOrDie(), output_stream)),
               dt, MPI_SUM) {}
 };
 
 struct GPUReductionFunctionProduct : public GPUReductionFunction {
-    GPUReductionFunctionProduct(std::shared_ptr<arrow::DataType> dt,
+    GPUReductionFunctionProduct(int input_col_idx,
+                                std::shared_ptr<arrow::DataType> dt,
                                 rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
-              {"product"}, {"multiply"}, {GPUReductionType::AGGREGATION},
+              input_col_idx, {"product"}, {"multiply"},
+              {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   arrow::MakeScalar(dt, 1).ValueOrDie(), output_stream)),
               dt, MPI_PROD) {}
 };
 
 struct GPUReductionFunctionCount : public GPUReductionFunction {
-    GPUReductionFunctionCount(std::shared_ptr<arrow::DataType> dt,
+    GPUReductionFunctionCount(int input_col_idx,
+                              std::shared_ptr<arrow::DataType> dt,
                               rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
-              {"count"}, {"add"}, {GPUReductionType::AGGREGATION},
+              input_col_idx, {"count"}, {"add"},
+              {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   arrow::MakeScalar(dt, 0).ValueOrDie(), output_stream)),
               dt, MPI_SUM) {}
 };
 
 struct GPUReductionFunctionMean : public GPUReductionFunction {
-    GPUReductionFunctionMean(std::shared_ptr<arrow::DataType> dt,
+    GPUReductionFunctionMean(int input_col_idx,
+                             std::shared_ptr<arrow::DataType> dt,
                              rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
-              {"sum", "count"}, {"add", "add"},
+              input_col_idx, {"sum", "count"}, {"add", "add"},
               {GPUReductionType::AGGREGATION, GPUReductionType::AGGREGATION},
               make_vector_of_two_cudf_scalars(
                   arrow_scalar_to_cudf(arrow::MakeScalar(dt, 0).ValueOrDie(),
@@ -175,9 +185,11 @@ struct GPUReductionFunctionMean : public GPUReductionFunction {
 class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
    public:
     explicit PhysicalGPUReduce(std::shared_ptr<bodo::Schema> out_schema,
-                               std::vector<std::string> function_names)
+                               std::vector<std::string> function_names,
+                               std::vector<int> input_column_indices)
         : out_schema(std::move(out_schema)),
-          function_names(std::move(function_names)) {
+          function_names(std::move(function_names)),
+          input_column_indices(std::move(input_column_indices)) {
         PhysicalGPUSource::EnsureNoNumpyColumns(this->out_schema);
     }
 
@@ -266,6 +278,7 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
     const std::shared_ptr<bodo::Schema> out_schema;
     std::vector<std::unique_ptr<GPUReductionFunction>> reduction_functions;
     std::vector<std::string> function_names;
+    std::vector<int> input_column_indices;
 
     int64_t iter = 0;
     PhysicalGPUReduceMetrics metrics;

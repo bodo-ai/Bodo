@@ -283,7 +283,15 @@ std::pair<GPU_DATA, OperatorResult> PhysicalGPUProcessBatch::ProcessBatch(
 }
 
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch) {
-    std::shared_ptr<arrow::Table> table = convertGPUToArrow(batch);
+    std::shared_ptr<arrow::Table> table =
+        convertGPUToArrow(batch.table->view(), batch.schema);
+
+    return arrow_table_to_bodo(table, nullptr);
+}
+
+std::shared_ptr<table_info> convertTableViewToTable(
+    cudf::table_view view, std::shared_ptr<arrow::Schema> schema) {
+    std::shared_ptr<arrow::Table> table = convertGPUToArrow(view, schema);
 
     return arrow_table_to_bodo(table, nullptr);
 }
@@ -398,13 +406,13 @@ cudf::column_metadata build_meta_from_arrow(
     return meta;
 }
 
-std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
-    cudf::table_view view = batch.table->view();
+std::shared_ptr<arrow::Table> convertGPUToArrow(
+    cudf::table_view view, std::shared_ptr<arrow::Schema> schema) {
     // Setup Metadata (Arrow requires column names)
     // We must create a cudf::column_metadata hierarchy matching the table
     // structure.
     std::vector<cudf::column_metadata> meta;
-    for (const auto &field : batch.schema->fields()) {
+    for (const auto &field : schema->fields()) {
         meta.push_back(build_meta_from_arrow(field));
     }
 
@@ -443,7 +451,7 @@ std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch) {
     }
 
     std::shared_ptr<arrow::Table> table = maybe_table.ValueOrDie();
-    table = table->ReplaceSchemaMetadata(batch.schema->metadata());
+    table = table->ReplaceSchemaMetadata(schema->metadata());
     return table;
 }
 
