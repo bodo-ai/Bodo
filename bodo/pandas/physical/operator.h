@@ -543,5 +543,8 @@ GPU_DATA convertTableToGPU(std::shared_ptr<table_info> batch,
 GPU_DATA convertArrowTableToGPU(std::shared_ptr<arrow::Table> arrow_table,
                                 std::shared_ptr<StreamAndEvent> se);
 std::shared_ptr<table_info> convertGPUToTable(GPU_DATA batch);
-std::shared_ptr<arrow::Table> convertGPUToArrow(GPU_DATA batch);
+std::shared_ptr<table_info> convertTableViewToTable(
+    cudf::table_view view, std::shared_ptr<arrow::Schema> schema);
+std::shared_ptr<arrow::Table> convertGPUToArrow(
+    cudf::table_view view, std::shared_ptr<arrow::Schema> schema);
 #endif

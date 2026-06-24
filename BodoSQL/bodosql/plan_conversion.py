@@ -1158,6 +1158,37 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
         if func_name == "REGEXP_SUBSTR" and len(op_exprs) in (2, 3, 4, 5, 6):
+
+            def clean_regex_params(regex_params_expr):
+                if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
+                    # Both case sensitive and case insensitive params provided; find which appears latest in the string
+                    latest_index = max(
+                        regex_params_expr.value.rfind(char) for char in ("c", "i")
+                    )
+                    latest_char = regex_params_expr.value[latest_index]
+                    # Remove occurrences of the other parameter to make the identification easier on the C++ side
+                    regex_params = regex_params_expr.value.replace(
+                        "c" if latest_char == "i" else "i", ""
+                    )
+                else:
+                    if (
+                        "c" not in regex_params_expr.value
+                        and "i" not in regex_params_expr.value
+                    ):
+                        regex_params = regex_params_expr.value + "c"
+                    else:
+                        regex_params = regex_params_expr.value
+                for character in regex_params:
+                    if character not in ("c", "i", "m", "e", "s"):
+                        raise ValueError(
+                            f"{func_name} regex parameter {character} does not exist"
+                        )
+                    if character in ("i", "m", "s"):
+                        raise ValueError(
+                            f"{func_name} regex parameter {character} is not yet supported in the C++ backend"
+                        )
+                return regex_params
+
             src = op_exprs[0]
             regexp = op_exprs[1]
 
@@ -1194,33 +1225,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 ensure_arg_is_const_expr_of_type(
                     regex_params_expr, "regex_params_expr", str
                 )
-                if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
-                    # Both case sensitive and case insensitive params provided; find which appears latest in the string
-                    latest_index = max(
-                        regex_params_expr.value.rfind(char) for char in ("c", "i")
-                    )
-                    latest_char = regex_params_expr.value[latest_index]
-                    # Remove occurrences of the other parameter to make the identification easier on the C++ side
-                    regex_params = regex_params_expr.value.replace(
-                        "c" if latest_char == "i" else "i", ""
-                    )
-                else:
-                    if (
-                        "c" not in regex_params_expr.value
-                        and "i" not in regex_params_expr.value
-                    ):
-                        regex_params = regex_params_expr.value + "c"
-                    else:
-                        regex_params = regex_params_expr.value
-                for character in regex_params:
-                    if character not in ("c", "i", "m", "e", "s"):
-                        raise ValueError(
-                            f"{func_name} regex parameter {character} does not exist"
-                        )
-                    if character in ("i", "m", "s"):
-                        raise ValueError(
-                            f"{func_name} regex parameter {character} is not yet supported in the C++ backend"
-                        )
+                regex_params = clean_regex_params(regex_params_expr)
             else:
                 regex_params = "c"
 
@@ -1241,12 +1246,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 group_num = 0
 
             # Chop off the start so that searching begins after the provided position
-            without_start_expr = ArrowScalarFuncExpression(
-                src.empty_data,
-                [src],
-                "utf8_slice_codeunits",
-                (start, None, 1),
-            )
+            if start > 0:
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
 
             # Remove earlier occurrences so that extract_regex can find the correct occurrence/substring matching the regexp
             if occurrence_num > 1:
@@ -1274,9 +1282,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
         )
-
-    print("\nOPERATOR CLASS NAME:", operator_class_name)
-    print("JAVA CALL:", java_call)
 
     if operator_class_name == "SqlNullPolicyFunction":
         operands = java_call.getOperands()
@@ -1385,13 +1390,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 start = 0
 
-            # If start index is beyond the length of the string, we expect this to return an empty string
-            without_start_expr = ArrowScalarFuncExpression(
-                src.empty_data,
-                [src],
-                "utf8_slice_codeunits",
-                (start, None, 1),
-            )
+            if start > 0:
+                # If start index is beyond the length of the string, we expect this to return an empty string
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
 
             # Find the first occurrence of the substring in the sliced string
             substring_pos_expr = ArrowScalarFuncExpression(
@@ -1410,8 +1418,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             # Add the ignored start index to the result only if substring was found
-            offset_expr = ArrowScalarFuncExpression(
-                int_empty_data, [substring_not_found], "if_else", (0, start)
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            start_expr = ConstantExpression(int_empty_data, input_plan, start)
+            offset_expr = CaseExpression(
+                int_empty_data, substring_not_found, zero_expr, start_expr
             )
             adjusted_substring_pos_expr = ArithOpExpression(
                 int_empty_data, substring_pos_expr, offset_expr, "__add__"
