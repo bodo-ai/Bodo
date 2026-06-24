@@ -170,6 +170,7 @@ def test_concat_ws_scalars(bodosql_string_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_concat_ws_single_arg_binary(
     bodosql_binary_types, spark_info, memory_leak_check
 ):
@@ -186,6 +187,7 @@ def test_concat_ws_single_arg_binary(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_concat_cols_binary(bodosql_binary_types, spark_info, memory_leak_check):
     """Checks that the concat_ws function is working for columns"""
     query = (
@@ -554,6 +556,7 @@ def test_strcmp(args, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query",
     [
@@ -581,7 +584,7 @@ def test_strcmp(args, memory_leak_check):
         ),
     ],
 )
-def test_rtrimmed_length(query, spark_info, memory_leak_check):
+def test_rtrimmed_length(query, memory_leak_check):
     whitespace = " " * 8
     chars = "a\tcdef\nh"
     # Generate a column of strings with every combination of 8 characters
@@ -606,12 +609,13 @@ def test_rtrimmed_length(query, spark_info, memory_leak_check):
     check_query(
         query,
         ctx,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         convert_nullable_bodosql=False,
         sort_output=False,
         equivalent_spark_query=spark_query,
+        use_duckdb=True,
     )
 
 
@@ -865,6 +869,7 @@ def test_length(bodosql_string_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_length_binary(bodosql_binary_types, memory_leak_check):
     query = "SELECT LENGTH(A) as OUT1 FROM table1"
     check_query(
@@ -890,6 +895,7 @@ def test_length_binary(bodosql_binary_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_reverse_binary(bodosql_binary_types, memory_leak_check):
     query = "SELECT REVERSE(A) as OUT1 FROM table1"
     expected_output1 = pd.DataFrame(
@@ -909,6 +915,7 @@ def test_reverse_binary(bodosql_binary_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_substring_binary(bodosql_binary_types, spark_info, memory_leak_check):
     query = "SELECT SUBSTR(A, 2, 3) as OUT1 FROM table1"
     check_query(
@@ -947,6 +954,7 @@ def test_substring_binary(bodosql_binary_types, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_left_right_binary(bodosql_binary_types, memory_leak_check):
     query1 = "SELECT LEFT(B,3) as OUT1, RIGHT(B,3) as OUT2 FROM table1"
     query2 = "SELECT LEFT(A,10) as OUT1, RIGHT(C,10) as OUT2 FROM table1"
@@ -1344,6 +1352,7 @@ def test_position(calculation, table, case, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_replace_two_args_scalar(memory_leak_check):
     """Test REPLACE works correctly with two scalar inputs"""
     query = "SELECT REPLACE('string', 'in')"
@@ -2038,6 +2047,7 @@ def test_base64_decode_error(func):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("func", ["LPAD", "RPAD"])
 def test_binary_pad_2args_errorchecking(func, memory_leak_check):
     """
