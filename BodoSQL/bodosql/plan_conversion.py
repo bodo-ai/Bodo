@@ -1404,26 +1404,40 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             bit_num = op_exprs[1]
 
             ensure_type_of_expr(src, "src", int)
-            ensure_arg_is_const_expr_of_type(bit_num, "bit_num", int)
-            if bit_num.value < 0:
-                raise ValueError("GETBIT position cannot be negative")
+            # TODO: Uncomment when cast PR is merged
+            # ensure_type_of_expr(bit_num, "bit_num", int)
 
             # Do a bitwise AND on `src` and a bitmask that is only set on the requested bit position.
             # If the result is nonzero, the requested bit is 1, else it is 0.
 
-            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            # We should operate on uint64.
+            # We want Arrow's shift_left to set the most significant bit when
+            # shifting 1 63 positions to the left, but this only happens when 1 is unsigned.
+
+            uint64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.uint64()))
+
+            one_expr = ConstantExpression(uint64_empty_data, input_plan, 1)
+            bit_num = CastExpression(uint64_empty_data, bit_num)
+            bitmask = ArrowScalarFuncExpression(
+                uint64_empty_data, [one_expr, bit_num], "shift_left", ()
+            )
+
+            # Cast `src` to uint64 to avoid problematic type unification in bit_wise_and.
+            src = CastExpression(uint64_empty_data, src)
             src_with_mask = ArrowScalarFuncExpression(
-                int64_empty_data, [src], "bit_wise_and", (1 << bit_num.value,)
+                uint64_empty_data, [src, bitmask], "bit_wise_and", ()
             )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            zero_expr = ConstantExpression(int64_empty_data, input_plan, 0)
+            zero_expr = ConstantExpression(uint64_empty_data, input_plan, 0)
             is_bit_set = ComparisonOpExpression(
                 bool_empty_data, src_with_mask, zero_expr, operator.ne
             )
 
-            one_expr = ConstantExpression(int64_empty_data, input_plan, 1)
-            return CaseExpression(int64_empty_data, is_bit_set, one_expr, zero_expr)
+            # Use if_else instead of case_when so that nulls in is_bit_set propagate to the result
+            return ArrowScalarFuncExpression(
+                uint64_empty_data, [is_bit_set, one_expr, zero_expr], "if_else", ()
+            )
         elif func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
             src = op_exprs[0]
