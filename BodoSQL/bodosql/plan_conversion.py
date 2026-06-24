@@ -1389,7 +1389,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 empty_data, [left_expr, right_expr], arrow_equivalent_func, ()
             )
 
-            # Cast the result to the desired type if f
+            # Cast the result to the desired type if (for one reason or another)
+            # the input types could not be aligned with the proper output type
             if cast_empty_data is not None:
                 result = CastExpression(cast_empty_data, result)
 
