@@ -38,4 +38,5 @@ PyMODINIT_FUNC PyInit_uuid_cpp(void);
 PyMODINIT_FUNC PyInit_test_cpp(void);
 #endif
 PyMODINIT_FUNC PyInit_plan_optimizer(void);
+PyMODINIT_FUNC PyInit_theta_sketches_entry(void);
 }  // extern "C"
