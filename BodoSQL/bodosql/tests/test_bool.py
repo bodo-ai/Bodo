@@ -52,6 +52,7 @@ def numeric_truthy_df(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query",
     [
@@ -81,6 +82,7 @@ def test_booland(query, numeric_truthy_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query",
     [
@@ -110,6 +112,7 @@ def test_boolor(query, numeric_truthy_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query",
     [
@@ -139,6 +142,7 @@ def test_boolxor(query, numeric_truthy_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query",
     [
@@ -178,24 +182,41 @@ def test_boolnot(query, numeric_truthy_df, memory_leak_check):
 @pytest.mark.parametrize(
     "dtype, val1, val2, use_symbol",
     [
-        pytest.param(str, "A", "B", True, id="string"),
-        pytest.param(str, b"yay", b"boo", False, id="binary", marks=pytest.mark.slow),
-        pytest.param(pd.Int32Dtype(), -1, 500, True, id="int32"),
+        pytest.param(str, "A", "B", True, id="string", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            str,
+            b"yay",
+            b"boo",
+            False,
+            id="binary",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
+        pytest.param(
+            pd.Int32Dtype(), -1, 500, True, id="int32", marks=pytest.mark.bodosql_cpp
+        ),
         pytest.param(
             None,
             pd.Timestamp("2023-1-30 6:00:00"),
             pd.Timestamp("2024-2-29 9:30:00"),
             False,
             id="timestamp",
+            marks=pytest.mark.bodosql_cpp,
         ),
-        pytest.param(None, True, False, True, id="bool", marks=pytest.mark.slow),
+        pytest.param(
+            None,
+            True,
+            False,
+            True,
+            id="bool",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
         pytest.param(
             None,
             Time(12, 30, 0),
             Time(16, 59, 30, nanosecond=999999999),
             False,
             id="time",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             None,
@@ -203,6 +224,7 @@ def test_boolnot(query, numeric_truthy_df, memory_leak_check):
             datetime.date(2023, 12, 31),
             True,
             id="date",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(None, [1, 2, 3], [], False, id="integer_array"),
         pytest.param(
