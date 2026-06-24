@@ -1,5 +1,5 @@
 SELECT
-  s_suppkey,
+  s.s_suppkey,
   s_name,
   s_address,
   s_phone,
