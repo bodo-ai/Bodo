@@ -1434,59 +1434,6 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::Datum y_datum(std::make_shared<arrow::UInt64Scalar>(y));
             result = do_arrow_compute_binary(res, y_datum,
                                              scalar_func_data.arrow_func_name);
-        } else if (scalar_func_data.arrow_func_name == "shift_left" ||
-                   scalar_func_data.arrow_func_name == "shift_left_checked" ||
-                   scalar_func_data.arrow_func_name == "shift_right" ||
-                   scalar_func_data.arrow_func_name == "shift_right_checked") {
-            auto [y] = get_py_args_as_types(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                get_py_object_as_int64);
-            arrow::Datum y_datum(std::make_shared<arrow::Int64Scalar>(y));
-
-            // Note that it is important that y_datum is int64 here as opposed
-            // to uint64. When the shift_right input is signed, the common type
-            // between the args (as chosen by CastIntDatumsToCommonType()) needs
-            // to be signed to ensure an arithmetic right shift is performed.
-
-            // Cast the input to uint64 first (just in case).
-            // We don't want shift_left to be limited by the precision of the
-            // input (at least for INTEGER input).
-            arrow::Datum res_datum = ConvertExprResultToDatum(
-                res, scalar_func_data.arrow_func_name + " input");
-            arrow::Result<arrow::Datum> casted_res_datum;
-            if (scalar_func_data.arrow_func_name == "shift_left" ||
-                scalar_func_data.arrow_func_name == "shift_left_checked") {
-                arrow::compute::CastOptions cast_opts;
-                cast_opts.allow_int_overflow = true;
-                casted_res_datum =
-                    arrow::compute::Cast(res_datum, arrow::int64(), cast_opts);
-                if (!casted_res_datum.ok()) [[unlikely]] {
-                    throw std::runtime_error(
-                        fmt::format("Error casting "
-                                    "datum to int64 for {}: ",
-                                    scalar_func_data.arrow_func_name) +
-                        casted_res_datum.status().message());
-                }
-            } else {
-                casted_res_datum = res_datum;
-            }
-
-            // Do bitshift and cast to signed int64.
-            // Retaining 64 bits is especially important for left shifts due to
-            // the possibility of overflow, but should be max bit width for
-            // right shifts too to be consistent with Snowflake. The output
-            // should be interpreted as signed according to Snowflake docs, even
-            // if the input is unsigned. plan_conversion.py will take care of
-            // the cast to original input size for BINARY input.
-            arrow::Datum shift_result = do_arrow_compute_binary(
-                casted_res_datum.ValueOrDie(), y_datum,
-                scalar_func_data.arrow_func_name, arrow::int64(), true);
-
-            if constexpr (std::is_same_v<T, arrow::Datum>) {
-                result = shift_result;
-            } else {
-                result = ConvertDatumToArrayInfo(shift_result);
-            }
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
                    scalar_func_data.arrow_func_name ==

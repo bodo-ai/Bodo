@@ -481,17 +481,8 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
 
-    std::shared_ptr<arrow::DataType> arrow_ret_type =
-        duckdbTypeToArrow(return_type);
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(src1, arrow_ret_type);
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute_cast: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    return ConvertDatumToArrayInfo(cmp_res.ValueOrDie());
+    arrow::Datum casted = do_arrow_compute_cast(src1, return_type);
+    return ConvertDatumToArrayInfo(casted);
 }
 
 arrow::Datum do_arrow_compute_binary(
@@ -586,6 +577,11 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
                                    const duckdb::LogicalType& return_type) {
     std::shared_ptr<arrow::DataType> arrow_ret_type =
         duckdbTypeToArrow(return_type);
+
+    // No need to cast if type is already the target type
+    if (left_res.type()->Equals(arrow_ret_type)) {
+        return left_res;
+    }
 
     // Globally set the allow_int_overflow cast option to true; in the future,
     // CaseExpressions should support these options.

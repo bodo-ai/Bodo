@@ -1285,9 +1285,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             right_expr = op_exprs[1]
 
             ensure_type_of_expr(left_expr, "left_expr", int)
-            ensure_arg_is_const_expr_of_type(right_expr, "right_expr", int)
+            ensure_type_of_expr(right_expr, "right_expr", int)
 
             empty_data = left_expr.empty_data
+            cast_empty_data = None
             int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
             if func_name == "BITAND":
@@ -1298,23 +1299,92 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 arrow_equivalent_func = "bit_wise_xor"
             elif func_name == "BITSHIFTLEFT":
                 arrow_equivalent_func = "shift_left"
-                # For bitshifting, result type should be INT64 to match Snowflake and output on C++ side.
-                empty_data = int64_empty_data
             elif func_name == "BITSHIFTRIGHT":
                 arrow_equivalent_func = "shift_right"
-                empty_data = int64_empty_data
 
-            result = ArrowScalarFuncExpression(
-                empty_data, [left_expr], arrow_equivalent_func, (right_expr.value,)
-            )
-
-            if func_name in ("BITSHIFTLEFT, BITSHIFTRIGHT"):
+            if func_name in ("BITSHIFTLEFT", "BITSHIFTRIGHT"):
                 left_opr_sql_type = operands[0].getType()
                 SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-                # Retain original bit width after shifting left/right if BINARY type.
-                # This discards bits that were shifted past the left end.
+
                 if left_opr_sql_type.getSqlTypeName().equals(SqlTypeName.BINARY):
-                    return CastExpression(left_expr.empty_data, result)
+                    # Cast right_expr to match the bit width and signedness of left_expr.
+                    # This minimizes cast operations necessary, since if the types of left_expr and right_expr match, the final result will have the type of left_expr.
+                    # This is what we want to retain the original bit width after shifting, for BINARY input.
+                    # Effectively we discard bits that were shifted past the left end of the original precision input.
+                    right_expr = CastExpression(left_expr.empty_data, right_expr)
+                else:
+                    # For INTEGER input:
+                    # Ensure arguments are int64.
+                    # We don't want shift_left to be limited by the precision of the
+                    # input (at least for INTEGER input).
+                    # If one argument is uint64, this can help avoid a mismatch that will cause an error coming from the Arrow compute function.
+                    # We do the same for shift_right to be consistent with Snowflake (max bit width signed output).
+                    if func_name == "BITSHIFTLEFT":
+                        left_expr = CastExpression(int64_empty_data, left_expr)
+                        # (Arrow can take care of casting right_expr in this case.)
+                        # For bitshifting, result type should be INT64 to match Snowflake and output on C++ side.
+                        empty_data = int64_empty_data
+                    else:
+                        # For shift_right, we have to be careful that left_expr keeps the original
+                        # signedness so the proper right shift (logical or arithmetic) is performed.
+                        if pa.types.is_signed_integer(
+                            left_expr.empty_data.dtypes[
+                                left_expr.empty_data.columns[0]
+                            ].pyarrow_dtype
+                        ):
+                            shift_right_empty_data = int64_empty_data
+                        else:
+                            shift_right_empty_data = pd.Series(
+                                dtype=pd.ArrowDtype(pa.uint64())
+                            )
+                        left_expr = CastExpression(shift_right_empty_data, left_expr)
+                        # Make right_expr's type match left_expr so that Arrow's type unification doesn't
+                        # make int64 the common type when left_expr is uint64, causing a cast failure
+                        right_expr = CastExpression(shift_right_empty_data, right_expr)
+                        empty_data = shift_right_empty_data
+                        # Ensure result is signed if input was unsigned
+                        cast_empty_data = int64_empty_data
+            else:
+                # For BITAND/BITOR/BIXOR:
+                # Make sure the type of empty_data has the larger bit width of the two inputs.
+                # Also unify the types of the inputs to that type.
+                left_expr_dtype = left_expr.empty_data.dtypes[
+                    left_expr.empty_data.columns[0]
+                ].pyarrow_dtype
+                right_expr_dtype = right_expr.empty_data.dtypes[
+                    right_expr.empty_data.columns[0]
+                ].pyarrow_dtype
+                left_expr_signed = pa.types.is_signed_integer(left_expr_dtype)
+                right_expr_signed = pa.types.is_signed_integer(right_expr_dtype)
+
+                # Cast inputs to unsigned before doing the operation if at least one is unsigned.
+                # Again, this is to work around a quirk of Arrow's type unification.
+                empty_data_bit_width = max(
+                    left_expr_dtype.bit_width, right_expr_dtype.bit_width
+                )
+                empty_data_signed = left_expr_signed and right_expr_signed
+                target_dtype = pd.ArrowDtype(
+                    eval(
+                        f"pa.{'' if empty_data_signed else 'u'}int{empty_data_bit_width}()"
+                    )
+                )
+                empty_data = pd.Series(dtype=target_dtype)
+                left_expr = CastExpression(empty_data, left_expr)
+                right_expr = CastExpression(empty_data, right_expr)
+                # Return signed if at least one of the inputs are signed
+                if left_expr_signed is not right_expr_signed:
+                    cast_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(eval(f"pa.int{empty_data_bit_width}()"))
+                    )
+
+            result = ArrowScalarFuncExpression(
+                empty_data, [left_expr, right_expr], arrow_equivalent_func, ()
+            )
+
+            # Cast the result to the desired type if f
+            if cast_empty_data is not None:
+                result = CastExpression(cast_empty_data, result)
+
             return result
         elif func_name == "BITNOT" and len(op_exprs) == 1:
             src = op_exprs[0]
@@ -1343,9 +1413,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 bool_empty_data, src_with_mask, zero_expr, operator.ne
             )
 
-            return ArrowScalarFuncExpression(
-                int64_empty_data, [is_bit_set], "if_else", (1, 0)
-            )
+            one_expr = ConstantExpression(int64_empty_data, input_plan, 1)
+            return CaseExpression(int64_empty_data, is_bit_set, one_expr, zero_expr)
         elif func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
             src = op_exprs[0]
