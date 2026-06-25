@@ -2259,6 +2259,79 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
+def get_common_int_type(left_expr, right_expr):
+    """Find a common integer type for two expressions with integer dtypes.
+
+    The bit width of the common type will be the maximum of the bit widths of the input types.
+    If `left_expr` and `right_expr` have the same signedness, the signedness does not change.
+    If `left_expr` and `right_expr` have different signedness, the common type will be
+    unsigned unless the unsigned input has a shorter bit width than the signed input.
+
+    Returns a tuple: (common_arrow_type, left_cast_needed, right_cast_needed)
+    (None, False, False) is returned if `left_expr` or `right_expr` does not have integer dtype.
+    """
+
+    def get_as_pyarrow_dtype(dtype):
+        if isinstance(dtype, pd.ArrowDtype):
+            return dtype.pyarrow_dtype
+        elif isinstance(dtype, pa.DataType):
+            return dtype
+
+        if not np.issubdtype(dtype, np.integer):
+            dtype = pd.api.types.pandas_dtype(dtype)
+
+            if hasattr(dtype, "numpy_dtype"):
+                dtype = dtype.numpy_dtype
+            else:
+                if not np.issubdtype(dtype, np.integer):
+                    raise ValueError(
+                        f"get_as_py_arrow_dtype: unable to convert {dtype} to a numpy dtype"
+                    )
+
+        return pa.from_numpy_dtype(dtype)
+
+    left_type = get_expr_dtype(left_expr)
+    right_type = get_expr_dtype(right_expr)
+
+    if not (compare_types(left_type, int) and compare_types(right_type, int)):
+        return None, False, False
+
+    left_type = get_as_pyarrow_dtype(left_type)
+    right_type = get_as_pyarrow_dtype(right_type)
+
+    # If types are identical, no cast needed
+    if left_type.equals(right_type):
+        return left_type, False, False
+
+    left_is_signed = pa.types.is_signed_integer(left_type)
+    right_is_signed = pa.types.is_signed_integer(right_type)
+    left_width = left_type.bit_width
+    right_width = right_type.bit_width
+
+    # Use wider type if inputs have same signedness
+    if left_is_signed == right_is_signed:
+        if left_width >= right_width:
+            return left_type, False, True
+        else:
+            return right_type, True, False
+
+    # For mixed signedness, use the wider bit width of the two.
+    # The common type is signed only if the max value of the unsigned input can fit in the signed int
+    common_type_width = max(left_width, right_width)
+    common_type_signed = (left_is_signed and left_width > right_width) or (
+        right_is_signed and right_width > left_width
+    )
+    common_type = eval(
+        f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
+    )
+
+    return (
+        common_type,
+        not left_type.equals(common_type),
+        not right_type.equals(common_type),
+    )
+
+
 def java_case_to_python_case(ctx, operands, input_plan):
     """Convert a BodoSQL Java CASE operator call to a DataFrame library CaseExpression.
     operands has the form [when1, then1, when2, then2, ..., else].
@@ -2273,7 +2346,42 @@ def java_case_to_python_case(ctx, operands, input_plan):
     else:
         else_expr = java_expr_to_python_expr(ctx, operands[2], input_plan)
 
-    return CaseExpression(then_expr.empty_data, when_expr, then_expr, else_expr)
+    # then_expr and else_expr could have different types here, e.g. int64 and uint64
+
+    # Here we explicitly unify integer types to prevent Arrow's case_when
+    # from attempting its own overflow-free unification which can fail in some cases,
+    # notably for mixed int64 and uint64 inputs
+
+    unified_then_expr = then_expr
+    unified_else_expr = else_expr
+    unified_empty_data = then_expr.empty_data
+
+    common_arrow_type, then_needs_cast, else_needs_cast = get_common_int_type(
+        then_expr, else_expr
+    )
+
+    if common_arrow_type is not None:
+        unified_empty_data = pd.Series(dtype=pd.ArrowDtype(common_arrow_type))
+
+        # Wrap expressions in CastExpression if needed
+        if then_needs_cast:
+            unified_then_expr = CastExpression(unified_empty_data, then_expr)
+        if else_needs_cast:
+            unified_else_expr = CastExpression(unified_empty_data, else_expr)
+
+        # Update empty_data to the unified type so schema matches the actual result
+        # This prevents Arrow from trying to safely cast the result to a mismatched type
+
+    case_expr = CaseExpression(
+        unified_empty_data, when_expr, unified_then_expr, unified_else_expr
+    )
+    # Restore the original return type if the types of then_expr and else_expr were different and our unification ended up casting one away from the intended result type.
+    # We do this with a CastExpression instead of via CaseExpression empty_data (which attempts to cast safely in _arrow_array_to_pd) so that integer overflow is allowed.
+    # At the moment we choose then_expr to be the result type - is there a better way to decide?
+    if then_needs_cast:
+        return CastExpression(then_expr.empty_data, case_expr)
+    else:
+        return case_expr
 
 
 def java_join_to_python_join(ctx, java_join):

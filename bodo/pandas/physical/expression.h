@@ -216,8 +216,7 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr,
-    bool sync_input_int_types = false);
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Run arrow compute on the left Datum and right ExprResult after
@@ -227,8 +226,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr,
-    bool sync_input_int_types = false);
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Run arrow compute on the left ExprResult and right Datum after
@@ -238,8 +236,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, arrow::Datum right_res,
     const std::string &comparator,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr,
-    bool sync_input_int_types = false);
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Convert ExprResult to arrow and cast to the requested type.
@@ -273,8 +270,7 @@ arrow::Datum do_arrow_compute_unary(
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string &comparator,
-    const std::shared_ptr<arrow::DataType> result_type = nullptr,
-    bool sync_input_int_types = false);
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Run cast on arrow Datum.

@@ -19,109 +19,6 @@
 #include "duckdb/planner/filter/optional_filter.hpp"
 #include "physical/expression.h"
 
-std::vector<arrow::Datum> CastIntDatumsToCommonTypeImpl(
-    const char *err_context, const std::vector<arrow::Datum> &datums) {
-    if (datums.empty()) {
-        return {};
-    }
-
-    auto get_unsigned_type =
-        [](int bit_width) -> std::shared_ptr<arrow::DataType> {
-        switch (bit_width) {
-            case 8:
-                return arrow::uint8();
-            case 16:
-                return arrow::uint16();
-            case 32:
-                return arrow::uint32();
-            case 64:
-                return arrow::uint64();
-            default:
-                return nullptr;
-        }
-    };
-
-    // Determine common type from all datums
-    std::shared_ptr<arrow::DataType> common_type = nullptr;
-
-    for (size_t i = 0; i < datums.size(); i++) {
-        std::shared_ptr<arrow::DataType> datum_type = datums[i].type();
-
-        if (!arrow::is_integer(datum_type->id())) {
-            // There is a non-integer type, so don't do any casting
-            common_type = nullptr;
-            break;
-        }
-
-        if (!common_type) {
-            common_type = datum_type;
-            continue;
-        }
-
-        if (!common_type->Equals(datum_type)) {
-            int common_width = common_type->bit_width();
-            int datum_width = datum_type->bit_width();
-
-            bool common_signed = arrow::is_signed_integer(common_type->id());
-            bool datum_signed = arrow::is_signed_integer(datum_type->id());
-
-            // If one is signed and one is unsigned, promote to unsigned of
-            // larger width
-            if (common_signed != datum_signed) {
-                int max_width = std::max(common_width, datum_width);
-                common_type = get_unsigned_type(max_width);
-            } else if (common_width != datum_width) {
-                // Both same sign but different width: promote common type to
-                // larger. Note that Arrow probably won't have a problem doing
-                // this promotion itself, but we do it here to be safe.
-                int max_width = std::max(common_width, datum_width);
-                if (common_signed) {
-                    // Both signed
-                    if (max_width == 64) {
-                        common_type = arrow::int64();
-                    } else if (max_width == 32) {
-                        common_type = arrow::int32();
-                    } else if (max_width == 16) {
-                        common_type = arrow::int16();
-                    } else {
-                        common_type = arrow::int8();
-                    }
-                } else {
-                    // Both unsigned
-                    common_type = get_unsigned_type(max_width);
-                }
-            }
-        }
-    }
-
-    // Cast all datums to common type if we determined one
-    std::vector<arrow::Datum> casted_datums;
-    if (common_type) {
-        for (const auto &datum : datums) {
-            if (datum.type()->Equals(common_type)) {
-                casted_datums.push_back(datum);
-            } else {
-                arrow::compute::CastOptions cast_opts;
-                cast_opts.allow_int_overflow = true;
-                auto cast_res =
-                    arrow::compute::Cast(datum, common_type, cast_opts);
-                if (!cast_res.ok()) [[unlikely]] {
-                    throw std::runtime_error(
-                        fmt::format("CastIntDatumsToCommonType: Error casting "
-                                    "datum for {}: ",
-                                    err_context) +
-                        cast_res.status().message());
-                }
-                casted_datums.push_back(cast_res.ValueOrDie());
-            }
-        }
-    } else {
-        casted_datums = datums;
-    }
-
-    return casted_datums;
-}
-
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
              std::shared_ptr<arrow::Scalar>>
@@ -1070,9 +967,16 @@ std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum) {
     // DuckDB's optimizer may evaluate expressions with scalar input, see
     // test_tpch_q22
     if (datum.is_scalar()) {
-        return arrow_array_to_bodo(
-            arrow::MakeArrayFromScalar(*datum.scalar(), 1).ValueOrDie(),
-            bodo::BufferPool::DefaultPtr());
+        auto scalar_array_result =
+            arrow::MakeArrayFromScalar(*datum.scalar(), 1);
+        if (!scalar_array_result.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "ConvertDatumToArrowInfo: Error making Arrow array from "
+                "scalar: " +
+                scalar_array_result.status().message());
+        }
+        return arrow_array_to_bodo(scalar_array_result.ValueOrDie(),
+                                   bodo::BufferPool::DefaultPtr());
     }
 
     std::shared_ptr<arrow::Array> arrow_arr = datum.make_array();
@@ -1093,9 +997,14 @@ arrow::Datum ConvertExprResultToDatum(std::shared_ptr<ExprResult> res,
     if (res_as_array) {
         src = arrow::Datum(prepare_arrow_compute(res_as_array->result));
     } else if (res_as_scalar) {
-        src = arrow::MakeScalar(prepare_arrow_compute(res_as_scalar->result)
-                                    ->GetScalar(0)
-                                    .ValueOrDie());
+        auto src_scalar_result =
+            prepare_arrow_compute(res_as_scalar->result)->GetScalar(0);
+        if (!src_scalar_result.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "ConvertExprResultToDatum: Error getting Arrow scalar: " +
+                src_scalar_result.status().message());
+        }
+        src = arrow::MakeScalar(src_scalar_result.ValueOrDie());
     } else {
         throw std::runtime_error(res_name + " is neither array nor scalar.");
     }

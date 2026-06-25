@@ -430,38 +430,35 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator,
-    const std::shared_ptr<arrow::DataType> result_type,
-    bool sync_input_int_types) {
+    const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
     arrow::Datum src2 =
         ConvertExprResultToDatum(right_res, "do_arrow_compute right");
-    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
-        src1, src2, comparator, result_type, sync_input_int_types);
+    arrow::Datum cmp_res_datum =
+        do_arrow_compute_binary(src1, src2, comparator, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator,
-    const std::shared_ptr<arrow::DataType> result_type,
-    bool sync_input_int_types) {
+    const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum src2 =
         ConvertExprResultToDatum(right_res, "do_arrow_compute right");
-    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
-        left_res, src2, comparator, result_type, sync_input_int_types);
+    arrow::Datum cmp_res_datum =
+        do_arrow_compute_binary(left_res, src2, comparator, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, arrow::Datum right_res,
     const std::string& comparator,
-    const std::shared_ptr<arrow::DataType> result_type,
-    bool sync_input_int_types) {
+    const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
-    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
-        src1, right_res, comparator, result_type, sync_input_int_types);
+    arrow::Datum cmp_res_datum =
+        do_arrow_compute_binary(src1, right_res, comparator, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
@@ -488,13 +485,7 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string& comparator,
-    const std::shared_ptr<arrow::DataType> result_type,
-    bool sync_input_int_types) {
-    if (sync_input_int_types) {
-        std::tie(left_res, right_res) = CastIntDatumsToCommonType(
-            "do_arrow_compute_binary arg", left_res, right_res);
-    }
-
+    const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {left_res, right_res});
     if (!cmp_res.ok()) [[unlikely]] {
@@ -635,11 +626,6 @@ std::shared_ptr<array_info> do_arrow_compute_case(
         ConvertExprResultToDatum(then_res, "do_arrow_compute then");
     arrow::Datum src3 =
         ConvertExprResultToDatum(else_res, "do_arrow_compute else");
-
-    // Make input integer datums unsigned so that Arrow doesn't attempt a
-    // safe conversion to signed int that isn't possible
-    std::tie(src2, src3) =
-        CastIntDatumsToCommonType("do_arrow_compute_case arg", src2, src3);
 
     // NOTE: Arrow's "if_else" doesn't match our Python and SQL semantics since
     // it propagates nulls in the condition.
