@@ -17,6 +17,7 @@ pytestmark = pytest_slow_unless_codegen
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_select(memory_leak_check):
     """
     Test a simple select statement with a table including

@@ -26,7 +26,6 @@ from bodo.pandas.plan import (
     ArrowScalarFuncExpression,
     CaseExpression,
     CastExpression,
-    ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
@@ -768,10 +767,21 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (tz,),
             )
 
-        # Integers are assumed in seconds in BodoSQL
+        # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
         if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
             SqlTypeName.TIMESTAMP
         ):
+            # Arrow's cast_timestamp only accepts int64 input, so convert other integer types to int64 first.
+            # This likely won't work for uint64 where the input is greater than the max value of int64,
+            # but the timestamp itself is backed by signed int64 anyway
+            in_expr_dtype = get_expr_dtype(in_expr)
+            if not compare_types(in_expr_dtype, "int64"):
+                int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                in_expr = CastExpression(
+                    int64_empty_data,
+                    in_expr,
+                )
+
             cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
             in_expr = CastExpression(
                 cast_empty_data,
@@ -1086,16 +1096,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(left_expr, "left_expr", (int, float))
             ensure_type_of_expr(right_expr, "right_expr", (int, float))
 
-            left_expr_is_int = pa.types.is_integer(
-                left_expr.empty_data.dtypes[
-                    left_expr.empty_data.columns[0]
-                ].pyarrow_dtype
-            )
-            right_expr_is_int = pa.types.is_integer(
-                right_expr.empty_data.dtypes[
-                    right_expr.empty_data.columns[0]
-                ].pyarrow_dtype
-            )
+            left_expr_is_int = compare_types(get_expr_dtype(left_expr), int)
+            right_expr_is_int = compare_types(get_expr_dtype(right_expr), int)
 
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
@@ -1121,15 +1123,18 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 right_expr_rounded = right_expr
 
             # Get nonzero values as True, zero values as False
-            zero_expr = ConstantExpression(
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            left_zero_expr = ConstantExpression(
                 int_empty_data if left_expr_is_int else float_empty_data, input_plan, 0
             )
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             left_expr_bool = ComparisonOpExpression(
-                bool_empty_data, left_expr_rounded, zero_expr, operator.ne
+                bool_empty_data, left_expr_rounded, left_zero_expr, operator.ne
+            )
+            right_zero_expr = ConstantExpression(
+                int_empty_data if right_expr_is_int else float_empty_data, input_plan, 0
             )
             right_expr_bool = ComparisonOpExpression(
-                bool_empty_data, right_expr_rounded, zero_expr, operator.ne
+                bool_empty_data, right_expr_rounded, right_zero_expr, operator.ne
             )
 
             if func_name == "BOOLAND":
@@ -1149,14 +1154,23 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             expr = op_exprs[0]
             ensure_type_of_expr(expr, "expr", (int, float))
 
-            # Round float inputs
+            expr_is_int = compare_types(get_expr_dtype(expr), int)
+
+            # Round float inputs (for the same reason as BOOLAND/BOOLOR/BOOLXOR)
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            expr_rounded = ArrowScalarFuncExpression(
-                int_empty_data, [expr], "round", ()
-            )
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+            if not expr_is_int:
+                expr_rounded = ArrowScalarFuncExpression(
+                    float_empty_data, [expr], "round", ()
+                )
+            else:
+                expr_rounded = expr
 
             # Flipped logic: get nonzero values as False, zero values as True
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            zero_expr = ConstantExpression(
+                int_empty_data if expr_is_int else float_empty_data, input_plan, 0
+            )
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ComparisonOpExpression(
                 bool_empty_data, expr_rounded, zero_expr, operator.eq
@@ -1375,6 +1389,119 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 [occurences_replaced_expr],
                 "regexp_substr",  # Made up function, will redirect to extract_regex with the right group extracted
                 (regexp.value, regex_params, group_num),
+            )
+
+        if func_name == "PI" and len(op_exprs) == 0:
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            return ConstantExpression(dummy_empty_data, input_plan, np.pi)
+
+        if (
+            func_name
+            in (
+                "ACOS",
+                "ACOSH",
+                "ASIN",
+                "ASINH",
+                "COS",
+                "COSH",
+                "SIN",
+                "SINH",
+                "TAN",
+                "TANH",
+                "ATAN",
+                "ATANH",
+            )
+            and len(op_exprs) == 1
+        ):
+            src = op_exprs[0]
+            # Arrow's Trigonometric functions return float32 for float32 input and
+            # float64 for float64 and decimal input:
+            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                func_name.lower(),
+                (),
+            )
+
+        if func_name == "ATAN2" and len(op_exprs) == 2:
+            src1 = op_exprs[0]
+            src2 = op_exprs[1]
+            src_dtype = src1.empty_data.dtypes.iloc[0]
+            src2_dtype = src2.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if (
+                    src_dtype.pyarrow_dtype == pa.float32()
+                    and src2_dtype.pyarrow_dtype == pa.float32()
+                )
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src1, src2],
+                "atan2",
+                (),
+            )
+
+        if func_name in ("RADIANS", "DEGREES") and len(op_exprs) == 1:
+            src = op_exprs[0]
+            # Return float32 for float32 input and float64 for float64 and decimal input
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            ceof_expr = ConstantExpression(
+                dummy_empty_data,
+                input_plan,
+                (np.pi / 180.0) if func_name == "RADIANS" else (180.0 / np.pi),
+            )
+            return ArithOpExpression(
+                dummy_empty_data,
+                src,
+                ceof_expr,
+                "__mul__",
+            )
+
+        if func_name == "COT" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            # Return float32 for float32 input and float64 for float64 and decimal input
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            # COT is defined as 1 / tan(x):
+            # https://github.com/bodo-ai/Bodo/blob/d8a047024e8cfd12993c8ad4e8d781c4f2723348/BodoSQL/bodosql/kernels/trig_array_kernels.py#L251
+            one_expr = ConstantExpression(
+                dummy_empty_data,
+                input_plan,
+                1.0,
+            )
+            tan_expr = ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                "tan",
+                (),
+            )
+            return ArithOpExpression(
+                dummy_empty_data,
+                one_expr,
+                tan_expr,
+                "__truediv__",
             )
 
         # If we didn't match a supported basic function, fall through to NotImplemented
@@ -1627,6 +1754,41 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(src, "src", str)
 
             return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
+        elif (
+            func_name
+            in (
+                "ACOS",
+                "ACOSH",
+                "ASIN",
+                "ASINH",
+                "COS",
+                "COSH",
+                "SIN",
+                "SINH",
+                "TAN",
+                "TANH",
+                "ATAN",
+                "ATANH",
+            )
+            and len(op_exprs) == 1
+        ):
+            src = op_exprs[0]
+            # Arrow's Trigonometric functions return float32 for float32 input and
+            # float64 for float64 and decimal input:
+            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                func_name.lower(),
+                (),
+            )
         elif func_name == "RTRIMMED_LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
             ensure_type_of_expr(src, "src", str)
@@ -1892,15 +2054,75 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     )
 
 
+def compare_types(obj_type, expected_type):
+    """
+    Type checker that accounts for numpy/pandas/pyarrow dtypes.
+    Returns True if `obj_type` is a subclass of `expected_type` or are otherwise considered equivalent
+    """
+    if isinstance(obj_type, str):
+        try:
+            obj_type = eval(obj_type)
+        except Exception:
+            pass
+        obj_type = pd.api.types.pandas_dtype(obj_type)
+    if isinstance(expected_type, str):
+        try:
+            expected_type = eval(expected_type)
+        except Exception:
+            pass
+        expected_type = pd.api.types.pandas_dtype(expected_type)
+
+    if isinstance(obj_type, type) and isinstance(expected_type, type):
+        if issubclass(obj_type, expected_type):
+            return True
+
+    if isinstance(obj_type, pa.DataType) and isinstance(expected_type, pa.DataType):
+        if obj_type.equals(expected_type):
+            return True
+    # Convert pyarrow datatype objects to pandas.
+    # This helps with compatibility with, e.g., pd.api.types.is_integer_dtype and the .numpy_dtype accessor below.
+    if isinstance(obj_type, pa.DataType):
+        # Note that wrapping pyarrow types in pd.ArrowDtype seems to behave better than pa.DataType.to_pandas_dtype()
+        # For example, pa.string().to_pandas_dtype() just gives np.object_
+        obj_type = pd.ArrowDtype(obj_type)
+    if isinstance(expected_type, pa.DataType):
+        expected_type = pd.ArrowDtype(expected_type)
+
+    if expected_type is int:
+        return pd.api.types.is_integer_dtype(obj_type)
+    if expected_type is float:
+        return pd.api.types.is_float_dtype(obj_type)
+    if expected_type is str:
+        return pd.api.types.is_string_dtype(obj_type)
+    if expected_type is bool:
+        return pd.api.types.is_bool_dtype(obj_type)
+
+    if pd.api.types.is_dtype_equal(obj_type, expected_type):
+        return True
+
+    # Works for most pd.api.types.ExtensionDtypes
+    # This can convert the nullable Pandas dtypes into standard numpy dtypes for easier comparison
+    if hasattr(obj_type, "numpy_dtype"):
+        obj_type = obj_type.numpy_dtype
+    if hasattr(expected_type, "numpy_dtype"):
+        expected_type = expected_type.numpy_dtype
+
+    if np.issubdtype(obj_type, expected_type):
+        return True
+
+    return False
+
+
 def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
     if not isinstance(expr, bodo.pandas.plan.ConstantExpression):
         raise ValueError(
             f"{expr_name} should be ConstantExpression but instead was {type(expr)}"
         )
+
     if not isinstance(dtype, (list, tuple, set)):
         dtype = (dtype,)
     for dtype_alternative in dtype:
-        if isinstance(expr.value, dtype_alternative):
+        if compare_types(type(expr.value), dtype_alternative):
             return
     if len(dtype) > 1:
         raise ValueError(
@@ -1912,74 +2134,42 @@ def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
         )
 
 
-def ensure_type_of_expr(expr, expr_name, dtype):
-    if isinstance(dtype, (list, tuple, set)):
-        for dtype_alternative in dtype:
-            try:
-                # Check if expr is this dtype from the accepted options
-                ensure_type_of_expr(expr, expr_name, dtype_alternative)
-                return
-            except ValueError as e:  # noqa
-                # Expr is not this type, try the next
-                pass
-        raise ValueError(
-            f"Expected {expr_name} ({type(expr)}) to hold one of the datatypes {str(dtype)},{str(e).partition(',')[2]}"  # noqa
-        )
+def get_expr_dtype(expr, expr_name="Expression"):
+    if not isinstance(expr, bodo.pandas.plan.Expression):
+        return type(expr)
 
-    def compare_types(obj_type, expected_type):
-        if expected_type is int:
-            return pd.api.types.is_integer_dtype(obj_type)
-        if expected_type is float:
-            return pd.api.types.is_float_dtype(obj_type)
-        if expected_type is str:
-            return pd.api.types.is_string_dtype(obj_type)
-        if expected_type is bool:
-            return pd.api.types.is_bool_dtype(obj_type)
-        if isinstance(expected_type, np.dtype) or isinstance(obj_type, np.dtype):
-            return np.issubdtype(obj_type, expected_type)
-        # At this point we could try converting dtypes to pandas dtypes
-        if isinstance(expected_type, pd.api.extensions.ExtensionDtype) or isinstance(
-            obj_type, pd.api.extensions.ExtensionDtype
-        ):
-            return pd.api.types.is_dtype_equal(obj_type, expected_type)
-        return False
-
-    # Type checker that accounts for pandas dtypes
-    def instanceof(obj, dtype):
-        if isinstance(obj, dtype):
-            return True
-        obj_type = (
-            type(obj) if not isinstance(obj, (pd.Series, np.ndarray)) else obj.dtype
-        )
-        return compare_types(obj_type, dtype)
-
-    if instanceof(expr, dtype):
-        return
-    elif isinstance(expr, bodo.pandas.plan.ConstantExpression):
-        if instanceof(expr.value, dtype):
-            return
-        else:
-            expr_dtype = type(expr.value)
-    elif isinstance(expr, ColRefExpression):
-        if isinstance(expr.empty_data, pd.Series):
-            expr_dtype = expr.empty_data.dtype
-            if instanceof(expr.empty_data, dtype):
-                return
+    if isinstance(expr, bodo.pandas.plan.ConstantExpression):
+        return type(expr.value)
+    else:
+        if isinstance(expr.empty_data, (pd.Series, np.ndarray)):
+            return expr.empty_data.dtype
         elif isinstance(expr.empty_data, pd.DataFrame):
             assert len(expr.empty_data.columns) == 1
-            expr_dtype = expr.empty_data.dtypes[expr.empty_data.columns[0]]
-            if compare_types(expr_dtype, dtype):
-                return
+            return expr.empty_data.dtypes[expr.empty_data.columns[0]]
         else:
             raise ValueError(
-                f"Unsupported type of {expr_name}.empty_data:", type(expr.empty_data)
+                f"get_expr_dtype: Unsupported type of {expr_name}.empty_data:",
+                type(expr.empty_data),
             )
-    else:
-        raise ValueError(f"Unsupported type of {expr_name}:", type(expr))
 
-    raise ValueError(
-        f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype)}, instead was {expr_dtype}"
-    )
+
+def ensure_type_of_expr(expr, expr_name, dtype):
+    expr_dtype = get_expr_dtype(expr, expr_name)
+
+    if not isinstance(dtype, (list, tuple, set)):
+        dtype = (dtype,)
+    for dtype_alternative in dtype:
+        if compare_types(expr_dtype, dtype_alternative):
+            return
+
+    if len(dtype) > 1:
+        raise ValueError(
+            f"Expected {expr_name} ({type(expr)}) to hold one of the datatypes {str(dtype)}, instead was {expr_dtype}"
+        )
+    else:
+        raise ValueError(
+            f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype[0])}, instead was {expr_dtype}"
+        )
 
 
 def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
@@ -2723,7 +2913,7 @@ def java_values_to_python_values(ctx, java_plan):
 
     data = []
     for row in rows:
-        data.append([java_literal_to_python_literal(ctx, e, None).value for e in row])
+        data.append([java_literal_to_python_const(ctx, e) for e in row])
 
     pa_schema = pa.schema(
         [java_field_to_pa_field(ctx, f) for f in row_type.getFieldList()]
@@ -2737,6 +2927,20 @@ def java_values_to_python_values(ctx, java_plan):
         )
 
     return bd.from_pandas(df)._plan
+
+
+def java_literal_to_python_const(ctx, java_literal):
+    """Convert a BodoSQL Java literal to a Python constant value."""
+
+    lit_expr = java_literal_to_python_literal(ctx, java_literal, None)
+    assert isinstance(lit_expr, (ConstantExpression, NullExpression)), (
+        "java_literal_to_python_const: Expected ConstantExpression or NullExpression"
+    )
+
+    if isinstance(lit_expr, NullExpression):
+        return None
+
+    return lit_expr.value
 
 
 def java_field_to_pa_field(ctx, java_field):
@@ -2784,6 +2988,8 @@ def sql_type_to_pa_type(ctx, sql_type_name):
         return pa.large_string()
     if sql_type_name.equals(SqlTypeName.TIME):
         return pa.time64("ns")
+    if sql_type_name.equals(SqlTypeName.NULL):
+        return pa.null()
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 

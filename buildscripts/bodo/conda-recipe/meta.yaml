@@ -81,11 +81,10 @@ requirements:
     - {{mpi_build_pkg}}
 
     # GPU dependencies
-    # This pin is necessary to avoid compatibility issues with 26.02
-    # and newer versions.
-    - cudf =26.04                  # [gpu]
-    - rmm =26.04                   # [gpu]
-    - librmm =26.04                # [gpu]
+    # This pin is necessary to avoid compatibility issues
+    - cudf =26.06                  # [gpu]
+    - rmm =26.06                   # [gpu]
+    - librmm =26.06                # [gpu]
     - cuda-version 13.*            # [gpu]
     - cuda-nvml-dev                # [gpu]
 

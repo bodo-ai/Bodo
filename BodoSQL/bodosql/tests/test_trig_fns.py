@@ -71,6 +71,7 @@ def double_op_trig_fn_info(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_single_op_trig_fns_cols(
     single_op_trig_fn_info, bodosql_trig_values, spark_info, memory_leak_check
 ):
@@ -88,6 +89,7 @@ def test_single_op_trig_fns_cols(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_double_op_trig_fns_cols(
     double_op_trig_fn_info, bodosql_trig_values, memory_leak_check
 ):
@@ -107,6 +109,7 @@ def test_double_op_trig_fns_cols(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_single_op_trig_fns_scalars(
     single_op_trig_fn_info, bodosql_trig_values, spark_info, memory_leak_check
 ):
@@ -125,6 +128,7 @@ def test_single_op_trig_fns_scalars(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_double_op_trig_fns_scalars(
     double_op_trig_fn_info, bodosql_trig_values, memory_leak_check
 ):
@@ -144,6 +148,7 @@ def test_double_op_trig_fns_scalars(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_pi(basic_df, memory_leak_check):
     """tests that the pi fn is working"""
     query = "SELECT A, PI from table1"
