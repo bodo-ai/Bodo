@@ -357,10 +357,8 @@ void CudaHashJoin::build_hash_table(
         if (this->join_type == duckdb::JoinType::MARK ||
             this->join_type == duckdb::JoinType::ANTI) {
             this->_join_handle = std::make_unique<cudf::filtered_join>(
-                selected_build_view, this->null_equality,
-                /* default args otherwise the compiler can't figure out which
-                   constructor to call */
-                cudf::set_as_build_table::RIGHT, 0.5, build_se->stream);
+                selected_build_view, this->null_equality, 0.5,
+                build_se->stream);
         } else {
             this->_join_handle = std::make_unique<cudf::hash_join>(
                 selected_build_view, this->null_equality, build_se->stream);
