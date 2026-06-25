@@ -17,7 +17,7 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, temp_env_override
+from bodo.tests.utils import check_func, temp_config_override, temp_env_override
 
 comm = MPI.COMM_WORLD
 
@@ -28,7 +28,9 @@ pytestmark = pytest.mark.iceberg
     "allow_low_ndv_filter",
     [
         pytest.param(True, id="low_ndv"),
-        pytest.param(False, id="min_max"),
+        pytest.param(
+            False, id="min_max", marks=[pytest.mark.bodosql_cpp, pytest.mark.gpu]
+        ),
     ],
 )
 def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
@@ -57,25 +59,32 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
     py_output = pd.DataFrame({"A": [1] * 100})
     if allow_low_ndv_filter:
         limit = 20
+        run_1D_var = True
+        run_python = False
         log_msg = "Runtime join filter expression: ((ds.field('{A}').isin([1])))"
     else:
         limit = 0
-        log_msg = "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 1))"
+        run_1D_var = False
+        run_python = True
+        # TODO BSE-5476: Check logs in BodoSQL backend C++ tests
+        log_msg = ""
     with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
-        with set_logging_stream(logger, 2):
-            check_func(
-                impl,
-                (bc, query),
-                py_output=py_output,
-                only_1DVar=True,
-                sort_output=True,
-                reset_index=True,
-            )
-            check_logger_msg(
-                stream,
-                log_msg,
-            )
-            check_logger_msg(stream, "Total number of files is 5. Reading 1 files:")
+        with temp_config_override("dataframe_library_run_parallel", False):
+            with set_logging_stream(logger, 2):
+                check_func(
+                    impl,
+                    (bc, query),
+                    py_output=py_output,
+                    only_1DVar=run_1D_var,
+                    only_python=run_python,
+                    sort_output=True,
+                    reset_index=True,
+                )
+                check_logger_msg(
+                    stream,
+                    log_msg,
+                )
+                check_logger_msg(stream, "Total number of files is 5. Reading 1 files:")
 
 
 @pytest.mark.parametrize(
@@ -395,6 +404,8 @@ def rtjf_test_tables():
 
 
 @temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "0"})
+@pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 @pytest.mark.parametrize(
     "query, expected_out",
     [
@@ -495,10 +506,9 @@ def test_merged_rtjf(
             impl,
             (bc, query),
             py_output=expected_out,
-            only_1DVar=True,
+            only_python=True,
             sort_output=True,
             reset_index=True,
-            use_dict_encoded_strings=True,
         )
 
 

@@ -2212,7 +2212,7 @@ def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
             is_first[key] = is_first_cols[loc_ind]
 
         # orig_build_key_cols for JoinFilterInfo requires a list of indexes
-        # corresponding to the order of the build keys appear in the
+        # corresponding to the order each build key appears in the
         # build table.
         sorted_build_keys = sorted(set(java_build_keys))
         build_cols_idxs = [sorted_build_keys.index(k) for k in java_build_keys]
