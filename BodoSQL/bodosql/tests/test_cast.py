@@ -602,7 +602,7 @@ def test_tz_aware_datetime_to_char_cast(
     if bodosql.use_cpp_backend:
         # US/Pacific is not in Arrow's timezone database, so we swap with the equivalent America/Los_Angeles.
         # In the future we may want a way to intercept the cast input and switch the timezones with
-        # ones recognized by Arrow before passing to Arrow's cast function.
+        # ones recognized by Arrow before passing to Arrow's cast function. See [BSE-5471].
         if tz_aware_df["TABLE1"]["A"].dt.tz.key == "US/Pacific":
             tz_aware_df["TABLE1"]["A"] = tz_aware_df["TABLE1"]["A"].dt.tz_convert(
                 "America/Los_Angeles"
@@ -638,7 +638,7 @@ def test_tz_aware_datetime_to_timestamp_cast(
     if bodosql.use_cpp_backend:
         # US/Pacific is not in Arrow's timezone database, so we swap with the equivalent America/Los_Angeles.
         # In the future we may want a way to intercept the cast input and switch the timezones with
-        # ones recognized by Arrow before passing to Arrow's cast function.
+        # ones recognized by Arrow before passing to Arrow's cast function. See [BSE-5471].
         if tz_aware_df["TABLE1"]["A"].dt.tz.key == "US/Pacific":
             tz_aware_df["TABLE1"]["A"] = tz_aware_df["TABLE1"]["A"].dt.tz_convert(
                 "America/Los_Angeles"

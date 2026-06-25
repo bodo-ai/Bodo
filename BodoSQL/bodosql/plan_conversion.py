@@ -1392,6 +1392,119 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (regexp.value, regex_params, group_num),
             )
 
+        if func_name == "PI" and len(op_exprs) == 0:
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            return ConstantExpression(dummy_empty_data, input_plan, np.pi)
+
+        if (
+            func_name
+            in (
+                "ACOS",
+                "ACOSH",
+                "ASIN",
+                "ASINH",
+                "COS",
+                "COSH",
+                "SIN",
+                "SINH",
+                "TAN",
+                "TANH",
+                "ATAN",
+                "ATANH",
+            )
+            and len(op_exprs) == 1
+        ):
+            src = op_exprs[0]
+            # Arrow's Trigonometric functions return float32 for float32 input and
+            # float64 for float64 and decimal input:
+            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                func_name.lower(),
+                (),
+            )
+
+        if func_name == "ATAN2" and len(op_exprs) == 2:
+            src1 = op_exprs[0]
+            src2 = op_exprs[1]
+            src_dtype = src1.empty_data.dtypes.iloc[0]
+            src2_dtype = src2.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if (
+                    src_dtype.pyarrow_dtype == pa.float32()
+                    and src2_dtype.pyarrow_dtype == pa.float32()
+                )
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src1, src2],
+                "atan2",
+                (),
+            )
+
+        if func_name in ("RADIANS", "DEGREES") and len(op_exprs) == 1:
+            src = op_exprs[0]
+            # Return float32 for float32 input and float64 for float64 and decimal input
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            ceof_expr = ConstantExpression(
+                dummy_empty_data,
+                input_plan,
+                (np.pi / 180.0) if func_name == "RADIANS" else (180.0 / np.pi),
+            )
+            return ArithOpExpression(
+                dummy_empty_data,
+                src,
+                ceof_expr,
+                "__mul__",
+            )
+
+        if func_name == "COT" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            # Return float32 for float32 input and float64 for float64 and decimal input
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            # COT is defined as 1 / tan(x):
+            # https://github.com/bodo-ai/Bodo/blob/d8a047024e8cfd12993c8ad4e8d781c4f2723348/BodoSQL/bodosql/kernels/trig_array_kernels.py#L251
+            one_expr = ConstantExpression(
+                dummy_empty_data,
+                input_plan,
+                1.0,
+            )
+            tan_expr = ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                "tan",
+                (),
+            )
+            return ArithOpExpression(
+                dummy_empty_data,
+                one_expr,
+                tan_expr,
+                "__truediv__",
+            )
+
         # If we didn't match a supported basic function, fall through to NotImplemented
         raise NotImplementedError(
             f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
@@ -1795,6 +1908,41 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(src, "src", str)
 
             return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
+        elif (
+            func_name
+            in (
+                "ACOS",
+                "ACOSH",
+                "ASIN",
+                "ASINH",
+                "COS",
+                "COSH",
+                "SIN",
+                "SINH",
+                "TAN",
+                "TANH",
+                "ATAN",
+                "ATANH",
+            )
+            and len(op_exprs) == 1
+        ):
+            src = op_exprs[0]
+            # Arrow's Trigonometric functions return float32 for float32 input and
+            # float64 for float64 and decimal input:
+            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                func_name.lower(),
+                (),
+            )
         elif func_name == "RTRIMMED_LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
             ensure_type_of_expr(src, "src", str)
@@ -3002,7 +3150,7 @@ def java_values_to_python_values(ctx, java_plan):
 
     data = []
     for row in rows:
-        data.append([java_literal_to_python_literal(ctx, e, None).value for e in row])
+        data.append([java_literal_to_python_const(ctx, e) for e in row])
 
     pa_schema = pa.schema(
         [java_field_to_pa_field(ctx, f) for f in row_type.getFieldList()]
@@ -3016,6 +3164,20 @@ def java_values_to_python_values(ctx, java_plan):
         )
 
     return bd.from_pandas(df)._plan
+
+
+def java_literal_to_python_const(ctx, java_literal):
+    """Convert a BodoSQL Java literal to a Python constant value."""
+
+    lit_expr = java_literal_to_python_literal(ctx, java_literal, None)
+    assert isinstance(lit_expr, (ConstantExpression, NullExpression)), (
+        "java_literal_to_python_const: Expected ConstantExpression or NullExpression"
+    )
+
+    if isinstance(lit_expr, NullExpression):
+        return None
+
+    return lit_expr.value
 
 
 def java_field_to_pa_field(ctx, java_field):
@@ -3063,6 +3225,8 @@ def sql_type_to_pa_type(ctx, sql_type_name):
         return pa.large_string()
     if sql_type_name.equals(SqlTypeName.TIME):
         return pa.time64("ns")
+    if sql_type_name.equals(SqlTypeName.NULL):
+        return pa.null()
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
