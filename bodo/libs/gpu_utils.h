@@ -7,6 +7,7 @@ extern bool g_use_async;
 #include <mpi.h>
 #include <cudf/contiguous_split.hpp>
 #include <cudf/table/table.hpp>
+#include <rmm/resource_ref.hpp>
 #include <unordered_set>
 
 #define CHECK_CUDA(call)                                                    \
@@ -577,10 +578,9 @@ void cudf_set_bools_from_indices(cudf::mutable_column_view target_bools,
  *
  * @note This function must be called after a rank's device id is set.
  *
- * @return std::shared_ptr<rmm::mr::device_memory_resource>
+ * @return rmm::device_async_resource_ref
  */
-std::shared_ptr<rmm::mr::device_memory_resource>
-get_gpu_async_memory_resource();
+rmm::device_async_resource_ref get_gpu_async_memory_resource();
 
 /**
  * @brief Get a static Cuda memory resource reference for allocating buffers for

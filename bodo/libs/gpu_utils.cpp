@@ -711,9 +711,10 @@ bool is_gpu_rank() {
     return is_gpu_rank;
 }
 
-std::shared_ptr<rmm::mr::device_memory_resource>
-get_gpu_async_memory_resource() {
-    return std::make_shared<rmm::mr::cuda_async_memory_resource>();
+rmm::device_async_resource_ref get_gpu_async_memory_resource() {
+    static rmm::mr::cuda_async_memory_resource mr;
+    static rmm::device_async_resource_ref mr_ref{&mr};
+    return mr_ref;
 }
 
 rmm::device_async_resource_ref get_cuda_memory_resource_ref() {
