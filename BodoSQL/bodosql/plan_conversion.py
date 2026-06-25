@@ -2530,6 +2530,11 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
             dummy_empty_data, input_plan, java_literal.getValue2()
         )
 
+    # SYMBOL is internal Calcite enum and needs supported specifically for each case.
+    # Just avoiding errors here if input exprs are processed before the function itself.
+    if lit_type_name.equals(SqlTypeName.SYMBOL):
+        return None
+
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
     )
