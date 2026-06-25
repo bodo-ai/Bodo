@@ -28,9 +28,7 @@ pytestmark = pytest.mark.iceberg
     "allow_low_ndv_filter",
     [
         pytest.param(True, id="low_ndv"),
-        pytest.param(
-            False, id="min_max", marks=[pytest.mark.bodosql_cpp, pytest.mark.gpu]
-        ),
+        pytest.param(False, id="min_max", marks=pytest.mark.bodosql_cpp),
     ],
 )
 def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
@@ -405,7 +403,6 @@ def rtjf_test_tables():
 
 @temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "0"})
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "query, expected_out",
     [
