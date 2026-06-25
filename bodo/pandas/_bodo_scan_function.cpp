@@ -91,8 +91,6 @@ PhysicalCpuGpuSource BodoIcebergScanFunctionData::CreatePhysicalOperator(
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
     std::shared_ptr<std::unordered_map<int, join_state_t>> join_filter_states,
     bool run_on_gpu) {
-    // If converting from Calcite, we need to override the selected columns
-    // and limit_val since the duckdb optimizer does not run.
     if (selected_fields_opt.has_value()) {
         selected_columns = selected_fields_opt.value();
     }

@@ -2170,7 +2170,7 @@ def java_subplan_to_python_subplan(ctx, java_subplan):
 
 def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
     """Convert a BodoSQL Java runtime join filter node to a Python runtime join filter
-    node.
+    info.
     """
     # Get join filter info
     # IDs of joins creating each filter
