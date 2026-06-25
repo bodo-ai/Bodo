@@ -8,7 +8,7 @@ Refer to the SDK guide for more details:
 
 https://docs.bodo.ai/latest/guides/using_bodo_platform/bodo_platform_sdk_guide/#installation
 
-NOTE: This script assumes that you have the file `dataframe_queries.py`
+NOTE: This script assumes that you have the file `bodosql_queries.py`
 copied in your current workspace.
 
 usage:
@@ -43,7 +43,7 @@ def run_bodo_benchmark(folder, queries, scale_factor):
         benchmark_job = benchmark_cluster.run_job(
             code_type="PYTHON",
             source={"type": "WORKSPACE", "path": "/"},
-            exec_file="dataframe_queries.py",
+            exec_file="bodosql_queries.py",
             args=arg_str,
         )
         print(benchmark_job.wait_for_status(["SUCCEEDED"]).get_stdout())

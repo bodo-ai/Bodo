@@ -1,8 +1,8 @@
 #!/bin/bash
 # Usage: ./run_all_queries.sh
-# Runs dataframe_queries.py for queries 1..22, moves rank files, extracts async stats, and generates graphs.
+# Runs bodosql_queries.py for queries 1..22, moves rank files, extracts async stats, and generates graphs.
 
-PYTHON_CMD="python dataframe_queries.py"
+PYTHON_CMD="python bodosql_queries.py"
 FOLDER="~/tpch/from_s3/SF100"
 SCALE_FLAG="--scale_factor 100"
 WORKERS_FLAG="--queries"   # note: this script will append the query number after this flag
@@ -27,7 +27,7 @@ for q in {1..22}; do
   #timeout --kill-after=${KILL_AFTER_SECONDS}s ${TIMEOUT_SECONDS}s \
   #  bash -c "${ENV_PREFIX} ${PYTHON_CMD} --folder \"${FOLDER}\" ${SCALE_FLAG} --no_warmup --queries ${q}" &> "${OUTFILE}"
   #rc=$?
-  timeout --kill-after=${KILL_AFTER_SECONDS}s ${TIMEOUT_SECONDS}s python dataframe_queries.py --folder ~/tpch/from_s3/SF100 --scale_factor 100  --no_warmup --queries ${q} >& "${OUTFILE}"
+  timeout --kill-after=${KILL_AFTER_SECONDS}s ${TIMEOUT_SECONDS}s python bodosql_queries.py --folder ~/tpch/from_s3/SF100 --scale_factor 100  --no_warmup --queries ${q} >& "${OUTFILE}"
 
   if [[ ${rc} -eq 0 ]]; then
     echo "Query ${q} finished within ${TIMEOUT_SECONDS}s (exit 0)."

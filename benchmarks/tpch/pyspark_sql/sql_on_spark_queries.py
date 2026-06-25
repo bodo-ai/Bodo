@@ -107,22 +107,46 @@ def main():
         default=1.0,
         help="Scale factor (used in query 11).",
     )
+    parser.add_argument(
+        "--gpu",
+        action="store_true",
+        help="Run queries on GPU (default: CPU).",
+    )
     args = parser.parse_args()
     folder = args.folder
     scale_factor = args.scale_factor
+    run_on_gpu = args.gpu
 
-    spark = (
-        SparkSession.builder.appName("SQL Queries with Spark")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.1,")
-        .config("spark.driver.memory", "12g")  # driver JVM heap
-        .config("spark.executor.memory", "8g")  # executor JVM heap (cluster mode)
-        .config(
-            "spark.executor.memoryOverhead", "2g"
-        )  # off-heap overhead for executors
-        .config("spark.sql.shuffle.partitions", "200")  # reduce per-task pressure
-        .getOrCreate()
-    )
+    if run_on_gpu:
+        spark = (
+            SparkSession.builder.appName("SQL Queries with Spark on GPU")
+            .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.1,")
+            .config("spark.driver.memory", "12g")  # driver JVM heap
+            .config("spark.executor.memory", "8g")  # executor JVM heap (cluster mode)
+            .config(
+                "spark.executor.memoryOverhead", "2g"
+            )  # off-heap overhead for executors
+            .config("spark.sql.shuffle.partitions", "200")  # reduce per-task pressure
+            .config("spark.plugins", "com.nvidia.spark.SQLPlugin")
+            .config("spark.rapids.sql.enabled", "true")
+            .config("spark.executor.resource.gpu.amount", "2")
+            .config("spark.task.resource.gpu.amount", "0.125")
+            .config("spark.rapids.memory.pinnedPool.size", "2G")
+            .getOrCreate()
+        )
+    else:
+        spark = (
+            SparkSession.builder.appName("SQL Queries with Spark")
+            .config("spark.sql.execution.arrow.pyspark.enabled", "true")
+            .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.1,")
+            .config("spark.driver.memory", "12g")  # driver JVM heap
+            .config("spark.executor.memory", "8g")  # executor JVM heap (cluster mode)
+            .config(
+                "spark.executor.memoryOverhead", "2g"
+            )  # off-heap overhead for executors
+            .config("spark.sql.shuffle.partitions", "200")  # reduce per-task pressure
+            .getOrCreate()
+        )
 
     queries = args.queries or list(range(1, 23))
 
