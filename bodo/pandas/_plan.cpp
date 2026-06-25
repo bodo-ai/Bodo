@@ -1383,10 +1383,8 @@ std::pair<int64_t, PyObject *> execute_plan(
     }
 
 #ifdef USE_CUDF
-    if (prev_mr) {
-        // Reset device resource for GPU ranks.
-        cudf::set_current_device_resource(std::move(prev_mr));
-    }
+    // Reset device resource for GPU ranks.
+    cudf::set_current_device_resource(std::move(prev_mr));
 #endif
 
     // Iceberg write returns a PyObject* with file information

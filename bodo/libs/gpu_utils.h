@@ -583,6 +583,13 @@ void cudf_set_bools_from_indices(cudf::mutable_column_view target_bools,
 rmm::device_async_resource_ref get_gpu_async_memory_resource();
 
 /**
+ * @brief Get the pool handle of the GPU async memory resource.
+ *
+ * @return cudaMemPool_t pool handle
+ */
+cudaMemPool_t get_gpu_async_pool_handle();
+
+/**
  * @brief Get a static Cuda memory resource reference for allocating buffers for
  * MPI to enable GPU Direct paths.
  *
