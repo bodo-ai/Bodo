@@ -1172,14 +1172,14 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     """
     cdef readonly str table_identifier
 
-    def __cinit__(self, object out_schema, str table_identifier, object catalog_name,
+    def __cinit__(self, object arrow_out_schema, str table_identifier, object catalog_name,
         object catalog_properties, object iceberg_filter, object iceberg_schema,
-        object snapshot_id, uint64_t table_len_estimate, object selected_columns,
+        object arrow_read_schema, object snapshot_id, uint64_t table_len_estimate, object selected_columns,
         object limit, object join_filter_info):
         import pyiceberg.catalog
 
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
-        self.out_schema = out_schema
+        self.out_schema = arrow_out_schema
         self.table_identifier = table_identifier
 
         cdef optional[JoinFilterProgramState] c_rtjf_program_state
@@ -1198,7 +1198,7 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
         if limit is not None:
             c_limit = <int64_t>limit
 
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(out_schema,
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(arrow_read_schema,
             table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id,
             table_len_estimate, c_selected_columns, c_limit, c_rtjf_program_state)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())

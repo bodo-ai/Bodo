@@ -1613,6 +1613,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
         std::vector<std::string> new_return_names;
         std::vector<duckdb::LogicalType> new_return_types;
         for (int col_idx : selected_columns_opt.value()) {
+            std::cout << "Selected column index: " << col_idx << std::endl;
             new_return_names.push_back(return_names[col_idx]);
             new_return_types.push_back(return_types[col_idx]);
         }

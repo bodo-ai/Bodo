@@ -74,8 +74,8 @@ def build_iceberg_read_plan(
     # Get the output schema
     table = catalog.load_table(table_identifier)
     pyiceberg_schema = table.schema()
-    arrow_schema = pyiceberg_schema.as_arrow()
-    empty_df = arrow_to_empty_df(arrow_schema)
+    arrow_read_schema = pyiceberg_schema.as_arrow()
+    empty_df = arrow_to_empty_df(arrow_read_schema)
 
     # Get the table length estimate, if there's not a filter it will be exact
     table_len_estimate = get_table_length(table, snapshot_id or -1)
@@ -94,9 +94,15 @@ def build_iceberg_read_plan(
     selected_idxs = None
     if selected_fields is not None:
         selected_idxs = [
-            arrow_schema.get_field_index(field_name) for field_name in selected_fields
+            arrow_read_schema.get_field_index(field_name)
+            for field_name in selected_fields
         ]
         empty_df = empty_df[list(selected_fields)]
+        arrow_out_schema = pa.schema(
+            [arrow_read_schema.field(i) for i in selected_idxs]
+        )
+    else:
+        arrow_out_schema = arrow_read_schema
 
     plan = LogicalGetIcebergRead(
         empty_df,
@@ -109,12 +115,13 @@ def build_iceberg_read_plan(
         # We need to pass the pyiceberg schema so we can bind the iceberg filter to it
         # during filter conversion. See bodo/io/iceberg/common.py::pyiceberg_filter_to_pyarrow_format_str_and_scalars
         pyiceberg_schema,
+        arrow_read_schema,
         snapshot_id if snapshot_id is not None else -1,
         table_len_estimate,
-        arrow_schema=arrow_schema,
+        arrow_schema=arrow_out_schema,
         join_filter_info=join_filter_info,
         selected_fields=selected_idxs,
         limit=limit,
     )
 
-    return plan, empty_df, arrow_schema
+    return plan, empty_df, arrow_out_schema
