@@ -11,6 +11,7 @@ import pandas as pd
 
 import bodo.pandas
 import bodo.spawn.spawner as spawner
+import bodosql  # noqa
 
 
 def tpch_data_helper(datapath):
