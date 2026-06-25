@@ -1634,8 +1634,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             bit_num = op_exprs[1]
 
             ensure_type_of_expr(src, "src", int)
-            # TODO: Uncomment when cast PR is merged
-            # ensure_type_of_expr(bit_num, "bit_num", int)
+            ensure_type_of_expr(bit_num, "bit_num", int)
 
             # Do a bitwise AND on `src` and a bitmask that is only set on the requested bit position.
             # If the result is nonzero, the requested bit is 1, else it is 0.
