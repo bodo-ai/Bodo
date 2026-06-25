@@ -6,6 +6,8 @@ import pytest
 
 from bodosql.tests.utils import check_query
 
+pytestmark = pytest.mark.bodosql_cpp
+
 
 @pytest.mark.slow
 def test_with(basic_df, memory_leak_check):
