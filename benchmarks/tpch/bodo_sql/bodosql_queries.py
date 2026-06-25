@@ -100,18 +100,6 @@ def exec_func(res):
     return res
 
 
-def _load_args(query: int, root: str, scale_factor: float, backend):
-    args = []
-    for arg in _query_to_args[query]:
-        if arg == "scale_factor":
-            args.append(scale_factor)
-        elif arg == "pd":
-            args.append(backend)
-        else:
-            args.append(globals()[f"load_{arg}"](root, pd=backend))
-    return args
-
-
 def run_queries(
     root: str,
     queries: list[int],
