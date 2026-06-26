@@ -455,6 +455,20 @@ class JoinFilterColStats {
 void assert_py_args_is_tuple(PyObject *args, const char *err_context);
 
 /**
+ * @brief Get a single scalar argument from a Python function call
+ * and convert it to an arrow Datum. This involves checking all of
+ * the possible scalar datatypes for the PyObject, converting it
+ * to the corresponding Arrow::Scalar type, before finally wrapping
+ * it in an arrow::Datum.
+ *
+ * @param py_obj Python object
+ * @param err_context String used for error messages, often the name of the
+ * function the arguments came from
+ */
+arrow::Datum get_scalar_py_object_as_datum(PyObject *py_obj,
+                                           const char *err_context);
+
+/**
  * @brief Get a single argument from a Python function call
  * and convert it to an int64 (long long).
  *

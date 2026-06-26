@@ -1082,6 +1082,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             out_empty = inp.empty_data
             return UnaryOpExpression(out_empty, inp, "round")
 
+        if func_name == "MOD" and len(op_exprs) == 2:
+            inp = op_exprs[0]
+            modulus_expr = op_exprs[1]
+            ensure_type_of_expr(inp, "MOD inp", int)
+            ensure_type_of_expr(modulus_expr, "modulus_expr", int)
+
+            return ArithOpExpression(inp.empty_data, inp, modulus_expr, "__mod__")
+
         if func_name in ("BOOLAND", "BOOLOR", "BOOLXOR") and len(op_exprs) == 2:
             left_expr = op_exprs[0]
             right_expr = op_exprs[1]
@@ -1507,7 +1515,159 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        if func_name == "LEFT" and len(op_exprs) == 2:
+        if (
+            func_name in ("BITAND", "BITOR", "BITXOR", "BITSHIFTLEFT", "BITSHIFTRIGHT")
+            and len(op_exprs) == 2
+        ):
+            left_expr = op_exprs[0]
+            right_expr = op_exprs[1]
+
+            ensure_type_of_expr(left_expr, "left_expr", int)
+            ensure_type_of_expr(right_expr, "right_expr", int)
+
+            empty_data = left_expr.empty_data
+            cast_empty_data = None
+            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            if func_name == "BITAND":
+                arrow_equivalent_func = "bit_wise_and"
+            elif func_name == "BITOR":
+                arrow_equivalent_func = "bit_wise_or"
+            elif func_name == "BITXOR":
+                arrow_equivalent_func = "bit_wise_xor"
+            elif func_name == "BITSHIFTLEFT":
+                arrow_equivalent_func = "shift_left"
+            elif func_name == "BITSHIFTRIGHT":
+                arrow_equivalent_func = "shift_right"
+
+            if func_name in ("BITSHIFTLEFT", "BITSHIFTRIGHT"):
+                left_opr_sql_type = operands[0].getType()
+                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+
+                if left_opr_sql_type.getSqlTypeName().equals(SqlTypeName.BINARY):
+                    # Cast right_expr to match the bit width and signedness of left_expr.
+                    # This minimizes cast operations necessary, since if the types of left_expr and right_expr match, the final result will have the type of left_expr.
+                    # This is what we want to retain the original bit width after shifting, for BINARY input.
+                    # Effectively we discard bits that were shifted past the left end of the original precision input.
+                    right_expr = CastExpression(left_expr.empty_data, right_expr)
+                else:
+                    # For INTEGER input:
+                    # Ensure arguments are int64.
+                    # We don't want shift_left to be limited by the precision of the
+                    # input (at least for INTEGER input).
+                    # If one argument is uint64, this can help avoid a mismatch that will cause an error coming from the Arrow compute function.
+                    # We do the same for shift_right to be consistent with Snowflake (max bit width signed output).
+                    if func_name == "BITSHIFTLEFT":
+                        left_expr = CastExpression(int64_empty_data, left_expr)
+                        # (Arrow can take care of casting right_expr in this case.)
+                        # For bitshifting, result type should be INT64 to match Snowflake and output on C++ side.
+                        empty_data = int64_empty_data
+                    else:
+                        # For shift_right, we have to be careful that left_expr keeps the original
+                        # signedness so the proper right shift (logical or arithmetic) is performed.
+                        if pa.types.is_signed_integer(
+                            left_expr.empty_data.dtypes[
+                                left_expr.empty_data.columns[0]
+                            ].pyarrow_dtype
+                        ):
+                            shift_right_empty_data = int64_empty_data
+                        else:
+                            shift_right_empty_data = pd.Series(
+                                dtype=pd.ArrowDtype(pa.uint64())
+                            )
+                        left_expr = CastExpression(shift_right_empty_data, left_expr)
+                        # Make right_expr's type match left_expr so that Arrow's type unification doesn't
+                        # make int64 the common type when left_expr is uint64, causing a cast failure
+                        right_expr = CastExpression(shift_right_empty_data, right_expr)
+                        empty_data = shift_right_empty_data
+                        # Ensure result is signed if input was unsigned
+                        cast_empty_data = int64_empty_data
+            else:
+                # For BITAND/BITOR/BIXOR:
+                # Make sure the type of empty_data has the larger bit width of the two inputs.
+                # Also unify the types of the inputs to that type.
+                left_expr_dtype = left_expr.empty_data.dtypes[
+                    left_expr.empty_data.columns[0]
+                ].pyarrow_dtype
+                right_expr_dtype = right_expr.empty_data.dtypes[
+                    right_expr.empty_data.columns[0]
+                ].pyarrow_dtype
+                left_expr_signed = pa.types.is_signed_integer(left_expr_dtype)
+                right_expr_signed = pa.types.is_signed_integer(right_expr_dtype)
+
+                # Cast inputs to unsigned before doing the operation if at least one is unsigned.
+                # Again, this is to work around a quirk of Arrow's type unification.
+                empty_data_bit_width = max(
+                    left_expr_dtype.bit_width, right_expr_dtype.bit_width
+                )
+                empty_data_signed = left_expr_signed and right_expr_signed
+                target_dtype = pd.ArrowDtype(
+                    eval(
+                        f"pa.{'' if empty_data_signed else 'u'}int{empty_data_bit_width}()"
+                    )
+                )
+                empty_data = pd.Series(dtype=target_dtype)
+                left_expr = CastExpression(empty_data, left_expr)
+                right_expr = CastExpression(empty_data, right_expr)
+                # Return signed if at least one of the inputs are signed
+                if left_expr_signed is not right_expr_signed:
+                    cast_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(eval(f"pa.int{empty_data_bit_width}()"))
+                    )
+
+            result = ArrowScalarFuncExpression(
+                empty_data, [left_expr, right_expr], arrow_equivalent_func, ()
+            )
+
+            # Cast the result to the desired type if (for one reason or another)
+            # the input types could not be aligned with the proper output type
+            if cast_empty_data is not None:
+                result = CastExpression(cast_empty_data, result)
+
+            return result
+        elif func_name == "BITNOT" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", int)
+            return ArrowScalarFuncExpression(src.empty_data, [src], "bit_wise_not", ())
+        elif func_name == "GETBIT" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            bit_num = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", int)
+            ensure_type_of_expr(bit_num, "bit_num", int)
+
+            # Do a bitwise AND on `src` and a bitmask that is only set on the requested bit position.
+            # If the result is nonzero, the requested bit is 1, else it is 0.
+
+            # We should operate on uint64.
+            # We want Arrow's shift_left to set the most significant bit when
+            # shifting 1 63 positions to the left, but this only happens when 1 is unsigned.
+
+            uint64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.uint64()))
+
+            one_expr = ConstantExpression(uint64_empty_data, input_plan, 1)
+            bit_num = CastExpression(uint64_empty_data, bit_num)
+            bitmask = ArrowScalarFuncExpression(
+                uint64_empty_data, [one_expr, bit_num], "shift_left", ()
+            )
+
+            # Cast `src` to uint64 to avoid problematic type unification in bit_wise_and.
+            src = CastExpression(uint64_empty_data, src)
+            src_with_mask = ArrowScalarFuncExpression(
+                uint64_empty_data, [src, bitmask], "bit_wise_and", ()
+            )
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            zero_expr = ConstantExpression(uint64_empty_data, input_plan, 0)
+            is_bit_set = ComparisonOpExpression(
+                bool_empty_data, src_with_mask, zero_expr, operator.ne
+            )
+
+            # Use if_else instead of case_when so that nulls in is_bit_set propagate to the result
+            return ArrowScalarFuncExpression(
+                uint64_empty_data, [is_bit_set, one_expr, zero_expr], "if_else", ()
+            )
+        elif func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
             src = op_exprs[0]
             len_expr = op_exprs[1]
@@ -2246,6 +2406,79 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
+def get_common_int_type(left_expr, right_expr):
+    """Find a common integer type for two expressions with integer dtypes.
+
+    The bit width of the common type will be the maximum of the bit widths of the input types.
+    If `left_expr` and `right_expr` have the same signedness, the signedness does not change.
+    If `left_expr` and `right_expr` have different signedness, the common type will be
+    unsigned unless the unsigned input has a shorter bit width than the signed input.
+
+    Returns a tuple: (common_arrow_type, left_cast_needed, right_cast_needed)
+    (None, False, False) is returned if `left_expr` or `right_expr` does not have integer dtype.
+    """
+
+    def get_as_pyarrow_dtype(dtype):
+        if isinstance(dtype, pd.ArrowDtype):
+            return dtype.pyarrow_dtype
+        elif isinstance(dtype, pa.DataType):
+            return dtype
+
+        if not np.issubdtype(dtype, np.integer):
+            dtype = pd.api.types.pandas_dtype(dtype)
+
+            if hasattr(dtype, "numpy_dtype"):
+                dtype = dtype.numpy_dtype
+            else:
+                if not np.issubdtype(dtype, np.integer):
+                    raise ValueError(
+                        f"get_as_py_arrow_dtype: unable to convert {dtype} to a numpy dtype"
+                    )
+
+        return pa.from_numpy_dtype(dtype)
+
+    left_type = get_expr_dtype(left_expr)
+    right_type = get_expr_dtype(right_expr)
+
+    if not (compare_types(left_type, int) and compare_types(right_type, int)):
+        return None, False, False
+
+    left_type = get_as_pyarrow_dtype(left_type)
+    right_type = get_as_pyarrow_dtype(right_type)
+
+    # If types are identical, no cast needed
+    if left_type.equals(right_type):
+        return left_type, False, False
+
+    left_is_signed = pa.types.is_signed_integer(left_type)
+    right_is_signed = pa.types.is_signed_integer(right_type)
+    left_width = left_type.bit_width
+    right_width = right_type.bit_width
+
+    # Use wider type if inputs have same signedness
+    if left_is_signed == right_is_signed:
+        if left_width >= right_width:
+            return left_type, False, True
+        else:
+            return right_type, True, False
+
+    # For mixed signedness, use the wider bit width of the two.
+    # The common type is signed only if the max value of the unsigned input can fit in the signed int
+    common_type_width = max(left_width, right_width)
+    common_type_signed = (left_is_signed and left_width > right_width) or (
+        right_is_signed and right_width > left_width
+    )
+    common_type = eval(
+        f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
+    )
+
+    return (
+        common_type,
+        not left_type.equals(common_type),
+        not right_type.equals(common_type),
+    )
+
+
 def java_case_to_python_case(ctx, operands, input_plan):
     """Convert a BodoSQL Java CASE operator call to a DataFrame library CaseExpression.
     operands has the form [when1, then1, when2, then2, ..., else].
@@ -2260,7 +2493,42 @@ def java_case_to_python_case(ctx, operands, input_plan):
     else:
         else_expr = java_expr_to_python_expr(ctx, operands[2], input_plan)
 
-    return CaseExpression(then_expr.empty_data, when_expr, then_expr, else_expr)
+    # then_expr and else_expr could have different types here, e.g. int64 and uint64
+
+    # Here we explicitly unify integer types to prevent Arrow's case_when
+    # from attempting its own overflow-free unification which can fail in some cases,
+    # notably for mixed int64 and uint64 inputs
+
+    unified_then_expr = then_expr
+    unified_else_expr = else_expr
+    unified_empty_data = then_expr.empty_data
+
+    common_arrow_type, then_needs_cast, else_needs_cast = get_common_int_type(
+        then_expr, else_expr
+    )
+
+    if common_arrow_type is not None:
+        unified_empty_data = pd.Series(dtype=pd.ArrowDtype(common_arrow_type))
+
+        # Wrap expressions in CastExpression if needed
+        if then_needs_cast:
+            unified_then_expr = CastExpression(unified_empty_data, then_expr)
+        if else_needs_cast:
+            unified_else_expr = CastExpression(unified_empty_data, else_expr)
+
+        # Update empty_data to the unified type so schema matches the actual result
+        # This prevents Arrow from trying to safely cast the result to a mismatched type
+
+    case_expr = CaseExpression(
+        unified_empty_data, when_expr, unified_then_expr, unified_else_expr
+    )
+    # Restore the original return type if the types of then_expr and else_expr were different and our unification ended up casting one away from the intended result type.
+    # We do this with a CastExpression instead of via CaseExpression empty_data (which attempts to cast safely in _arrow_array_to_pd) so that integer overflow is allowed.
+    # At the moment we choose then_expr to be the result type - is there a better way to decide?
+    if then_needs_cast:
+        return CastExpression(then_expr.empty_data, case_expr)
+    else:
+        return case_expr
 
 
 def java_join_to_python_join(ctx, java_join):

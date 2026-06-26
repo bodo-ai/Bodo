@@ -9,7 +9,7 @@ from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
-pytestmark = pytest_slow_unless_codegen
+pytestmark = pytest_slow_unless_codegen + [pytest.mark.bodosql_cpp]
 
 
 @pytest.fixture
@@ -36,37 +36,95 @@ def bitwise_df():
 
 
 @pytest.mark.parametrize(
-    "query",
+    "args",
     [
         pytest.param(
-            "SELECT BITAND(A, B) FROM table1",
+            (
+                "SELECT BITAND(A, B) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [0, 1, 32, 0, 0, None],
+                            dtype=pd.Int32Dtype(),
+                        )
+                    }
+                ),
+            ),
             id="all_vector_int32",
         ),
         pytest.param(
-            "SELECT BITAND(C, D) FROM table1",
+            (
+                "SELECT BITAND(C, D) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [0, 0, 127, 128, 200, None],
+                            dtype=pd.Int32Dtype(),
+                        )
+                    }
+                ),
+            ),
             id="all_vector_uint8",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            "SELECT BITAND(E, F) FROM table1",
+            (
+                "SELECT BITAND(E, F) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [127, 0, 42, 128, 8, None],
+                            dtype=pd.Int64Dtype(),
+                        )
+                    }
+                ),
+            ),
             id="all_vector_mixed",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            # 6148914691236517205 = 0x5555555555555555
-            "SELECT CASE WHEN F IS NULL THEN -1 ELSE BITAND(F, 6148914691236517205) END FROM table1",
+            (
+                "SELECT BITAND(D, E) FROM table1",
+                # Demonstrates that the result of signed and unsigned input
+                # should be signed - even for the same bit width
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [100, 0, -1, -128, 8, None],
+                            dtype=pd.Int32Dtype(),
+                        )
+                    }
+                ),
+            ),
+            id="all_vector_mixed_int8",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                # 6148914691236517205 = 0x5555555555555555
+                "SELECT CASE WHEN F IS NULL THEN -1 ELSE BITAND(F, 6148914691236517205) END FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [6148914691236517205, 85, 0, 0, 5, -1],
+                            dtype=pd.Int64Dtype(),
+                        )
+                    }
+                ),
+            ),
             id="vector_scalar_case",
         ),
     ],
 )
-def test_bitand(query, bitwise_df, memory_leak_check):
+def test_bitand(args, bitwise_df, memory_leak_check):
+    query, answer = args
     check_query(
         query,
         bitwise_df,
         None,
         check_dtype=False,
         check_names=False,
-        use_duckdb=True,
+        expected_output=answer,
     )
 
 
@@ -115,6 +173,21 @@ def test_bitand(query, bitwise_df, memory_leak_check):
                 ),
             ),
             id="all_vector_mixed",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT BITOR(D, E) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [127, -86, -1, -127, -22, None],
+                            dtype=pd.Int32Dtype(),
+                        )
+                    }
+                ),
+            ),
+            id="all_vector_mixed_int8",
             marks=pytest.mark.slow,
         ),
         pytest.param(
@@ -198,6 +271,21 @@ def test_bitor(args, bitwise_df, memory_leak_check):
                 ),
             ),
             id="all_vector_mixed",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT BITXOR(D, E) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [27, -86, 0, 1, -30, None],
+                            dtype=pd.Int32Dtype(),
+                        )
+                    }
+                ),
+            ),
+            id="all_vector_mixed_int8",
             marks=pytest.mark.slow,
         ),
         pytest.param(

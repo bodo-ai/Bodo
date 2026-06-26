@@ -477,6 +477,7 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     const duckdb::LogicalType& return_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
+
     arrow::Datum casted = do_arrow_compute_cast(src1, return_type);
     return ConvertDatumToArrayInfo(casted);
 }
@@ -498,8 +499,10 @@ arrow::Datum do_arrow_compute_binary(
     std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
     if (result_type && cmp_dtype != result_type) {
         // Cast to result type if available and different from current type.
+        arrow::compute::CastOptions cast_opts;
+        cast_opts.allow_int_overflow = true;
         arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(cmp_datum, result_type);
+            arrow::compute::Cast(cmp_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
             throw std::runtime_error(
                 "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
@@ -565,8 +568,18 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
                                    const duckdb::LogicalType& return_type) {
     std::shared_ptr<arrow::DataType> arrow_ret_type =
         duckdbTypeToArrow(return_type);
+
+    // No need to cast if type is already the target type
+    if (left_res.type()->Equals(arrow_ret_type)) {
+        return left_res;
+    }
+
+    // Globally set the allow_int_overflow cast option to true; in the future,
+    // CaseExpressions should support these options.
+    arrow::compute::CastOptions cast_opts;
+    cast_opts.allow_int_overflow = true;
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(left_res, arrow_ret_type);
+        arrow::compute::Cast(left_res, arrow_ret_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_arrow_compute_cast: Error in Arrow compute: " +
@@ -620,7 +633,7 @@ std::shared_ptr<array_info> do_arrow_compute_case(
         arrow::compute::CallFunction("case_when", {src1, src2, src3});
     if (!case_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_case: Error in Arrow compute: " +
+            "do_arrow_compute_case case_when: Error in Arrow compute: " +
             case_res.status().message());
     }
 
@@ -628,11 +641,13 @@ std::shared_ptr<array_info> do_arrow_compute_case(
     std::shared_ptr<arrow::DataType> case_dtype = case_datum.type();
     if (result_type && case_dtype != result_type) {
         // Cast to result type if available and different from current type.
+        arrow::compute::CastOptions cast_opts;
+        cast_opts.allow_int_overflow = true;
         arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(case_datum, result_type);
+            arrow::compute::Cast(case_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
+                "do_arrow_compute_case cast_res: Error in Arrow compute: " +
                 cast_res.status().message());
         }
         case_res = cast_res;

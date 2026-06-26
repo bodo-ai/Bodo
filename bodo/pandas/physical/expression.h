@@ -1135,7 +1135,7 @@ class PhysicalCaseExpression : public PhysicalExpression {
             "if_else", {when_datum, then_datum, else_datum});
         if (!cmp_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_array_compute_case: Error in Arrow compute: " +
+                "do_array_compute_case if_else: Error in Arrow compute: " +
                 cmp_res.status().message());
         }
         return cmp_res.ValueOrDie();
@@ -1518,7 +1518,29 @@ class PhysicalArrowExpression : public PhysicalExpression {
     template <typename T>
     compute_return_t<T> do_arrow_compute(T res) {
         compute_return_t<T> result;
-        if (scalar_func_data.arrow_func_name == "date") {
+
+        if (scalar_func_data.arrow_func_name == "if_else") {
+            auto [then_datum, else_datum] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_scalar_py_object_as_datum, get_scalar_py_object_as_datum);
+            arrow::Datum when_datum = ConvertExprResultToDatum(
+                res, scalar_func_data.arrow_func_name + " when");
+
+            arrow::Result<arrow::Datum> if_else_res =
+                arrow::compute::CallFunction(
+                    "if_else", {when_datum, then_datum, else_datum});
+            if (!if_else_res.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    "do_arrow_compute if_else: Error in Arrow compute: " +
+                    if_else_res.status().message());
+            }
+
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = if_else_res.ValueOrDie();
+            } else {
+                result = ConvertDatumToArrayInfo(if_else_res.ValueOrDie());
+            }
+        } else if (scalar_func_data.arrow_func_name == "date") {
             // The Arrow compute equivalent of Series.dt.date() is
             // year_month_day, which returns a struct. To match the output dtype
             // of Pandas, we Cast to Date32 instead.
