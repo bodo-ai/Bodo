@@ -689,6 +689,7 @@ def localtime_equiv_fns(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_localtime_equivalents_cols(basic_df, localtime_equiv_fns, memory_leak_check):
     """Tests the group of equivalent functions which return the local time,
     without timezone info from the Snowflake Catalog.
@@ -721,6 +722,7 @@ def test_localtime_equivalents_cols(basic_df, localtime_equiv_fns, memory_leak_c
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_localtime_equivalents_case(localtime_equiv_fns, memory_leak_check):
     """Tests the group of equivalent functions which return the local time in case,
     without timezone info from the Snowflake Catalog.
