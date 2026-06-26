@@ -322,7 +322,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "DATE_TRUNC" and num_operands == 2:
             # DATE_TRUNC(FLAG(DAY), timestamp) → floor_temporal(timestamp, unit)
-            unit_raw = get_java_symbol(java_call.getOperands()[0]).upper()
+            unit_raw = get_java_symbol(java_call.getOperands()[0])
+            unit_raw = standardize_java_time_unit(func_name, unit_raw)
             _TRUNC_UNITS = {
                 "year",
                 "quarter",
@@ -370,7 +371,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             unit_str = "MONTH"
             if num_operands == 2:
                 # EXTRACT(FLAG(MONTH), date) → month
-                unit_str = get_java_symbol(java_call.getOperands()[1]).upper()
+                unit_str = get_java_symbol(java_call.getOperands()[1])
+                unit_str = standardize_java_time_unit(func_name, unit_str)
             LAST_DAY_UNITS = {
                 "MONTH": ("month", 1, 0),
                 "QUARTER": ("quarter", 3, 0),
@@ -463,7 +465,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # 3-operand form: DATEADD(unit, amount, date) → date + (unit * amount)
                 # First operand is a FLAG(unit) interval qualifier from the Java
                 # planner (e.g. FLAG(DAY), FLAG(MONTH)).
-                unit_str = get_java_symbol(java_call.getOperands()[0]).upper()
+                unit_str = get_java_symbol(java_call.getOperands()[0])
+                unit_str = standardize_java_time_unit(func_name, unit_str)
                 assert unit_str in INTERVAL_UNIT_MAP, (
                     f"Unsupported DATEADD interval unit: {unit_str}"
                 )
@@ -2538,6 +2541,14 @@ def get_java_symbol(java_symbol):
     )
 
     return java_symbol.getValue().toString()
+
+
+def standardize_java_time_unit(fname, time_unit):
+    """Convert time unit to a standardized form to simplify the code.
+    For example, convert yy to year.
+    """
+    standardizeTimeUnit = gateway.jvm.com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit
+    return standardizeTimeUnit(fname, time_unit, None)
 
 
 def is_int_type(java_type):
