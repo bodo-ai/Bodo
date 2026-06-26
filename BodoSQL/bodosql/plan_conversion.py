@@ -322,9 +322,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "DATE_TRUNC" and num_operands == 2:
             # DATE_TRUNC(FLAG(DAY), timestamp) → floor_temporal(timestamp, unit)
-            unit_raw = str(java_call.getOperands()[0].toString()).upper()
-            if "(" in unit_raw:
-                unit_raw = unit_raw.split("(")[1].rstrip(")")
+            unit_raw = get_java_symbol(java_call.getOperands()[0]).upper()
             _TRUNC_UNITS = {
                 "year",
                 "quarter",
@@ -372,10 +370,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             unit_str = "MONTH"
             if num_operands == 2:
                 # EXTRACT(FLAG(MONTH), date) → month
-                unit_str = str(java_call.getOperands()[1].toString()).upper()
-                # Strip "FLAG(" / ")" from unit string
-                if "(" in unit_str:
-                    unit_str = unit_str.split("(")[1].rstrip(")")
+                unit_str = get_java_symbol(java_call.getOperands()[1]).upper()
             LAST_DAY_UNITS = {
                 "MONTH": ("month", 1, 0),
                 "QUARTER": ("quarter", 3, 0),
@@ -468,13 +463,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # 3-operand form: DATEADD(unit, amount, date) → date + (unit * amount)
                 # First operand is a FLAG(unit) interval qualifier from the Java
                 # planner (e.g. FLAG(DAY), FLAG(MONTH)).
-                first_op_str = str(java_call.getOperands()[0].toString())
-                if not first_op_str.startswith("FLAG"):
-                    raise NotImplementedError(
-                        "DATEADD with 3 string operands not supported in "
-                        "C++ backend yet"
-                    )
-                unit_str = first_op_str.split("(")[1].rstrip(")").upper()
+                unit_str = get_java_symbol(java_call.getOperands()[0]).upper()
                 assert unit_str in INTERVAL_UNIT_MAP, (
                     f"Unsupported DATEADD interval unit: {unit_str}"
                 )
@@ -626,15 +615,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             interval_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
-            unit_str = str(java_call.getOperands()[2].toString()).upper().strip("'")
-            # Strip "FLAG(" / ")" from unit string
-            if "(" in unit_str:
-                unit_str = unit_str.split("(")[1].rstrip(")")
+            unit_str = get_java_symbol(java_call.getOperands()[2]).upper()
             start_or_end = "START"
             if num_operands == 4:
-                start_or_end = (
-                    str(java_call.getOperands()[3].toString()).upper().strip("'")
-                )
+                start_or_end = get_java_symbol(java_call.getOperands()[3]).upper()
                 assert start_or_end in ("START", "END"), (
                     f"Unsupported TIME_SLICE 4th operand: {start_or_end}"
                 )
@@ -844,11 +828,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         and len(java_call.getOperands()) == 2
     ):
         # EXTRACT(FLAG(MONTH), date) → month(date)
-        unit_str = str(java_call.getOperands()[0].toString()).upper()
+        unit_str = get_java_symbol(java_call.getOperands()[0]).upper()
         input = java_expr_to_python_expr(ctx, java_call.getOperands()[1], input_plan)
-        # Strip FLAG from unit if it's in the form FLAG(unit)
-        if "(" in unit_str:
-            unit_str = unit_str.split("(")[1].rstrip(")")
         arrow_func = _DATE_PART_ARROW_FUNCS.get(unit_str)
         if arrow_func is None:
             raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
@@ -2538,6 +2519,25 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
     )
+
+
+def get_java_symbol(java_symbol):
+    """Extract the value of a Java SYMBOL or CHAR literal (e.g. date/time units)."""
+    assert java_symbol.getClass().getSimpleName() == "RexLiteral", (
+        "get_java_symbol: expected RexLiteral but got "
+        + java_symbol.getClass().getSimpleName()
+    )
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+
+    if java_symbol.getTypeName().equals(SqlTypeName.CHAR):
+        return java_symbol.getValue2()
+
+    assert java_symbol.getTypeName().equals(SqlTypeName.SYMBOL), (
+        "get_java_symbol: expected SYMBOL but got "
+        + java_symbol.getTypeName().toString()
+    )
+
+    return java_symbol.getValue().toString()
 
 
 def is_int_type(java_type):
