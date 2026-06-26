@@ -106,6 +106,15 @@ extractValue(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
         } break;
+        case duckdb::LogicalTypeId::TIME: {
+            // Define a time type with nanosecond precision
+            auto time_type = arrow::time64(arrow::TimeUnit::NANO);
+            duckdb::dtime_ns_t extracted = value.GetValue<duckdb::dtime_ns_t>();
+            // Create a TimeScalar with the time value
+            // NOTE: DuckDB's dtime_ns_t is subclass of dtime_t so the field is
+            // still called micros, but it is actually nanoseconds.
+            return arrow::MakeScalar(time_type, extracted.micros).ValueOrDie();
+        } break;
         case duckdb::LogicalTypeId::INTERVAL: {
             duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
             // Convert to nanoseconds total, dropping month/day information

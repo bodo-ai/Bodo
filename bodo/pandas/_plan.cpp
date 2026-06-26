@@ -186,7 +186,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val) {
 
 duckdb::unique_ptr<duckdb::Expression> make_const_time64_expr(int64_t val) {
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
-        duckdb::Value::TIME(duckdb::dtime_ns_t(val)));
+        duckdb::Value::TIME_NS(duckdb::dtime_ns_t(val)));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_const_string_expr(
