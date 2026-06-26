@@ -3229,6 +3229,7 @@ def test_date_trunc_date(date_df, day_part_strings, use_case, memory_leak_check)
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [

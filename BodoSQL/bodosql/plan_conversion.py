@@ -333,6 +333,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "hour",
                 "minute",
                 "second",
+                "millisecond",
+                "microsecond",
+                "nanosecond",
             }
             assert unit_raw.lower() in _TRUNC_UNITS, (
                 f"DATE_TRUNC unit has unexpected format after stripping: "
