@@ -2402,10 +2402,10 @@ def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
             is_first[key] = is_first_cols[loc_ind]
 
         # orig_build_key_cols for JoinFilterInfo requires a list of indexes
-        # corresponding to the order each build key appears in the
-        # build table.
-        sorted_build_keys = sorted(set(java_build_keys))
-        build_cols_idxs = [sorted_build_keys.index(k) for k in java_build_keys]
+        # corresponding to the order each build key appears in the join
+        # condition:
+        # https://github.com/bodo-ai/Bodo/blob/f8cbfd4705e346a860fc4121c6735d9e8960d2c0/bodo/pandas/optimizer/runtime_join_filter.cpp#L282
+        build_cols_idxs = list(range(len(java_build_keys)))
 
         new_filter_ids.append(fid)
         new_equality_filter_columns.append(filter_cols)
