@@ -2423,7 +2423,7 @@ def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
 def generate_runtime_join_filter(
     join_info: JoinFilterInfo, input_plan: LazyPlan
 ) -> LogicalJoinFilter:
-    """Contruct an instance of a runtime join filter plan node from the given join filter info and input plan."""
+    """Construct an instance of a runtime join filter plan node from the given join filter info and input plan."""
     return LogicalJoinFilter(
         input_plan.empty_data,
         input_plan,

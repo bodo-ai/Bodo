@@ -56,8 +56,6 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
     logger = create_string_io_logger(stream)
     py_output = pd.DataFrame({"A": [1] * 100})
 
-    run_1D_var = True
-    run_python = False
     if allow_low_ndv_filter:
         limit = 20
         log_msg = "Runtime join filter expression: ((ds.field('{A}').isin([1])))"
@@ -66,8 +64,6 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
         log_msg = "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 1))"
 
         if bodosql.use_cpp_backend:
-            run_1D_var = False
-            run_python = True
             # TODO BSE-5476: Check logs in BodoSQL backend C++ tests
             log_msg = ""
 
@@ -78,8 +74,7 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
                     impl,
                     (bc, query),
                     py_output=py_output,
-                    only_1DVar=run_1D_var,
-                    only_python=run_python,
+                    only_1DVar=True,
                     sort_output=True,
                     reset_index=True,
                 )
@@ -504,12 +499,8 @@ def test_merged_rtjf(
     logger = create_string_io_logger(stream)
 
     if bodosql.use_cpp_backend:
-        run_1D_var = False
-        run_python = True
         use_dict_encoded_strings = False
     else:
-        run_1D_var = True
-        run_python = False
         use_dict_encoded_strings = True
 
     with set_logging_stream(logger, 2):
@@ -517,8 +508,7 @@ def test_merged_rtjf(
             impl,
             (bc, query),
             py_output=expected_out,
-            only_python=run_python,
-            only_1DVar=run_1D_var,
+            only_1DVar=True,
             use_dict_encoded_strings=use_dict_encoded_strings,
             sort_output=True,
             reset_index=True,

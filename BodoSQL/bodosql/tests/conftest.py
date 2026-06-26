@@ -119,6 +119,22 @@ def cpp_backend_disable_jit_fallback(request):
     yield
 
 
+@pytest.fixture(autouse=True)
+def cpp_backend_run_with_test_dataframe_library_enabled(request):
+    """Sets bodo.test_dataframe_library_enabled for tests marked bodosql_cpp
+    to enable converting JIT tests to run with the C++ backend by running impls
+    as regular Python functions.
+    """
+    if bodosql.use_cpp_backend:
+        marker = request.node.get_closest_marker("bodosql_cpp")
+        if marker:
+            set_config("bodo.test_dataframe_library_enabled", True)
+            yield
+            set_config("bodo.test_dataframe_library_enabled", False)
+            return
+    yield
+
+
 @pytest.fixture(scope="module")
 def spark_info():
     spark = get_spark()
