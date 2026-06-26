@@ -55,6 +55,9 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     py_output = pd.DataFrame({"A": [1] * 100})
+
+    run_1D_var = True
+    run_python = False
     if allow_low_ndv_filter:
         limit = 20
         log_msg = "Runtime join filter expression: ((ds.field('{A}').isin([1])))"
@@ -62,14 +65,11 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
         limit = 0
         log_msg = "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 1))"
 
-    if bodosql.use_cpp_backend:
-        run_1D_var = False
-        run_python = True
-        # TODO BSE-5476: Check logs in BodoSQL backend C++ tests
-        log_msg = ""
-    else:
-        run_1D_var = True
-        run_python = False
+        if bodosql.use_cpp_backend:
+            run_1D_var = False
+            run_python = True
+            # TODO BSE-5476: Check logs in BodoSQL backend C++ tests
+            log_msg = ""
 
     with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
         with temp_config_override("dataframe_library_run_parallel", False):
