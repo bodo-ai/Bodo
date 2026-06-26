@@ -112,7 +112,7 @@ bool is_supported_cudf_type(const duckdb::LogicalType &type) {
 
 bool bodosql_enabled() {
     char *env_str = std::getenv("BODOSQL_CPP_BACKEND");
-    return env_str != nullptr && std::string(env_str) != "0";
+    return env_str == nullptr || std::string(env_str) != "0";
 }
 
 class DevicePlanNode {
