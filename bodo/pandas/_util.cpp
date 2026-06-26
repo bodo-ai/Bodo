@@ -99,6 +99,15 @@ extractValue(const duckdb::Value &value) {
             return std::make_shared<arrow::TimestampScalar>(extracted.value,
                                                             timestamp_type);
         } break;
+        case duckdb::LogicalTypeId::TIME_NS: {
+            // Define a time type
+            auto time_type = arrow::time64(arrow::TimeUnit::NANO);
+            duckdb::dtime_ns_t extracted = value.GetValue<duckdb::dtime_ns_t>();
+            // Create a Time64Scalar with the time value
+            // Confusingly, extracted.micros is actually the raw nanosecond
+            // value
+            return arrow::MakeScalar(time_type, extracted.micros).ValueOrDie();
+        }
         case duckdb::LogicalTypeId::DATE: {
             // Define a date type
             auto date_type = arrow::date32();
@@ -114,7 +123,7 @@ extractValue(const duckdb::Value &value) {
             return arrow::MakeScalar(dur_type, total_nanos).ValueOrDie();
         } break;
         default:
-            throw std::runtime_error("extractValue unhandled type." +
+            throw std::runtime_error("extractValue unhandled type: " +
                                      std::to_string(static_cast<int>(type)));
     }
 }

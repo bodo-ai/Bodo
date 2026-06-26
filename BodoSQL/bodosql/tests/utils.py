@@ -798,6 +798,8 @@ def check_query_python(
     if bodo.tests.utils.test_spawn_mode_enabled:
         jit_options["spawn"] = True
     bodosql_output = bc.sql(query, named_params, bind_variables, **jit_options)
+    # print("Bodo output:", bodosql_output)
+    # print("Expected output:", expected_output)
     _check_query_equal(
         bodosql_output,
         expected_output,

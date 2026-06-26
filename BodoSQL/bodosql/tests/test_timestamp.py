@@ -17,6 +17,7 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_codegen
 
 
+@pytest.mark.bodosql_cpp
 def test_datetime_condition(memory_leak_check):
     """test selecting column satisfying condition on timestamp type column"""
     dataframe_dict = {
@@ -40,6 +41,7 @@ def test_datetime_condition(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_extract_date(memory_leak_check):
     query = "SELECT EXTRACT(YEAR FROM A) FROM table1"
@@ -66,6 +68,7 @@ def test_extract_date(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_datediff_literals(basic_df, memory_leak_check):
     """
@@ -138,6 +141,7 @@ def test_datediff_literals(basic_df, memory_leak_check):
     ],
 )
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_datediff_args3_literals(query, basic_df, memory_leak_check):
     """
     Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF on timestamp literals behaves as expected.
@@ -158,6 +162,7 @@ def test_datediff_args3_literals(query, basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_datediff_columns(bodosql_datetime_types, memory_leak_check):
     """
     Checks that calling DATEDIFF on columns behaves as expected
@@ -174,6 +179,7 @@ def test_datediff_columns(bodosql_datetime_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_datediff_multitable_columns(bodosql_datetime_types, memory_leak_check):
     """
     Checks that calling DATEDIFF on columns behaves as expected
@@ -205,6 +211,7 @@ def test_datediff_multitable_columns(bodosql_datetime_types, memory_leak_check):
     ],
 )
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_datediff_args3_multitable_columns_date(
     query, bodosql_datetime_types, memory_leak_check
 ):
@@ -246,6 +253,7 @@ def test_datediff_args3_multitable_columns_date(
     ],
 )
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_datediff_args3_multitable_columns_time(
     query, bodosql_datetime_types_small, memory_leak_check
 ):
@@ -263,6 +271,7 @@ def test_datediff_args3_multitable_columns_time(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_datediff_args3_multitable_columns_case(
     bodosql_datetime_types, memory_leak_check
 ):
@@ -327,6 +336,7 @@ def test_datediff_tz_aware_tz_naive(memory_leak_check):
     check_query(query, ctx, None, check_dtype=False, expected_output=py_output)
 
 
+@pytest.mark.bodosql_cpp
 def test_str_date_case_stmt(spark_info, memory_leak_check):
     """
     Many sql dialects play fast and loose with what is a string and date/timestamp
@@ -400,6 +410,7 @@ def test_timestamp_from_utc_literal(timestamp_literal, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output)
 
 
+@pytest.mark.bodosql_cpp
 def test_timestamp_cast_utc_literal(timestamp_literal, memory_leak_check):
     """
     Checks that a timestamp can be cast from a literal with a UTC offset
@@ -411,6 +422,7 @@ def test_timestamp_cast_utc_literal(timestamp_literal, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output)
 
 
+@pytest.mark.bodosql_cpp
 def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
     """
     Checks that to_timestamp_ntz works with a UTC offset

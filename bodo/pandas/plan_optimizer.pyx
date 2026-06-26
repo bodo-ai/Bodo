@@ -358,6 +358,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_date_offset_expr(int32_t months, int32_t days, int64_t nanos) except +
     cdef unique_ptr[CExpression] make_const_date32_expr(int32_t val) except +
+    cdef unique_ptr[CExpression] make_const_time64_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_string_expr(c_string val) except +
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
@@ -793,6 +794,9 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
         return move(make_const_timestamp_ns_expr(pd.Timestamp(val).value))
     elif isinstance(val, pa.Date32Scalar):
         return move(make_const_date32_expr(val.value))
+    elif isinstance(val, pa.Time64Scalar):
+        ns_val = val.value * 1000 if val.type.unit == "us" else val.value
+        return move(make_const_time64_expr(ns_val))
     elif isinstance(val, bodo.pandas.scalar.BodoScalar):
         return move(make_const_expr(None, val.get_value()))
     else:
