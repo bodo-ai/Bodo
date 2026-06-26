@@ -590,6 +590,7 @@ def now_equiv_fns(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
     """Tests the group of equivalent functions which return the current timestamp,
     without timezone info from the Snowflake Catalog.
@@ -629,6 +630,7 @@ def test_now_equivalents_cols(basic_df, now_equiv_fns, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_now_equivalents_case(now_equiv_fns, memory_leak_check):
     """Tests the group of equivalent functions which return the current timestamp in case,
     without timezone info from the Snowflake Catalog.
@@ -3171,6 +3173,7 @@ def test_yearweek_scalars(dt_fn_dataframe, memory_leak_check):
 # map to the same codegen, it is believed that testing TRUNC
 # with the below two DATE_TRUNC unit tests is sufficient.
 @pytest.mark.parametrize("sql_func", ["DATE_TRUNC", "TRUNC"])
+@pytest.mark.bodosql_cpp
 def test_date_trunc_time_part(sql_func, time_df, time_part_strings, memory_leak_check):
     query = f"SELECT {sql_func}('{time_part_strings}', A) as output from table1"
     scalar_func = generate_date_trunc_time_func(time_part_strings)
@@ -3967,6 +3970,7 @@ def test_tz_aware_previous_day_case(
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
     query = f"SELECT DATE_TRUNC('{date_trunc_literal}', A) as output from table1"
@@ -3991,6 +3995,7 @@ def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 @pytest.mark.slow
 def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
