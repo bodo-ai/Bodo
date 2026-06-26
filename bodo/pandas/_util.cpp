@@ -106,6 +106,7 @@ extractValue(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
         } break;
+        case duckdb::LogicalTypeId::TIME:
         case duckdb::LogicalTypeId::TIME_NS: {
             // Define a time type with nanosecond precision
             auto time_type = arrow::time64(arrow::TimeUnit::NANO);
@@ -170,6 +171,7 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeNullScalar(date_type);
         } break;
+        case duckdb::LogicalTypeId::TIME:
         case duckdb::LogicalTypeId::TIME_NS: {
             auto time_type = arrow::time64(arrow::TimeUnit::NANO);
             return arrow::MakeNullScalar(time_type);
@@ -517,6 +519,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::timestamp(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::TIMESTAMP_NS:
             return arrow::timestamp(arrow::TimeUnit::NANO);
+        case duckdb::LogicalTypeId::TIME:
         case duckdb::LogicalTypeId::TIME_NS:
             return arrow::time64(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::BLOB:
