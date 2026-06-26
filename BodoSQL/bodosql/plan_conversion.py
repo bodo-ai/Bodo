@@ -375,7 +375,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             if num_operands == 2:
                 # EXTRACT(FLAG(MONTH), date) → month
                 unit_str = get_java_symbol(java_call.getOperands()[1])
-                unit_str = standardize_java_time_unit(func_name, unit_str)
+                unit_str = standardize_java_time_unit(func_name, unit_str).upper()
             LAST_DAY_UNITS = {
                 "MONTH": ("month", 1, 0),
                 "QUARTER": ("quarter", 3, 0),
@@ -469,7 +469,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # First operand is a FLAG(unit) interval qualifier from the Java
                 # planner (e.g. FLAG(DAY), FLAG(MONTH)).
                 unit_str = get_java_symbol(java_call.getOperands()[0])
-                unit_str = standardize_java_time_unit(func_name, unit_str)
+                unit_str = standardize_java_time_unit(func_name, unit_str).upper()
                 assert unit_str in INTERVAL_UNIT_MAP, (
                     f"Unsupported DATEADD interval unit: {unit_str}"
                 )
