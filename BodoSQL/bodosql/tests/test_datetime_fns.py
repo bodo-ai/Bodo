@@ -3257,6 +3257,7 @@ def test_date_trunc_time_part_handling(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -3281,6 +3282,7 @@ def test_date_trunc_timestamp(
     check_query(query, dt_fn_dataframe, None, expected_output=py_output)
 
 
+@pytest.mark.bodosql_cpp
 def test_date_trunc_unquoted_timeunit(dt_fn_dataframe, memory_leak_check):
     """
     Test DATE_TRUNC works for unquoted time unit input
