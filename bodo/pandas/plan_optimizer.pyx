@@ -795,8 +795,8 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
     elif isinstance(val, pa.Date32Scalar):
         return move(make_const_date32_expr(val.value))
     elif isinstance(val, pa.Time64Scalar):
-        assert val.type.unit == "ns", "Only Time64 with nanosecond precision is supported as a constant"
-        return move(make_const_time64_expr(val.value))
+        ns_val = val.value * 1000 if val.type.unit == "us" else val.value
+        return move(make_const_time64_expr(ns_val))
     elif isinstance(val, bodo.pandas.scalar.BodoScalar):
         return move(make_const_expr(None, val.get_value()))
     else:

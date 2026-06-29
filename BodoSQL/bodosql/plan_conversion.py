@@ -563,7 +563,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # Check if the second argument is an integer (number of days)
                 # rather than an INTERVAL literal.
                 amount_type = java_call.getOperands()[1].getType()
-                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
                 if is_int_type(amount_type):
                     # DATE_SUB(date, N) → date - N days
                     if isinstance(amount_expr, ConstantExpression):
@@ -613,6 +612,101 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         ),
                     ],
                 )
+        if func_name == "DATEDIFF" and num_operands == 3:
+            # TODO: May need TZ-aware support
+
+            # First operand is a FLAG(unit) interval qualifier from the Java
+            # planner (e.g. FLAG(DAY), FLAG(MONTH)).
+            unit_str = get_java_symbol(java_call.getOperands()[0])
+            unit_str = standardize_java_time_unit(func_name, unit_str).upper()
+            assert unit_str in INTERVAL_UNIT_MAP, (
+                f"Unsupported DATEDIFF unit: {unit_str}"
+            )
+            # date_expr1 will be subtracted from date_expr2
+            date_expr1 = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            date_expr2 = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[2], input_plan
+            )
+
+            date1_pa_type = date_expr1.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            date2_pa_type = date_expr2.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+
+            # Only mixing DATE and TIMESTAMP is allowed
+            if pa.types.is_time(date1_pa_type) or pa.types.is_time(date2_pa_type):
+                if unit_str in ("YEAR", "QUARTER", "MONTH", "WEEK", "DAY"):
+                    raise ValueError(
+                        "Unsupported unit for DATEDIFF with TIME input: " + unit_str
+                    )
+                if not (
+                    pa.types.is_time(date1_pa_type) and pa.types.is_time(date2_pa_type)
+                ):
+                    raise ValueError(
+                        "If a time type is provided both arguments must be time types."
+                    )
+            else:
+                if pa.types.is_date(date1_pa_type):
+                    if unit_str in (
+                        "HOUR",
+                        "MINUTE",
+                        "SECOND",
+                        "MILLISECOND",
+                        "MICROSECOND",
+                        "NANOSECOND",
+                    ) or pa.types.is_timestamp(date2_pa_type):
+                        timestamp_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                        )
+                        date_expr1 = CastExpression(timestamp_empty_data, date_expr1)
+                if pa.types.is_date(date2_pa_type):
+                    if unit_str in (
+                        "HOUR",
+                        "MINUTE",
+                        "SECOND",
+                        "MILLISECOND",
+                        "MICROSECOND",
+                        "NANOSECOND",
+                    ) or pa.types.is_timestamp(date1_pa_type):
+                        timestamp_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                        )
+                        date_expr2 = CastExpression(timestamp_empty_data, date_expr2)
+
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            if unit_str == "YEAR":
+                diff_func_name = "years_between"
+            elif unit_str == "QUARTER":
+                diff_func_name = "quarters_between"
+            elif unit_str == "MONTH":
+                diff_func_name = "month_interval_between"
+                empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int32()))
+            elif unit_str == "WEEK":
+                # Depends on the week_start parameter
+                diff_func_name = "weeks_between"
+            elif unit_str == "DAY":
+                diff_func_name = "days_between"
+            elif unit_str == "HOUR":
+                diff_func_name = "hours_between"
+            elif unit_str == "MINUTE":
+                diff_func_name = "minutes_between"
+            elif unit_str == "SECOND":
+                diff_func_name = "seconds_between"
+            elif unit_str == "MILLISECOND":
+                diff_func_name = "milliseconds_between"
+            elif unit_str == "MICROSECOND":
+                diff_func_name = "microseconds_between"
+            elif unit_str == "NANOSECOND":
+                diff_func_name = "nanoseconds_between"
+            else:
+                raise ValueError("DATEDIFF: Unrecognized unit " + unit_str)
+
+            date_diff = ArrowScalarFuncExpression(
+                empty_data, [date_expr1, date_expr2], diff_func_name, ()
+            )
+            return date_diff
+
         if func_name == "TIME_SLICE":
             # TIME_SLICE(date, interval) → floor_temporal(date, interval)
             date_expr = java_expr_to_python_expr(
@@ -2797,6 +2891,12 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
         # getValue2() returns an integer representing days since epoch
         val = pa.scalar(java_literal.getValue2(), pa.date32())
+        return ConstantExpression(dummy_empty_data, input_plan, val)
+
+    if lit_type_name.equals(SqlTypeName.TIME):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.time64("ns")))
+        # getValue2() returns an integer representing milliseconds since midnight
+        val = pa.scalar(java_literal.getValue2() * 1000, pa.time64("us"))
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
     if lit_type_name.equals(SqlTypeName.TIMESTAMP):

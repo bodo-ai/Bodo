@@ -124,7 +124,7 @@ extractValue(const duckdb::Value &value) {
             return arrow::MakeScalar(dur_type, total_nanos).ValueOrDie();
         } break;
         default:
-            throw std::runtime_error("extractValue unhandled type." +
+            throw std::runtime_error("extractValue unhandled type: " +
                                      std::to_string(static_cast<int>(type)));
     }
 }

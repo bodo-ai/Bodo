@@ -378,7 +378,8 @@ duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val);
 /**
  * @brief Create an expression from a constant time64 with ns resolution.
  *
- * @param val - the constant time for the expression in ns
+ * @param val - the constant time for the expression in nanoseconds since
+ * midnight
  * @return duckdb::unique_ptr<duckdb::Expression> - the const time expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_const_time64_expr(int64_t val);

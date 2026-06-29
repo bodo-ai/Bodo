@@ -23,6 +23,7 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_codegen
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "precision",
     [
@@ -46,6 +47,7 @@ def test_time_array_box_unbox(precision, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "precision",
     [
@@ -316,6 +318,7 @@ def test_time_plus_minus_intervals(query, answer, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -410,6 +413,7 @@ def test_timeadd_timediff_invalid_units(timeadd_dataframe, calculation, error_ms
         bc.sql(query)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query, expected_output",
     [
@@ -462,6 +466,7 @@ def test_datediff_time_literals(query, expected_output, basic_df, memory_leak_ch
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_datediff_time_columns(time_df, time_part_strings, memory_leak_check):
     """
     Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF on columns behaves as expected
@@ -500,6 +505,7 @@ def test_datediff_time_columns(time_df, time_part_strings, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_datediff_time_day_part_handling(time_df, day_part_strings, memory_leak_check):
     """
     Checks that calling DATEDIFF/TIMEDIFF/TIMESTAMPDIFF throws an error when a date part is passed in as the unit

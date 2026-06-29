@@ -349,6 +349,35 @@ arrow::Datum do_arrow_compute_multi_input_datum(
             "do_arrow_compute_multi_input: bodo_dateadd unsupported input "
             "type " +
             date_arr->type()->ToString());
+    } else if (arrow_func_name == "month_interval_between") {
+        if (arg_datums.size() != 2) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: month_interval_between expects "
+                "exactly 2 "
+                "arguments.");
+        }
+        auto mib_res =
+            arrow::compute::CallFunction("month_interval_between", arg_datums);
+        if (!mib_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: Error in Arrow compute "
+                "(month_interval_between): " +
+                mib_res.status().message());
+        }
+
+        // Cast MonthInterval result to int32, that is all we need
+        arrow::Datum month_interval_datum = mib_res.ValueOrDie();
+        std::shared_ptr<arrow::MonthIntervalArray> mi_arr =
+            std::static_pointer_cast<arrow::MonthIntervalArray>(
+                month_interval_datum.make_array());
+
+        // MonthIntervalArray stores months as int32.
+        // Extract raw buffers and create Int32Array with the same buffers.
+        auto mi_arr_int32 = std::make_shared<arrow::Int32Array>(
+            arrow::int32(), mi_arr->length(), mi_arr->values(),
+            mi_arr->null_bitmap(), mi_arr->null_count());
+
+        return arrow::Datum(mi_arr_int32);
     } else if (arrow_func_name == "nullif") {
         // SQL NULLIF(a, b): returns NULL when a == b, else a.
         // Arrow has no direct nullif kernel, so implement as:
