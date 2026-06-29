@@ -2401,10 +2401,25 @@ def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
             filter_cols[key] = eq_cols[loc_ind]
             is_first[key] = is_first_cols[loc_ind]
 
-        # orig_build_key_cols for JoinFilterInfo requires a list of indexes
-        # corresponding to the order each build key appears in the join
-        # condition:
+        # Each element in eq_cols corresponds to an item in JoinInfo.leftKeys,
+        # which indicates an equality condition with the key from
+        # JoinInfo.rightKeys at the same position. The order of the rightKeys/leftKeys
+        # lists might change during column pruning, so we track the original key
+        # column locations in BodoPhysicalJoin and reorder filter_cols to match the
+        # order of the final join condition. After reordering, each key in filter_cols
+        # will correspond to a filter derived from the key/column in JoinInfo.rightKeys
+        # at the same position (the filter column can be -1 if that column is not
+        # available yet).
+        # The C++ JoinState creates a vector that's length is <num_build_keys> to store
+        # the min/max values for each build key. The order of this vector should match
+        # the order of the build keys in JoinInfo.rightKeys, which
+        # is equivalent to the order that the build keys appear in the join condition.
+        # Finally, we use the values at orig_build_key_cols to lookup the
+        # min/max values from the JoinState for each filter that we
+        # can push into I/O.
         # https://github.com/bodo-ai/Bodo/blob/f8cbfd4705e346a860fc4121c6735d9e8960d2c0/bodo/pandas/optimizer/runtime_join_filter.cpp#L282
+        # https://github.com/bodo-ai/Bodo/blob/f8cbfd4705e346a860fc4121c6735d9e8960d2c0/bodo/pandas/_util.cpp#L1182
+        # https://github.com/bodo-ai/Bodo/blob/0edd4715fdbb302f505962e3dcdf484f7e971c4a/bodo/libs/streaming/_join.cpp#L1360
         build_cols_idxs = list(range(len(java_build_keys)))
 
         new_filter_ids.append(fid)
