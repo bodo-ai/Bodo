@@ -115,6 +115,16 @@ extractValue(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
         } break;
+        case duckdb::LogicalTypeId::TIME:
+        case duckdb::LogicalTypeId::TIME_NS: {
+            // Define a time type with nanosecond precision
+            auto time_type = arrow::time64(arrow::TimeUnit::NANO);
+            duckdb::dtime_ns_t extracted = value.GetValue<duckdb::dtime_ns_t>();
+            // Create a TimeScalar with the time value
+            // NOTE: DuckDB's dtime_ns_t is subclass of dtime_t so the field is
+            // still called micros, but it is actually nanoseconds.
+            return arrow::MakeScalar(time_type, extracted.micros).ValueOrDie();
+        } break;
         case duckdb::LogicalTypeId::INTERVAL: {
             duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
             // Convert to nanoseconds total, dropping month/day information
@@ -170,7 +180,8 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeNullScalar(date_type);
         } break;
-        case duckdb::LogicalTypeId::TIME: {
+        case duckdb::LogicalTypeId::TIME:
+        case duckdb::LogicalTypeId::TIME_NS: {
             auto time_type = arrow::time64(arrow::TimeUnit::NANO);
             return arrow::MakeNullScalar(time_type);
         } break;
@@ -518,6 +529,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
         case duckdb::LogicalTypeId::TIMESTAMP_NS:
             return arrow::timestamp(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::TIME:
+        case duckdb::LogicalTypeId::TIME_NS:
             return arrow::time64(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::BLOB:
             return arrow::large_binary();
@@ -576,7 +588,7 @@ duckdb::LogicalType arrowTypeToDuckDB(
         case arrow::Type::LARGE_BINARY:
             return duckdb::LogicalType(duckdb::LogicalTypeId::BLOB);
         case arrow::Type::TIME64:
-            return duckdb::LogicalType(duckdb::LogicalTypeId::TIME);
+            return duckdb::LogicalType(duckdb::LogicalTypeId::TIME_NS);
         case arrow::Type::TIMESTAMP: {
             auto ts_type = std::static_pointer_cast<arrow::TimestampType>(type);
             if (!ts_type->timezone().empty()) {
