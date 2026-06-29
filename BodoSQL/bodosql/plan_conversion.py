@@ -617,12 +617,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             # First operand is a FLAG(unit) interval qualifier from the Java
             # planner (e.g. FLAG(DAY), FLAG(MONTH)).
-            first_op_str = str(java_call.getOperands()[0].toString())
-            if not first_op_str.startswith("FLAG"):
-                raise NotImplementedError(
-                    "DATEDIFF with 3 string operands not supported in C++ backend yet"
-                )
-            unit_str = first_op_str.split("(")[1].rstrip(")").upper()
+            unit_str = get_java_symbol(java_call.getOperands()[0])
+            unit_str = standardize_java_time_unit(func_name, unit_str).upper()
             assert unit_str in INTERVAL_UNIT_MAP, (
                 f"Unsupported DATEDIFF unit: {unit_str}"
             )

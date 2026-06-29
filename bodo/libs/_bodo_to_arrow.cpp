@@ -1467,19 +1467,6 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::TimestampArray>(
                 ts_arr, Bodo_CTypes::DATETIME, src_pool);
         }
-        case arrow::Type::INTERVAL_MONTHS: {
-            std::shared_ptr<arrow::MonthIntervalArray> im_arr =
-                std::static_pointer_cast<arrow::MonthIntervalArray>(arrow_arr);
-
-            // MonthIntervalArray stores months as int32.
-            // Extract raw buffers and create Int32Array with the same buffers.
-            auto im_arr_int32 = std::make_shared<arrow::Int32Array>(
-                arrow::int32(), im_arr->length(), im_arr->values(),
-                im_arr->null_bitmap(), im_arr->null_count());
-
-            return arrow_numeric_array_to_bodo<arrow::Int32Array>(
-                im_arr_int32, Bodo_CTypes::INT32, src_pool);
-        }
         case arrow::Type::DURATION: {
             auto dur_arr =
                 std::static_pointer_cast<arrow::DurationArray>(arrow_arr);
