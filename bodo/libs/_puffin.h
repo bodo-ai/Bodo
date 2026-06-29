@@ -3,6 +3,7 @@
 #include <Python.h>
 #include <boost/json.hpp>
 
+#include "_bodo_common.h"
 #include "_theta_sketches.h"
 
 // Use libzstd to decompress a blob string.
@@ -280,7 +281,7 @@ std::unique_ptr<PuffinFile> read_puffin_file(std::string puffin_loc,
  *
  * @return PyObject* StatisticsFile on rank 0, empty StatisticsFile on others.
  */
-PyObject *write_puffin_file_py_entrypt(
+BODO_EXPORT PyObject *write_puffin_file_py_entrypt(
     const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
     int64_t sequence_number, UpdateSketchCollection *sketches,
     PyObject *iceberg_arrow_schema_py, PyObject *pyarrow_fs,
@@ -291,7 +292,7 @@ PyObject *write_puffin_file_py_entrypt(
  * Unlike write_puffin_file_py_entrypt, this does NOT call
  * merge_parallel_sketches() — the caller is responsible for merging.
  */
-PyObject *write_puffin_from_compact_sketches_py_entrypt(
+BODO_EXPORT PyObject *write_puffin_from_compact_sketches_py_entrypt(
     const char *puffin_file_loc, const char *bucket_region, int64_t snapshot_id,
     int64_t sequence_number,
     std::shared_ptr<CompactSketchCollection> merged_sketches,

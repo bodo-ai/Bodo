@@ -24,18 +24,12 @@
 #include "../libs/_puffin.h"
 #include "../libs/_theta_sketches.h"
 
-#if defined(_MSC_VER)
-#define EXPORT __declspec(dllexport)
-#else
-#define EXPORT __attribute__((visibility("default")))
-#endif
-
 extern "C" {
 
 /**
  * @brief Delete an UpdateSketchCollection.
  */
-EXPORT void bodo_theta_utils_delete_sketches(uintptr_t ptr) {
+BODO_EXPORT void bodo_theta_utils_delete_sketches(uintptr_t ptr) {
     if (ptr == 0)
         return;
     try {
@@ -57,7 +51,7 @@ EXPORT void bodo_theta_utils_delete_sketches(uintptr_t ptr) {
  *
  * @return A Python bytes object, or NULL on error.
  */
-EXPORT PyObject *bodo_theta_utils_compact_serialize(uintptr_t ptr) {
+BODO_EXPORT PyObject *bodo_theta_utils_compact_serialize(uintptr_t ptr) {
     if (ptr == 0) {
         Py_RETURN_NONE;
     }
@@ -120,7 +114,7 @@ EXPORT PyObject *bodo_theta_utils_compact_serialize(uintptr_t ptr) {
  *                             string for new writes).
  * @return A StatisticsFile PyObject* on success, NULL on error.
  */
-EXPORT PyObject *bodo_theta_utils_merge_and_write_puffin(
+BODO_EXPORT PyObject *bodo_theta_utils_merge_and_write_puffin(
     PyObject *serialized_list, const char *puffin_file_loc,
     const char *bucket_region, int64_t snapshot_id, int64_t sequence_number,
     PyObject *iceberg_schema_py, PyObject *pyarrow_fs_py,

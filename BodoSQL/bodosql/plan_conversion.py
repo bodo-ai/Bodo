@@ -1306,7 +1306,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "CHAR_LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(
                 int_empty_data,
@@ -1327,7 +1327,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name in ("LPAD", "RPAD") and len(op_exprs) in (2, 3):
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
 
             length = op_exprs[1]
             ensure_arg_is_const_expr_of_type(length, "length", int)
@@ -1336,7 +1336,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             if len(op_exprs) == 3:
                 pattern = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(pattern, "pattern", str)
+                ensure_arg_is_const_expr_of_type(pattern, "pattern", (str, pa.binary()))
                 arrow_func_args += (pattern.value,)
 
             return ArrowScalarFuncExpression(
@@ -1350,13 +1350,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             search_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(search_expr, "search_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                search_expr, "search_expr", (str, pa.binary())
+            )
 
             if len(op_exprs) == 3:
                 replacement_expr = op_exprs[2]
                 ensure_arg_is_const_expr_of_type(
-                    replacement_expr, "replacement_expr", str
+                    replacement_expr, "replacement_expr", (str, pa.binary())
                 )
                 replacement_val = replacement_expr.value
             else:
@@ -1404,8 +1406,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             regexp = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(regexp, "regexp", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
 
             if len(op_exprs) >= 3:
                 start_expr = op_exprs[2]
@@ -1770,7 +1772,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             len_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
 
             out_empty = src.empty_data.iloc[:, 0]
@@ -1782,7 +1784,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             len_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
 
             out_empty = src.empty_data.iloc[:, 0]
@@ -1793,8 +1795,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             match_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                match_expr, "match_expr", (str, pa.binary())
+            )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
@@ -1807,8 +1811,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             match_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                match_expr, "match_expr", (str, pa.binary())
+            )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
@@ -1821,8 +1827,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             match_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                match_expr, "match_expr", (str, pa.binary())
+            )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
@@ -1833,7 +1841,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(
                 int_empty_data,
@@ -1850,8 +1858,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 src = op_exprs[1]
                 match_expr = op_exprs[0]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                match_expr, "match_expr", (str, pa.binary())
+            )
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             if len(match_expr.value) == 0:
                 return ConstantExpression(int_empty_data, input_plan, 1)
@@ -1928,7 +1938,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "CONCAT" and len(op_exprs) > 0:
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
 
             if len(op_exprs) == 1:
                 # Nothing to concatenate, just return the input string
@@ -1944,7 +1954,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             if len(op_exprs) > 1:
                 for other_str_src in op_exprs[1:]:
-                    ensure_type_of_expr(other_str_src, "other_str_src", str)
+                    ensure_type_of_expr(
+                        other_str_src, "other_str_src", (str, pa.binary())
+                    )
                     input_exprs.append(other_str_src)
 
             input_exprs.append(separator)
@@ -1957,7 +1969,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "CONCAT_WS" and len(op_exprs) > 1:
             separator = op_exprs[0]
-            ensure_type_of_expr(separator, "separator", str)
+            ensure_type_of_expr(separator, "separator", (str, pa.binary()))
 
             if len(op_exprs) == 2:
                 # Nothing to concatenate, just return the input string
@@ -1965,7 +1977,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             input_exprs = []
             for str_src in op_exprs[1:]:
-                ensure_type_of_expr(str_src, "str_src", str)
+                ensure_type_of_expr(str_src, "str_src", (str, pa.binary()))
                 input_exprs.append(str_src)
             input_exprs.append(separator)
 
@@ -1981,7 +1993,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             num_repeats_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
 
             return ArrowScalarFuncExpression(
@@ -2002,7 +2014,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "REVERSE" and len(op_exprs) == 1:
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
 
             return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
         elif (
@@ -2042,7 +2054,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "RTRIMMED_LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             # Use utf8_rtrim instead of utf8_rtrim_whitespace so that only regular space characters are removed
             rtrimmed_expr = ArrowScalarFuncExpression(
@@ -2057,7 +2069,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[2]
             inserted_str_expr = op_exprs[3]
 
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
             ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
             ensure_arg_is_const_expr_of_type(
@@ -2257,32 +2269,68 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # T        T        F              T
                 # T        T        F              F
 
-                # Also, the case of having lower and upper bound and both being
-                # inclusive can be divided up into two cases, where lower and
-                # upper are equal and where they are not equal.
+                # The lower and upper bounds being equal is a special case that does not
+                # involve less-than or greater-than comparison. It can be subdivided
+                # based on whether the lower and upper bounds are inclusive or not.
+                # The typical case is that they will be inclusive, which we can simplify
+                # to an equality check.
                 if (
                     lower_lit is not None
                     and upper_lit is not None
-                    and lower_inclusive
-                    and upper_inclusive
                     and lower_lit == upper_lit
                 ):
-                    # The exception case where we have lower and upper bounds and they are both
-                    # inclusive and the same we can simplify as equality check.
+                    if lower_inclusive and upper_inclusive:
+                        # Range of the form [a..a] - reduce to equality check
+                        const_empty_data = arrow_to_empty_df(
+                            pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
+                        )
+
+                        return ComparisonOpExpression(
+                            bool_empty_data,
+                            src,
+                            ConstantExpression(const_empty_data, input_plan, lower_lit),
+                            operator.eq,
+                        )
+                    elif lower_inclusive or upper_inclusive:
+                        # Range of the form [a..a) or (a..a] - interpret as empty
+                        return ConstantExpression(bool_empty_data, input_plan, False)
+                    else:
+                        raise ValueError("SEARCH option range form (a..a) is invalid.")
+
+                # Address the standard continuous range case, e.g. BETWEEN
+                if lower_lit is not None:
                     const_empty_data = arrow_to_empty_df(
                         pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
                     )
-
-                    return ComparisonOpExpression(
+                    src_greater = ComparisonOpExpression(
                         bool_empty_data,
                         src,
                         ConstantExpression(const_empty_data, input_plan, lower_lit),
-                        operator.eq,
+                        operator.ge if lower_inclusive else operator.gt,
                     )
+                    in_range = src_greater
+                if upper_lit is not None:
+                    const_empty_data = arrow_to_empty_df(
+                        pa.schema([pa.field("equal", pa.scalar(upper_lit).type)])
+                    )
+                    src_less = ComparisonOpExpression(
+                        bool_empty_data,
+                        src,
+                        ConstantExpression(const_empty_data, input_plan, upper_lit),
+                        operator.le if upper_inclusive else operator.lt,
+                    )
+                    in_range = src_less
 
-                raise NotImplementedError(
-                    f"SEARCH operator case of hasLower {lower_lit is not None}, hasUpper {upper_lit is not None}, lowerInclusive {lower_inclusive}, upperInclusive {upper_inclusive} not supported yet."
-                )
+                if lower_lit is not None and upper_lit is not None:
+                    # Assure input is within both bounds
+                    in_range = ConjunctionOpExpression(
+                        bool_empty_data, src_greater, src_less, "__and__"
+                    )
+                elif lower_lit is None and upper_lit is None:
+                    # No bounds specified, inputs must be in infinite range
+                    in_range = ConstantExpression(bool_empty_data, input_plan, True)
+
+                return in_range
 
             out_expr = process_one_search_option(search_options[0])
             # The definition of search is that the value is one of the
@@ -2487,7 +2535,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.OTHER):
         if op_name == "||":  # string concatenation
             for op_expr in (left, right):
-                ensure_type_of_expr(op_expr, "op_expr (|| arg)", str)
+                ensure_type_of_expr(op_expr, "op_expr (|| arg)", (str, pa.binary()))
 
             separator = bodo.pandas.plan.ConstantExpression(
                 left.empty_data,
