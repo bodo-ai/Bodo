@@ -11,52 +11,21 @@ import pandas as pd
 
 import bodo.pandas
 import bodo.spawn.spawner as spawner
-import bodosql  # noqa
+from bodosql import BodoSQLContext, TablePath  # noqa
 
 
-def tpch_data_helper(datapath):
-    (
-        customer_df,
-        orders_df,
-        lineitem_df,
-        nation_df,
-        region_df,
-        supplier_df,
-        part_df,
-        partsupp_df,
-    ) = load_tpch_data(datapath)
+def get_tpch_data(datapath):
     dataframe_dict = {
-        "CUSTOMER": customer_df,
-        "ORDERS": orders_df,
-        "LINEITEM": lineitem_df,
-        "NATION": nation_df,
-        "REGION": region_df,
-        "SUPPLIER": supplier_df,
-        "PART": part_df,
-        "PARTSUPP": partsupp_df,
+        "CUSTOMER": TablePath(datapath + "/customer.pq", file_type="parquet"),
+        "ORDERS": TablePath(datapath + "/orders.pq", file_type="parquet"),
+        "LINEITEM": TablePath(datapath + "/lineitem.pq", file_type="parquet"),
+        "NATION": TablePath(datapath + "/nation.pq", file_type="parquet"),
+        "REGION": TablePath(datapath + "/region.pq", file_type="parquet"),
+        "SUPPLIER": TablePath(datapath + "/supplier.pq", file_type="parquet"),
+        "PART": TablePath(datapath + "/part.pq", file_type="parquet"),
+        "PARTSUPP": TablePath(datapath + "/partsupp.pq", file_type="parquet"),
     }
     return dataframe_dict
-
-
-def load_tpch_data(dir_name):
-    customer_df = pd.read_parquet(dir_name + "/customer.pq/", dtype_backend="pyarrow")
-    orders_df = pd.read_parquet(dir_name + "/orders.pq/", dtype_backend="pyarrow")
-    lineitem_df = pd.read_parquet(dir_name + "/lineitem.pq/", dtype_backend="pyarrow")
-    nation_df = pd.read_parquet(dir_name + "/nation.pq", dtype_backend="pyarrow")
-    region_df = pd.read_parquet(dir_name + "/region.pq", dtype_backend="pyarrow")
-    supplier_df = pd.read_parquet(dir_name + "/supplier.pq", dtype_backend="pyarrow")
-    part_df = pd.read_parquet(dir_name + "/part.pq/", dtype_backend="pyarrow")
-    partsupp_df = pd.read_parquet(dir_name + "/partsupp.pq/", dtype_backend="pyarrow")
-    return (
-        customer_df,
-        orders_df,
-        lineitem_df,
-        nation_df,
-        region_df,
-        supplier_df,
-        part_df,
-        partsupp_df,
-    )
 
 
 def timethis(
@@ -118,7 +87,7 @@ def run_queries(
     total_start = time.time()
     n_passed = 0
     failed_queries = []
-    tpch_data = tpch_data_helper(root)
+    tpch_data = get_tpch_data(root)
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
@@ -187,7 +156,7 @@ def {func_name}(tpch_data):
             + sql_text
             + "\\\n'''\n"
             + """
-    bc = bodosql.BodoSQLContext(tpch_data, default_tz=None)
+    bc = BodoSQLContext(tpch_data, default_tz=None)
     bodosql_output = bc.sql(tpch_query, None, None, {})
     return bodosql_output
 """
@@ -293,7 +262,7 @@ def main():
 
     print("Running bodo.pandas: GPU enabled?: ", bodo.gpu_enabled)
     # warmup GPU cluster
-    print(backend_module.DataFrame({"A": [1, 2, 3]})["A"])
+    # print(backend_module.DataFrame({"A": [1, 2, 3]})["A"])
 
     run_queries(
         data_set,

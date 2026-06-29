@@ -14,6 +14,14 @@
 using hrclock = std::chrono::high_resolution_clock;
 #endif
 
+uint64_t getNSTime() {
+    auto now = std::chrono::high_resolution_clock::now();
+    auto ns = std::chrono::time_point_cast<std::chrono::nanoseconds>(now)
+                  .time_since_epoch()
+                  .count();
+    return ns;
+}
+
 std::string getGPUStats() {
 #ifdef USE_CUDF
     if (!is_gpu_rank()) {
@@ -67,8 +75,8 @@ std::string getGPUStats() {
             out << " ";                                                       \
         out << "Rank " << rank << " midPipelineExecute before ConsumeBatch "  \
             << getNodeString(sink) << " " << toString(prev_op_result)         \
-            << " NumRows=>" << getBatchRows(batch) << " " << getGPUStats()    \
-            << std::endl;                                                     \
+            << " NumRows=>" << getBatchRows(batch) << " " << getNSTime()      \
+            << " " << getGPUStats() << std::endl;                             \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_CONSUME(rank, sink, prev_op_result, out, batch) \
@@ -83,7 +91,7 @@ std::string getGPUStats() {
             out << " ";                                                      \
         out << "Rank " << rank << " midPipelineExecute after ConsumeBatch "  \
             << getNodeString(sink) << " " << toString(consume_result) << " " \
-            << getGPUStats() << std::endl;                                   \
+            << getNSTime() << " " << getGPUStats() << std::endl;             \
     } while (0)
 #else
 #define DEBUG_PIPELINE_AFTER_CONSUME(rank, sink, consume_result, out) \
@@ -95,7 +103,8 @@ std::string getGPUStats() {
 #define DEBUG_PIPELINE_BEFORE_PRODUCE(rank, source, out)                    \
     do {                                                                    \
         out << "Rank " << rank << " Pipeline::Execute before ProduceBatch " \
-            << getNodeString(source) << " " << getGPUStats() << std::endl;  \
+            << getNodeString(source) << " " << getNSTime() << " "           \
+            << getGPUStats() << std::endl;                                  \
     } while (0)
 #else
 #define DEBUG_PIPELINE_BEFORE_PRODUCE(rank, source, out) \
@@ -108,8 +117,8 @@ std::string getGPUStats() {
     do {                                                                       \
         out << "Rank " << rank << " Pipeline::Execute after ProduceBatch "     \
             << getNodeString(source) << " " << toString(produce_result)        \
-            << " NumRows=>" << getBatchRows(batch) << " " << getGPUStats()     \
-            << std::endl;                                                      \
+            << " NumRows=>" << getBatchRows(batch) << " " << getNSTime()       \
+            << " " << getGPUStats() << std::endl;                              \
         if (DEBUG_PIPELINE >= 2) {                                             \
             printBatchTypes(out, batch);                                       \
         }                                                                      \
@@ -140,8 +149,8 @@ std::string getGPUStats() {
             out << " ";                                                      \
         out << "Rank " << rank << " midPipelineExecute before ProcessBatch " \
             << getNodeString(op) << " " << toString(prev_op_result)          \
-            << " NumRows=>" << getBatchRows(batch) << " " << getGPUStats()   \
-            << std::endl;                                                    \
+            << " NumRows=>" << getBatchRows(batch) << " " << getNSTime()     \
+            << " " << getGPUStats() << std::endl;                            \
         if (DEBUG_PIPELINE >= 2) {                                           \
             printBatchTypes(out, batch);                                     \
         }                                                                    \
@@ -163,7 +172,8 @@ std::string getGPUStats() {
             out << " ";                                                       \
         out << "Rank " << rank << " midPipelineExecute after ProcessBatch "   \
             << getNodeString(op) << " " << toString(prev_op_result) << " "    \
-            << " NumRows=>" << getBatchRows(batch) << " " << diff_ms << "us"  \
+            << " NumRows=>" << getBatchRows(batch) << " " << getNSTime()      \
+            << " " << diff_ms << "us"                                         \
             << " " << getGPUStats() << std::endl;                             \
         if (DEBUG_PIPELINE >= 2) {                                            \
             printBatchTypes(out, batch);                                      \
@@ -180,7 +190,8 @@ std::string getGPUStats() {
     do {                                                                    \
         out << "Rank " << rank                                              \
             << " Pipeline::Execute calling with empty batch until finished" \
-            << getNodeString(source) << " " << getGPUStats() << std::endl;  \
+            << getNodeString(source) << " " << getNSTime() << " "           \
+            << getGPUStats() << std::endl;                                  \
     } while (0)
 #else
 #define DEBUG_PIPELINE_SOURCE_FINISHED(rank, source, out) \
@@ -189,10 +200,11 @@ std::string getGPUStats() {
 #endif
 
 #if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
-#define DEBUG_PIPELINE_FINALIZE(rank, op, out)                           \
-    do {                                                                 \
-        out << "Rank " << rank << " Pipeline::Execute calling Finalize " \
-            << getNodeString(op) << " " << getGPUStats() << std::endl;   \
+#define DEBUG_PIPELINE_FINALIZE(rank, op, out)                                 \
+    do {                                                                       \
+        out << "Rank " << rank << " Pipeline::Execute calling Finalize "       \
+            << getNodeString(op) << " " << getNSTime() << " " << getGPUStats() \
+            << std::endl;                                                      \
     } while (0)
 #else
 #define DEBUG_PIPELINE_FINALIZE(rank, op, out) \
@@ -207,7 +219,7 @@ std::string getGPUStats() {
             out << " ";                                                        \
         out << "Rank " << rank << " midPipelineExecute in batch "              \
             << getNodeString(op) << " NumRows=>" << getBatchRows(batch) << " " \
-            << getGPUStats() << std::endl;                                     \
+            << getNSTime() << " " << getGPUStats() << std::endl;               \
         std::visit(                                                            \
             [&](auto &x) {                                                     \
                 using T = std::decay_t<decltype(x)>;                           \
@@ -228,7 +240,7 @@ std::string getGPUStats() {
             out << " ";                                                        \
         out << "Rank " << rank << " midPipelineExecute in batch "              \
             << getNodeString(op) << " NumRows=>" << getBatchRows(batch) << " " \
-            << getGPUStats() << std::endl;                                     \
+            << getNSTime() << " " << getGPUStats() << std::endl;               \
         if (DEBUG_PIPELINE >= 2) {                                             \
             printBatchTypes(out, batch);                                       \
         }                                                                      \
