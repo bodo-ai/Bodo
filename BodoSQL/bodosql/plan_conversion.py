@@ -2159,32 +2159,68 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # T        T        F              T
                 # T        T        F              F
 
-                # Also, the case of having lower and upper bound and both being
-                # inclusive can be divided up into two cases, where lower and
-                # upper are equal and where they are not equal.
+                # The lower and upper bounds being equal is a special case that does not
+                # involve less-than or greater-than comparison. It can be subdivided
+                # based on whether the lower and upper bounds are inclusive or not.
+                # The typical case is that they will be inclusive, which we can simplify
+                # to an equality check.
                 if (
                     lower_lit is not None
                     and upper_lit is not None
-                    and lower_inclusive
-                    and upper_inclusive
                     and lower_lit == upper_lit
                 ):
-                    # The exception case where we have lower and upper bounds and they are both
-                    # inclusive and the same we can simplify as equality check.
+                    if lower_inclusive and upper_inclusive:
+                        # Range of the form [a..a] - reduce to equality check
+                        const_empty_data = arrow_to_empty_df(
+                            pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
+                        )
+
+                        return ComparisonOpExpression(
+                            bool_empty_data,
+                            src,
+                            ConstantExpression(const_empty_data, input_plan, lower_lit),
+                            operator.eq,
+                        )
+                    elif lower_inclusive or upper_inclusive:
+                        # Range of the form [a..a) or (a..a] - interpret as empty
+                        return ConstantExpression(bool_empty_data, input_plan, False)
+                    else:
+                        raise ValueError("SEARCH option range form (a..a) is invalid.")
+
+                # Address the standard continuous range case, e.g. BETWEEN
+                if lower_lit is not None:
                     const_empty_data = arrow_to_empty_df(
                         pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
                     )
-
-                    return ComparisonOpExpression(
+                    src_greater = ComparisonOpExpression(
                         bool_empty_data,
                         src,
                         ConstantExpression(const_empty_data, input_plan, lower_lit),
-                        operator.eq,
+                        operator.ge if lower_inclusive else operator.gt,
                     )
+                    in_range = src_greater
+                if upper_lit is not None:
+                    const_empty_data = arrow_to_empty_df(
+                        pa.schema([pa.field("equal", pa.scalar(upper_lit).type)])
+                    )
+                    src_less = ComparisonOpExpression(
+                        bool_empty_data,
+                        src,
+                        ConstantExpression(const_empty_data, input_plan, upper_lit),
+                        operator.le if upper_inclusive else operator.lt,
+                    )
+                    in_range = src_less
 
-                raise NotImplementedError(
-                    f"SEARCH operator case of hasLower {lower_lit is not None}, hasUpper {upper_lit is not None}, lowerInclusive {lower_inclusive}, upperInclusive {upper_inclusive} not supported yet."
-                )
+                if lower_lit is not None and upper_lit is not None:
+                    # Assure input is within both bounds
+                    in_range = ConjunctionOpExpression(
+                        bool_empty_data, src_greater, src_less, "__and__"
+                    )
+                elif lower_lit is None and upper_lit is None:
+                    # No bounds specified, inputs must be in infinite range
+                    in_range = ConstantExpression(bool_empty_data, input_plan, True)
+
+                return in_range
 
             out_expr = process_one_search_option(search_options[0])
             # The definition of search is that the value is one of the

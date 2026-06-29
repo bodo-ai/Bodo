@@ -5,7 +5,10 @@ Tests correctness of the In and Not In operations in BodoSQL
 import pandas as pd
 import pytest
 
+import bodosql
 from bodosql.tests.utils import check_query
+
+pytestmark = pytest.mark.bodosql_cpp
 
 
 def check_codegen_uses_optimized_is_in(codegen):
@@ -75,10 +78,11 @@ def test_in_scalar_literals(basic_df, memory_leak_check):
         None,
         check_names=False,
         check_dtype=False,
-        return_codegen=True,
+        return_codegen=not bodosql.use_cpp_backend,
         use_duckdb=True,
     )
-    assert check_codegen_uses_optimized_is_in(output["pandas_code"])
+    if not bodosql.use_cpp_backend:
+        assert check_codegen_uses_optimized_is_in(output["pandas_code"])
 
 
 def test_string_in_scalar_literals():
@@ -94,10 +98,11 @@ def test_string_in_scalar_literals():
         None,
         check_names=False,
         check_dtype=False,
-        return_codegen=True,
+        return_codegen=not bodosql.use_cpp_backend,
         use_duckdb=True,
     )
-    assert check_codegen_uses_optimized_is_in(output["pandas_code"])
+    if not bodosql.use_cpp_backend:
+        assert check_codegen_uses_optimized_is_in(output["pandas_code"])
 
 
 @pytest.mark.slow
