@@ -403,6 +403,9 @@ void CudaHashJoin::runtime_filter(
     std::vector<cudf::size_type> const& probe_key_indices,
     std::unique_ptr<cudf::column>& prev_mask, rmm::cuda_stream_view stream) {
     if (_build_bloom_filter) {
+        if (build_se) {
+            build_se->event.wait(stream);
+        }
         filter_table_with_bloom(probe_table, probe_key_indices,
                                 *_build_bloom_filter, prev_mask, stream);
     }
@@ -740,19 +743,6 @@ CudaNonEquiJoin::CudaNonEquiJoin(
                std::move(non_equi_expression), true) {}
 
 void CudaNonEquiJoin::FinalizeBuild() {
-    // Drain any pending broadcasts from GPU ranks.
-    //  Must be done before clearing _build_chunks since the broadcast may
-    //  arrive
-    // during this call.
-    if (is_broadcast_join) {
-        std::vector<std::shared_ptr<cudf::table>> received_chunks =
-            build_broadcast_manager->progress(true);
-        for (auto& chunk : received_chunks) {
-            this->_build_chunks.emplace_back(std::move(chunk));
-        }
-        build_broadcast_manager->sync_is_last(true);
-    }
-
     if (is_gpu_rank()) {
         std::vector<cudf::table_view> build_views;
         for (const auto& chunk : this->_build_chunks) {
