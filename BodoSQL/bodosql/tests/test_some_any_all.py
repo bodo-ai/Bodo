@@ -134,6 +134,7 @@ def test_some_any_all_interval_non_null_tuples(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_some_any_all_null_tuples(
     bodosql_nullable_numeric_types,
