@@ -218,6 +218,7 @@ def test_tpch_q14(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
     DATE = "1996-01-01"
     # This query is modified because we don't support DDL properly.

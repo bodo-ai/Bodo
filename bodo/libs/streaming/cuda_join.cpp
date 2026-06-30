@@ -403,6 +403,9 @@ void CudaHashJoin::runtime_filter(
     std::vector<cudf::size_type> const& probe_key_indices,
     std::unique_ptr<cudf::column>& prev_mask, rmm::cuda_stream_view stream) {
     if (_build_bloom_filter) {
+        if (build_se) {
+            build_se->event.wait(stream);
+        }
         filter_table_with_bloom(probe_table, probe_key_indices,
                                 *_build_bloom_filter, prev_mask, stream);
     }

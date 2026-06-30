@@ -848,7 +848,9 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
     // join filter run before this pipeline.
     for (int filter_id : op.filter_ids) {
 #ifdef USE_CUDF
-        if ((*join_on_gpu)[filter_id] != run_on_gpu) {
+        auto join_gpu_iter = join_on_gpu->find(filter_id);
+        if (join_gpu_iter == join_on_gpu->end() ||
+            join_gpu_iter->second != run_on_gpu) {
             continue;
         }
         found_join_on_same_device = true;
