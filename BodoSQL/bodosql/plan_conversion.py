@@ -1332,7 +1332,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             select_expr = op_exprs[0]
 
             # Get unified result type between all result expressions to avoid overflow
-            # breakpoint()
             common_result_type, results_need_cast = get_common_int_type_list(
                 [op_exprs[i] for i in range(2, len(op_exprs), 2)]
             )
