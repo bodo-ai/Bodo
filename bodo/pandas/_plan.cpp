@@ -461,6 +461,7 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
     switch (etype) {
         case duckdb::ExpressionType::OPERATOR_NOT:
         case duckdb::ExpressionType::OPERATOR_IS_TRUE:
+        case duckdb::ExpressionType::OPERATOR_IS_NOT_TRUE:
         case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(

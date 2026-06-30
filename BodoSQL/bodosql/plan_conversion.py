@@ -899,6 +899,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "istrue")
 
+        if kind.equals(SqlKind.IS_NOT_TRUE):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "isnottrue")
+
     if operator_class_name == "SqlCaseOperator":
         operands = java_call.getOperands()
         kind = op.getKind()
