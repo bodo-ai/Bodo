@@ -1295,9 +1295,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             expr1_is_null = UnaryOpExpression(bool_empty_data, expr1, "isnull")
-            return make_unified_case_expression(
-                expr2.empty_data, expr1_is_null, expr3, expr2
-            )
+            return make_unified_case_expression("common", expr1_is_null, expr3, expr2)
 
         if func_name == "ZEROIFNULL" and len(op_exprs) == 1:
             expr = op_exprs[0]
@@ -2720,6 +2718,10 @@ def make_unified_case_expression(empty_data, when_expr, then_expr, else_expr):
     to Arrow's case_when. Note that the output type (from `empty_data`) is
     retained. If `then_expr` or `else_expr` is not an integer expression,
     this is equivalent to directly constructing a CaseExpression.
+
+    If `empty_data` is None or `"common"`, the output type will be the same as
+    the common type of the inputs. If `then_expr` and `else_expr` have no
+    common type, `empty_data` will default to `then_expr.empty_data`.
     """
     # then_expr and else_expr could have different types, e.g. int64 and uint64
 
@@ -2729,7 +2731,9 @@ def make_unified_case_expression(empty_data, when_expr, then_expr, else_expr):
 
     unified_then_expr = then_expr
     unified_else_expr = else_expr
-    unified_empty_data = empty_data
+    unified_empty_data = (
+        empty_data if empty_data not in (None, "common") else then_expr.empty_data
+    )
 
     common_arrow_type, then_needs_cast, else_needs_cast = get_common_int_type(
         then_expr, else_expr
@@ -2754,7 +2758,7 @@ def make_unified_case_expression(empty_data, when_expr, then_expr, else_expr):
     # and our unification ended up casting one away from the intended result type.
     # We do this with a CastExpression instead of via CaseExpression empty_data
     # (which attempts to cast safely in _arrow_array_to_pd) so that integer overflow is allowed.
-    if then_needs_cast or else_needs_cast:
+    if empty_data not in (None, "common") and (then_needs_cast or else_needs_cast):
         return CastExpression(empty_data, case_expr)
     else:
         return case_expr
