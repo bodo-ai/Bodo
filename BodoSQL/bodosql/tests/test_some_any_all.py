@@ -163,6 +163,7 @@ def test_some_any_all_null_tuples(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_some_any_all_subquery(
     simple_join_fixture, some_any_all, comparison_ops, memory_leak_check
 ):
