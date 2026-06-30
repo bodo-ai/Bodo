@@ -16,6 +16,10 @@ import pyarrow.compute as pc
 import bodo
 import bodo.pandas as bd
 import bodosql
+from bodo.pandas.iceberg_utils import (
+    JoinFilterInfo,
+    build_iceberg_read_plan,
+)
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
@@ -124,6 +128,7 @@ class IcebergReadInfo:
     """Information extracted from Iceberg read plan nodes."""
 
     scan_node: object = None
+    join_filter_info: JoinFilterInfo = None
     filters: list[object] = None
     # Columns to read from the table, in the order they should appear in output.
     colmap: list[int] = None
@@ -177,7 +182,7 @@ def java_plan_to_python_plan(ctx, java_plan):
         # Initialize all columns to be in the original location (updated top-down based
         # on IcebergProject nodes)
         read_info.colmap = list(range(input.getRowType().getFieldCount()))
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return generate_iceberg_read(read_info)
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
@@ -202,7 +207,9 @@ def java_plan_to_python_plan(ctx, java_plan):
         return java_join_to_python_join(ctx, java_plan)
 
     if java_class_name == "BodoPhysicalRuntimeJoinFilter":
-        return java_rtjf_to_python_rtjf(ctx, java_plan)
+        input_python_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+        join_info = java_rtjf_to_join_info(ctx, java_plan)
+        return generate_runtime_join_filter(join_info, input_python_plan)
 
     if java_class_name == "BodoPhysicalFilter":
         return java_filter_to_python_filter(ctx, java_plan)
@@ -2664,10 +2671,6 @@ def java_case_to_python_case(ctx, operands, input_plan):
 def java_join_to_python_join(ctx, java_join):
     """Convert a BodoSQL Java join plan to a Python join plan."""
 
-    ctx.join_filter_info[java_join.getJoinFilterID()] = (
-        java_join.getOriginalJoinFilterKeyLocations()
-    )
-
     join_info = java_join.analyzeCondition()
     join_info_cls = join_info.getClass()
     field = join_info_cls.getField("nonEquiConditions")
@@ -2677,6 +2680,11 @@ def java_join_to_python_join(ctx, java_join):
     key_indices = list(zip(left_keys, right_keys))
     join_type = JavaJoinTypeToDuckDB(java_join.getJoinType())
     force_broadcast = java_join.getBroadcastBuildSide()
+
+    ctx.join_filter_info[java_join.getJoinFilterID()] = (
+        java_join.getOriginalJoinFilterKeyLocations(),
+        right_keys,
+    )
 
     left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
@@ -2748,12 +2756,10 @@ def java_subplan_to_python_subplan(ctx, java_subplan):
     return subplan
 
 
-def java_rtjf_to_python_rtjf(ctx, java_plan):
-    """Convert a BodoSQL Java runtime join filter plan to a Python runtime join filter
-    plan.
+def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
+    """Convert a BodoSQL Java runtime join filter node to a Python runtime join filter
+    info.
     """
-    input = java_plan_to_python_plan(ctx, java_plan.getInput())
-
     # Get join filter info
     # IDs of joins creating each filter
     filter_ids: list[int] = java_plan.getJoinFilterIDs()
@@ -2775,11 +2781,17 @@ def java_rtjf_to_python_rtjf(ctx, java_plan):
     new_filter_ids = []
     new_equality_filter_columns = []
     new_equality_is_first_locations = []
+    new_orig_build_keys = []
     for fid, eq_cols, is_first_cols in sorted_filter_data:
         if fid not in ctx.join_filter_info:
             raise ValueError(f"Join filter ID {fid} not found in join filter info")
 
-        orig_key_locs = ctx.join_filter_info[fid]
+        orig_key_locs, java_build_keys = ctx.join_filter_info[fid]
+        if len(java_build_keys) != len(eq_cols):
+            raise ValueError(
+                f"Join filter ID {fid} has {len(java_build_keys)} original build keys but {len(eq_cols)} equality filter columns"
+            )
+
         filter_cols = [-1] * len(eq_cols)
         is_first = [False] * len(is_first_cols)
 
@@ -2787,16 +2799,51 @@ def java_rtjf_to_python_rtjf(ctx, java_plan):
             filter_cols[key] = eq_cols[loc_ind]
             is_first[key] = is_first_cols[loc_ind]
 
+        # Each element in eq_cols corresponds to an item in JoinInfo.leftKeys,
+        # which indicates an equality condition with the key from
+        # JoinInfo.rightKeys at the same position. The order of the rightKeys/leftKeys
+        # lists might change during column pruning, so we track the original key
+        # column locations in BodoPhysicalJoin and reorder filter_cols to match the
+        # order of the final join condition. After reordering, each key in filter_cols
+        # will correspond to a filter derived from the key/column in JoinInfo.rightKeys
+        # at the same position (the filter column can be -1 if that column is not
+        # available yet).
+        # The C++ JoinState creates a vector that's length is <num_build_keys> to store
+        # the min/max values for each build key. The order of this vector should match
+        # the order of the build keys in JoinInfo.rightKeys, which
+        # is equivalent to the order that the build keys appear in the join condition.
+        # Finally, we use the values at orig_build_key_cols to lookup the
+        # min/max values from the JoinState for each filter that we
+        # can push into I/O.
+        # https://github.com/bodo-ai/Bodo/blob/f8cbfd4705e346a860fc4121c6735d9e8960d2c0/bodo/pandas/optimizer/runtime_join_filter.cpp#L282
+        # https://github.com/bodo-ai/Bodo/blob/f8cbfd4705e346a860fc4121c6735d9e8960d2c0/bodo/pandas/_util.cpp#L1182
+        # https://github.com/bodo-ai/Bodo/blob/0edd4715fdbb302f505962e3dcdf484f7e971c4a/bodo/libs/streaming/_join.cpp#L1360
+        build_cols_idxs = list(range(len(java_build_keys)))
+
         new_filter_ids.append(fid)
         new_equality_filter_columns.append(filter_cols)
         new_equality_is_first_locations.append(is_first)
+        new_orig_build_keys.append(build_cols_idxs)
 
+    return JoinFilterInfo(
+        filter_ids=new_filter_ids,
+        equality_filter_columns=new_equality_filter_columns,
+        orig_build_key_cols=new_orig_build_keys,
+        equality_is_first_locations=new_equality_is_first_locations,
+    )
+
+
+def generate_runtime_join_filter(
+    join_info: JoinFilterInfo, input_plan: LazyPlan
+) -> LogicalJoinFilter:
+    """Construct an instance of a runtime join filter plan node from the given join filter info and input plan."""
     return LogicalJoinFilter(
-        input.empty_data,
-        input,
-        new_filter_ids,
-        new_equality_filter_columns,
-        new_equality_is_first_locations,
+        input_plan.empty_data,
+        input_plan,
+        join_info.filter_ids,
+        join_info.equality_filter_columns,
+        join_info.equality_is_first_locations,
+        join_info.orig_build_key_cols,
     )
 
 
@@ -3398,7 +3445,7 @@ def sql_type_to_pa_type(ctx, sql_type_name):
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
 
-def visit_iceberg_node(java_plan, read_info):
+def visit_iceberg_node(ctx, java_plan, read_info: IcebergReadInfo):
     """Visit Iceberg-related plan nodes to extract read information like filters.
     For example:
     CombineStreamsExchange
@@ -3417,7 +3464,7 @@ def visit_iceberg_node(java_plan, read_info):
         if read_info.filters is None:
             read_info.filters = []
         read_info.filters.append(java_plan.getCondition())
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     if java_class_name == "IcebergProject":
@@ -3435,7 +3482,7 @@ def visit_iceberg_node(java_plan, read_info):
 
         read_info.colmap = new_colmap
         input = java_plan.getInput()
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     if java_class_name == "IcebergSort":
@@ -3449,7 +3496,13 @@ def visit_iceberg_node(java_plan, read_info):
                 limit if read_info.limit is None else min(read_info.limit, limit)
             )
         input = java_plan.getInput()
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
+        return
+
+    if java_class_name == "IcebergRuntimeJoinFilter":
+        read_info.join_filter_info = java_rtjf_to_join_info(ctx, java_plan)
+        input = java_plan.getInput()
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     raise NotImplementedError(
@@ -3457,7 +3510,7 @@ def visit_iceberg_node(java_plan, read_info):
     )
 
 
-def generate_iceberg_read(read_info):
+def generate_iceberg_read(read_info: IcebergReadInfo):
     """Generate a Python plan for reading Iceberg table with the given read info."""
     scan_node = read_info.scan_node
     catalog_table = scan_node.getCatalogTable()
@@ -3481,16 +3534,22 @@ def generate_iceberg_read(read_info):
     uri = file_path.toUri()
     path_str = uri.getRawPath()
 
-    df = bd.read_iceberg(
+    plan, _, _ = build_iceberg_read_plan(
         # path_str has the schema in it so it's not needed in table id
         # TODO: update when supporting other catalog types
         full_table_path[-1],
         location=path_str,
         row_filter=row_filter,
+        join_filter_info=read_info.join_filter_info,
         selected_fields=read_fields,
         limit=read_info.limit,
     )
-    return df._plan
+
+    # Insert Runtime Join Filters on top of the read if needed
+    if read_info.join_filter_info is not None:
+        plan = generate_runtime_join_filter(read_info.join_filter_info, plan)
+
+    return plan
 
 
 def get_pyiceberg_row_filter(filters, field_names):

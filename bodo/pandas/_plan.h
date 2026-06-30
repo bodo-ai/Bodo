@@ -17,6 +17,7 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
+#include "optimizer/runtime_join_filter.h"
 
 namespace bodo {
 
@@ -628,7 +629,10 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_identifier,
     PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate);
+    PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
+    std::optional<std::vector<int>> selected_columns_opt,
+    std::optional<int64_t> limit_opt,
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt);
 
 /**
  * @brief Returns a statically created DuckDB database.

@@ -44,7 +44,6 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "duckdb/planner/operator/logical_top_n.hpp"
-#include "optimizer/runtime_join_filter.h"
 
 #include "../libs/gpu_utils.h"
 
@@ -1601,20 +1600,43 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_name,
     PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, int64_t snapshot_id,
-    uint64_t table_len_estimate) {
+    PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
+    std::optional<std::vector<int>> selected_columns_opt,
+    std::optional<int64_t> limit_opt,
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
 
+    // Apply selected columns if provided by Calcite planner
+    // i.e. we are not running the duckdb optimizer.
+    if (selected_columns_opt.has_value()) {
+        std::vector<std::string> new_return_names;
+        std::vector<duckdb::LogicalType> new_return_types;
+        for (int col_idx : selected_columns_opt.value()) {
+            new_return_names.push_back(return_names[col_idx]);
+            new_return_types.push_back(return_types[col_idx]);
+        }
+        return_names = std::move(new_return_names);
+        return_types = std::move(new_return_types);
+    }
+
     BodoIcebergScanFunction table_function =
         BodoIcebergScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoIcebergScanFunctionData>(
             arrow_schema, pyiceberg_catalog, table_name, iceberg_filter,
-            iceberg_schema, snapshot_id);
+            iceberg_schema, snapshot_id, selected_columns_opt, limit_opt);
+
+    // Set the runtime join filter state map if provided by Calcite planner
+    if (rtjf_state_map_opt.has_value()) {
+        BodoScanFunctionData *scan_function_data =
+            dynamic_cast<BodoScanFunctionData *>(bind_data1.get());
+
+        scan_function_data->rtjf_state_map = rtjf_state_map_opt.value();
+    }
 
     duckdb::virtual_column_map_t virtual_columns;
 
