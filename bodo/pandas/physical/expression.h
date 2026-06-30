@@ -880,6 +880,9 @@ class PhysicalUnaryExpression : public PhysicalExpression {
             case duckdb::ExpressionType::OPERATOR_IS_TRUE:
                 comparator = "is_true";
                 break;
+            case duckdb::ExpressionType::OPERATOR_IS_NOT_TRUE:
+                comparator = "is_not_true";
+                break;
             case duckdb::ExpressionType::OPERATOR_NEG:
                 comparator = "negate";
                 break;

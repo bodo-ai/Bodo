@@ -582,6 +582,29 @@ arrow::Datum do_arrow_compute_unary(
         return is_true_res.ValueOrDie();
     }
 
+    // Special handling for is_not_true since it is not supported directly
+    // by Arrow compute.
+    if (comparator == "is_not_true") {
+        auto arrow_false = arrow::MakeScalar(false);
+        arrow::Result<arrow::Datum> coalesce_res = arrow::compute::CallFunction(
+            "coalesce", {src1, arrow_false}, func_options);
+        if (!coalesce_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_unary: Error in Arrow compute: " +
+                coalesce_res.status().message());
+        }
+
+        // Invert so that null/false -> true and true -> false.
+        arrow::Result<arrow::Datum> invert_res =
+            arrow::compute::CallFunction("invert", {coalesce_res.ValueOrDie()});
+        if (!invert_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_unary: Error in Arrow compute Invert: " +
+                invert_res.status().message());
+        }
+        return invert_res.ValueOrDie();
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {

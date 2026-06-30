@@ -155,7 +155,8 @@ enum class ExpressionType : uint8_t {
 
 	// Bodo change: added new operator
 	OPERATOR_IS_TRUE = 250,
-	OPERATOR_NEG = 251
+	OPERATOR_NEG = 251,
+	OPERATOR_IS_NOT_TRUE = 252,
 };
 
 //===--------------------------------------------------------------------===//

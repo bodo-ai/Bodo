@@ -5,6 +5,7 @@ Test correctness of SQL ANY and ALL clauses.
 import pandas as pd
 import pytest
 
+import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.string_ops_common import *  # noqa
 from bodosql.tests.utils import check_query
@@ -26,6 +27,7 @@ def some_any_all(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_some_any_all_numeric_non_null_tuples(
     basic_df, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
@@ -53,6 +55,7 @@ def test_some_any_all_numeric_non_null_tuples(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_some_any_all_string_non_null_tuples(
     bodosql_string_types, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
@@ -74,6 +77,7 @@ def test_some_any_all_string_non_null_tuples(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_some_any_all_datetime_non_null_tuples(
     bodosql_datetime_types, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
@@ -131,6 +135,7 @@ def test_some_any_all_interval_non_null_tuples(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_some_any_all_null_tuples(
     bodosql_nullable_numeric_types,
@@ -158,6 +163,7 @@ def test_some_any_all_null_tuples(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_some_any_all_subquery(
     simple_join_fixture, some_any_all, comparison_ops, memory_leak_check
 ):
@@ -165,6 +171,15 @@ def test_some_any_all_subquery(
 
     if comparison_ops == "<=>":
         pytest.skip("<=> is not compatible with subqueries")
+
+    if (
+        bodosql.use_cpp_backend
+        and some_any_all == "ALL"
+        and comparison_ops in ("<>", "!=")
+    ):
+        pytest.skip(
+            "Joins with non-equi conditions are only supported for inner joins in C++ backend currently"
+        )
 
     expected_output = {
         ("ANY", "="): lambda: pd.DataFrame(
