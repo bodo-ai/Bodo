@@ -2192,13 +2192,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # sarg is an org.apache.calcite.util.Sarg
             sarg = search_expr.value
             assert sarg.getClass().getSimpleName() == "Sarg"
-            if (
-                sarg.getClass().getDeclaredField("nullAs").get(sarg).toString()
-                != "UNKNOWN"
-            ):
-                raise NotImplementedError(
-                    "SEARCH operator with nullAs not UNKNOWN not supported in C++ backend yet"
-                )
+            nullAs = sarg.getClass().getDeclaredField("nullAs").get(sarg).toString()
             # sarg_rangeSet is a com.google.common.collect.ImmutableRangeSet
             sarg_rangeSet = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
             assert sarg_rangeSet.getClass().getSimpleName() == "ImmutableRangeSet"
@@ -2324,6 +2318,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 out_expr = ConjunctionOpExpression(
                     bool_empty_data, out_expr, process_one_search_option(so), "__or__"
                 )
+
+            if nullAs != "UNKNOWN":
+                # Replace nulls in the output with True or False depending on the value
+                # of nullAs.
+                out_expr = ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [
+                        out_expr,
+                        ConstantExpression(
+                            bool_empty_data, input_plan, nullAs == "TRUE"
+                        ),
+                    ],
+                    "coalesce",
+                    (),
+                )
+
             return out_expr
 
         raise NotImplementedError(
