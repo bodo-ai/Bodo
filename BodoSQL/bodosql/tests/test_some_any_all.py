@@ -26,6 +26,7 @@ def some_any_all(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_some_any_all_numeric_non_null_tuples(
     basic_df, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
@@ -53,6 +54,7 @@ def test_some_any_all_numeric_non_null_tuples(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_some_any_all_string_non_null_tuples(
     bodosql_string_types, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
@@ -74,6 +76,7 @@ def test_some_any_all_string_non_null_tuples(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_some_any_all_datetime_non_null_tuples(
     bodosql_datetime_types, some_any_all, comparison_ops, spark_info, memory_leak_check
 ):
