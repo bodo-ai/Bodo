@@ -1329,14 +1329,30 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if func_name == "DECODE" and len(op_exprs) >= 3:
             select_expr = op_exprs[0]
 
+            result_exprs = [op_exprs[i] for i in range(2, len(op_exprs), 2)]
+            # Ensure result expression datatypes are compatible. Currently we
+            # only try to unify integer datatypes.
+            result_expr_dtypes = [
+                get_expr_dtype(result_expr) for result_expr in result_exprs
+            ]
+            if not all(
+                pd.api.types.is_integer_dtype(dtype) for dtype in result_expr_dtypes
+            ):
+                result_type = result_expr_dtypes[0]
+                for result_expr_dtype in result_expr_dtypes[1:]:
+                    if not compare_types(result_expr_dtype, result_type):
+                        raise ValueError(
+                            f"Incompatible DECODE result expression dtypes: {result_expr_dtype} and {result_type}"
+                        )
+
             # Get unified result type between all result expressions to avoid overflow
             common_result_type, results_need_cast = get_common_int_type_list(
-                [op_exprs[i] for i in range(2, len(op_exprs), 2)]
+                result_exprs
             )
             if common_result_type is not None:
                 empty_data = pd.Series(dtype=pd.ArrowDtype(common_result_type))
             else:
-                empty_data = op_exprs[2].empty_data
+                empty_data = result_exprs[0].empty_data
 
             if len(op_exprs) % 2 == 0:
                 # Default specified
