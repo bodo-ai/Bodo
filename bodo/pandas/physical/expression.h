@@ -1391,6 +1391,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
     PhysicalArrowExpressionMetrics metrics;
 
     template <typename T>
+    using compute_return_t =
+        std::conditional_t<std::is_same_v<T, std::shared_ptr<ExprResult>>,
+                           std::shared_ptr<array_info>, T>;
+
+    template <typename T>
     arrow::Datum do_arrow_compute_regexp_substr(T res, std::string pattern_str,
                                                 std::string regex_params_str,
                                                 int64_t group_to_extract) {
@@ -1515,9 +1520,44 @@ class PhysicalArrowExpression : public PhysicalExpression {
     }
 
     template <typename T>
-    using compute_return_t =
-        std::conditional_t<std::is_same_v<T, std::shared_ptr<ExprResult>>,
-                           std::shared_ptr<array_info>, T>;
+    arrow::Datum do_arrow_compute_dow_num(T res) {
+        // We strip off the leading spaces and only look at the first two
+        // characters of the input string in accordance with Snowflake (e.g.
+        // NEXT_DAY/PREVIOUS_DAY)
+
+        // Create Arrow array containing the days of the week. The order (index)
+        // determines the result DoW number.
+        arrow::StringBuilder builder;
+        arrow::Status status =
+            builder.AppendValues({"mo", "tu", "we", "th", "fr", "sa", "su"});
+        if (!status.ok()) {
+            throw std::runtime_error(
+                "do_arrow_compute_dow_num: Failed to append values to "
+                "StringBuilder");
+        }
+        std::shared_ptr<arrow::Array> dow_array = builder.Finish().ValueOrDie();
+
+        arrow::Datum res_datum =
+            ConvertExprResultToDatum(res, "day_of_week_num input");
+
+        // Normalize string to two lowercase characters representing the day of
+        // the week
+        arrow::Datum trimmed_dow_string =
+            do_arrow_compute_unary(res_datum, "utf8_ltrim_whitespace");
+        arrow::compute::SliceOptions slice_opts(0, 2, 1);
+        arrow::Datum sliced_dow_string = do_arrow_compute_unary(
+            trimmed_dow_string, "utf8_slice_codeunits", &slice_opts);
+        arrow::Datum lowered_dow_string =
+            do_arrow_compute_unary(sliced_dow_string, "utf8_lower");
+
+        // Get index of string into DoW array, which equals the DoW number
+        arrow::compute::SetLookupOptions set_lookup_opts(dow_array);
+        arrow::Datum dow_num = do_arrow_compute_unary(
+            lowered_dow_string, "index_in", &set_lookup_opts);
+
+        return dow_num;
+    }
+
     template <typename T>
     compute_return_t<T> do_arrow_compute(T res) {
         compute_return_t<T> result;
@@ -1548,6 +1588,18 @@ class PhysicalArrowExpression : public PhysicalExpression {
             // year_month_day, which returns a struct. To match the output dtype
             // of Pandas, we Cast to Date32 instead.
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+        } else if (scalar_func_data.arrow_func_name == "day_of_week_num") {
+            // day_of_week_num is a made up function representing the
+            // number representing a day of week string.
+            // Monday = 0, ..., Sunday = 6
+            arrow::Datum dow_num_datum = do_arrow_compute_dow_num(res);
+
+            // Convert DoW number and assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = dow_num_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(dow_num_datum);
+            }
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
                    scalar_func_data.arrow_func_name ==

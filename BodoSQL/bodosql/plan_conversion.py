@@ -421,6 +421,91 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             return last_day
 
+        if func_name in ("NEXT_DAY", "PREVIOUS_DAY") and num_operands == 2:
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            dow_string_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            ensure_type_of_expr(dow_string_expr, "dow_string_expr", str)
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            # 0-6 integer matching order of Arrow's day_of_week
+            target_dow_expr = ArrowScalarFuncExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int32())),
+                [dow_string_expr],
+                "day_of_week_num",
+                (),
+            )
+            # Returns day of week between 0 and 6
+            cur_dow_expr = ArrowScalarFuncExpression(
+                int_empty_data, [date_expr], "day_of_week", ()
+            )
+
+            if func_name == "NEXT_DAY":
+                # ((target_dow - cur_dow - 1) + 7) % 7 + 1 to get a day offset between 1 and 7
+                diff_expr = ArithOpExpression(
+                    int_empty_data, target_dow_expr, cur_dow_expr, "__sub__"
+                )
+            else:
+                # ((cur_dow - target_dow - 1) + 7) % 7 + 1 to get a day offset between 1 and 7
+                diff_expr = ArithOpExpression(
+                    int_empty_data, cur_dow_expr, target_dow_expr, "__sub__"
+                )
+            diff_expr = ArithOpExpression(
+                int_empty_data,
+                diff_expr,
+                ConstantExpression(int_empty_data, input_plan, 6),
+                "__add__",
+            )
+            diff_mod_expr = ArithOpExpression(
+                int_empty_data,
+                diff_expr,
+                ConstantExpression(int_empty_data, input_plan, 7),
+                "__mod__",
+            )
+            days_to_offset_expr = ArithOpExpression(
+                int_empty_data,
+                diff_mod_expr,
+                ConstantExpression(int_empty_data, input_plan, 1),
+                "__add__",
+            )
+
+            # Get the number of seconds to add to or subtract from the input timestamp.
+            # Arrow's duration type is the easiest way to add/subtract time, but it only accepts seconds and smaller units.
+            seconds_in_day = ConstantExpression(int_empty_data, input_plan, 86400)
+            seconds_to_offset_expr = ArithOpExpression(
+                int_empty_data, days_to_offset_expr, seconds_in_day, "__mul__"
+            )
+            duration_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("s")))
+            one_duration_expr = ConstantExpression(duration_empty_data, input_plan, 1)
+            seconds_to_offset_duration_expr = ArithOpExpression(
+                duration_empty_data,
+                seconds_to_offset_expr,
+                one_duration_expr,
+                "__mul__",
+            )
+
+            date_pa_type = date_expr.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            if pa.types.is_date(date_pa_type):
+                timestamp_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
+            else:
+                # Otherwise, must be a timestamp
+                timestamp_empty_data = date_expr.empty_data
+
+            # Add or subtract the seconds offset to get the requested day
+            next_day_timestamp_expr = ArithOpExpression(
+                timestamp_empty_data,
+                date_expr,
+                seconds_to_offset_duration_expr,
+                "__add__" if func_name == "NEXT_DAY" else "__sub__",
+            )
+            # According to Snowflake, we should always cast result to a date
+            date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+            return CastExpression(date_empty_data, next_day_timestamp_expr)
+
         # ADD_MONTHS(date, months) -> date + months * INTERVAL '1' MONTH
         if func_name == "ADD_MONTHS" and num_operands == 2:
             date_expr = java_expr_to_python_expr(
