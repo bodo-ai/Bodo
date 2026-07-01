@@ -351,6 +351,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_bool force_broadcast) except +
     cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
+    cdef unique_ptr[CLogicalOperator] optimize_plan_for_bodosql(unique_ptr[CLogicalOperator]) except +
     cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalDistinct] make_distinct(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
     cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
@@ -1358,6 +1359,21 @@ cpdef py_optimize_plan(object plan):
 
     optimized_plan = LogicalOperator()
     optimized_plan.c_logical_operator = optimize_plan(move(wrapped_operator.c_logical_operator))
+    return optimized_plan
+
+
+cpdef py_optimize_plan_for_bodosql(object plan):
+    """Optimize a logical plan using DuckDB's optimizer
+    """
+    cdef LogicalOperator wrapped_operator
+
+    if not isinstance(plan, LogicalOperator):
+        raise TypeError("Expected a LogicalOperator instance")
+
+    wrapped_operator = plan
+
+    optimized_plan = LogicalOperator()
+    optimized_plan.c_logical_operator = optimize_plan_for_bodosql(move(wrapped_operator.c_logical_operator))
     return optimized_plan
 
 

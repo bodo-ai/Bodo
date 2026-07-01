@@ -20,6 +20,8 @@
 #include <iostream>
 #endif
 
+uint64_t getNSTime();
+
 template <class T>
 std::string getNodeString(T &t) {
     std::string ret;

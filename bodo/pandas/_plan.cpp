@@ -110,6 +110,88 @@ duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan(
     return out_plan;
 }
 
+duckdb::unique_ptr<duckdb::LogicalOperator> optimize_plan_for_bodosql(
+    std::unique_ptr<duckdb::LogicalOperator> plan) {
+    // 1) Convert input plan to duckdb::unique_ptr (your helper)
+    auto in_plan = to_duckdb(plan);
+
+    // 2) Build DBConfig and disable all optimizer types except the two we want
+    duckdb::DBConfig config;
+
+    std::vector<duckdb::OptimizerType> all_optimizers = {
+        duckdb::OptimizerType::EXPRESSION_REWRITER,
+        duckdb::OptimizerType::FILTER_PULLUP,
+        duckdb::OptimizerType::FILTER_PUSHDOWN,
+        duckdb::OptimizerType::EMPTY_RESULT_PULLUP,
+        duckdb::OptimizerType::CTE_FILTER_PUSHER,
+        duckdb::OptimizerType::REGEX_RANGE,
+        duckdb::OptimizerType::IN_CLAUSE,
+        duckdb::OptimizerType::JOIN_ORDER,
+        duckdb::OptimizerType::DELIMINATOR,
+        duckdb::OptimizerType::UNNEST_REWRITER,
+        duckdb::OptimizerType::UNUSED_COLUMNS,
+        duckdb::OptimizerType::STATISTICS_PROPAGATION,
+        duckdb::OptimizerType::COMMON_SUBEXPRESSIONS,
+        duckdb::OptimizerType::COMMON_AGGREGATE,
+        duckdb::OptimizerType::COLUMN_LIFETIME,
+        duckdb::OptimizerType::BUILD_SIDE_PROBE_SIDE,
+        duckdb::OptimizerType::LIMIT_PUSHDOWN,
+        duckdb::OptimizerType::TOP_N,
+        duckdb::OptimizerType::COMPRESSED_MATERIALIZATION,
+        duckdb::OptimizerType::DUPLICATE_GROUPS,
+        duckdb::OptimizerType::REORDER_FILTER,
+        duckdb::OptimizerType::SAMPLING_PUSHDOWN,
+        duckdb::OptimizerType::JOIN_FILTER_PUSHDOWN,
+        duckdb::OptimizerType::EXTENSION,
+        duckdb::OptimizerType::MATERIALIZED_CTE,
+        duckdb::OptimizerType::SUM_REWRITER,
+        duckdb::OptimizerType::LATE_MATERIALIZATION,
+        duckdb::OptimizerType::CTE_INLINING,
+        duckdb::OptimizerType::ROW_GROUP_PRUNER,
+        duckdb::OptimizerType::TOP_N_WINDOW_ELIMINATION,
+        duckdb::OptimizerType::COMMON_SUBPLAN,
+        duckdb::OptimizerType::JOIN_ELIMINATION,
+        duckdb::OptimizerType::WINDOW_SELF_JOIN,
+        duckdb::OptimizerType::PROJECTION_PULLUP};
+
+    const duckdb::OptimizerType keepA = duckdb::OptimizerType::FILTER_PUSHDOWN;
+    const duckdb::OptimizerType keepB = duckdb::OptimizerType::UNUSED_COLUMNS;
+
+    // Populate config.options.disabled_optimizers with everything except the
+    // two we keep
+    for (auto &opt : all_optimizers) {
+        if (opt == keepA || opt == keepB)
+            continue;
+        config.options.disabled_optimizers.insert(opt);
+    }
+
+    duckdb::DuckDB db(nullptr, &config);
+
+    duckdb::shared_ptr<duckdb::ClientContext> client_context =
+        duckdb::make_shared_ptr<duckdb::ClientContext>(db.instance);
+    duckdb::shared_ptr<duckdb::Binder> binder =
+        duckdb::Binder::CreateBinder(*client_context);
+
+    bool started_transaction = false;
+    if (!client_context->transaction.HasActiveTransaction()) {
+        client_context->transaction.BeginTransaction();
+        started_transaction = true;
+    }
+
+    duckdb::Optimizer optimizer(*binder, *client_context);
+    duckdb::unique_ptr<duckdb::LogicalOperator> optimized_plan =
+        optimizer.Optimize(std::move(in_plan));
+
+    // 7) Rollback the transaction we started for optimization (if we started
+    // one)
+    if (started_transaction) {
+        client_context->transaction.Rollback({});
+        started_transaction = false;
+    }
+
+    return optimized_plan;
+}
+
 duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
                                                        int64_t field_idx) {
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
