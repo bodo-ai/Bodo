@@ -28,6 +28,31 @@ def get_tpch_data(datapath):
     return dataframe_dict
 
 
+required_tables = {
+    1: ["LINEITEM"],
+    2: ["PART", "PARTSUPP", "SUPPLIER", "NATION", "REGION"],
+    3: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    4: ["LINEITEM", "ORDERS"],
+    5: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION", "REGION", "SUPPLIER"],
+    6: ["LINEITEM"],
+    7: ["LINEITEM", "SUPPLIER", "ORDERS", "CUSTOMER", "NATION"],
+    8: ["PART", "LINEITEM", "SUPPLIER", "ORDERS", "CUSTOMER", "NATION", "REGION"],
+    9: ["LINEITEM", "ORDERS", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
+    10: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION"],
+    11: ["PARTSUPP", "SUPPLIER", "NATION"],
+    12: ["LINEITEM", "ORDERS"],
+    13: ["CUSTOMER", "ORDERS"],
+    14: ["LINEITEM", "PART"],
+    15: ["LINEITEM", "SUPPLIER"],
+    16: ["PART", "PARTSUPP", "SUPPLIER"],
+    17: ["LINEITEM", "PART"],
+    18: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    19: ["LINEITEM", "PART"],
+    20: ["LINEITEM", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
+    21: ["LINEITEM", "ORDERS", "SUPPLIER", "NATION"],
+}
+
+
 def timethis(
     q: Callable,
     name: str | None = None,
@@ -93,7 +118,7 @@ def run_queries(
         q = globals()[f"q{query:02}"]
 
         def query_func():
-            return q(tpch_data)
+            return q({k: tpch_data[k] for k in required_tables[query]})
 
         query_func = timethis(
             query_func,
