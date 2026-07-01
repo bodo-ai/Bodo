@@ -2461,6 +2461,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         arrow_func = (
             "max_element_wise" if func_name == "GREATEST" else "min_element_wise"
         )
+        # TODO(ehsan): get empty_data for the common type of the operands
         return ArrowScalarFuncExpression(
             op_exprs[0].empty_data, op_exprs, arrow_func, ()
         )

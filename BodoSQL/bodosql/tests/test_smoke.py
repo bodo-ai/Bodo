@@ -134,6 +134,7 @@ def smoke_shipping_ctx():
     }
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_project(smoke_ctx, memory_leak_check):
     """
@@ -153,6 +154,7 @@ def test_smoke_project(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_functions(smoke_ctx, memory_leak_check):
     """
@@ -177,6 +179,7 @@ def test_smoke_functions(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_case(smoke_ctx, memory_leak_check):
     """
@@ -199,6 +202,7 @@ def test_smoke_case(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_raw_select(smoke_ctx, memory_leak_check):
     """
@@ -221,6 +225,7 @@ def test_smoke_raw_select(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_distinct(smoke_ctx, memory_leak_check):
     """
@@ -240,6 +245,7 @@ def test_smoke_distinct(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_sort(smoke_ctx, memory_leak_check):
     """
@@ -261,6 +267,7 @@ def test_smoke_sort(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_limit(smoke_ctx, memory_leak_check):
     """
@@ -283,6 +290,7 @@ def test_smoke_limit(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_join(smoke_ctx, memory_leak_check):
     """
@@ -304,6 +312,7 @@ def test_smoke_join(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_filter(smoke_ctx, memory_leak_check):
     """
@@ -361,6 +370,7 @@ def test_smoke_qualify(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_groupby_aggregation(smoke_ctx, memory_leak_check):
     """
@@ -430,6 +440,7 @@ def test_smoke_grouping_set_aggregation(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_having(smoke_ctx, memory_leak_check):
     """
