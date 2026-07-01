@@ -217,6 +217,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         zero_size_other = (
             _empty_like(other) if type(other) in {BodoSeries, BodoScalar} else other
         )
+
         if pd.api.types.is_scalar(other):
             _validate_series_cmp_scalar_args(zero_size_self, zero_size_other, op)
 
@@ -2548,7 +2549,7 @@ def representative_value_for_arrow_type(dtype: pa.DataType):
 def _validate_series_cmp_scalar_args(empty_lhs: pd.Series, rhs, op):
     """Validate BodoSeries comparison and raise TypeError if comparison is invalid.
 
-    This function checks whether Pandas would allow the type error if `empty_lhs` was not
+    This function checks whether Pandas would allow the comparison if `empty_lhs` was not
     actually empty. Since Pandas allows comparisons between empty Series and any scalar type
     and we generally don't know whether a Series is empty or not until we run the plan, we
     throw an error just in case to prevent unexpected behavior.
