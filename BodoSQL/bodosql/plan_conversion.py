@@ -2476,7 +2476,11 @@ def compare_types(obj_type, expected_type):
         expected_type = pd.api.types.pandas_dtype(expected_type)
 
     if isinstance(obj_type, type) and isinstance(expected_type, type):
-        if issubclass(obj_type, expected_type):
+        if issubclass(obj_type, expected_type) and not (
+            obj_type is bool and expected_type is int
+        ):
+            # bool is a subclass of int in Python, but we don't want to consider them
+            # equivalent for our purposes
             return True
 
     if isinstance(obj_type, pa.DataType) and isinstance(expected_type, pa.DataType):
