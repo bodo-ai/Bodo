@@ -1,6 +1,7 @@
 """Convert Iceberg expressions to PyArrow expressions and scalars for filtering.
 This module imports pyicberg so it shouldn't be imported unless PyIceberg is installed."""
 
+import re
 from typing import Any
 
 import pyarrow as pa
@@ -45,9 +46,13 @@ class _ConvertToArrowExpressionStringAndScalar(
             (right_rename_map[name], value) for name, value in right_child[1]
         ]
         # Rename the right child names in the expression string
-        right_child_expr = right_child[0]
-        for old_name, new_name in right_rename_map.items():
-            right_child_expr = right_child_expr.replace(old_name, new_name)
+        pattern = re.compile(
+            r"\b(" + "|".join(map(re.escape, right_rename_map)) + r")\b"
+        )
+        right_child_expr = pattern.sub(
+            lambda m: right_rename_map[m.group(0)],
+            right_child[0],
+        )
         right_child = (right_child_expr, right_child_scalars)
 
         return left_child, right_child
