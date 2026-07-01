@@ -19,6 +19,10 @@
 #include "duckdb/planner/filter/optional_filter.hpp"
 #include "physical/expression.h"
 
+#ifdef _WIN32
+#define timegm _mkgmtime
+#endif
+
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
              std::shared_ptr<arrow::Scalar>>
