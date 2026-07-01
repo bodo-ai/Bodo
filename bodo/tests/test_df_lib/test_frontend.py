@@ -3,8 +3,10 @@ Tests dataframe library frontend (no triggering of execution).
 """
 
 import warnings
+from datetime import date
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 from test_end_to_end import index_val  # noqa
 
@@ -417,3 +419,15 @@ def test_timestamp_now():
 
         # Test static methods works
         bd.Timestamp.now()
+
+
+def test_series_cmp_errorchecking():
+    """Test that invalid comparisons raise TypeErrors that match Pandas behavior."""
+
+    pa_type = pa.large_string()
+    S = bd.Series(
+        ["1994-12-31", "1995-01-02", "1995-01-01"], dtype=pd.ArrowDtype(pa_type)
+    )
+
+    with pytest.raises(TypeError):
+        S < date(1995, 1, 1)

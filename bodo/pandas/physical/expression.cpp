@@ -515,6 +515,10 @@ arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string& comparator,
     const std::shared_ptr<arrow::DataType> result_type) {
+    std::cout << " GOT here " << std::endl;
+    std::cout << "left type " << left_res.type()->ToString() << std::endl;
+    std::cout << "right type " << right_res.type()->ToString() << std::endl;
+    std::cout << "comparator " << comparator << std::endl;
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {left_res, right_res});
     if (!cmp_res.ok()) [[unlikely]] {

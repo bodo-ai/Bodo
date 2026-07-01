@@ -10,6 +10,7 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 
 import numpy
 import numpy as np
@@ -216,13 +217,14 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         zero_size_other = (
             _empty_like(other) if type(other) in {BodoSeries, BodoScalar} else other
         )
+        if pd.api.types.is_scalar(other):
+            _validate_series_cmp_scalar_args(zero_size_self, zero_size_other, op)
 
         # Compute schema of new series.
         empty_data = zero_size_self._cmp_method(zero_size_other, op)
         assert isinstance(empty_data, pd.Series), "_cmp_method: Series expected"
 
         lhs_plan, lhs, rhs = _handle_series_binop_args(self._plan, other)
-
         # Match the source plans of lhs and rhs, if they don't match return None, None
         lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
         if lhs is None and rhs is None:
@@ -2489,6 +2491,82 @@ def is_numeric(other):
         other, allowed_types_map["binop_dtlike"]
     )
     return is_numeric_bodoseries or is_numeric_scalar
+
+
+def representative_value_for_arrow_type(dtype: pa.DataType):
+    """
+    Return a non-null Python value that can be used to construct a one-element
+    pandas/Arrow-backed Series for dtype validation.
+    """
+
+    if pa.types.is_boolean(dtype):
+        return False
+
+    if pa.types.is_integer(dtype):
+        return 0
+
+    if pa.types.is_floating(dtype):
+        return 0.0
+
+    if pa.types.is_decimal(dtype):
+        return Decimal("0")
+
+    if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
+        return ""
+
+    if pa.types.is_binary(dtype) or pa.types.is_large_binary(dtype):
+        return b""
+
+    if pa.types.is_date32(dtype) or pa.types.is_date64(dtype):
+        return datetime.date(2000, 1, 1)
+
+    if pa.types.is_timestamp(dtype):
+        tz = dtype.tz
+        if tz is not None:
+            return pd.Timestamp("2000-01-01 00:00:00", tz=tz)
+        return pd.Timestamp("2000-01-01 00:00:00")
+
+    if pa.types.is_time32(dtype) or pa.types.is_time64(dtype):
+        return datetime.time(0, 0, 0)
+
+    if pa.types.is_duration(dtype):
+        return datetime.timedelta(0)
+
+    if pa.types.is_list(dtype) or pa.types.is_large_list(dtype):
+        return [representative_value_for_arrow_type(dtype.value_type)]
+
+    if pa.types.is_struct(dtype):
+        return {
+            field.name: representative_value_for_arrow_type(field.type)
+            for field in dtype
+        }
+
+    # TODO: add more types here as needed
+    raise NotImplementedError(f"No representative value for Arrow type: {dtype}")
+
+
+def _validate_series_cmp_scalar_args(empty_lhs: pd.Series, rhs, op):
+    """Validate BodoSeries comparison and raise TypeError if comparison is invalid.
+
+    This function checks whether Pandas would allow the type error if `empty_lhs` was not
+    actually empty. Since Pandas allows comparisons between empty Series and any scalar type
+    and we generally don't know whether a Series is empty or not until we run the plan, we
+    throw an error just in case to prevent unexpected behavior.
+    """
+    assert isinstance(empty_lhs, pd.Series) and isinstance(
+        empty_lhs.dtype, pd.ArrowDtype
+    )
+
+    pa_type = empty_lhs.dtype.pyarrow_dtype
+
+    try:
+        value = representative_value_for_arrow_type(pa_type)
+    except NotImplementedError:
+        # If we don't have a representative value, rely on empty Series behavior
+        return
+
+    non_empty_lhs = pd.Series([value], dtype=empty_lhs.dtype)
+    non_empty_lhs._cmp_method(rhs, op)
 
 
 def _handle_series_binop_args(series_plan: LazyPlan, other):
