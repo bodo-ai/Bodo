@@ -61,7 +61,10 @@ _DATE_PART_ARROW_FUNCS = {
     "WEEKISO": "iso_week",
     "DAYOFYEAR": "day_of_year",
     "DAYOFWEEK": "day_of_week",
+    "DAYOFWEEKISO": "day_of_week",
     "WEEKDAY": "day_of_week",
+    "YEAROFWEEK": "iso_year",
+    "YEAROFWEEKISO": "iso_year",
     "MICROSECOND": "microsecond",
     "NANOSECOND": "nanosecond",
     "DOW": "day_of_week",
@@ -258,8 +261,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
-    _DOW_NAMES = {"DAYOFWEEK", "DOW"}
-
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
         num_operands = len(java_call.getOperands())
@@ -271,14 +272,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             arrow_func = _DATE_PART_ARROW_FUNCS[func_name]
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
             if func_name in ("DAYOFWEEK", "DOW"):
-                # PyArrow default: 0=Monday, 6=Sunday.
-                # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
-                one = ConstantExpression(empty_data, input_plan, 1)
-                seven = ConstantExpression(empty_data, input_plan, 7)
-                raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
-                raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+                # Default DAYOFWEEK for Bodo/Snowflake is Sunday=0, Monday=1, ..., Saturday=6.
+                raw_expr = ArrowScalarFuncExpression(
+                    empty_data, [input], arrow_func, (True, 7)
+                )
+            else:
+                raw_expr = ArrowScalarFuncExpression(
+                    empty_data, [input], arrow_func, ()
+                )
             # For WEEKDAY, PyArrow default (0=Monday..6=Sunday) exactly matches
             # Spark/Snowflake WEEKDAY, so no transformation is needed.
             return raw_expr
@@ -309,6 +311,25 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return ArrowScalarFuncExpression(
                 empty_data, [input], "strftime", (arrow_fmt,)
             )
+
+        if func_name == "STR_TO_DATE" and num_operands == 2:
+            input = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            mysql_fmt = str(java_call.getOperands()[1].toString())
+            if mysql_fmt.startswith("'") and mysql_fmt.endswith("'"):
+                mysql_fmt = mysql_fmt[1:-1]
+            arrow_fmt = _mysql_date_format_to_arrow_format(mysql_fmt)
+
+            timestamp_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+            timestamp_expr = ArrowScalarFuncExpression(
+                timestamp_empty_data, [input], "strptime", (arrow_fmt, "ns")
+            )
+
+            # Cast to date at the end no matter what.
+            # We need to truncate timestamps to be consistent with the JIT implementation.
+            date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+            return CastExpression(date_empty_data, timestamp_expr)
 
         if func_name == "MAKEDATE" and num_operands == 2:
             # MAKEDATE(year, dayofyear) → Jan 1 of year + (doy-1) days
@@ -421,6 +442,91 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             return last_day
 
+        if func_name in ("NEXT_DAY", "PREVIOUS_DAY") and num_operands == 2:
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            dow_string_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            ensure_type_of_expr(dow_string_expr, "dow_string_expr", str)
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            # 0-6 integer matching order of Arrow's day_of_week
+            target_dow_expr = ArrowScalarFuncExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int32())),
+                [dow_string_expr],
+                "day_of_week_num",
+                (),
+            )
+            # Returns day of week between 0 and 6
+            cur_dow_expr = ArrowScalarFuncExpression(
+                int_empty_data, [date_expr], "day_of_week", ()
+            )
+
+            if func_name == "NEXT_DAY":
+                # ((target_dow - cur_dow - 1) + 7) % 7 + 1 to get a day offset between 1 and 7
+                diff_expr = ArithOpExpression(
+                    int_empty_data, target_dow_expr, cur_dow_expr, "__sub__"
+                )
+            else:
+                # ((cur_dow - target_dow - 1) + 7) % 7 + 1 to get a day offset between 1 and 7
+                diff_expr = ArithOpExpression(
+                    int_empty_data, cur_dow_expr, target_dow_expr, "__sub__"
+                )
+            diff_expr = ArithOpExpression(
+                int_empty_data,
+                diff_expr,
+                ConstantExpression(int_empty_data, input_plan, 6),
+                "__add__",
+            )
+            diff_mod_expr = ArithOpExpression(
+                int_empty_data,
+                diff_expr,
+                ConstantExpression(int_empty_data, input_plan, 7),
+                "__mod__",
+            )
+            days_to_offset_expr = ArithOpExpression(
+                int_empty_data,
+                diff_mod_expr,
+                ConstantExpression(int_empty_data, input_plan, 1),
+                "__add__",
+            )
+
+            # Get the number of seconds to add to or subtract from the input timestamp.
+            # Arrow's duration type is the easiest way to add/subtract time, but it only accepts seconds and smaller units.
+            seconds_in_day = ConstantExpression(int_empty_data, input_plan, 86400)
+            seconds_to_offset_expr = ArithOpExpression(
+                int_empty_data, days_to_offset_expr, seconds_in_day, "__mul__"
+            )
+            duration_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("s")))
+            one_duration_expr = ConstantExpression(duration_empty_data, input_plan, 1)
+            seconds_to_offset_duration_expr = ArithOpExpression(
+                duration_empty_data,
+                seconds_to_offset_expr,
+                one_duration_expr,
+                "__mul__",
+            )
+
+            date_pa_type = date_expr.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            if pa.types.is_date(date_pa_type):
+                timestamp_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
+            else:
+                # Otherwise, must be a timestamp
+                timestamp_empty_data = date_expr.empty_data
+
+            # Add or subtract the seconds offset to get the requested day
+            next_day_timestamp_expr = ArithOpExpression(
+                timestamp_empty_data,
+                date_expr,
+                seconds_to_offset_duration_expr,
+                "__add__" if func_name == "NEXT_DAY" else "__sub__",
+            )
+            # According to Snowflake, we should always cast result to a date
+            date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+            return CastExpression(date_empty_data, next_day_timestamp_expr)
+
         # ADD_MONTHS(date, months) -> date + months * INTERVAL '1' MONTH
         if func_name == "ADD_MONTHS" and num_operands == 2:
             date_expr = java_expr_to_python_expr(
@@ -450,8 +556,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             if num_operands == 2:
                 # 2-operand form: DATEADD(date, interval) → date + interval
                 # This path handles Snowflake-style DATEADD with a date/timestamp
-                # and an interval literal. Default to DAY-based units
-                # (86_400_000_000_000 nanos per day) for the scalar fallback.
+                # and an interval literal.
                 date_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[0], input_plan
                 )
@@ -460,13 +565,30 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 )
                 int_empty = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
                 out_empty = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+
+                amount_expr_dtype = get_expr_dtype(amount_expr, "DATEADD amount_expr")
+                if compare_types(amount_expr_dtype, (int, float)):
+                    # For the scalar fallback, default to DAY-based units
+                    # (86_400_000_000_000 nanos per day)
+                    nano_scale_expr = ConstantExpression(
+                        int_empty, input_plan, 86_400_000_000_000
+                    )
+                else:
+                    # Assume we have an interval type (e.g. a MonthDayNanoInterval tuple or duration type).
+                    # Get nanoseconds from interval literal by casting to int64.
+                    amount_expr = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.int64())), amount_expr
+                    )
+                    # nano_scale is 1 since we are already in units of nanoseconds
+                    nano_scale_expr = ConstantExpression(int_empty, input_plan, 1)
+
                 return ArrowScalarFuncExpression(
                     out_empty,
                     [
                         date_expr,
                         amount_expr,
                         ConstantExpression(int_empty, input_plan, 0),
-                        ConstantExpression(int_empty, input_plan, 86_400_000_000_000),
+                        nano_scale_expr,
                     ],
                     "bodo_dateadd",
                     (),
@@ -774,6 +896,31 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "__add__",
             )
 
+        if func_name == "YEARWEEK" and num_operands == 1:
+            date_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            year_part = ArrowScalarFuncExpression(
+                int_empty_data, [date_expr], "iso_year", ()
+            )
+            week_part = ArrowScalarFuncExpression(
+                int_empty_data, [date_expr], "iso_week", ()
+            )
+
+            # Concatenate the year and the week parts in integer form
+            year_part_shifted = ArithOpExpression(
+                int_empty_data,
+                year_part,
+                ConstantExpression(int_empty_data, input_plan, 100),
+                "__mul__",
+            )
+            week_part_appended = ArithOpExpression(
+                int_empty_data, year_part_shifted, week_part, "__add__"
+            )
+            return week_part_appended
+
     if operator_class_name in (
         "SqlMonotonicBinaryOperator",
         "SqlBinaryOperator",
@@ -820,6 +967,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         empty_data = pd.Series(
             dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type.getSqlTypeName()))
         )
+
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.VARCHAR
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.DATE):
+            # Cast to a timestamp first so we can parse string timestamps
+            # before truncating to a date at the end.
+            in_expr = CastExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))),
+                in_expr,
+            )
 
         # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
         # local_timestamp() function of Arrow (not cast)
@@ -954,14 +1111,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if arrow_func is None:
             raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
         empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-        raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+
         if unit_str in ("DAYOFWEEK", "DOW"):
-            # PyArrow default: 0=Monday, 6=Sunday.
-            # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
-            one = ConstantExpression(empty_data, input_plan, 1)
-            seven = ConstantExpression(empty_data, input_plan, 7)
-            raw_expr = ArithOpExpression(empty_data, raw_expr, one, "__add__")
-            raw_expr = ArithOpExpression(empty_data, raw_expr, seven, "__mod__")
+            # Default DAYOFWEEK for Bodo/Snowflake is Sunday=0, Monday=1, ..., Saturday=6.
+            raw_expr = ArrowScalarFuncExpression(
+                empty_data, [input], arrow_func, (True, 7)
+            )
+        else:
+            raw_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
         # For WEEKDAY, PyArrow default (0=Monday..6=Sunday) exactly matches
         # Spark/Snowflake WEEKDAY, so no transformation is needed.
         return raw_expr
@@ -982,9 +1139,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "DAY",
             "DAYOFMONTH",
             "DAYOFYEAR",
+            "WEEKDAY",
             "WEEK",
             "WEEKOFYEAR",
-            "WEEKISOHOUR",
+            "WEEKISO",
+            "YEAROFWEEK",
+            "YEAROFWEEKISO",
             "HOUR",
             "MINUTE",
             "SECOND",
@@ -992,28 +1152,23 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "MICROSECOND",
             "NANOSECOND",
         ):
+            # TODO: Properly differentiate between the ISO and non-ISO versions.
+            # Currently we resort to Arrow's ISO versions for the variants aside from regular DAYOFWEEK.
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
 
-        if func_name in ("WEEK", "WEEKOFYEAR", "WEEKISO", "DAYOFYEAR"):
+        if func_name == "DAYOFWEEKISO":
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+            # Set count_from_zero=False and week_start=1 which corresponds to Monday.
+            # Therefore we get Monday=1, Tuesday=2, ..., Sunday=7.
+            return ArrowScalarFuncExpression(
+                empty_data, [input], arrow_func, (False, 1)
+            )
 
         if func_name in ("DAYOFWEEK", "DOW"):
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            dow_expr = ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
-            # PyArrow default: 0=Monday, 6=Sunday.
-            # Bodo/Snowflake DAYOFWEEK: 1=Monday, 0=Sunday → (dow+1)%7
-            one_const = ConstantExpression(empty_data, input_plan, 1)
-            seven_const = ConstantExpression(empty_data, input_plan, 7)
-            plus_one = ArithOpExpression(empty_data, dow_expr, one_const, "__add__")
-            return ArithOpExpression(empty_data, plus_one, seven_const, "__mod__")
-
-        if func_name == "WEEKDAY":
-            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            # PyArrow default (0=Monday..6=Sunday) exactly matches
-            # Spark/Snowflake WEEKDAY, so no transformation is needed.
-            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, ())
+            # Pass week_start = 7 which corresponds to Sunday, so we have Sunday=0, Monday=1, ..., Saturday=6.
+            return ArrowScalarFuncExpression(empty_data, [input], arrow_func, (True, 7))
 
     if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()

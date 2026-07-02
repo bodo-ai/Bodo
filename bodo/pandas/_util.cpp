@@ -331,6 +331,32 @@ duckdb::Value ArrowScalarToDuckDBValue(
             break;
         }
 
+        case arrow::Type::DURATION: {
+            auto dur_scalar =
+                std::static_pointer_cast<arrow::DurationScalar>(scalar);
+            auto dur_type =
+                std::static_pointer_cast<arrow::DurationType>(scalar->type);
+
+            // DuckDB INTERVAL uses microseconds. If Arrow is not micro,
+            // we must scale.
+            int64_t val = dur_scalar->value;
+            switch (dur_type->unit()) {
+                case arrow::TimeUnit::SECOND:
+                    val *= 1000000;
+                    break;
+                case arrow::TimeUnit::MILLI:
+                    val *= 1000;
+                    break;
+                case arrow::TimeUnit::MICRO:
+                    break;  // No change
+                case arrow::TimeUnit::NANO:
+                    val /= 1000;
+                    break;
+            }
+
+            return duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(val));
+        }
+
         default:
             throw std::runtime_error(
                 "ArrowScalarToDuckDBValue unhandled type: " +
