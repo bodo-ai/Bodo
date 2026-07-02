@@ -1588,6 +1588,23 @@ class PhysicalArrowExpression : public PhysicalExpression {
             // year_month_day, which returns a struct. To match the output dtype
             // of Pandas, we Cast to Date32 instead.
             result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+        } else if (scalar_func_data.arrow_func_name == "day_of_week") {
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            size_t num_args = PyTuple_Size(scalar_func_data.args);
+            if (num_args == 2) {
+                auto [count_from_zero, week_start] = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_bool, get_py_object_as_int64);
+
+                arrow::compute::DayOfWeekOptions opts(count_from_zero,
+                                                      week_start);
+                result = do_arrow_compute_unary(res, "day_of_week", &opts);
+            } else {
+                // Only support 0 or 2 optional parameters for now
+                result = do_arrow_compute_unary(res, "day_of_week");
+            }
         } else if (scalar_func_data.arrow_func_name == "day_of_week_num") {
             // day_of_week_num is a made up function representing the
             // number representing a day of week string.
@@ -1796,6 +1813,26 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 scalar_func_data.arrow_func_name.c_str());
             arrow::compute::StrftimeOptions opts(fmt_str);
             result = do_arrow_compute_unary(res, "strftime", &opts);
+        } else if (scalar_func_data.arrow_func_name == "strptime") {
+            auto [fmt_str, unit_cstr] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_cstr);
+            std::string unit_str(unit_cstr);
+            arrow::TimeUnit::type time_unit;
+            if (unit_str == "s") {
+                time_unit = arrow::TimeUnit::SECOND;
+            } else if (unit_str == "ms") {
+                time_unit = arrow::TimeUnit::MILLI;
+            } else if (unit_str == "us") {
+                time_unit = arrow::TimeUnit::MICRO;
+            } else if (unit_str == "ns") {
+                time_unit = arrow::TimeUnit::NANO;
+            } else {
+                throw std::invalid_argument(
+                    "strptime: Invalid time unit string: " + unit_str);
+            }
+            arrow::compute::StrptimeOptions opts(fmt_str, time_unit, false);
+            result = do_arrow_compute_unary(res, "strptime", &opts);
         } else if (scalar_func_data.arrow_func_name == "floor_temporal" ||
                    scalar_func_data.arrow_func_name == "ceil_temporal" ||
                    scalar_func_data.arrow_func_name == "round_temporal") {

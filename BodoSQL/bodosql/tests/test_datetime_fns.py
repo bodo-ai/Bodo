@@ -399,6 +399,7 @@ def test_dt_fns_cols(spark_info, dt_fn_info, dt_fn_dataframe, memory_leak_check)
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_dt_fns_scalars(spark_info, dt_fn_info, dt_fn_dataframe, memory_leak_check):
     """tests that the specified string functions work on Scalars"""
     bodo_fn_name = dt_fn_info[0]
@@ -2873,6 +2874,7 @@ def test_date_add_sub_interval_with_date_input(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_subdate_cols_int_arg1(
     subdate_equiv_fns,
     dt_fn_dataframe,
@@ -2930,6 +2932,7 @@ def test_subdate_scalar_int_arg1(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_subdate_cols_td_arg1(
     subdate_equiv_fns,
     dt_fn_dataframe,
@@ -3105,6 +3108,7 @@ def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_yearweek(dt_fn_dataframe, memory_leak_check):
     """Test for YEARWEEK, which returns a 6-character string
     with the date's year and week (1-53) concatenated together"""
@@ -3124,9 +3128,11 @@ def test_yearweek(dt_fn_dataframe, memory_leak_check):
         check_dtype=False,
         only_python=True,
         expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_yearweek(tz_aware_df, memory_leak_check):
     """Test for YEARWEEK on timezone aware data.
@@ -3134,40 +3140,26 @@ def test_tz_aware_yearweek(tz_aware_df, memory_leak_check):
     and week (1-53) concatenated together"""
 
     query = "SELECT YEARWEEK(A) AS OUTPUT from table1"
-
-    expected_output = pd.DataFrame(
-        {
-            "OUTPUT": tz_aware_df["TABLE1"]["A"].dt.year * 100
-            + tz_aware_df["TABLE1"]["A"].dt.isocalendar().week
-        }
-    )
     check_query(
         query,
         tz_aware_df,
         spark=None,
         check_dtype=False,
         only_python=True,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_yearweek_scalars(dt_fn_dataframe, memory_leak_check):
     query = "SELECT CASE WHEN YEARWEEK(timestamps) = 0 THEN -1 ELSE YEARWEEK(timestamps) END AS OUTPUT from table1"
-
-    expected_output = pd.DataFrame(
-        {
-            "OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.year * 100
-            + dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.isocalendar().week
-        }
-    )
-
     check_query(
         query,
         dt_fn_dataframe,
         None,
         check_dtype=False,
         only_python=True,
-        expected_output=expected_output,
+        use_duckdb=True,
     )
 
 
@@ -3189,6 +3181,7 @@ def test_date_trunc_time_part(sql_func, time_df, time_part_strings, memory_leak_
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("sql_func", ["DATE_TRUNC", "TRUNC"])
 def test_date_trunc_day_part_handling(
     sql_func, time_df, day_part_strings, memory_leak_check
@@ -3317,23 +3310,7 @@ def test_date_trunc_unquoted_timeunit(dt_fn_dataframe, memory_leak_check):
     )
 
 
-@pytest.mark.tz_aware
-def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
-    """
-    Test Snowflake's yearofweekiso function on columns.
-    """
-    query = "SELECT YEAROFWEEKISO(A) as A from table1"
-    # Use expected output because this function isn't in SparkSQL
-    expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].dt.year})
-    check_query(
-        query,
-        tz_aware_df,
-        None,
-        expected_output=expected_output,
-        check_dtype=False,
-    )
-
-
+@pytest.mark.bodosql_cpp
 def test_yearofweekiso(dt_fn_dataframe, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on columns.
@@ -3352,6 +3329,7 @@ def test_yearofweekiso(dt_fn_dataframe, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
     """
@@ -3371,6 +3349,7 @@ def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_yearofweekiso_scalar(dt_fn_dataframe, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on scalars.
@@ -3393,6 +3372,7 @@ def test_yearofweekiso_scalar(dt_fn_dataframe, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_yearofweekiso_scalar(tz_aware_df, memory_leak_check):
     """
@@ -3453,6 +3433,7 @@ def test_weekiso_scalar(dt_fn_dataframe, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_weekiso(tz_aware_df, memory_leak_check):
     """simplest weekiso test on timezone aware data"""
@@ -3470,6 +3451,7 @@ def test_tz_aware_weekiso(tz_aware_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_weekiso_case(tz_aware_df, memory_leak_check):
     """weekiso test in case statement on timezone aware data"""
@@ -3491,6 +3473,7 @@ def test_tz_aware_weekiso_case(tz_aware_df, memory_leak_check):
 dm = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 @pytest.mark.parametrize("dow_str", ["days_of_week", "su"])
 def test_next_previous_day_cols(
@@ -3535,6 +3518,7 @@ def test_next_previous_day_cols(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 @pytest.mark.parametrize("dow_str", ["days_of_week", "su"])
 def test_next_previous_day_scalars(
@@ -3763,6 +3747,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 @pytest.mark.parametrize(
     "case",
