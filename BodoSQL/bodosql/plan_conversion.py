@@ -174,52 +174,14 @@ def java_plan_to_python_plan(ctx, java_plan):
                 f"Table type {type(table)} not supported in C++ backend yet"
             )
 
-    # Iceberg plan nodes: each handler sets up its own contribution to
-    # IcebergReadInfo and recurses into children via visit_iceberg_node
+    # Traverse Iceberg plan nodes to extract read information similar to BodoSQL
     # (see flattenIcebergTree in BodoSQL Java code)
-
     if java_class_name == "IcebergToBodoPhysicalConverter":
-        return java_plan_to_python_plan(ctx, java_plan.getInput())
-
-    if java_class_name == "IcebergTableScan":
-        read_info = IcebergReadInfo()
-        read_info.scan_node = java_plan
-        read_info.colmap = list(range(java_plan.getRowType().getFieldCount()))
-        return generate_iceberg_read(read_info)
-
-    if java_class_name == "IcebergFilter":
-        read_info = IcebergReadInfo()
         input = java_plan.getInput()
-        read_info.colmap = list(range(input.getRowType().getFieldCount()))
-        read_info.filters = [java_plan.getCondition()]
-        visit_iceberg_node(ctx, input, read_info)
-        return generate_iceberg_read(read_info)
-
-    if java_class_name == "IcebergProject":
         read_info = IcebergReadInfo()
-        read_info.colmap = list(range(java_plan.getRowType().getFieldCount()))
-        _apply_iceberg_project(read_info, java_plan)
-        visit_iceberg_node(ctx, java_plan.getInput(), read_info)
-        return generate_iceberg_read(read_info)
-
-    if java_class_name == "IcebergSort":
-        read_info = IcebergReadInfo()
-        input = java_plan.getInput()
+        # Initialize all columns to be in the original location (updated top-down based
+        # on IcebergProject nodes)
         read_info.colmap = list(range(input.getRowType().getFieldCount()))
-        limit = java_plan.getFetch()
-        if limit is not None:
-            assert limit.getClass().getSimpleName() == "RexLiteral", (
-                "Only literal LIMITs are supported in IcebergSort"
-            )
-            read_info.limit = java_expr_to_pyiceberg_expr(limit, [])
-        visit_iceberg_node(ctx, input, read_info)
-        return generate_iceberg_read(read_info)
-
-    if java_class_name == "IcebergRuntimeJoinFilter":
-        read_info = IcebergReadInfo()
-        input = java_plan.getInput()
-        read_info.colmap = list(range(input.getRowType().getFieldCount()))
-        read_info.join_filter_info = java_rtjf_to_join_info(ctx, java_plan)
         visit_iceberg_node(ctx, input, read_info)
         return generate_iceberg_read(read_info)
 
@@ -3600,24 +3562,6 @@ def sql_type_to_pa_type(ctx, sql_type_name):
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
 
-def _apply_iceberg_project(read_info, java_plan):
-    """Apply IcebergProject column reordering to read_info.colmap.
-
-    Updates read_info.colmap in-place to map output positions to input
-    column indices based on the project expressions.
-    """
-    new_colmap = []
-    projs = java_plan.getProjects()
-    for ind in read_info.colmap:
-        proj = projs[ind]
-        if proj.getClass().getSimpleName() != "RexInputRef":
-            raise NotImplementedError(
-                "IcebergProject with expressions not supported yet"
-            )
-        new_colmap.append(proj.getIndex())
-    read_info.colmap = new_colmap
-
-
 def visit_iceberg_node(ctx, java_plan, read_info: IcebergReadInfo):
     """Visit Iceberg-related plan nodes to extract read information like filters.
     For example:
@@ -3643,7 +3587,17 @@ def visit_iceberg_node(ctx, java_plan, read_info: IcebergReadInfo):
     if java_class_name == "IcebergProject":
         # Projects may reorder columns, so we need to update the column mapping.
         # See IcebergToBodoPhysicalConverter.kt
-        _apply_iceberg_project(read_info, java_plan)
+        new_colmap = []
+        projs = java_plan.getProjects()
+        for ind in read_info.colmap:
+            proj = projs[ind]
+            if proj.getClass().getSimpleName() != "RexInputRef":
+                raise NotImplementedError(
+                    "IcebergProject with expressions not supported yet"
+                )
+            new_colmap.append(proj.getIndex())
+
+        read_info.colmap = new_colmap
         input = java_plan.getInput()
         visit_iceberg_node(ctx, input, read_info)
         return
