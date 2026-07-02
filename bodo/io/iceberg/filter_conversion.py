@@ -46,8 +46,9 @@ class _ConvertToArrowExpressionStringAndScalar(
             (right_rename_map[name], value) for name, value in right_child[1]
         ]
         # Rename the right child names in the expression string
+        # Matches whole words that are not inside {} and are in the right_rename_map
         pattern = re.compile(
-            r"\b(" + "|".join(map(re.escape, right_rename_map)) + r")\b"
+            r"(?<!\{)\b(" + "|".join(map(re.escape, right_rename_map)) + r")\b(?!\})"
         )
         right_child_expr = pattern.sub(
             lambda m: right_rename_map[m.group(0)],
