@@ -10,7 +10,6 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
 from concurrent.futures import ThreadPoolExecutor
-from decimal import Decimal
 
 import numpy
 import numpy as np
@@ -2509,9 +2508,6 @@ def representative_value_for_arrow_type(dtype: pa.DataType):
     if pa.types.is_floating(dtype):
         return 0.0
 
-    if pa.types.is_decimal(dtype):
-        return Decimal("0")
-
     if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
         return ""
 
@@ -2547,12 +2543,8 @@ def representative_value_for_arrow_type(dtype: pa.DataType):
 
 
 def _validate_series_cmp_scalar_args(empty_lhs: pd.Series, rhs, op):
-    """Validate BodoSeries comparison and raise TypeError if comparison is invalid.
-
-    This function checks whether Pandas would allow the comparison if `empty_lhs` was not
-    actually empty. Since Pandas allows comparisons between empty Series and any scalar type
-    and we generally don't know whether a Series is empty or not until we run the plan, we
-    throw an error just in case to prevent unexpected behavior.
+    """Validate BodoSeries comparison between a Series and a scalar and raise
+    an error if comparison is invalid.
     """
     assert isinstance(empty_lhs, pd.Series) and isinstance(
         empty_lhs.dtype, pd.ArrowDtype
@@ -2566,6 +2558,9 @@ def _validate_series_cmp_scalar_args(empty_lhs: pd.Series, rhs, op):
         # If we don't have a representative value, rely on empty Series behavior
         return
 
+    # Pandas allows empty Series to be compared with any scalar type, but since
+    # Bodo Series can be lazy, we also need to validate the comparison with a non-empty Series
+    # with the same dtype.
     non_empty_lhs = pd.Series([value], dtype=empty_lhs.dtype)
     non_empty_lhs._cmp_method(rhs, op)
 
