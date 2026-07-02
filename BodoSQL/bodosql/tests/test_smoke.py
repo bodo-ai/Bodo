@@ -467,6 +467,7 @@ def test_smoke_having(smoke_ctx, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.smoke
 def test_smoke_pivot(smoke_ctx, memory_leak_check):
     """
