@@ -214,8 +214,12 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalFilter":
         return java_filter_to_python_filter(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalAggregate" and not java_plan.usesGroupingSets():
+    if java_class_name == "BodoPhysicalAggregate":
         # TODO: support grouping sets
+        if java_plan.usesGroupingSets():
+            raise NotImplementedError(
+                "BodoPhysicalAggregate with grouping sets is not supported in C++ backend yet"
+            )
         return java_agg_to_python_agg(ctx, java_plan)
 
     if java_class_name == "BodoPhysicalSort":

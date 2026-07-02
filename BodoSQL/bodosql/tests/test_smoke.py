@@ -398,6 +398,7 @@ def test_smoke_groupby_aggregation(smoke_ctx, memory_leak_check):
 
 @pytest.mark.smoke
 @pytest.mark.timeout(2000)
+# TODO(Ehsan): support grouping sets in C++ backend for this test
 def test_smoke_nogroup_aggregation(smoke_ctx, memory_leak_check):
     """
     Tests only no-groupby aggregation
