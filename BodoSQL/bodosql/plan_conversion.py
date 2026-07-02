@@ -762,6 +762,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             date1_pa_type = date_expr1.empty_data.iloc[:, 0].dtype.pyarrow_dtype
             date2_pa_type = date_expr2.empty_data.iloc[:, 0].dtype.pyarrow_dtype
 
+            if (
+                pa.types.is_timestamp(date1_pa_type) and date1_pa_type.tz is not None
+            ) or (
+                pa.types.is_timestamp(date2_pa_type) and date2_pa_type.tz is not None
+            ):
+                raise ValueError(
+                    "TZ-aware input not currently supported in DATEDIFF (C++ backend)"
+                )
+
             # Only mixing DATE and TIMESTAMP is allowed
             if pa.types.is_time(date1_pa_type) or pa.types.is_time(date2_pa_type):
                 if unit_str in ("YEAR", "QUARTER", "MONTH", "WEEK", "DAY"):
@@ -2631,7 +2640,11 @@ def compare_types(obj_type, expected_type):
         expected_type = pd.api.types.pandas_dtype(expected_type)
 
     if isinstance(obj_type, type) and isinstance(expected_type, type):
-        if issubclass(obj_type, expected_type):
+        # NOTE: bool is a subclass of int in Python, but we don't want to consider them
+        # equivalent for our purposes
+        if issubclass(obj_type, expected_type) and not (
+            obj_type is bool and expected_type is int
+        ):
             return True
 
     if isinstance(obj_type, pa.DataType) and isinstance(expected_type, pa.DataType):

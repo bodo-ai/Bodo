@@ -556,7 +556,7 @@ def timestampdiff_data():
     [
         pytest.param(False, False, id="no_tz-no_case"),
         pytest.param(False, True, id="no_tz-with_case", marks=pytest.mark.slow),
-        pytest.param(False, False, id="with_tz-no_case", marks=pytest.mark.slow),
+        pytest.param(True, False, id="with_tz-no_case", marks=pytest.mark.slow),
         pytest.param(True, True, id="with_tz-with_case"),
     ],
 )
