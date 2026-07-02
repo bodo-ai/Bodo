@@ -215,6 +215,14 @@ def java_plan_to_python_plan(ctx, java_plan):
         visit_iceberg_node(ctx, input, read_info)
         return generate_iceberg_read(read_info)
 
+    if java_class_name == "IcebergRuntimeJoinFilter":
+        read_info = IcebergReadInfo()
+        input = java_plan.getInput()
+        read_info.colmap = list(range(input.getRowType().getFieldCount()))
+        read_info.join_filter_info = java_rtjf_to_join_info(ctx, java_plan)
+        visit_iceberg_node(ctx, input, read_info)
+        return generate_iceberg_read(read_info)
+
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
         exprs = [
