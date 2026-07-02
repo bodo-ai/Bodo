@@ -434,6 +434,11 @@ def test_timestamp_now():
         pytest.param([date(1995, 1, 1)], datetime(1995, 1, 1), id="date_series"),
         pytest.param([timedelta(10)], "10", id="timedelta_series"),
         pytest.param([time(10, 0, 0)], 11, id="time_series"),
+        pytest.param(
+            [pd.Timestamp(1995, 1, 1, tz="UTC")],
+            datetime(1995, 1, 1),
+            id="timestamp_series",
+        ),
     ],
 )
 def test_series_cmp_errorchecking(data, value):
