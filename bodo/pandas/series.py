@@ -225,6 +225,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         assert isinstance(empty_data, pd.Series), "_cmp_method: Series expected"
 
         lhs_plan, lhs, rhs = _handle_series_binop_args(self._plan, other)
+
         # Match the source plans of lhs and rhs, if they don't match return None, None
         lhs, rhs = match_binop_expr_source_plans(lhs, rhs)
         if lhs is None and rhs is None:
