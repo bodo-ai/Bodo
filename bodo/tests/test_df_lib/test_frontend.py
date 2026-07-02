@@ -3,6 +3,7 @@ Tests dataframe library frontend (no triggering of execution).
 """
 
 import warnings
+from datetime import date, datetime, time, timedelta
 
 import pandas as pd
 import pytest
@@ -417,3 +418,35 @@ def test_timestamp_now():
 
         # Test static methods works
         bd.Timestamp.now()
+
+
+@pytest.mark.parametrize(
+    "data, value",
+    [
+        pytest.param(["1994-12-31"], date(1995, 1, 1), id="string_series"),
+        pytest.param(
+            [{"A": 1.1, "B": {"A": date(1995, 1, 1)}}],
+            date(1995, 1, 1),
+            id="struct_series",
+        ),
+        pytest.param([[False, True, True]], date(1995, 1, 1), id="list_series"),
+        # Pandas raises an error when comparing date with timestamp, timestamp with date,
+        # and timestamp with timezone vs timestamp without
+        pytest.param([datetime(1995, 1, 1)], date(1995, 1, 1), id="datetime_series"),
+        pytest.param([date(1995, 1, 1)], datetime(1995, 1, 1), id="date_series"),
+        pytest.param([timedelta(10)], "10", id="timedelta_series"),
+        pytest.param([time(10, 0, 0)], 11, id="time_series"),
+        pytest.param(
+            [pd.Timestamp(1995, 1, 1, tz="UTC")],
+            datetime(1995, 1, 1),
+            id="timestamp_series",
+        ),
+    ],
+)
+def test_series_cmp_errorchecking(data, value):
+    """Test that invalid comparisons raise TypeErrors, matching Pandas behavior."""
+
+    S = bd.Series(data)
+
+    with pytest.raises(TypeError):
+        S < value
