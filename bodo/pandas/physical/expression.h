@@ -1102,8 +1102,15 @@ class PhysicalCaseExpression : public PhysicalExpression {
             children[0]->ProcessBatch(input_batch);
         std::shared_ptr<ExprResult> then_res =
             children[1]->ProcessBatch(input_batch);
-        std::shared_ptr<ExprResult> else_res =
-            children[2]->ProcessBatch(input_batch);
+
+        // Arrow uses NULL for the "else" case if it is not provided.
+        // Bodo creates string arrays for null data type currently
+        // which can cause errors in Arrow so this check is necessary.
+        std::shared_ptr<ExprResult> else_res = nullptr;
+        if (children[2]->GetExpressionType() !=
+            PhysicalExpressionType::NULL_CONSTANT) {
+            else_res = children[2]->ProcessBatch(input_batch);
+        }
 
         auto result =
             do_arrow_compute_case(when_res, then_res, else_res, result_type);
@@ -1114,7 +1121,8 @@ class PhysicalCaseExpression : public PhysicalExpression {
             std::dynamic_pointer_cast<ScalarExprResult>(then_res);
         auto else_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(else_res);
-        if (when_as_scalar && then_as_scalar && else_as_scalar) {
+        if (when_as_scalar && then_as_scalar &&
+            (else_res == nullptr || else_as_scalar)) {
             return std::make_shared<ScalarExprResult>(result);
         }
         return std::make_shared<ArrayExprResult>(result, "Case");

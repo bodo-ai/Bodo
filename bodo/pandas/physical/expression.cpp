@@ -676,13 +676,16 @@ std::shared_ptr<array_info> do_arrow_compute_case(
 
     arrow::Datum src2 =
         ConvertExprResultToDatum(then_res, "do_arrow_compute then");
-    arrow::Datum src3 =
-        ConvertExprResultToDatum(else_res, "do_arrow_compute else");
+    arrow::Datum src3;
+    if (else_res != nullptr) {
+        src3 = ConvertExprResultToDatum(else_res, "do_arrow_compute else");
+    }
 
     // NOTE: Arrow's "if_else" doesn't match our Python and SQL semantics since
     // it propagates nulls in the condition.
-    arrow::Result<arrow::Datum> case_res =
-        arrow::compute::CallFunction("case_when", {src1, src2, src3});
+    arrow::Result<arrow::Datum> case_res = arrow::compute::CallFunction(
+        "case_when", else_res ? std::vector<arrow::Datum>{src1, src2, src3}
+                              : std::vector<arrow::Datum>{src1, src2});
     if (!case_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_arrow_compute_case case_when: Error in Arrow compute: " +
