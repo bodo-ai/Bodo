@@ -3113,21 +3113,12 @@ def test_yearweek(dt_fn_dataframe, memory_leak_check):
     """Test for YEARWEEK, which returns a 6-character string
     with the date's year and week (1-53) concatenated together"""
     query = "SELECT YEARWEEK(timestamps) AS OUTPUT from table1"
-
-    expected_output = pd.DataFrame(
-        {
-            "OUTPUT": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.year * 100
-            + dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.isocalendar().week
-        }
-    )
-
     check_query(
         query,
         dt_fn_dataframe,
         None,
         check_dtype=False,
         only_python=True,
-        expected_output=expected_output,
         use_duckdb=True,
     )
 
