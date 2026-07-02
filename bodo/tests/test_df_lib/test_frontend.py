@@ -430,6 +430,8 @@ def test_timestamp_now():
             id="struct_series",
         ),
         pytest.param([[False, True, True]], date(1995, 1, 1), id="list_series"),
+        # Pandas raises an error when comparing date with timestamp, timestamp with date,
+        # and timestamp with timezone vs timestamp without
         pytest.param([datetime(1995, 1, 1)], date(1995, 1, 1), id="datetime_series"),
         pytest.param([date(1995, 1, 1)], datetime(1995, 1, 1), id="date_series"),
         pytest.param([timedelta(10)], "10", id="timedelta_series"),
