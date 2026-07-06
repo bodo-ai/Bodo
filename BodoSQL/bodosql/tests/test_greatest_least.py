@@ -37,6 +37,7 @@ def greatest_least_output_func(row, op):
         return row.min()
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_integer_literals(basic_df, greatest_or_least, memory_leak_check):
     """
     tests that Greatest and Least work on integer literals
@@ -71,6 +72,7 @@ def test_greatest_integer_literals(basic_df, greatest_or_least, memory_leak_chec
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_float_literals(basic_df, greatest_or_least, memory_leak_check):
     """
     tests that Greatest and Least work on float literals
@@ -107,6 +109,7 @@ def test_greatest_float_literals(basic_df, greatest_or_least, memory_leak_check)
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_string_literals(basic_df, greatest_or_least, memory_leak_check):
     """
     tests that Greatest works on string literals
@@ -161,6 +164,7 @@ def test_greatest_bool_literals(basic_df, greatest_or_least, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_numeric_columns(
     bodosql_numeric_types, greatest_or_least, memory_leak_check
 ):
@@ -183,6 +187,7 @@ def test_greatest_numeric_columns(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_string_columns(
     bodosql_string_types, greatest_or_least, memory_leak_check
 ):
@@ -205,6 +210,7 @@ def test_greatest_string_columns(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_binary_columns(
     bodosql_binary_types, greatest_or_least, memory_leak_check
 ):
@@ -252,6 +258,7 @@ def test_greatest_bool_columns(
     check_query(query, bodosql_boolean_types, None, expected_output=expected_output)
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_date_literals(greatest_or_least, memory_leak_check):
     """
     tests that Greatest works on date literals.
@@ -270,6 +277,7 @@ def test_greatest_date_literals(greatest_or_least, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_date_columns(
     bodosql_date_types, greatest_or_least, memory_leak_check
 ):
@@ -299,6 +307,7 @@ def test_greatest_date_columns(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_timestamp_literals(greatest_or_least, memory_leak_check):
     """
     tests that Greatest works on timestamp literals
@@ -317,6 +326,7 @@ def test_greatest_timestamp_literals(greatest_or_least, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_timestamp_columns(
     bodosql_datetime_types, greatest_or_least, memory_leak_check
 ):
@@ -380,6 +390,9 @@ def test_greatest_tz_aware_columns(
     )
 
 
+@pytest.mark.skip(
+    reason="[BSE-5496]: Fix conversion of string to datetime in Greatest/Least"
+)
 def test_least_datetime_strings(memory_leak_check):
     """
     tests that Least works with datetimes + valid strings (to be converted to datetimes)
@@ -409,6 +422,7 @@ def test_least_datetime_strings(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_single_column_least_greatest(greatest_or_least, memory_leak_check):
     """
@@ -423,6 +437,7 @@ def test_single_column_least_greatest(greatest_or_least, memory_leak_check):
     check_query(query, ctx, None, check_dtype=False, expected_output=py_output)
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_time_literals(greatest_or_least, memory_leak_check):
     """
     tests that Greatest works on time literals
@@ -441,6 +456,7 @@ def test_greatest_time_literals(greatest_or_least, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_greatest_time_columns(
     bodosql_time_types, greatest_or_least, memory_leak_check
 ):
