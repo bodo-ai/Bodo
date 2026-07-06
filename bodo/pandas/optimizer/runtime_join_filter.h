@@ -4,7 +4,11 @@
 struct JoinColumnInfo {
     std::vector<int64_t> filter_columns;
     std::vector<bool> is_first_locations;
-    std::vector<int64_t> orig_build_key_cols;
+    std::vector<int64_t>
+        orig_build_key_cols;  // The indices used to lookup the min/max value
+                              // for the corresponding filter column. Each index
+                              // represents the position of the build key in
+                              // the final join condition.
 };
 
 using JoinFilterProgramState = std::unordered_map<int, JoinColumnInfo>;

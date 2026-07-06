@@ -17,6 +17,7 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_cteref.hpp"
 #include "duckdb/planner/operator/logical_materialized_cte.hpp"
+#include "optimizer/runtime_join_filter.h"
 
 namespace bodo {
 
@@ -386,6 +387,15 @@ duckdb::unique_ptr<duckdb::Expression> make_const_date_offset_expr(
 duckdb::unique_ptr<duckdb::Expression> make_const_date32_expr(int32_t val);
 
 /**
+ * @brief Create an expression from a constant time64 with ns resolution.
+ *
+ * @param val - the constant time for the expression in nanoseconds since
+ * midnight
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const time expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_time64_expr(int64_t val);
+
+/**
  * @brief Create an expression that references a specified column.
  *
  * @param field_py - the data type of the specified column
@@ -629,7 +639,10 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
 duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *pyarrow_schema, std::string table_identifier,
     PyObject *pyiceberg_catalog, PyObject *iceberg_filter,
-    PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate);
+    PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
+    std::optional<std::vector<int>> selected_columns_opt,
+    std::optional<int64_t> limit_opt,
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt);
 
 /**
  * @brief Returns a statically created DuckDB database.

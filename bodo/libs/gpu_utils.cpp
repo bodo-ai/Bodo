@@ -711,15 +711,24 @@ bool is_gpu_rank() {
     return is_gpu_rank;
 }
 
-std::shared_ptr<rmm::mr::device_memory_resource>
-get_gpu_async_memory_resource() {
-    return std::make_shared<rmm::mr::cuda_async_memory_resource>();
+// Static GPU async memory resource — shared by both the ref and pool handle
+// queries
+static rmm::mr::cuda_async_memory_resource& get_gpu_async_mr_inst() {
+    static rmm::mr::cuda_async_memory_resource mr;
+    return mr;
+}
+
+rmm::device_async_resource_ref get_gpu_async_memory_resource() {
+    return rmm::device_async_resource_ref{get_gpu_async_mr_inst()};
+}
+
+cudaMemPool_t get_gpu_async_pool_handle() {
+    return get_gpu_async_mr_inst().pool_handle();
 }
 
 rmm::device_async_resource_ref get_cuda_memory_resource_ref() {
     static rmm::mr::cuda_memory_resource mr;
-    static rmm::device_async_resource_ref mr_ref{&mr};
-    return mr_ref;
+    return rmm::device_async_resource_ref{mr};
 }
 
 #endif  // USE_CUDF

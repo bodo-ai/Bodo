@@ -225,11 +225,15 @@ class BodoIcebergScanFunction : public BodoScanFunction {
  */
 class BodoIcebergScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoIcebergScanFunctionData(std::shared_ptr<arrow::Schema> _arrow_schema,
-                                PyObject *_catalog, const std::string _table_id,
-                                PyObject *_iceberg_filter,
-                                PyObject *_iceberg_schema, int64_t _snapshot_id)
+    BodoIcebergScanFunctionData(
+        std::shared_ptr<arrow::Schema> _arrow_schema, PyObject *_catalog,
+        const std::string _table_id, PyObject *_iceberg_filter,
+        PyObject *_iceberg_schema, int64_t _snapshot_id,
+        std::optional<std::vector<int>> _selected_fields_opt,
+        std::optional<int64_t> _limit_opt)
         : BodoScanFunctionData(BodoScanFunctionType::ICEBERG_SCAN),
+          selected_fields_opt(std::move(_selected_fields_opt)),
+          limit_opt(std::move(_limit_opt)),
           arrow_schema(std::move(_arrow_schema)),
           catalog(_catalog),
           iceberg_filter(_iceberg_filter),
@@ -259,6 +263,11 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         return !has_limit;
     }
 
+    // When converting from Calcite to duckdb plans,
+    // the optimizer does not run, so we have to explicitly
+    // pass the columns we want to select as well as the limit.
+    std::optional<std::vector<int>> selected_fields_opt;
+    std::optional<int64_t> limit_opt;
     const std::shared_ptr<arrow::Schema> arrow_schema;
     PyObject *catalog;
     PyObject *iceberg_filter;

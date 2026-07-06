@@ -19,6 +19,10 @@
 #include "duckdb/planner/filter/optional_filter.hpp"
 #include "physical/expression.h"
 
+#ifdef _WIN32
+#define timegm _mkgmtime
+#endif
+
 std::variant<int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t,
              uint64_t, bool, std::string, float, double,
              std::shared_ptr<arrow::Scalar>>
@@ -106,6 +110,16 @@ extractValue(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeScalar(date_type, extracted.days).ValueOrDie();
         } break;
+        case duckdb::LogicalTypeId::TIME:
+        case duckdb::LogicalTypeId::TIME_NS: {
+            // Define a time type with nanosecond precision
+            auto time_type = arrow::time64(arrow::TimeUnit::NANO);
+            duckdb::dtime_ns_t extracted = value.GetValue<duckdb::dtime_ns_t>();
+            // Create a TimeScalar with the time value
+            // NOTE: DuckDB's dtime_ns_t is subclass of dtime_t so the field is
+            // still called micros, but it is actually nanoseconds.
+            return arrow::MakeScalar(time_type, extracted.micros).ValueOrDie();
+        } break;
         case duckdb::LogicalTypeId::INTERVAL: {
             duckdb::interval_t extracted = value.GetValue<duckdb::interval_t>();
             // Convert to nanoseconds total, dropping month/day information
@@ -114,7 +128,7 @@ extractValue(const duckdb::Value &value) {
             return arrow::MakeScalar(dur_type, total_nanos).ValueOrDie();
         } break;
         default:
-            throw std::runtime_error("extractValue unhandled type." +
+            throw std::runtime_error("extractValue unhandled type: " +
                                      std::to_string(static_cast<int>(type)));
     }
 }
@@ -161,7 +175,8 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             // Create a DateScalar with the date value
             return arrow::MakeNullScalar(date_type);
         } break;
-        case duckdb::LogicalTypeId::TIME: {
+        case duckdb::LogicalTypeId::TIME:
+        case duckdb::LogicalTypeId::TIME_NS: {
             auto time_type = arrow::time64(arrow::TimeUnit::NANO);
             return arrow::MakeNullScalar(time_type);
         } break;
@@ -173,6 +188,9 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             auto timestamp_type =
                 arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
             return arrow::MakeNullScalar(timestamp_type);
+        } break;
+        case duckdb::LogicalTypeId::SQLNULL: {
+            return arrow::MakeNullScalar(arrow::null());
         } break;
         default:
             throw std::runtime_error(
@@ -509,6 +527,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
         case duckdb::LogicalTypeId::TIMESTAMP_NS:
             return arrow::timestamp(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::TIME:
+        case duckdb::LogicalTypeId::TIME_NS:
             return arrow::time64(arrow::TimeUnit::NANO);
         case duckdb::LogicalTypeId::BLOB:
             return arrow::large_binary();
@@ -567,7 +586,7 @@ duckdb::LogicalType arrowTypeToDuckDB(
         case arrow::Type::LARGE_BINARY:
             return duckdb::LogicalType(duckdb::LogicalTypeId::BLOB);
         case arrow::Type::TIME64:
-            return duckdb::LogicalType(duckdb::LogicalTypeId::TIME);
+            return duckdb::LogicalType(duckdb::LogicalTypeId::TIME_NS);
         case arrow::Type::TIMESTAMP: {
             auto ts_type = std::static_pointer_cast<arrow::TimestampType>(type);
             if (!ts_type->timezone().empty()) {
@@ -967,9 +986,16 @@ std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum) {
     // DuckDB's optimizer may evaluate expressions with scalar input, see
     // test_tpch_q22
     if (datum.is_scalar()) {
-        return arrow_array_to_bodo(
-            arrow::MakeArrayFromScalar(*datum.scalar(), 1).ValueOrDie(),
-            bodo::BufferPool::DefaultPtr());
+        auto scalar_array_result =
+            arrow::MakeArrayFromScalar(*datum.scalar(), 1);
+        if (!scalar_array_result.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "ConvertDatumToArrowInfo: Error making Arrow array from "
+                "scalar: " +
+                scalar_array_result.status().message());
+        }
+        return arrow_array_to_bodo(scalar_array_result.ValueOrDie(),
+                                   bodo::BufferPool::DefaultPtr());
     }
 
     std::shared_ptr<arrow::Array> arrow_arr = datum.make_array();
@@ -990,9 +1016,14 @@ arrow::Datum ConvertExprResultToDatum(std::shared_ptr<ExprResult> res,
     if (res_as_array) {
         src = arrow::Datum(prepare_arrow_compute(res_as_array->result));
     } else if (res_as_scalar) {
-        src = arrow::MakeScalar(prepare_arrow_compute(res_as_scalar->result)
-                                    ->GetScalar(0)
-                                    .ValueOrDie());
+        auto src_scalar_result =
+            prepare_arrow_compute(res_as_scalar->result)->GetScalar(0);
+        if (!src_scalar_result.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "ConvertExprResultToDatum: Error getting Arrow scalar: " +
+                src_scalar_result.status().message());
+        }
+        src = arrow::MakeScalar(src_scalar_result.ValueOrDie());
     } else {
         throw std::runtime_error(res_name + " is neither array nor scalar.");
     }
@@ -1094,6 +1125,14 @@ arrow::Datum ConvertToDatum(void *raw_ptr,
                 "ConvertToDatum does not support arrow::DataType " +
                 type->ToString());
     }
+}
+
+arrow::Type::type GetArrowTypeOfRes(std::shared_ptr<ExprResult> res) {
+    return GetArrowTypeOfRes(ConvertExprResultToDatum(res, "res"));
+}
+
+arrow::Type::type GetArrowTypeOfRes(arrow::Datum res) {
+    return res.type()->id();
 }
 
 std::optional<JoinFilterColStats::col_min_max_t>
@@ -1228,12 +1267,159 @@ void assert_py_args_is_tuple(PyObject *args, const char *err_context) {
     }
 }
 
+int64_t py_object_to_timestamp(PyObject *obj) {
+    // Assume we have already verified that PyDateTime_Check(obj) == true
+    struct tm time_struct = {0};
+    time_struct.tm_year = PyDateTime_GET_YEAR(obj) - 1900;
+    time_struct.tm_mon = PyDateTime_GET_MONTH(obj) - 1;
+    time_struct.tm_mday = PyDateTime_GET_DAY(obj);
+    time_struct.tm_hour = PyDateTime_DATE_GET_HOUR(obj);
+    time_struct.tm_min = PyDateTime_DATE_GET_MINUTE(obj);
+    time_struct.tm_sec = PyDateTime_DATE_GET_SECOND(obj);
+    time_struct.tm_isdst = -1;
+    int64_t microsecond_remainder = PyDateTime_DATE_GET_MICROSECOND(obj);
+
+    // Convert time struct down to standard epoch seconds
+    // timegm interprets input as UTC
+    int64_t epoch_seconds = static_cast<int64_t>(timegm(&time_struct));
+    int64_t total_microseconds =
+        (epoch_seconds * 1000000LL) + microsecond_remainder;
+    return total_microseconds;
+}
+
+int64_t py_object_to_time(PyObject *obj) {
+    // Assume we have already verified that PyTime_Check(obj) == true
+    int64_t hour = PyDateTime_TIME_GET_HOUR(obj);
+    int64_t minute = PyDateTime_TIME_GET_MINUTE(obj);
+    int64_t second = PyDateTime_TIME_GET_SECOND(obj);
+    int64_t microsecond_remainder = PyDateTime_TIME_GET_MICROSECOND(obj);
+
+    // Calculate total microsecond offset from midnight
+    int64_t total_microseconds =
+        (((hour * 3600LL) + (minute * 60LL) + second) * 1000000LL) +
+        microsecond_remainder;
+    return total_microseconds;
+}
+
+int32_t py_object_to_date(PyObject *obj) {
+    // Assume we have already verified that PyDate_Check(obj) == true
+    struct tm time_struct = {0};
+    time_struct.tm_year = PyDateTime_GET_YEAR(obj) - 1900;
+    time_struct.tm_mon = PyDateTime_GET_MONTH(obj) - 1;
+    time_struct.tm_mday = PyDateTime_GET_DAY(obj);
+    time_struct.tm_isdst = -1;
+
+    // Convert time struct down to standard epoch seconds
+    time_t epoch_seconds =
+        timegm(&time_struct);  // timegm interprets input as UTC
+    int32_t total_days = static_cast<int32_t>(epoch_seconds / (24 * 3600));
+    return total_days;
+}
+
+arrow::Datum get_scalar_py_object_as_datum(PyObject *py_obj,
+                                           const char *err_context) {
+    // Is the PyObject already a PyArrow scalar?
+    if (arrow::py::is_scalar(py_obj)) {
+        arrow::Result<std::shared_ptr<arrow::Scalar>> scalar_result =
+            arrow::py::unwrap_scalar(py_obj);
+        if (scalar_result.ok()) {
+            return arrow::Datum(scalar_result.ValueOrDie());
+        }
+    }
+
+    // If not, we have to check the Python types individually, create scalar,
+    // and package in datum
+    if (py_obj == Py_None) {
+        return arrow::Datum(std::make_shared<arrow::NullScalar>());
+    } else if (PyBool_Check(py_obj)) {
+        return arrow::Datum(
+            std::make_shared<arrow::BooleanScalar>(py_obj == Py_True));
+    } else if (PyLong_Check(py_obj)) {
+        int64_t val = PyLong_AsLongLong(py_obj);
+        if (PyErr_Occurred()) {
+            PyErr_Clear();
+
+            // Conversion to signed int64 failed, try unsigned
+            uint64_t val = PyLong_AsUnsignedLongLong(py_obj);
+            if (PyErr_Occurred()) {
+                PyErr_Clear();
+                throw std::runtime_error(
+                    "Integer conversion overflowed 64-bit boundaries for " +
+                    std::string(err_context));
+            }
+
+            return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(val));
+        }
+        return arrow::Datum(std::make_shared<arrow::Int64Scalar>(val));
+    } else if (PyFloat_Check(py_obj)) {
+        double val = PyFloat_AsDouble(py_obj);
+        return arrow::Datum(std::make_shared<arrow::DoubleScalar>(val));
+    } else if (PyUnicode_Check(py_obj)) {
+        const char *c_str = PyUnicode_AsUTF8(py_obj);
+        if (!c_str) {
+            throw std::runtime_error(
+                fmt::format("Error for {} extracting Python string.",
+                            std::string(err_context)));
+        }
+        return arrow::Datum(
+            std::make_shared<arrow::StringScalar>(std::string(c_str)));
+    } else if (PyBytes_Check(py_obj)) {
+        const char *c_str = PyBytes_AsString(py_obj);
+        if (!c_str) {
+            throw std::runtime_error(
+                fmt::format("Error for {} extracting Python binary string.",
+                            std::string(err_context)));
+        }
+        return arrow::Datum(
+            std::make_shared<arrow::BinaryScalar>(std::string(c_str)));
+    } else if (PyDateTime_Check(py_obj)) {
+        int64_t total_microseconds = py_object_to_timestamp(py_obj);
+        auto timestamp_type = arrow::timestamp(arrow::TimeUnit::MICRO);
+        return arrow::Datum(std::make_shared<arrow::TimestampScalar>(
+            total_microseconds, timestamp_type));
+    } else if (PyDate_Check(py_obj)) {
+        int32_t total_days = py_object_to_date(py_obj);
+        return arrow::Datum(std::make_shared<arrow::Date32Scalar>(total_days));
+    } else if (PyTime_Check(py_obj)) {
+        int64_t total_microseconds = py_object_to_time(py_obj);
+        auto time_type = arrow::time64(arrow::TimeUnit::MICRO);
+        return arrow::Datum(std::make_shared<arrow::Time64Scalar>(
+            total_microseconds, time_type));
+    }
+
+    throw std::runtime_error(
+        "Unrecognized scalar type or non-scalar PyObject: " +
+        std::string(err_context));
+}
+
 int64_t get_py_object_as_int64(PyObject *py_int, const char *err_context) {
     if (!PyLong_Check(py_int)) {
         throw std::runtime_error("Object is not a Python int: " +
                                  std::string(err_context));
     }
-    return PyLong_AsLongLong(py_int);
+    int64_t val = PyLong_AsLongLong(py_int);
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        throw std::runtime_error(
+            "Integer conversion overflowed signed 64-bit boundaries for " +
+            std::string(err_context));
+    }
+    return val;
+}
+
+uint64_t get_py_object_as_uint64(PyObject *py_int, const char *err_context) {
+    if (!PyLong_Check(py_int)) {
+        throw std::runtime_error("Object is not a Python int: " +
+                                 std::string(err_context));
+    }
+    uint64_t val = PyLong_AsUnsignedLongLong(py_int);
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        throw std::runtime_error(
+            "Integer conversion overflowed unsigned 64-bit boundaries for " +
+            std::string(err_context));
+    }
+    return val;
 }
 
 const char *get_py_object_as_cstr(PyObject *py_str, const char *err_context) {

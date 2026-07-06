@@ -127,16 +127,8 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
     return array;
 }
 
-/**
- * @brief Perform an Arrow compute operation with multiple input expressions.
- *
- * @param in_expr_results A vector of input expression results.
- * @param arrow_func_name The name of the Arrow function to call.
- * @return std::shared_ptr<array_info> The result of the Arrow compute
- * operation.
- */
-std::shared_ptr<array_info> do_arrow_compute_multi_input(
-    std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
+arrow::Datum do_arrow_compute_multi_input_datum(
+    const std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
     const std::string& arrow_func_name) {
     std::vector<arrow::Datum> arg_datums;
     for (auto& expr_res : in_expr_results) {
@@ -261,8 +253,7 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             if (!res_arr.ok()) {
                 throw std::runtime_error(res_arr.status().ToString());
             }
-            return arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                       bodo::BufferPool::DefaultPtr());
+            return res_arr.ValueOrDie();
         }
         if (date_arr->type_id() == arrow::Type::TIME64) {
             if (month_scale != 0) {
@@ -296,8 +287,7 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             if (!res_arr.ok()) {
                 throw std::runtime_error(res_arr.status().ToString());
             }
-            return arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                       bodo::BufferPool::DefaultPtr());
+            return res_arr.ValueOrDie();
         }
         if (date_arr->type_id() == arrow::Type::DATE32) {
             auto date32_arr =
@@ -335,8 +325,7 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
                 if (!res_arr.ok()) {
                     throw std::runtime_error(res_arr.status().ToString());
                 }
-                return arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                           bodo::BufferPool::DefaultPtr());
+                return res_arr.ValueOrDie();
             }
             arrow::TimestampBuilder ts_builder(
                 arrow::timestamp(arrow::TimeUnit::NANO),
@@ -354,13 +343,41 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             if (!res_arr.ok()) {
                 throw std::runtime_error(res_arr.status().ToString());
             }
-            return arrow_array_to_bodo(res_arr.ValueOrDie(),
-                                       bodo::BufferPool::DefaultPtr());
+            return res_arr.ValueOrDie();
         }
         throw std::runtime_error(
             "do_arrow_compute_multi_input: bodo_dateadd unsupported input "
             "type " +
             date_arr->type()->ToString());
+    } else if (arrow_func_name == "month_interval_between") {
+        if (arg_datums.size() != 2) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: month_interval_between expects "
+                "exactly 2 "
+                "arguments.");
+        }
+        auto mib_res =
+            arrow::compute::CallFunction("month_interval_between", arg_datums);
+        if (!mib_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: Error in Arrow compute "
+                "(month_interval_between): " +
+                mib_res.status().message());
+        }
+
+        // Cast MonthInterval result to int32, that is all we need
+        arrow::Datum month_interval_datum = mib_res.ValueOrDie();
+        std::shared_ptr<arrow::MonthIntervalArray> mi_arr =
+            std::static_pointer_cast<arrow::MonthIntervalArray>(
+                month_interval_datum.make_array());
+
+        // MonthIntervalArray stores months as int32.
+        // Extract raw buffers and create Int32Array with the same buffers.
+        auto mi_arr_int32 = std::make_shared<arrow::Int32Array>(
+            arrow::int32(), mi_arr->length(), mi_arr->values(),
+            mi_arr->null_bitmap(), mi_arr->null_count());
+
+        return arrow::Datum(mi_arr_int32);
     } else if (arrow_func_name == "nullif") {
         // SQL NULLIF(a, b): returns NULL when a == b, else a.
         // Arrow has no direct nullif kernel, so implement as:
@@ -395,6 +412,29 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
 
         func_res = arrow::compute::CallFunction(
             "case_when", {cond, null_datum, arg_datums[0]});
+    } else if (arrow_func_name == "binary_join_element_wise") {
+        // binary_join_element_wise appears to require all arguments to have the
+        // same type. Cast all arguments to match the first argument's type
+        auto target_type = arg_datums[0].type();
+        std::vector<arrow::Datum> casted_datums;
+        for (auto& datum : arg_datums) {
+            if (datum.type()->Equals(target_type)) {
+                casted_datums.push_back(datum);
+            } else {
+                auto cast_opts = arrow::compute::CastOptions::Safe(target_type);
+                auto cast_res =
+                    arrow::compute::CallFunction("cast", {datum}, &cast_opts);
+                if (!cast_res.ok()) [[unlikely]] {
+                    throw std::runtime_error(
+                        "do_arrow_compute_multi_input: Error casting argument "
+                        "to match "
+                        "binary_join_element_wise: " +
+                        cast_res.status().message());
+                }
+                casted_datums.push_back(cast_res.ValueOrDie());
+            }
+        }
+        func_res = arrow::compute::CallFunction(arrow_func_name, casted_datums);
     } else {
         func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums);
     }
@@ -405,7 +445,15 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             func_res.status().message());
     }
 
-    return ConvertDatumToArrayInfo(func_res.ValueOrDie());
+    return func_res.ValueOrDie();
+}
+
+std::shared_ptr<array_info> do_arrow_compute_multi_input(
+    const std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
+    const std::string& arrow_func_name) {
+    arrow::Datum result_datum =
+        do_arrow_compute_multi_input_datum(in_expr_results, arrow_func_name);
+    return ConvertDatumToArrayInfo(result_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
@@ -459,17 +507,8 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
 
-    std::shared_ptr<arrow::DataType> arrow_ret_type =
-        duckdbTypeToArrow(return_type);
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(src1, arrow_ret_type);
-    if (!cmp_res.ok()) [[unlikely]] {
-        throw std::runtime_error(
-            "do_array_compute_cast: Error in Arrow compute: " +
-            cmp_res.status().message());
-    }
-
-    return ConvertDatumToArrayInfo(cmp_res.ValueOrDie());
+    arrow::Datum casted = do_arrow_compute_cast(src1, return_type);
+    return ConvertDatumToArrayInfo(casted);
 }
 
 arrow::Datum do_arrow_compute_binary(
@@ -489,8 +528,10 @@ arrow::Datum do_arrow_compute_binary(
     std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
     if (result_type && cmp_dtype != result_type) {
         // Cast to result type if available and different from current type.
+        arrow::compute::CastOptions cast_opts;
+        cast_opts.allow_int_overflow = true;
         arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(cmp_datum, result_type);
+            arrow::compute::Cast(cmp_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
             throw std::runtime_error(
                 "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
@@ -541,6 +582,29 @@ arrow::Datum do_arrow_compute_unary(
         return is_true_res.ValueOrDie();
     }
 
+    // Special handling for is_not_true since it is not supported directly
+    // by Arrow compute.
+    if (comparator == "is_not_true") {
+        auto arrow_false = arrow::MakeScalar(false);
+        arrow::Result<arrow::Datum> coalesce_res = arrow::compute::CallFunction(
+            "coalesce", {src1, arrow_false}, func_options);
+        if (!coalesce_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_unary: Error in Arrow compute: " +
+                coalesce_res.status().message());
+        }
+
+        // Invert so that null/false -> true and true -> false.
+        arrow::Result<arrow::Datum> invert_res =
+            arrow::compute::CallFunction("invert", {coalesce_res.ValueOrDie()});
+        if (!invert_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_arrow_compute_unary: Error in Arrow compute Invert: " +
+                invert_res.status().message());
+        }
+        return invert_res.ValueOrDie();
+    }
+
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
@@ -556,11 +620,21 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
                                    const duckdb::LogicalType& return_type) {
     std::shared_ptr<arrow::DataType> arrow_ret_type =
         duckdbTypeToArrow(return_type);
+
+    // No need to cast if type is already the target type
+    if (left_res.type()->Equals(arrow_ret_type)) {
+        return left_res;
+    }
+
+    // Globally set the allow_int_overflow cast option to true; in the future,
+    // CaseExpressions should support these options.
+    arrow::compute::CastOptions cast_opts;
+    cast_opts.allow_int_overflow = true;
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(left_res, arrow_ret_type);
+        arrow::compute::Cast(left_res, arrow_ret_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_cast: Error in Arrow compute: " +
+            "do_arrow_compute_cast: Error in Arrow compute: " +
             cmp_res.status().message());
     }
 
@@ -611,7 +685,7 @@ std::shared_ptr<array_info> do_arrow_compute_case(
         arrow::compute::CallFunction("case_when", {src1, src2, src3});
     if (!case_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_case: Error in Arrow compute: " +
+            "do_arrow_compute_case case_when: Error in Arrow compute: " +
             case_res.status().message());
     }
 
@@ -619,11 +693,13 @@ std::shared_ptr<array_info> do_arrow_compute_case(
     std::shared_ptr<arrow::DataType> case_dtype = case_datum.type();
     if (result_type && case_dtype != result_type) {
         // Cast to result type if available and different from current type.
+        arrow::compute::CastOptions cast_opts;
+        cast_opts.allow_int_overflow = true;
         arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(case_datum, result_type);
+            arrow::compute::Cast(case_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
+                "do_arrow_compute_case cast_res: Error in Arrow compute: " +
                 cast_res.status().message());
         }
         case_res = cast_res;

@@ -25,6 +25,7 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_codegen
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "fn_name",
     [
@@ -85,6 +86,7 @@ def test_date_to_date_invalid(fn_name, scalar):
         bc.sql(query, ctx)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "scalar_to_cast",
     [
@@ -102,6 +104,7 @@ def test_date_cast_to_date(scalar_to_cast, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "to_type,expected",
     [
@@ -128,42 +131,49 @@ def test_date_cast_from_date(to_type, expected, memory_leak_check):
             "DATE_PART",
             pd.Series([1999, None, 2010, 2021, 2023], dtype=pd.Int32Dtype()),
             id="valid-year-date_part",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "quarter",
             "EXTRACT",
             pd.Series([4, None, 1, 3, 2], dtype=pd.Int32Dtype()),
             id="valid-quarter-extract",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "month",
             "MONTH",
             pd.Series([12, None, 1, 7, 4], dtype=pd.Int32Dtype()),
             id="valid-month-date_part",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "week",
             "EXTRACT",
             pd.Series([52, None, 53, 26, 15], dtype=pd.Int32Dtype()),
             id="valid-week-extract",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "dayofmonth",
             "DATE_PART",
             pd.Series([31, None, 1, 4, 15], dtype=pd.Int32Dtype()),
             id="valid-dayofmonth-date_part",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "dayofyear",
             "DAYOFYEAR",
             pd.Series([365, None, 1, 185, 105], dtype=pd.Int32Dtype()),
             id="valid-dayofyear-regular",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "dow",
             "EXTRACT",
             pd.Series([5, None, 5, 0, 6], dtype=pd.Int32Dtype()),
             id="valid-dayofweek-extract",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "dayofweekiso",
@@ -250,6 +260,7 @@ def test_date_extract(unit, answer, test_fn_type, memory_leak_check):
         )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query, expected_output",
     [
@@ -342,6 +353,7 @@ def test_datediff_date_literals(query, expected_output, basic_df, memory_leak_ch
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_datediff_date_columns_time_units(
     date_df, time_part_strings, memory_leak_check
 ):
@@ -381,6 +393,7 @@ def test_datediff_date_columns_time_units(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_check):
     """
@@ -418,6 +431,7 @@ def test_datediff_date_columns_day_units(date_df, day_part_strings, memory_leak_
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func, unit, answer",
     [
@@ -505,6 +519,7 @@ def test_date_next_day(func_name, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_max_date(date_df, memory_leak_check):
     """
     Test that max is working for date type columns
@@ -519,6 +534,7 @@ def test_max_date(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_min_date(date_df, memory_leak_check):
     """
     Test that min is working for date type columns
@@ -533,6 +549,7 @@ def test_min_date(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_max_date_group_by(date_df, memory_leak_check):
     """
     Test that max with group by is working for date type columns
@@ -547,6 +564,7 @@ def test_max_date_group_by(date_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_min_date_group_by(date_df, memory_leak_check):
     """
     Test that min with group by is working for date type columns

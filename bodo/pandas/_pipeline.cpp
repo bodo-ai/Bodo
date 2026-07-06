@@ -4,7 +4,6 @@
 #ifdef USE_CUDF
 #include <cudf/copying.hpp>
 #include <cudf/table/table_view.hpp>
-#include <rmm/mr/cuda_async_memory_resource.hpp>
 #endif  // USE_CUDF
 #include "physical/operator.h"
 #include "physical/result_collector.h"
@@ -34,13 +33,7 @@ std::string getGPUStats() {
     free_bytes /= 1024 * 1024 * 1024;
     total_bytes /= 1024 * 1024 * 1024;
 
-    auto *mr = dynamic_cast<rmm::mr::cuda_async_memory_resource *>(
-        rmm::mr::get_current_device_resource());
-    if (!mr) {
-        throw std::runtime_error(
-            "Current RMM resource is not cuda_async_memory_resource");
-    }
-    cudaMemPool_t pool = mr->pool_handle();
+    cudaMemPool_t pool = get_gpu_async_pool_handle();
 
     size_t reserved_current = 0;
     size_t reserved_peak = 0;

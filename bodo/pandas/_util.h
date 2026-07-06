@@ -371,6 +371,24 @@ arrow::Datum ConvertExprResultToDatum(std::shared_ptr<ExprResult> res,
  */
 arrow::Datum ConvertToDatum(void *raw_ptr,
                             std::shared_ptr<arrow::DataType> type);
+
+/**
+ * @brief Get the Arrow type (arrow::Type::type) of the input res
+ *
+ * @param res The input ExprResult to get the Arrow type of (after converting to
+ * a Datum)
+ * @return arrow::Type::type the Arrow type
+ */
+arrow::Type::type GetArrowTypeOfRes(std::shared_ptr<ExprResult> res);
+
+/**
+ * @brief Get the Arrow type (arrow::Type::type) of the input res
+ *
+ * @param res The input datum to get the Arrow type of
+ * @return arrow::Type::type the Arrow type
+ */
+arrow::Type::type GetArrowTypeOfRes(arrow::Datum res);
+
 #ifdef USE_CUDF
 using join_state_t = std::variant<JoinState *, CudaJoin *>;
 #else
@@ -435,6 +453,20 @@ class JoinFilterColStats {
  * function the arguments came from
  */
 void assert_py_args_is_tuple(PyObject *args, const char *err_context);
+
+/**
+ * @brief Get a single scalar argument from a Python function call
+ * and convert it to an arrow Datum. This involves checking all of
+ * the possible scalar datatypes for the PyObject, converting it
+ * to the corresponding Arrow::Scalar type, before finally wrapping
+ * it in an arrow::Datum.
+ *
+ * @param py_obj Python object
+ * @param err_context String used for error messages, often the name of the
+ * function the arguments came from
+ */
+arrow::Datum get_scalar_py_object_as_datum(PyObject *py_obj,
+                                           const char *err_context);
 
 /**
  * @brief Get a single argument from a Python function call

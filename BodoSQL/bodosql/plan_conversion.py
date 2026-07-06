@@ -5,7 +5,7 @@ import operator
 import re
 import zoneinfo
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -16,13 +16,16 @@ import pyarrow.compute as pc
 import bodo
 import bodo.pandas as bd
 import bodosql
+from bodo.pandas.iceberg_utils import (
+    JoinFilterInfo,
+    build_iceberg_read_plan,
+)
 from bodo.pandas.plan import (
     AggregateExpression,
     ArithOpExpression,
     ArrowScalarFuncExpression,
     CaseExpression,
     CastExpression,
-    ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
     ConstantExpression,
@@ -125,6 +128,7 @@ class IcebergReadInfo:
     """Information extracted from Iceberg read plan nodes."""
 
     scan_node: object = None
+    join_filter_info: JoinFilterInfo = None
     filters: list[object] = None
     # Columns to read from the table, in the order they should appear in output.
     colmap: list[int] = None
@@ -178,7 +182,7 @@ def java_plan_to_python_plan(ctx, java_plan):
         # Initialize all columns to be in the original location (updated top-down based
         # on IcebergProject nodes)
         read_info.colmap = list(range(input.getRowType().getFieldCount()))
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return generate_iceberg_read(read_info)
 
     if java_class_name in ("PandasProject", "BodoPhysicalProject"):
@@ -203,7 +207,9 @@ def java_plan_to_python_plan(ctx, java_plan):
         return java_join_to_python_join(ctx, java_plan)
 
     if java_class_name == "BodoPhysicalRuntimeJoinFilter":
-        return java_rtjf_to_python_rtjf(ctx, java_plan)
+        input_python_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+        join_info = java_rtjf_to_join_info(ctx, java_plan)
+        return generate_runtime_join_filter(join_info, input_python_plan)
 
     if java_class_name == "BodoPhysicalFilter":
         return java_filter_to_python_filter(ctx, java_plan)
@@ -323,9 +329,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "DATE_TRUNC" and num_operands == 2:
             # DATE_TRUNC(FLAG(DAY), timestamp) → floor_temporal(timestamp, unit)
-            unit_raw = str(java_call.getOperands()[0].toString()).upper()
-            if "(" in unit_raw:
-                unit_raw = unit_raw.split("(")[1].rstrip(")")
+            unit_raw = get_java_symbol(java_call.getOperands()[0])
+            unit_raw = standardize_java_time_unit(func_name, unit_raw)
             _TRUNC_UNITS = {
                 "year",
                 "quarter",
@@ -335,6 +340,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "hour",
                 "minute",
                 "second",
+                "millisecond",
+                "microsecond",
+                "nanosecond",
             }
             assert unit_raw.lower() in _TRUNC_UNITS, (
                 f"DATE_TRUNC unit has unexpected format after stripping: "
@@ -373,10 +381,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             unit_str = "MONTH"
             if num_operands == 2:
                 # EXTRACT(FLAG(MONTH), date) → month
-                unit_str = str(java_call.getOperands()[1].toString()).upper()
-                # Strip "FLAG(" / ")" from unit string
-                if "(" in unit_str:
-                    unit_str = unit_str.split("(")[1].rstrip(")")
+                unit_str = get_java_symbol(java_call.getOperands()[1])
+                unit_str = standardize_java_time_unit(func_name, unit_str).upper()
             LAST_DAY_UNITS = {
                 "MONTH": ("month", 1, 0),
                 "QUARTER": ("quarter", 3, 0),
@@ -469,13 +475,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # 3-operand form: DATEADD(unit, amount, date) → date + (unit * amount)
                 # First operand is a FLAG(unit) interval qualifier from the Java
                 # planner (e.g. FLAG(DAY), FLAG(MONTH)).
-                first_op_str = str(java_call.getOperands()[0].toString())
-                if not first_op_str.startswith("FLAG"):
-                    raise NotImplementedError(
-                        "DATEADD with 3 string operands not supported in "
-                        "C++ backend yet"
-                    )
-                unit_str = first_op_str.split("(")[1].rstrip(")").upper()
+                unit_str = get_java_symbol(java_call.getOperands()[0])
+                unit_str = standardize_java_time_unit(func_name, unit_str).upper()
                 assert unit_str in INTERVAL_UNIT_MAP, (
                     f"Unsupported DATEADD interval unit: {unit_str}"
                 )
@@ -569,7 +570,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # Check if the second argument is an integer (number of days)
                 # rather than an INTERVAL literal.
                 amount_type = java_call.getOperands()[1].getType()
-                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
                 if is_int_type(amount_type):
                     # DATE_SUB(date, N) → date - N days
                     if isinstance(amount_expr, ConstantExpression):
@@ -619,6 +619,110 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         ),
                     ],
                 )
+        if func_name == "DATEDIFF" and num_operands == 3:
+            # TODO: May need TZ-aware support
+
+            # First operand is a FLAG(unit) interval qualifier from the Java
+            # planner (e.g. FLAG(DAY), FLAG(MONTH)).
+            unit_str = get_java_symbol(java_call.getOperands()[0])
+            unit_str = standardize_java_time_unit(func_name, unit_str).upper()
+            assert unit_str in INTERVAL_UNIT_MAP, (
+                f"Unsupported DATEDIFF unit: {unit_str}"
+            )
+            # date_expr1 will be subtracted from date_expr2
+            date_expr1 = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            date_expr2 = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[2], input_plan
+            )
+
+            date1_pa_type = date_expr1.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            date2_pa_type = date_expr2.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+
+            if (
+                pa.types.is_timestamp(date1_pa_type) and date1_pa_type.tz is not None
+            ) or (
+                pa.types.is_timestamp(date2_pa_type) and date2_pa_type.tz is not None
+            ):
+                raise ValueError(
+                    "TZ-aware input not currently supported in DATEDIFF (C++ backend)"
+                )
+
+            # Only mixing DATE and TIMESTAMP is allowed
+            if pa.types.is_time(date1_pa_type) or pa.types.is_time(date2_pa_type):
+                if unit_str in ("YEAR", "QUARTER", "MONTH", "WEEK", "DAY"):
+                    raise ValueError(
+                        "Unsupported unit for DATEDIFF with TIME input: " + unit_str
+                    )
+                if not (
+                    pa.types.is_time(date1_pa_type) and pa.types.is_time(date2_pa_type)
+                ):
+                    raise ValueError(
+                        "If a time type is provided both arguments must be time types."
+                    )
+            else:
+                if pa.types.is_date(date1_pa_type):
+                    if unit_str in (
+                        "HOUR",
+                        "MINUTE",
+                        "SECOND",
+                        "MILLISECOND",
+                        "MICROSECOND",
+                        "NANOSECOND",
+                    ) or pa.types.is_timestamp(date2_pa_type):
+                        timestamp_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                        )
+                        date_expr1 = CastExpression(timestamp_empty_data, date_expr1)
+                if pa.types.is_date(date2_pa_type):
+                    if unit_str in (
+                        "HOUR",
+                        "MINUTE",
+                        "SECOND",
+                        "MILLISECOND",
+                        "MICROSECOND",
+                        "NANOSECOND",
+                    ) or pa.types.is_timestamp(date1_pa_type):
+                        timestamp_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                        )
+                        date_expr2 = CastExpression(timestamp_empty_data, date_expr2)
+
+            empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            if unit_str == "YEAR":
+                diff_func_name = "years_between"
+            elif unit_str == "QUARTER":
+                diff_func_name = "quarters_between"
+            elif unit_str == "MONTH":
+                diff_func_name = "month_interval_between"
+                empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int32()))
+            elif unit_str == "WEEK":
+                # Depends on the week_start parameter
+                diff_func_name = "weeks_between"
+            elif unit_str == "DAY":
+                diff_func_name = "days_between"
+            elif unit_str == "HOUR":
+                diff_func_name = "hours_between"
+            elif unit_str == "MINUTE":
+                diff_func_name = "minutes_between"
+            elif unit_str == "SECOND":
+                diff_func_name = "seconds_between"
+            elif unit_str == "MILLISECOND":
+                diff_func_name = "milliseconds_between"
+            elif unit_str == "MICROSECOND":
+                diff_func_name = "microseconds_between"
+            elif unit_str == "NANOSECOND":
+                diff_func_name = "nanoseconds_between"
+            else:
+                raise ValueError("DATEDIFF: Unrecognized unit " + unit_str)
+
+            date_diff = ArrowScalarFuncExpression(
+                empty_data, [date_expr1, date_expr2], diff_func_name, ()
+            )
+            return date_diff
+
         if func_name == "TIME_SLICE":
             # TIME_SLICE(date, interval) → floor_temporal(date, interval)
             date_expr = java_expr_to_python_expr(
@@ -627,15 +731,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             interval_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
-            unit_str = str(java_call.getOperands()[2].toString()).upper().strip("'")
-            # Strip "FLAG(" / ")" from unit string
-            if "(" in unit_str:
-                unit_str = unit_str.split("(")[1].rstrip(")")
+            unit_str = get_java_symbol(java_call.getOperands()[2]).upper()
             start_or_end = "START"
             if num_operands == 4:
-                start_or_end = (
-                    str(java_call.getOperands()[3].toString()).upper().strip("'")
-                )
+                start_or_end = get_java_symbol(java_call.getOperands()[3]).upper()
                 assert start_or_end in ("START", "END"), (
                     f"Unsupported TIME_SLICE 4th operand: {start_or_end}"
                 )
@@ -761,10 +860,21 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (tz,),
             )
 
-        # Integers are assumed in seconds in BodoSQL
+        # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
         if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
             SqlTypeName.TIMESTAMP
         ):
+            # Arrow's cast_timestamp only accepts int64 input, so convert other integer types to int64 first.
+            # This likely won't work for uint64 where the input is greater than the max value of int64,
+            # but the timestamp itself is backed by signed int64 anyway
+            in_expr_dtype = get_expr_dtype(in_expr)
+            if not compare_types(in_expr_dtype, "int64"):
+                int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                in_expr = CastExpression(
+                    int64_empty_data,
+                    in_expr,
+                )
+
             cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
             in_expr = CastExpression(
                 cast_empty_data,
@@ -805,6 +915,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "istrue")
 
+        if kind.equals(SqlKind.IS_NOT_TRUE):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "isnottrue")
+
     if operator_class_name == "SqlCaseOperator":
         operands = java_call.getOperands()
         kind = op.getKind()
@@ -834,11 +948,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         and len(java_call.getOperands()) == 2
     ):
         # EXTRACT(FLAG(MONTH), date) → month(date)
-        unit_str = str(java_call.getOperands()[0].toString()).upper()
+        unit_str = get_java_symbol(java_call.getOperands()[0]).upper()
         input = java_expr_to_python_expr(ctx, java_call.getOperands()[1], input_plan)
-        # Strip FLAG from unit if it's in the form FLAG(unit)
-        if "(" in unit_str:
-            unit_str = unit_str.split("(")[1].rstrip(")")
         arrow_func = _DATE_PART_ARROW_FUNCS.get(unit_str)
         if arrow_func is None:
             raise NotImplementedError(f"Unsupported EXTRACT unit: {unit_str}")
@@ -946,7 +1057,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     if operator_class_name == "SqlAbstractTimeFunction":
         func_name = op.getName().upper()
         if func_name in ("LOCALTIME", "CURRENT_TIME"):
-            curr_ts = pd.Timestamp.now()
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            curr_ts = pd.Timestamp.now(tz=tz)
             curr_time = pc.cast(curr_ts, pa.time64("ns"))
             dummy_empty_data = pd.Series(
                 [curr_time], dtype=pd.ArrowDtype(pa.time64("ns"))
@@ -1072,6 +1184,121 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             out_empty = inp.empty_data
             return UnaryOpExpression(out_empty, inp, "round")
 
+        if func_name == "MOD" and len(op_exprs) == 2:
+            inp = op_exprs[0]
+            modulus_expr = op_exprs[1]
+            ensure_type_of_expr(inp, "MOD inp", int)
+            ensure_type_of_expr(modulus_expr, "modulus_expr", int)
+
+            return ArithOpExpression(inp.empty_data, inp, modulus_expr, "__mod__")
+
+        if func_name in ("BOOLAND", "BOOLOR", "BOOLXOR") and len(op_exprs) == 2:
+            left_expr = op_exprs[0]
+            right_expr = op_exprs[1]
+
+            ensure_type_of_expr(left_expr, "left_expr", (int, float))
+            ensure_type_of_expr(right_expr, "right_expr", (int, float))
+
+            left_expr_is_int = compare_types(get_expr_dtype(left_expr), int)
+            right_expr_is_int = compare_types(get_expr_dtype(right_expr), int)
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+            if not left_expr_is_int:
+                # Round float inputs.
+                # This is required because, according to the docs,
+                # Snowflake interprets floats in BOOLAND as integers
+                # by rounding. Thus, a float like 0.3 should be considered 0
+                # whereas a float like 0.7 would be non-zero.
+
+                left_expr_rounded = ArrowScalarFuncExpression(
+                    float_empty_data, [left_expr], "round", ()
+                )
+            else:
+                left_expr_rounded = left_expr
+
+            if not right_expr_is_int:
+                right_expr_rounded = ArrowScalarFuncExpression(
+                    float_empty_data, [right_expr], "round", ()
+                )
+            else:
+                right_expr_rounded = right_expr
+
+            # Get nonzero values as True, zero values as False
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            left_zero_expr = ConstantExpression(
+                int_empty_data if left_expr_is_int else float_empty_data, input_plan, 0
+            )
+            left_expr_bool = ComparisonOpExpression(
+                bool_empty_data, left_expr_rounded, left_zero_expr, operator.ne
+            )
+            right_zero_expr = ConstantExpression(
+                int_empty_data if right_expr_is_int else float_empty_data, input_plan, 0
+            )
+            right_expr_bool = ComparisonOpExpression(
+                bool_empty_data, right_expr_rounded, right_zero_expr, operator.ne
+            )
+
+            if func_name == "BOOLAND":
+                return ConjunctionOpExpression(
+                    bool_empty_data, left_expr_bool, right_expr_bool, "__and__"
+                )
+            elif func_name == "BOOLOR":
+                return ConjunctionOpExpression(
+                    bool_empty_data, left_expr_bool, right_expr_bool, "__or__"
+                )
+            elif func_name == "BOOLXOR":
+                return ComparisonOpExpression(
+                    bool_empty_data, left_expr_bool, right_expr_bool, operator.ne
+                )
+
+        if func_name == "BOOLNOT" and len(op_exprs) == 1:
+            expr = op_exprs[0]
+            ensure_type_of_expr(expr, "expr", (int, float))
+
+            expr_is_int = compare_types(get_expr_dtype(expr), int)
+
+            # Round float inputs (for the same reason as BOOLAND/BOOLOR/BOOLXOR)
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+            if not expr_is_int:
+                expr_rounded = ArrowScalarFuncExpression(
+                    float_empty_data, [expr], "round", ()
+                )
+            else:
+                expr_rounded = expr
+
+            # Flipped logic: get nonzero values as False, zero values as True
+            zero_expr = ConstantExpression(
+                int_empty_data if expr_is_int else float_empty_data, input_plan, 0
+            )
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return ComparisonOpExpression(
+                bool_empty_data, expr_rounded, zero_expr, operator.eq
+            )
+
+        def equal_null(left_expr, right_expr):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            values_equal = ComparisonOpExpression(
+                bool_empty_data, left_expr, right_expr, operator.eq
+            )
+
+            left_is_null = UnaryOpExpression(bool_empty_data, left_expr, "isnull")
+            right_is_null = UnaryOpExpression(bool_empty_data, right_expr, "isnull")
+            both_null = ConjunctionOpExpression(
+                bool_empty_data, left_is_null, right_is_null, "__and__"
+            )
+
+            # CASE WHEN values_equal THEN TRUE ELSE both_null
+            # The case statement interprets nulls as false, so we avoid the coalesce step
+            true_expr = ConstantExpression(bool_empty_data, input_plan, True)
+            return CaseExpression(bool_empty_data, values_equal, true_expr, both_null)
+
+        if func_name == "EQUAL_NULL" and len(op_exprs) == 2:
+            return equal_null(op_exprs[0], op_exprs[1])
+
         if func_name == "IFF" and len(op_exprs) == 3:
             # IFF is equivalent to CASE with single WHEN
             return java_case_to_python_case(ctx, operands, input_plan)
@@ -1081,9 +1308,108 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 op_exprs[0].empty_data, op_exprs, "nullif", ()
             )
 
+        if func_name == "NVL2" and len(op_exprs) == 3:
+            expr1 = op_exprs[0]
+            expr2 = op_exprs[1]
+            expr3 = op_exprs[2]
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            expr1_is_null = UnaryOpExpression(bool_empty_data, expr1, "isnull")
+            return make_unified_case_expression("common", expr1_is_null, expr3, expr2)
+
+        if func_name == "ZEROIFNULL" and len(op_exprs) == 1:
+            expr = op_exprs[0]
+            ensure_type_of_expr(expr, "ZEROIFNULL expr", (int, float))
+
+            zero_expr = ConstantExpression(expr.empty_data, input_plan, 0)
+            return ArrowScalarFuncExpression(
+                expr.empty_data, [expr, zero_expr], "coalesce", ()
+            )
+
+        if func_name == "REGR_VALX" and len(op_exprs) == 2:
+            y_expr = op_exprs[0]
+            x_expr = op_exprs[1]
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            y_is_null = UnaryOpExpression(bool_empty_data, y_expr, "isnull")
+            return make_unified_case_expression(
+                x_expr.empty_data, y_is_null, y_expr, x_expr
+            )
+
+        if func_name == "REGR_VALY" and len(op_exprs) == 2:
+            y_expr = op_exprs[0]
+            x_expr = op_exprs[1]
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            x_is_null = UnaryOpExpression(bool_empty_data, x_expr, "isnull")
+            return make_unified_case_expression(
+                y_expr.empty_data, x_is_null, x_expr, y_expr
+            )
+
+        if func_name == "DECODE" and len(op_exprs) >= 3:
+            select_expr = op_exprs[0]
+
+            result_exprs = [op_exprs[i] for i in range(2, len(op_exprs), 2)]
+            # Ensure result expression datatypes are compatible. Currently we
+            # only try to unify integer datatypes.
+            result_expr_dtypes = [
+                get_expr_dtype(result_expr) for result_expr in result_exprs
+            ]
+            if not all(
+                pd.api.types.is_integer_dtype(dtype) for dtype in result_expr_dtypes
+            ):
+                result_type = result_expr_dtypes[0]
+                for result_expr_dtype in result_expr_dtypes[1:]:
+                    if not compare_types(result_expr_dtype, result_type):
+                        raise ValueError(
+                            f"Incompatible DECODE result expression dtypes: {result_expr_dtype} and {result_type}"
+                        )
+
+            # Get unified result type between all result expressions to avoid overflow
+            common_result_type, results_need_cast = get_common_int_type_list(
+                result_exprs
+            )
+            if common_result_type is not None:
+                empty_data = pd.Series(dtype=pd.ArrowDtype(common_result_type))
+            else:
+                empty_data = result_exprs[0].empty_data
+
+            if len(op_exprs) % 2 == 0:
+                # Default specified
+                default_expr = op_exprs[-1]
+            else:
+                # No default specified - NULL should be returned when there is no match
+                default_expr = NullExpression(empty_data, input_plan, 0)
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+
+            # Recursively create CaseExpressions for the remaining search expression and result expression pairs
+            # There is guaranteed to be at least one pair
+            def make_ternary_expression(search_result_pair_index):
+                pair_start_index = 1 + 2 * search_result_pair_index
+                search_expr = op_exprs[pair_start_index]
+                result_expr = op_exprs[pair_start_index + 1]
+                if results_need_cast[search_result_pair_index]:
+                    result_expr = CastExpression(empty_data, result_expr)
+
+                # Use equal_null for comparison since nulls should match nulls
+                search_expr_match = equal_null(select_expr, search_expr)
+                # Get the result expression if select_expr does not match search_expr
+                if len(op_exprs) - pair_start_index > 3:
+                    else_ternary_expr = make_ternary_expression(
+                        search_result_pair_index + 1
+                    )
+                else:
+                    else_ternary_expr = default_expr  # Use the default expression if we have run out of pairs
+                return CaseExpression(
+                    empty_data, search_expr_match, result_expr, else_ternary_expr
+                )
+
+            return make_ternary_expression(0)
+
         if func_name == "CHAR_LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(
                 int_empty_data,
@@ -1104,7 +1430,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name in ("LPAD", "RPAD") and len(op_exprs) in (2, 3):
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
 
             length = op_exprs[1]
             ensure_arg_is_const_expr_of_type(length, "length", int)
@@ -1113,7 +1439,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             if len(op_exprs) == 3:
                 pattern = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(pattern, "pattern", str)
+                ensure_arg_is_const_expr_of_type(pattern, "pattern", (str, pa.binary()))
                 arrow_func_args += (pattern.value,)
 
             return ArrowScalarFuncExpression(
@@ -1123,20 +1449,263 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 arrow_func_args,
             )
 
-        if func_name == "REPLACE" and len(op_exprs) == 3:
+        if func_name == "REPLACE" and len(op_exprs) in (2, 3):
             src = op_exprs[0]
             search_expr = op_exprs[1]
-            replacement_expr = op_exprs[2]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(search_expr, "search_expr", str)
-            ensure_arg_is_const_expr_of_type(replacement_expr, "replacement_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                search_expr, "search_expr", (str, pa.binary())
+            )
+
+            if len(op_exprs) == 3:
+                replacement_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(
+                    replacement_expr, "replacement_expr", (str, pa.binary())
+                )
+                replacement_val = replacement_expr.value
+            else:
+                replacement_val = ""
 
             return ArrowScalarFuncExpression(
                 src.empty_data,
                 [src],
                 "replace_substring",
-                (search_expr.value, replacement_expr.value),
+                (search_expr.value, replacement_val),
+            )
+
+        if func_name == "REGEXP_SUBSTR" and len(op_exprs) in (2, 3, 4, 5, 6):
+
+            def clean_regex_params(regex_params_expr):
+                if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
+                    # Both case sensitive and case insensitive params provided; find which appears latest in the string
+                    latest_index = max(
+                        regex_params_expr.value.rfind(char) for char in ("c", "i")
+                    )
+                    latest_char = regex_params_expr.value[latest_index]
+                    # Remove occurrences of the other parameter to make the identification easier on the C++ side
+                    regex_params = regex_params_expr.value.replace(
+                        "c" if latest_char == "i" else "i", ""
+                    )
+                else:
+                    if (
+                        "c" not in regex_params_expr.value
+                        and "i" not in regex_params_expr.value
+                    ):
+                        regex_params = regex_params_expr.value + "c"
+                    else:
+                        regex_params = regex_params_expr.value
+                for character in regex_params:
+                    if character not in ("c", "i", "m", "e", "s"):
+                        raise ValueError(
+                            f"{func_name} regex parameter {character} does not exist"
+                        )
+                    if character in ("i", "m", "s"):
+                        raise ValueError(
+                            f"{func_name} regex parameter {character} is not yet supported in the C++ backend"
+                        )
+                return regex_params
+
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+            if len(op_exprs) >= 3:
+                start_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                else:
+                    start = start_expr.value
+            else:
+                start = 0
+
+            if len(op_exprs) >= 4:
+                # Need to search for the substring that is the op_exprs[3]-th occurrence / regex match
+                occurrence_expr = op_exprs[3]
+                ensure_arg_is_const_expr_of_type(
+                    occurrence_expr, "occurrence_expr", int
+                )
+                occurrence_num = occurrence_expr.value
+                if occurrence_num < 1:
+                    raise ValueError(
+                        f"{func_name} occurences argument must be 1 or greater"
+                    )
+            else:
+                occurrence_num = 1
+
+            if len(op_exprs) >= 5:
+                regex_params_expr = op_exprs[4]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                regex_params = clean_regex_params(regex_params_expr)
+            else:
+                regex_params = "c"
+
+            if len(op_exprs) == 6:
+                group_num_expr = op_exprs[5]
+                ensure_arg_is_const_expr_of_type(group_num_expr, "group_num_expr", int)
+                if group_num_expr.value < 0:
+                    raise ValueError(
+                        f"Negative value for group_num argument of {func_name} is not permitted"
+                    )
+                group_num = group_num_expr.value
+                if group_num > 0:
+                    group_num -= 1  # Convert from 1-based to 0-based
+                regex_params = (
+                    regex_params + "e"
+                )  # 'e' is implied if group_num is passed
+            else:
+                group_num = 0
+
+            # Chop off the start so that searching begins after the provided position
+            if start > 0:
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
+
+            # Remove earlier occurrences so that extract_regex can find the correct occurrence/substring matching the regexp
+            if occurrence_num > 1:
+                occurences_replaced_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [without_start_expr],
+                    "replace_substring_regex",
+                    (
+                        regexp.value,
+                        "",
+                        occurrence_num - 1,
+                    ),
+                )
+            else:
+                occurences_replaced_expr = without_start_expr
+
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [occurences_replaced_expr],
+                "regexp_substr",  # Made up function, will redirect to extract_regex with the right group extracted
+                (regexp.value, regex_params, group_num),
+            )
+
+        if func_name == "PI" and len(op_exprs) == 0:
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            return ConstantExpression(dummy_empty_data, input_plan, np.pi)
+
+        if (
+            func_name
+            in (
+                "ACOS",
+                "ACOSH",
+                "ASIN",
+                "ASINH",
+                "COS",
+                "COSH",
+                "SIN",
+                "SINH",
+                "TAN",
+                "TANH",
+                "ATAN",
+                "ATANH",
+            )
+            and len(op_exprs) == 1
+        ):
+            src = op_exprs[0]
+            # Arrow's Trigonometric functions return float32 for float32 input and
+            # float64 for float64 and decimal input:
+            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                func_name.lower(),
+                (),
+            )
+
+        if func_name == "ATAN2" and len(op_exprs) == 2:
+            src1 = op_exprs[0]
+            src2 = op_exprs[1]
+            src_dtype = src1.empty_data.dtypes.iloc[0]
+            src2_dtype = src2.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if (
+                    src_dtype.pyarrow_dtype == pa.float32()
+                    and src2_dtype.pyarrow_dtype == pa.float32()
+                )
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src1, src2],
+                "atan2",
+                (),
+            )
+
+        if func_name in ("RADIANS", "DEGREES") and len(op_exprs) == 1:
+            src = op_exprs[0]
+            # Return float32 for float32 input and float64 for float64 and decimal input
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            ceof_expr = ConstantExpression(
+                dummy_empty_data,
+                input_plan,
+                (np.pi / 180.0) if func_name == "RADIANS" else (180.0 / np.pi),
+            )
+            return ArithOpExpression(
+                dummy_empty_data,
+                src,
+                ceof_expr,
+                "__mul__",
+            )
+
+        if func_name == "COT" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            # Return float32 for float32 input and float64 for float64 and decimal input
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            # COT is defined as 1 / tan(x):
+            # https://github.com/bodo-ai/Bodo/blob/d8a047024e8cfd12993c8ad4e8d781c4f2723348/BodoSQL/bodosql/kernels/trig_array_kernels.py#L251
+            one_expr = ConstantExpression(
+                dummy_empty_data,
+                input_plan,
+                1.0,
+            )
+            tan_expr = ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                "tan",
+                (),
+            )
+            return ArithOpExpression(
+                dummy_empty_data,
+                one_expr,
+                tan_expr,
+                "__truediv__",
             )
 
         # If we didn't match a supported basic function, fall through to NotImplemented
@@ -1149,12 +1718,164 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        if func_name == "LEFT" and len(op_exprs) == 2:
+        if (
+            func_name in ("BITAND", "BITOR", "BITXOR", "BITSHIFTLEFT", "BITSHIFTRIGHT")
+            and len(op_exprs) == 2
+        ):
+            left_expr = op_exprs[0]
+            right_expr = op_exprs[1]
+
+            ensure_type_of_expr(left_expr, "left_expr", int)
+            ensure_type_of_expr(right_expr, "right_expr", int)
+
+            empty_data = left_expr.empty_data
+            cast_empty_data = None
+            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            if func_name == "BITAND":
+                arrow_equivalent_func = "bit_wise_and"
+            elif func_name == "BITOR":
+                arrow_equivalent_func = "bit_wise_or"
+            elif func_name == "BITXOR":
+                arrow_equivalent_func = "bit_wise_xor"
+            elif func_name == "BITSHIFTLEFT":
+                arrow_equivalent_func = "shift_left"
+            elif func_name == "BITSHIFTRIGHT":
+                arrow_equivalent_func = "shift_right"
+
+            if func_name in ("BITSHIFTLEFT", "BITSHIFTRIGHT"):
+                left_opr_sql_type = operands[0].getType()
+                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+
+                if left_opr_sql_type.getSqlTypeName().equals(SqlTypeName.BINARY):
+                    # Cast right_expr to match the bit width and signedness of left_expr.
+                    # This minimizes cast operations necessary, since if the types of left_expr and right_expr match, the final result will have the type of left_expr.
+                    # This is what we want to retain the original bit width after shifting, for BINARY input.
+                    # Effectively we discard bits that were shifted past the left end of the original precision input.
+                    right_expr = CastExpression(left_expr.empty_data, right_expr)
+                else:
+                    # For INTEGER input:
+                    # Ensure arguments are int64.
+                    # We don't want shift_left to be limited by the precision of the
+                    # input (at least for INTEGER input).
+                    # If one argument is uint64, this can help avoid a mismatch that will cause an error coming from the Arrow compute function.
+                    # We do the same for shift_right to be consistent with Snowflake (max bit width signed output).
+                    if func_name == "BITSHIFTLEFT":
+                        left_expr = CastExpression(int64_empty_data, left_expr)
+                        # (Arrow can take care of casting right_expr in this case.)
+                        # For bitshifting, result type should be INT64 to match Snowflake and output on C++ side.
+                        empty_data = int64_empty_data
+                    else:
+                        # For shift_right, we have to be careful that left_expr keeps the original
+                        # signedness so the proper right shift (logical or arithmetic) is performed.
+                        if pa.types.is_signed_integer(
+                            left_expr.empty_data.dtypes[
+                                left_expr.empty_data.columns[0]
+                            ].pyarrow_dtype
+                        ):
+                            shift_right_empty_data = int64_empty_data
+                        else:
+                            shift_right_empty_data = pd.Series(
+                                dtype=pd.ArrowDtype(pa.uint64())
+                            )
+                        left_expr = CastExpression(shift_right_empty_data, left_expr)
+                        # Make right_expr's type match left_expr so that Arrow's type unification doesn't
+                        # make int64 the common type when left_expr is uint64, causing a cast failure
+                        right_expr = CastExpression(shift_right_empty_data, right_expr)
+                        empty_data = shift_right_empty_data
+                        # Ensure result is signed if input was unsigned
+                        cast_empty_data = int64_empty_data
+            else:
+                # For BITAND/BITOR/BIXOR:
+                # Make sure the type of empty_data has the larger bit width of the two inputs.
+                # Also unify the types of the inputs to that type.
+                left_expr_dtype = left_expr.empty_data.dtypes[
+                    left_expr.empty_data.columns[0]
+                ].pyarrow_dtype
+                right_expr_dtype = right_expr.empty_data.dtypes[
+                    right_expr.empty_data.columns[0]
+                ].pyarrow_dtype
+                left_expr_signed = pa.types.is_signed_integer(left_expr_dtype)
+                right_expr_signed = pa.types.is_signed_integer(right_expr_dtype)
+
+                # Cast inputs to unsigned before doing the operation if at least one is unsigned.
+                # Again, this is to work around a quirk of Arrow's type unification.
+                empty_data_bit_width = max(
+                    left_expr_dtype.bit_width, right_expr_dtype.bit_width
+                )
+                empty_data_signed = left_expr_signed and right_expr_signed
+                target_dtype = pd.ArrowDtype(
+                    eval(
+                        f"pa.{'' if empty_data_signed else 'u'}int{empty_data_bit_width}()"
+                    )
+                )
+                empty_data = pd.Series(dtype=target_dtype)
+                left_expr = CastExpression(empty_data, left_expr)
+                right_expr = CastExpression(empty_data, right_expr)
+                # Return signed if at least one of the inputs are signed
+                if left_expr_signed is not right_expr_signed:
+                    cast_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(eval(f"pa.int{empty_data_bit_width}()"))
+                    )
+
+            result = ArrowScalarFuncExpression(
+                empty_data, [left_expr, right_expr], arrow_equivalent_func, ()
+            )
+
+            # Cast the result to the desired type if (for one reason or another)
+            # the input types could not be aligned with the proper output type
+            if cast_empty_data is not None:
+                result = CastExpression(cast_empty_data, result)
+
+            return result
+        elif func_name == "BITNOT" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", int)
+            return ArrowScalarFuncExpression(src.empty_data, [src], "bit_wise_not", ())
+        elif func_name == "GETBIT" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            bit_num = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", int)
+            ensure_type_of_expr(bit_num, "bit_num", int)
+
+            # Do a bitwise AND on `src` and a bitmask that is only set on the requested bit position.
+            # If the result is nonzero, the requested bit is 1, else it is 0.
+
+            # We should operate on uint64.
+            # We want Arrow's shift_left to set the most significant bit when
+            # shifting 1 63 positions to the left, but this only happens when 1 is unsigned.
+
+            uint64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.uint64()))
+
+            one_expr = ConstantExpression(uint64_empty_data, input_plan, 1)
+            bit_num = CastExpression(uint64_empty_data, bit_num)
+            bitmask = ArrowScalarFuncExpression(
+                uint64_empty_data, [one_expr, bit_num], "shift_left", ()
+            )
+
+            # Cast `src` to uint64 to avoid problematic type unification in bit_wise_and.
+            src = CastExpression(uint64_empty_data, src)
+            src_with_mask = ArrowScalarFuncExpression(
+                uint64_empty_data, [src, bitmask], "bit_wise_and", ()
+            )
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            zero_expr = ConstantExpression(uint64_empty_data, input_plan, 0)
+            is_bit_set = ComparisonOpExpression(
+                bool_empty_data, src_with_mask, zero_expr, operator.ne
+            )
+
+            # Use if_else instead of case_when so that nulls in is_bit_set propagate to the result
+            return ArrowScalarFuncExpression(
+                uint64_empty_data, [is_bit_set, one_expr, zero_expr], "if_else", ()
+            )
+        elif func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
             src = op_exprs[0]
             len_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
 
             out_empty = src.empty_data.iloc[:, 0]
@@ -1166,7 +1887,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             len_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
 
             out_empty = src.empty_data.iloc[:, 0]
@@ -1177,8 +1898,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             match_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                match_expr, "match_expr", (str, pa.binary())
+            )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
@@ -1191,8 +1914,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             match_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                match_expr, "match_expr", (str, pa.binary())
+            )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
@@ -1205,8 +1930,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             match_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                match_expr, "match_expr", (str, pa.binary())
+            )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return ArrowScalarFuncExpression(
@@ -1217,7 +1944,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "LENGTH" and len(op_exprs) == 1:
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             return ArrowScalarFuncExpression(
                 int_empty_data,
@@ -1225,23 +1952,78 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "utf8_length",
                 (),
             )
-        elif func_name == "INSTR" and len(op_exprs) == 2:
-            src = op_exprs[0]
-            match_expr = op_exprs[1]
+        elif func_name in ("INSTR", "CHARINDEX") and len(op_exprs) in (2, 3):
+            if func_name == "INSTR":
+                src = op_exprs[0]
+                match_expr = op_exprs[1]
+            else:
+                # Substring to search for is the first parameter for POSITION/CHARINDEX
+                src = op_exprs[1]
+                match_expr = op_exprs[0]
 
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(match_expr, "match_expr", str)
-
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                match_expr, "match_expr", (str, pa.binary())
+            )
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            zero_indexed_expr = ArrowScalarFuncExpression(
+            if len(match_expr.value) == 0:
+                return ConstantExpression(int_empty_data, input_plan, 1)
+
+            if len(op_exprs) == 3:
+                start_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                else:
+                    start = start_expr.value
+            else:
+                start = 0
+
+            if start > 0:
+                # If start index is beyond the length of the string, we expect this to return an empty string
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
+
+            # Find the first occurrence of the substring in the sliced string
+            substring_pos_expr = ArrowScalarFuncExpression(
                 int_empty_data,
-                [src],
+                [without_start_expr],
                 "find_substring",
                 (match_expr.value,),
             )
-            # Add 1 to find_substring expression since find_substring is 0-indexed instead of 1-based like INSTR
-            one = ConstantExpression(int_empty_data, input_plan, 1)
-            return ArithOpExpression(int_empty_data, zero_indexed_expr, one, "__add__")
+
+            # find_substring emits -1 when the substring is not found.
+            # We need to return 0 in this case
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+            substring_not_found = ComparisonOpExpression(
+                bool_empty_data, substring_pos_expr, negative_one_expr, operator.eq
+            )
+
+            # Add the ignored start index to the result only if substring was found
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            start_expr = ConstantExpression(int_empty_data, input_plan, start)
+            offset_expr = CaseExpression(
+                int_empty_data, substring_not_found, zero_expr, start_expr
+            )
+            adjusted_substring_pos_expr = ArithOpExpression(
+                int_empty_data, substring_pos_expr, offset_expr, "__add__"
+            )
+
+            # Add 1 to find_substring expression since Arrow's find_substring is 0-indexed instead of 1-based like INSTR/CHARINDEX
+            # If adjusted_substring_pos_expr is -1 then this will give the correct output of 0
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            return ArithOpExpression(
+                int_empty_data, adjusted_substring_pos_expr, one_expr, "__add__"
+            )
+
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
             raise ValueError("INITCAP currently disabled on C++ backend")
 
@@ -1259,8 +2041,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "CONCAT" and len(op_exprs) > 0:
             src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
 
-            ensure_type_of_expr(src, "src", str)
+            if len(op_exprs) == 1:
+                # Nothing to concatenate, just return the input string
+                return src
 
             separator = bodo.pandas.plan.ConstantExpression(
                 src.empty_data,
@@ -1272,7 +2057,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             if len(op_exprs) > 1:
                 for other_str_src in op_exprs[1:]:
-                    ensure_type_of_expr(other_str_src, "other_str_src", str)
+                    ensure_type_of_expr(
+                        other_str_src, "other_str_src", (str, pa.binary())
+                    )
                     input_exprs.append(other_str_src)
 
             input_exprs.append(separator)
@@ -1285,16 +2072,20 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "CONCAT_WS" and len(op_exprs) > 1:
             separator = op_exprs[0]
-            ensure_type_of_expr(separator, "separator", str)
+            ensure_type_of_expr(separator, "separator", (str, pa.binary()))
+
+            if len(op_exprs) == 2:
+                # Nothing to concatenate, just return the input string
+                return op_exprs[1]
 
             input_exprs = []
             for str_src in op_exprs[1:]:
-                ensure_type_of_expr(str_src, "str_src", str)
+                ensure_type_of_expr(str_src, "str_src", (str, pa.binary()))
                 input_exprs.append(str_src)
             input_exprs.append(separator)
 
             return ArrowScalarFuncExpression(
-                separator.empty_data,
+                input_exprs[0].empty_data,
                 input_exprs,
                 "binary_join_element_wise",
                 (
@@ -1305,7 +2096,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             src = op_exprs[0]
             num_repeats_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
             ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
 
             return ArrowScalarFuncExpression(
@@ -1326,9 +2117,78 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         elif func_name == "REVERSE" and len(op_exprs) == 1:
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
 
             return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
+        elif (
+            func_name
+            in (
+                "ACOS",
+                "ACOSH",
+                "ASIN",
+                "ASINH",
+                "COS",
+                "COSH",
+                "SIN",
+                "SINH",
+                "TAN",
+                "TANH",
+                "ATAN",
+                "ATANH",
+            )
+            and len(op_exprs) == 1
+        ):
+            src = op_exprs[0]
+            # Arrow's Trigonometric functions return float32 for float32 input and
+            # float64 for float64 and decimal input:
+            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
+            src_dtype = src.empty_data.dtypes.iloc[0]
+            out_dtype = pd.ArrowDtype(
+                pa.float32()
+                if src_dtype.pyarrow_dtype == pa.float32()
+                else pa.float64()
+            )
+            dummy_empty_data = pd.Series(dtype=out_dtype)
+            return ArrowScalarFuncExpression(
+                dummy_empty_data,
+                [src],
+                func_name.lower(),
+                (),
+            )
+        elif func_name == "RTRIMMED_LENGTH" and len(op_exprs) == 1:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            # Use utf8_rtrim instead of utf8_rtrim_whitespace so that only regular space characters are removed
+            rtrimmed_expr = ArrowScalarFuncExpression(
+                src.empty_data, [src], "utf8_rtrim", (" ",)
+            )
+            return ArrowScalarFuncExpression(
+                int_empty_data, [rtrimmed_expr], "utf8_length", ()
+            )
+        elif func_name == "INSERT" and len(op_exprs) == 4:
+            src = op_exprs[0]
+            start_expr = op_exprs[1]
+            len_expr = op_exprs[2]
+            inserted_str_expr = op_exprs[3]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+            ensure_arg_is_const_expr_of_type(
+                inserted_str_expr, "inserted_str_expr", str
+            )
+
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "utf8_replace_slice",
+                (
+                    start_expr.value - 1,
+                    start_expr.value - 1 + len_expr.value,
+                    inserted_str_expr.value,
+                ),
+            )
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()
@@ -1448,105 +2308,98 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # search_expr is a ConstantExpression with org.apache.calcite.util.Sarg value
             search_expr = op_exprs[1]
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            # sarg is an org.apache.calcite.util.Sarg
             sarg = search_expr.value
-            assert sarg.getClass().getSimpleName() == "Sarg"
-            if (
-                sarg.getClass().getDeclaredField("nullAs").get(sarg).toString()
-                != "UNKNOWN"
-            ):
-                raise NotImplementedError(
-                    "SEARCH operator with nullAs not UNKNOWN not supported in C++ backend yet"
-                )
-            # sarg_rangeSet is a com.google.common.collect.ImmutableRangeSet
-            sarg_rangeSet = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
-            assert sarg_rangeSet.getClass().getSimpleName() == "ImmutableRangeSet"
-            # ranges_collection is a com.google.common.collect.RegularImmutableSortedSet
-            ranges_collection = sarg_rangeSet.asRanges()
-            assert (
-                ranges_collection.getClass().getSimpleName()
-                == "RegularImmutableSortedSet"
-            )
-            search_options = []
-            it = ranges_collection.iterator()
-            while it.hasNext():
-                # r is a com.google.common.collect.Range
-                r = it.next()
-                assert r.getClass().getSimpleName() == "Range"
-                search_options.append(r)
+            nullAs = _get_sarg_null_as(sarg)
 
-            def range_type_to_python(x):
-                if isinstance(x, py4j.java_gateway.JavaObject):
-                    return x.getValue()
-                elif isinstance(x, decimal.Decimal):
-                    return float(x)
-                else:
-                    return x
-
-            def process_one_search_option(so):
+            def process_one_search_option(lower, lower_incl, upper, upper_incl):
                 """Generate an expression to check if src satisfies this
                 current possibility from the range set."""
-                # Get and convert the lower range endpoint if it has one else None.
-                lower_lit = (
-                    range_type_to_python(so.lowerEndpoint())
-                    if so.hasLowerBound()
-                    else None
-                )
-                # Get and convert the upper range endpoint if it has one else None.
-                upper_lit = (
-                    range_type_to_python(so.upperEndpoint())
-                    if so.hasUpperBound()
-                    else None
-                )
-                lower_inclusive = so.lowerBoundType().toString() == "CLOSED"
-                upper_inclusive = so.upperBoundType().toString() == "CLOSED"
-                # There are 9 possibilities here.  NA=Not applicable
-                # HasLower HasUpper LowerInclusive UpperInclusive
-                # F        F        NA             NA
-                # T        F        T              NA
-                # T        F        F              NA
-                # F        T        NA             T
-                # F        T        NA             F
-                # T        T        T              T
-                # T        T        T              F
-                # T        T        F              T
-                # T        T        F              F
+                # The lower and upper bounds being equal is a special case that does not
+                # involve less-than or greater-than comparison. It can be subdivided
+                # based on whether the lower and upper bounds are inclusive or not.
+                # The typical case is that they will be inclusive, which we can simplify
+                # to an equality check.
+                if lower is not None and upper is not None and lower == upper:
+                    if lower_incl and upper_incl:
+                        # Range of the form [a..a] - reduce to equality check
+                        const_empty_data = arrow_to_empty_df(
+                            pa.schema([pa.field("equal", pa.scalar(lower).type)])
+                        )
+                        return ComparisonOpExpression(
+                            bool_empty_data,
+                            src,
+                            ConstantExpression(const_empty_data, input_plan, lower),
+                            operator.eq,
+                        )
+                    elif lower_incl or upper_incl:
+                        # Range of the form [a..a) or (a..a] - interpret as empty
+                        return ConstantExpression(bool_empty_data, input_plan, False)
+                    else:
+                        raise ValueError("SEARCH option range form (a..a) is invalid.")
 
-                # Also, the case of having lower and upper bound and both being
-                # inclusive can be divided up into two cases, where lower and
-                # upper are equal and where they are not equal.
-                if (
-                    lower_lit is not None
-                    and upper_lit is not None
-                    and lower_inclusive
-                    and upper_inclusive
-                    and lower_lit == upper_lit
-                ):
-                    # The exception case where we have lower and upper bounds and they are both
-                    # inclusive and the same we can simplify as equality check.
+                # Address the standard continuous range case, e.g. BETWEEN
+                in_range = None
+                src_greater = None
+                src_less = None
+                if lower is not None:
                     const_empty_data = arrow_to_empty_df(
-                        pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
+                        pa.schema([pa.field("equal", pa.scalar(lower).type)])
                     )
-
-                    return ComparisonOpExpression(
+                    src_greater = ComparisonOpExpression(
                         bool_empty_data,
                         src,
-                        ConstantExpression(const_empty_data, input_plan, lower_lit),
-                        operator.eq,
+                        ConstantExpression(const_empty_data, input_plan, lower),
+                        operator.ge if lower_incl else operator.gt,
                     )
+                    in_range = src_greater
+                if upper is not None:
+                    const_empty_data = arrow_to_empty_df(
+                        pa.schema([pa.field("equal", pa.scalar(upper).type)])
+                    )
+                    src_less = ComparisonOpExpression(
+                        bool_empty_data,
+                        src,
+                        ConstantExpression(const_empty_data, input_plan, upper),
+                        operator.le if upper_incl else operator.lt,
+                    )
+                    in_range = src_less
 
-                raise NotImplementedError(
-                    f"SEARCH operator case of hasLower {lower_lit is not None}, hasUpper {upper_lit is not None}, lowerInclusive {lower_inclusive}, upperInclusive {upper_inclusive} not supported yet."
-                )
+                if lower is not None and upper is not None:
+                    # Assure input is within both bounds
+                    in_range = ConjunctionOpExpression(
+                        bool_empty_data, src_greater, src_less, "__and__"
+                    )
+                elif lower is None and upper is None:
+                    # No bounds specified, inputs must be in infinite range
+                    in_range = ConstantExpression(bool_empty_data, input_plan, True)
 
-            out_expr = process_one_search_option(search_options[0])
+                return in_range
+
+            search_options = list(iter_sarg_ranges(sarg))
+            out_expr = process_one_search_option(*search_options[0])
             # The definition of search is that the value is one of the
             # possibilities in the range set.  so, "or" in the other
             # possibilities below.
             for so in search_options[1:]:
                 out_expr = ConjunctionOpExpression(
-                    bool_empty_data, out_expr, process_one_search_option(so), "__or__"
+                    bool_empty_data, out_expr, process_one_search_option(*so), "__or__"
                 )
+
+            if nullAs != "UNKNOWN":
+                # Replace nulls in the output with True or False depending on the value
+                # of nullAs.
+                out_expr = ArrowScalarFuncExpression(
+                    bool_empty_data,
+                    [
+                        out_expr,
+                        ConstantExpression(
+                            bool_empty_data, input_plan, nullAs == "TRUE"
+                        ),
+                    ],
+                    "coalesce",
+                    (),
+                )
+
             return out_expr
 
         raise NotImplementedError(
@@ -1560,70 +2413,126 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     )
 
 
+def compare_types(obj_type, expected_type):
+    """
+    Type checker that accounts for numpy/pandas/pyarrow dtypes.
+    Returns True if `obj_type` is a subclass of `expected_type` or are otherwise considered equivalent
+    """
+    if isinstance(obj_type, str):
+        try:
+            obj_type = eval(obj_type)
+        except Exception:
+            pass
+        obj_type = pd.api.types.pandas_dtype(obj_type)
+    if isinstance(expected_type, str):
+        try:
+            expected_type = eval(expected_type)
+        except Exception:
+            pass
+        expected_type = pd.api.types.pandas_dtype(expected_type)
+
+    if isinstance(obj_type, type) and isinstance(expected_type, type):
+        # NOTE: bool is a subclass of int in Python, but we don't want to consider them
+        # equivalent for our purposes
+        if issubclass(obj_type, expected_type) and not (
+            obj_type is bool and expected_type is int
+        ):
+            return True
+
+    if isinstance(obj_type, pa.DataType) and isinstance(expected_type, pa.DataType):
+        if obj_type.equals(expected_type):
+            return True
+    # Convert pyarrow datatype objects to pandas.
+    # This helps with compatibility with, e.g., pd.api.types.is_integer_dtype and the .numpy_dtype accessor below.
+    if isinstance(obj_type, pa.DataType):
+        # Note that wrapping pyarrow types in pd.ArrowDtype seems to behave better than pa.DataType.to_pandas_dtype()
+        # For example, pa.string().to_pandas_dtype() just gives np.object_
+        obj_type = pd.ArrowDtype(obj_type)
+    if isinstance(expected_type, pa.DataType):
+        expected_type = pd.ArrowDtype(expected_type)
+
+    if expected_type is int:
+        return pd.api.types.is_integer_dtype(obj_type)
+    if expected_type is float:
+        return pd.api.types.is_float_dtype(obj_type)
+    if expected_type is str:
+        return pd.api.types.is_string_dtype(obj_type)
+    if expected_type is bool:
+        return pd.api.types.is_bool_dtype(obj_type)
+
+    if pd.api.types.is_dtype_equal(obj_type, expected_type):
+        return True
+
+    # Works for most pd.api.types.ExtensionDtypes
+    # This can convert the nullable Pandas dtypes into standard numpy dtypes for easier comparison
+    if hasattr(obj_type, "numpy_dtype"):
+        obj_type = obj_type.numpy_dtype
+    if hasattr(expected_type, "numpy_dtype"):
+        expected_type = expected_type.numpy_dtype
+
+    if np.issubdtype(obj_type, expected_type):
+        return True
+
+    return False
+
+
 def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
     if not isinstance(expr, bodo.pandas.plan.ConstantExpression):
         raise ValueError(
             f"{expr_name} should be ConstantExpression but instead was {type(expr)}"
         )
-    if not isinstance(expr.value, dtype):
+
+    if not isinstance(dtype, (list, tuple, set)):
+        dtype = (dtype,)
+    for dtype_alternative in dtype:
+        if compare_types(type(expr.value), dtype_alternative):
+            return
+    if len(dtype) > 1:
         raise ValueError(
-            f"{expr_name}.value should be {str(dtype)} but instead was {type(expr.value)}"
+            f"{expr_name}.value should be one of {str(dtype)} but instead was {type(expr.value)}"
         )
+    else:
+        raise ValueError(
+            f"{expr_name}.value should be {str(dtype[0])} but instead was {type(expr.value)}"
+        )
+
+
+def get_expr_dtype(expr, expr_name="Expression"):
+    if not isinstance(expr, bodo.pandas.plan.Expression):
+        return type(expr)
+
+    if isinstance(expr, bodo.pandas.plan.ConstantExpression):
+        return type(expr.value)
+    else:
+        if isinstance(expr.empty_data, (pd.Series, np.ndarray)):
+            return expr.empty_data.dtype
+        elif isinstance(expr.empty_data, pd.DataFrame):
+            assert len(expr.empty_data.columns) == 1
+            return expr.empty_data.dtypes[expr.empty_data.columns[0]]
+        else:
+            raise ValueError(
+                f"get_expr_dtype: Unsupported type of {expr_name}.empty_data:",
+                type(expr.empty_data),
+            )
 
 
 def ensure_type_of_expr(expr, expr_name, dtype):
-    def compare_types(obj_type, expected_type):
-        if expected_type is int:
-            return pd.api.types.is_integer_dtype(obj_type)
-        if expected_type is float:
-            return pd.api.types.is_float_dtype(obj_type)
-        if expected_type is str:
-            return pd.api.types.is_string_dtype(obj_type)
-        if expected_type is bool:
-            return pd.api.types.is_bool_dtype(obj_type)
-        if isinstance(expected_type, np.dtype):
-            return np.issubdtype(obj_type, expected_type)
-        # At this point we could try converting dtypes to pandas dtypes
-        if isinstance(expected_type, pd.api.extensions.ExtensionDtype):
-            return pd.api.types.is_dtype_equal(obj_type, expected_type)
-        return False
+    expr_dtype = get_expr_dtype(expr, expr_name)
 
-    # Type checker that accounts for pandas dtypes
-    def instanceof(obj, dtype):
-        if isinstance(obj, dtype):
-            return True
-        obj_type = (
-            type(obj) if not isinstance(obj, (pd.Series, np.ndarray)) else obj.dtype
-        )
-        return compare_types(obj_type, dtype)
-
-    if instanceof(expr, dtype):
-        return
-    elif isinstance(expr, bodo.pandas.plan.ConstantExpression):
-        if instanceof(expr.value, dtype):
+    if not isinstance(dtype, (list, tuple, set)):
+        dtype = (dtype,)
+    for dtype_alternative in dtype:
+        if compare_types(expr_dtype, dtype_alternative):
             return
-        else:
-            expr_dtype = type(expr.value)
-    elif isinstance(expr, ColRefExpression):
-        if isinstance(expr.empty_data, pd.Series):
-            expr_dtype = expr.empty_data.dtype
-            if instanceof(expr.empty_data, dtype):
-                return
-        elif isinstance(expr.empty_data, pd.DataFrame):
-            assert len(expr.empty_data.columns) == 1
-            expr_dtype = expr.empty_data.dtypes[expr.empty_data.columns[0]]
-            if compare_types(expr_dtype, dtype):
-                return
-        else:
-            raise ValueError(
-                f"Unsupported type of {expr_name}.empty_data:", type(expr.empty_data)
-            )
-    else:
-        raise ValueError(f"Unsupported type of {expr_name}:", type(expr))
 
-    raise ValueError(
-        f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype)}, instead was {expr_dtype}"
-    )
+    if len(dtype) > 1:
+        raise ValueError(
+            f"Expected {expr_name} ({type(expr)}) to hold one of the datatypes {str(dtype)}, instead was {expr_dtype}"
+        )
+    else:
+        raise ValueError(
+            f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype[0])}, instead was {expr_dtype}"
+        )
 
 
 def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
@@ -1690,7 +2599,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.OTHER):
         if op_name == "||":  # string concatenation
             for op_expr in (left, right):
-                ensure_type_of_expr(op_expr, "op_expr (|| arg)", str)
+                ensure_type_of_expr(op_expr, "op_expr (|| arg)", (str, pa.binary()))
 
             separator = bodo.pandas.plan.ConstantExpression(
                 left.empty_data,
@@ -1707,6 +2616,155 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
+def get_common_int_type_list(exprs):
+    """Find a common integer type for a list of expressions with integer dtypes.
+
+    The bit width of the common type will be the maximum of the bit widths of the input types.
+    If all expressions have the same signedness, the signedness does not change.
+    If expressions have different signedness, the common type will be unsigned unless
+    the unsigned inputs have shorter bit widths than the signed inputs.
+
+    Returns a tuple: (common_arrow_type, cast_needed_list) where each element in cast_needed_list
+    is a boolean representing if the corresponding expr needs to be casted to match the common type.
+    (None, [False] * len(exprs)) is returned if any of the input exprs does not have integer dtype.
+    """
+    if not exprs:
+        return None, []
+
+    def get_as_pyarrow_dtype(dtype):
+        if isinstance(dtype, pd.ArrowDtype):
+            return dtype.pyarrow_dtype
+        elif isinstance(dtype, pa.DataType):
+            return dtype
+
+        if not np.issubdtype(dtype, np.integer):
+            dtype = pd.api.types.pandas_dtype(dtype)
+
+            if hasattr(dtype, "numpy_dtype"):
+                dtype = dtype.numpy_dtype
+            else:
+                if not np.issubdtype(dtype, np.integer):
+                    raise ValueError(
+                        f"get_as_py_arrow_dtype: unable to convert {dtype} to a numpy dtype"
+                    )
+
+        return pa.from_numpy_dtype(dtype)
+
+    types = []
+    for expr in exprs:
+        dtype = get_expr_dtype(expr)
+        if not compare_types(dtype, int):
+            return None, [False] * len(exprs)
+        types.append(get_as_pyarrow_dtype(dtype))
+
+    common_type = types[0]
+
+    for dtype in types[1:]:
+        if common_type.equals(dtype):
+            continue
+
+        common_is_signed = pa.types.is_signed_integer(common_type)
+        expr_is_signed = pa.types.is_signed_integer(dtype)
+        common_width = common_type.bit_width
+        expr_width = dtype.bit_width
+
+        if common_is_signed == expr_is_signed:
+            # Use wider type if inputs have same signedness
+            if expr_width > common_width:
+                common_type = dtype
+        else:
+            # For mixed signedness, use the wider bit width of the two.
+            # The common type is signed only if the max value of the unsigned input can fit in the signed int
+            common_type_width = max(common_width, expr_width)
+            common_type_signed = (common_is_signed and common_width > expr_width) or (
+                expr_is_signed and expr_width > common_width
+            )
+            common_type = eval(
+                f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
+            )
+
+    cast_needed_list = [not expr_type.equals(common_type) for expr_type in types]
+
+    return common_type, cast_needed_list
+
+
+def get_common_int_type(left_expr, right_expr):
+    """Find a common integer type for two expressions with integer dtypes.
+
+    The bit width of the common type will be the maximum of the bit widths of the input types.
+    If `left_expr` and `right_expr` have the same signedness, the signedness does not change.
+    If `left_expr` and `right_expr` have different signedness, the common type will be
+    unsigned unless the unsigned input has a shorter bit width than the signed input.
+
+    Returns a tuple: (common_arrow_type, left_cast_needed, right_cast_needed)
+    (None, False, False) is returned if `left_expr` or `right_expr` does not have integer dtype.
+    """
+
+    common_type, casts_needed = get_common_int_type_list([left_expr, right_expr])
+    return (
+        common_type,
+        casts_needed[0],
+        casts_needed[1],
+    )
+
+
+def make_unified_case_expression(empty_data, when_expr, then_expr, else_expr):
+    """
+    Make a DataFrame library CaseExpression with logic (`get_common_int_type`)
+    to unify the integer types of `then_expr` and `else_expr` before passing
+    to Arrow's case_when. Note that the output type (from `empty_data`) is
+    retained. If `then_expr` or `else_expr` is not an integer expression,
+    this is equivalent to directly constructing a CaseExpression.
+
+    If `empty_data` is None or `"common"`, the output type will be the same as
+    the common type of the inputs. If `then_expr` and `else_expr` have no
+    common type, `empty_data` will default to `then_expr.empty_data`.
+    """
+    # then_expr and else_expr could have different types, e.g. int64 and uint64
+
+    # Here we explicitly unify integer types to prevent Arrow's case_when
+    # from attempting its own overflow-free unification which can fail in some cases,
+    # notably for mixed int64 and uint64 inputs
+
+    unified_then_expr = then_expr
+    unified_else_expr = else_expr
+    if isinstance(empty_data, (pd.Series, pd.DataFrame)):
+        unified_empty_data = empty_data
+    else:
+        assert empty_data in (None, "common")
+        unified_empty_data = then_expr.empty_data
+
+    common_arrow_type, then_needs_cast, else_needs_cast = get_common_int_type(
+        then_expr, else_expr
+    )
+
+    if common_arrow_type is not None:
+        unified_empty_data = pd.Series(dtype=pd.ArrowDtype(common_arrow_type))
+
+        # Wrap expressions in CastExpression if needed
+        if then_needs_cast:
+            unified_then_expr = CastExpression(unified_empty_data, then_expr)
+        if else_needs_cast:
+            unified_else_expr = CastExpression(unified_empty_data, else_expr)
+
+        # Update empty_data to the unified type so schema matches the actual result
+        # This prevents Arrow from trying to safely cast the result to a mismatched type
+
+    case_expr = CaseExpression(
+        unified_empty_data, when_expr, unified_then_expr, unified_else_expr
+    )
+    # Restore the original return type if the types of then_expr and else_expr were different
+    # and our unification ended up casting one away from the intended result type.
+    # We do this with a CastExpression instead of via CaseExpression empty_data
+    # (which attempts to cast safely in _arrow_array_to_pd) so that integer overflow is allowed.
+    if isinstance(empty_data, (pd.Series, pd.DataFrame)):
+        if then_needs_cast or else_needs_cast:
+            return CastExpression(empty_data, case_expr)
+    else:
+        assert empty_data in (None, "common")
+    return case_expr
+
+
 def java_case_to_python_case(ctx, operands, input_plan):
     """Convert a BodoSQL Java CASE operator call to a DataFrame library CaseExpression.
     operands has the form [when1, then1, when2, then2, ..., else].
@@ -1721,15 +2779,14 @@ def java_case_to_python_case(ctx, operands, input_plan):
     else:
         else_expr = java_expr_to_python_expr(ctx, operands[2], input_plan)
 
-    return CaseExpression(then_expr.empty_data, when_expr, then_expr, else_expr)
+    # At the moment we choose then_expr to be the result type - is there a better way to decide?
+    return make_unified_case_expression(
+        then_expr.empty_data, when_expr, then_expr, else_expr
+    )
 
 
 def java_join_to_python_join(ctx, java_join):
     """Convert a BodoSQL Java join plan to a Python join plan."""
-
-    ctx.join_filter_info[java_join.getJoinFilterID()] = (
-        java_join.getOriginalJoinFilterKeyLocations()
-    )
 
     join_info = java_join.analyzeCondition()
     join_info_cls = join_info.getClass()
@@ -1740,6 +2797,11 @@ def java_join_to_python_join(ctx, java_join):
     key_indices = list(zip(left_keys, right_keys))
     join_type = JavaJoinTypeToDuckDB(java_join.getJoinType())
     force_broadcast = java_join.getBroadcastBuildSide()
+
+    ctx.join_filter_info[java_join.getJoinFilterID()] = (
+        java_join.getOriginalJoinFilterKeyLocations(),
+        right_keys,
+    )
 
     left_plan = java_plan_to_python_plan(ctx, java_join.getLeft())
     right_plan = java_plan_to_python_plan(ctx, java_join.getRight())
@@ -1811,12 +2873,10 @@ def java_subplan_to_python_subplan(ctx, java_subplan):
     return subplan
 
 
-def java_rtjf_to_python_rtjf(ctx, java_plan):
-    """Convert a BodoSQL Java runtime join filter plan to a Python runtime join filter
-    plan.
+def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:
+    """Convert a BodoSQL Java runtime join filter node to a Python runtime join filter
+    info.
     """
-    input = java_plan_to_python_plan(ctx, java_plan.getInput())
-
     # Get join filter info
     # IDs of joins creating each filter
     filter_ids: list[int] = java_plan.getJoinFilterIDs()
@@ -1838,11 +2898,17 @@ def java_rtjf_to_python_rtjf(ctx, java_plan):
     new_filter_ids = []
     new_equality_filter_columns = []
     new_equality_is_first_locations = []
+    new_orig_build_keys = []
     for fid, eq_cols, is_first_cols in sorted_filter_data:
         if fid not in ctx.join_filter_info:
             raise ValueError(f"Join filter ID {fid} not found in join filter info")
 
-        orig_key_locs = ctx.join_filter_info[fid]
+        orig_key_locs, java_build_keys = ctx.join_filter_info[fid]
+        if len(java_build_keys) != len(eq_cols):
+            raise ValueError(
+                f"Join filter ID {fid} has {len(java_build_keys)} original build keys but {len(eq_cols)} equality filter columns"
+            )
+
         filter_cols = [-1] * len(eq_cols)
         is_first = [False] * len(is_first_cols)
 
@@ -1850,16 +2916,51 @@ def java_rtjf_to_python_rtjf(ctx, java_plan):
             filter_cols[key] = eq_cols[loc_ind]
             is_first[key] = is_first_cols[loc_ind]
 
+        # Each element in eq_cols corresponds to an item in JoinInfo.leftKeys,
+        # which indicates an equality condition with the key from
+        # JoinInfo.rightKeys at the same position. The order of the rightKeys/leftKeys
+        # lists might change during column pruning, so we track the original key
+        # column locations in BodoPhysicalJoin and reorder filter_cols to match the
+        # order of the final join condition. After reordering, each key in filter_cols
+        # will correspond to a filter derived from the key/column in JoinInfo.rightKeys
+        # at the same position (the filter column can be -1 if that column is not
+        # available yet).
+        # The C++ JoinState creates a vector that's length is <num_build_keys> to store
+        # the min/max values for each build key. The order of this vector should match
+        # the order of the build keys in JoinInfo.rightKeys, which
+        # is equivalent to the order that the build keys appear in the join condition.
+        # Finally, we use the values at orig_build_key_cols to lookup the
+        # min/max values from the JoinState for each filter that we
+        # can push into I/O.
+        # https://github.com/bodo-ai/Bodo/blob/f8cbfd4705e346a860fc4121c6735d9e8960d2c0/bodo/pandas/optimizer/runtime_join_filter.cpp#L282
+        # https://github.com/bodo-ai/Bodo/blob/f8cbfd4705e346a860fc4121c6735d9e8960d2c0/bodo/pandas/_util.cpp#L1182
+        # https://github.com/bodo-ai/Bodo/blob/0edd4715fdbb302f505962e3dcdf484f7e971c4a/bodo/libs/streaming/_join.cpp#L1360
+        build_cols_idxs = list(range(len(java_build_keys)))
+
         new_filter_ids.append(fid)
         new_equality_filter_columns.append(filter_cols)
         new_equality_is_first_locations.append(is_first)
+        new_orig_build_keys.append(build_cols_idxs)
 
+    return JoinFilterInfo(
+        filter_ids=new_filter_ids,
+        equality_filter_columns=new_equality_filter_columns,
+        orig_build_key_cols=new_orig_build_keys,
+        equality_is_first_locations=new_equality_is_first_locations,
+    )
+
+
+def generate_runtime_join_filter(
+    join_info: JoinFilterInfo, input_plan: LazyPlan
+) -> LogicalJoinFilter:
+    """Construct an instance of a runtime join filter plan node from the given join filter info and input plan."""
     return LogicalJoinFilter(
-        input.empty_data,
-        input,
-        new_filter_ids,
-        new_equality_filter_columns,
-        new_equality_is_first_locations,
+        input_plan.empty_data,
+        input_plan,
+        join_info.filter_ids,
+        join_info.equality_filter_columns,
+        join_info.equality_is_first_locations,
+        join_info.orig_build_key_cols,
     )
 
 
@@ -1956,6 +3057,12 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         val = pa.scalar(java_literal.getValue2(), pa.date32())
         return ConstantExpression(dummy_empty_data, input_plan, val)
 
+    if lit_type_name.equals(SqlTypeName.TIME):
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.time64("ns")))
+        # getValue2() returns an integer representing milliseconds since midnight
+        val = pa.scalar(java_literal.getValue2() * 1000, pa.time64("us"))
+        return ConstantExpression(dummy_empty_data, input_plan, val)
+
     if lit_type_name.equals(SqlTypeName.TIMESTAMP):
         dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
         # getValue2() returns an integer representing milliseconds since epoch
@@ -1991,9 +3098,41 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
             dummy_empty_data, input_plan, java_literal.getValue2()
         )
 
+    # SYMBOL is internal Calcite enum and needs supported specifically for each case.
+    # Just avoiding errors here if input exprs are processed before the function itself.
+    if lit_type_name.equals(SqlTypeName.SYMBOL):
+        return None
+
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet"
     )
+
+
+def get_java_symbol(java_symbol):
+    """Extract the value of a Java SYMBOL or CHAR literal (e.g. date/time units)."""
+    assert java_symbol.getClass().getSimpleName() == "RexLiteral", (
+        "get_java_symbol: expected RexLiteral but got "
+        + java_symbol.getClass().getSimpleName()
+    )
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+
+    if java_symbol.getTypeName().equals(SqlTypeName.CHAR):
+        return java_symbol.getValue2()
+
+    assert java_symbol.getTypeName().equals(SqlTypeName.SYMBOL), (
+        "get_java_symbol: expected SYMBOL but got "
+        + java_symbol.getTypeName().toString()
+    )
+
+    return java_symbol.getValue().toString()
+
+
+def standardize_java_time_unit(fname, time_unit):
+    """Convert time unit to a standardized form to simplify the code.
+    For example, convert yy to year.
+    """
+    standardizeTimeUnit = gateway.jvm.com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.standardizeTimeUnit
+    return standardizeTimeUnit(fname, time_unit, None)
 
 
 def is_int_type(java_type):
@@ -2342,7 +3481,7 @@ def java_values_to_python_values(ctx, java_plan):
 
     data = []
     for row in rows:
-        data.append([java_literal_to_python_literal(ctx, e, None).value for e in row])
+        data.append([java_literal_to_python_const(ctx, e) for e in row])
 
     pa_schema = pa.schema(
         [java_field_to_pa_field(ctx, f) for f in row_type.getFieldList()]
@@ -2356,6 +3495,20 @@ def java_values_to_python_values(ctx, java_plan):
         )
 
     return bd.from_pandas(df)._plan
+
+
+def java_literal_to_python_const(ctx, java_literal):
+    """Convert a BodoSQL Java literal to a Python constant value."""
+
+    lit_expr = java_literal_to_python_literal(ctx, java_literal, None)
+    assert isinstance(lit_expr, (ConstantExpression, NullExpression)), (
+        "java_literal_to_python_const: Expected ConstantExpression or NullExpression"
+    )
+
+    if isinstance(lit_expr, NullExpression):
+        return None
+
+    return lit_expr.value
 
 
 def java_field_to_pa_field(ctx, java_field):
@@ -2403,11 +3556,13 @@ def sql_type_to_pa_type(ctx, sql_type_name):
         return pa.large_string()
     if sql_type_name.equals(SqlTypeName.TIME):
         return pa.time64("ns")
+    if sql_type_name.equals(SqlTypeName.NULL):
+        return pa.null()
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
 
-def visit_iceberg_node(java_plan, read_info):
+def visit_iceberg_node(ctx, java_plan, read_info: IcebergReadInfo):
     """Visit Iceberg-related plan nodes to extract read information like filters.
     For example:
     CombineStreamsExchange
@@ -2426,7 +3581,7 @@ def visit_iceberg_node(java_plan, read_info):
         if read_info.filters is None:
             read_info.filters = []
         read_info.filters.append(java_plan.getCondition())
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     if java_class_name == "IcebergProject":
@@ -2444,7 +3599,7 @@ def visit_iceberg_node(java_plan, read_info):
 
         read_info.colmap = new_colmap
         input = java_plan.getInput()
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     if java_class_name == "IcebergSort":
@@ -2458,7 +3613,13 @@ def visit_iceberg_node(java_plan, read_info):
                 limit if read_info.limit is None else min(read_info.limit, limit)
             )
         input = java_plan.getInput()
-        visit_iceberg_node(input, read_info)
+        visit_iceberg_node(ctx, input, read_info)
+        return
+
+    if java_class_name == "IcebergRuntimeJoinFilter":
+        read_info.join_filter_info = java_rtjf_to_join_info(ctx, java_plan)
+        input = java_plan.getInput()
+        visit_iceberg_node(ctx, input, read_info)
         return
 
     raise NotImplementedError(
@@ -2466,7 +3627,7 @@ def visit_iceberg_node(java_plan, read_info):
     )
 
 
-def generate_iceberg_read(read_info):
+def generate_iceberg_read(read_info: IcebergReadInfo):
     """Generate a Python plan for reading Iceberg table with the given read info."""
     scan_node = read_info.scan_node
     catalog_table = scan_node.getCatalogTable()
@@ -2490,16 +3651,22 @@ def generate_iceberg_read(read_info):
     uri = file_path.toUri()
     path_str = uri.getRawPath()
 
-    df = bd.read_iceberg(
+    plan, _, _ = build_iceberg_read_plan(
         # path_str has the schema in it so it's not needed in table id
         # TODO: update when supporting other catalog types
         full_table_path[-1],
         location=path_str,
         row_filter=row_filter,
+        join_filter_info=read_info.join_filter_info,
         selected_fields=read_fields,
         limit=read_info.limit,
     )
-    return df._plan
+
+    # Insert Runtime Join Filters on top of the read if needed
+    if read_info.join_filter_info is not None:
+        plan = generate_runtime_join_filter(read_info.join_filter_info, plan)
+
+    return plan
 
 
 def get_pyiceberg_row_filter(filters, field_names):
@@ -2589,10 +3756,178 @@ def java_call_to_pyiceberg_call(java_call, field_names):
         if kind.equals(SqlKind.IS_NULL):
             return pie.IsNull(input)
 
+        if kind.equals(SqlKind.IS_TRUE):
+            return pie.EqualTo(input, True)
+
+        if kind.equals(SqlKind.IS_FALSE):
+            return pie.EqualTo(input, False)
+
+    if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
+        kind = op.getKind()
+        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+        if kind.equals(SqlKind.NOT):
+            operand = java_expr_to_pyiceberg_expr(
+                java_call.getOperands()[0], field_names
+            )
+            return pie.Not(operand)
+
+    if operator_class_name == "SqlSearchOperator":
+        return java_search_to_pyiceberg_expr(java_call, field_names)
+
+    if operator_class_name == "SqlNullPolicyFunction":
+        func_name = op.getName().upper()
+        if func_name == "STARTSWITH" and len(java_call.getOperands()) == 2:
+            operands = java_call.getOperands()
+            ref = java_expr_to_pyiceberg_expr(operands[0], field_names)
+            prefix = java_expr_to_pyiceberg_expr(operands[1], field_names)
+            return pie.StartsWith(ref, prefix)
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} for pyiceberg not supported yet: "
         + java_call.toString()
     )
+
+
+def java_search_to_pyiceberg_expr(java_call, field_names):
+    """Convert a Calcite SEARCH call (e.g. IN/BETWEEN expressed as
+    SEARCH($col, Sarg[...])) to a PyIceberg expression.
+
+    Calcite represents IN predicates as SEARCH against a Sarg of discrete
+    points, and NOT IN as SEARCH against the complement. Range-based
+    predicates (e.g. BETWEEN) become a Sarg with non-point ranges.
+    """
+    import pyiceberg.expressions as pie
+
+    operands = java_call.getOperands()
+    ref = java_expr_to_pyiceberg_expr(operands[0], field_names)
+    sarg = operands[1].getValue()
+    null_as = _get_sarg_null_as(sarg)
+
+    # Collect each range as a Python value (point) or a comparison pair (range).
+    points = []
+    range_exprs = []
+    for lower, lower_incl, upper, upper_incl in iter_sarg_ranges(sarg):
+        if (
+            lower is not None
+            and upper is not None
+            and lower == upper
+            and lower_incl
+            and upper_incl
+        ):
+            points.append(lower)
+        elif (
+            lower is not None
+            and upper is not None
+            and lower == upper
+            and lower_incl != upper_incl
+        ):
+            # [a..a) or (a..a] is an empty range.
+            range_exprs.append(pie.AlwaysFalse())
+        else:
+            range_exprs.append(
+                _sarg_range_to_pyiceberg_expr(ref, lower, lower_incl, upper, upper_incl)
+            )
+
+    if sarg.isPoints() and points:
+        expr = pie.In(ref, set(points))
+    elif sarg.isComplementedPoints() and points:
+        expr = pie.NotIn(ref, set(points))
+    elif range_exprs:
+        expr = range_exprs[0]
+        for re_ in range_exprs[1:]:
+            expr = pie.Or(expr, re_)
+    elif points:
+        # Mixed points and ranges (shouldn't happen for isPoints/isComplementedPoints,
+        # but handle defensively): OR together In and range expressions.
+        expr = pie.In(ref, set(points))
+        for re_ in range_exprs:
+            expr = pie.Or(expr, re_)
+    else:
+        raise NotImplementedError(
+            "SEARCH with empty Sarg not supported yet: " + java_call.toString()
+        )
+
+    if null_as == "FALSE":
+        return pie.And(expr, pie.NotNull(ref))
+    if null_as == "TRUE":
+        return pie.Or(expr, pie.IsNull(ref))
+    return expr
+
+
+def _sarg_endpoint_to_python(endpoint):
+    """Convert a Java Sarg range endpoint (e.g. NlsString, BigDecimal) to a
+    Python value."""
+    if isinstance(endpoint, py4j.java_gateway.JavaObject):
+        # NlsString and other Calcite literal wrappers expose getValue()
+        return endpoint.getValue()
+    if isinstance(endpoint, decimal.Decimal):
+        return float(endpoint)
+    return endpoint
+
+
+def _get_sarg_null_as(sarg):
+    """Read the nullAs field of a Java Sarg as a string ('UNKNOWN', 'TRUE', or 'FALSE')."""
+    return sarg.getClass().getDeclaredField("nullAs").get(sarg).toString()
+
+
+def iter_sarg_ranges(sarg):
+    """Iterate over the ranges in a Calcite Sarg's range set, yielding
+    ``(lower, lower_inclusive, upper, upper_inclusive)`` tuples with
+    Python-typed endpoints.
+
+    A ``None`` bound means unbounded on that side. Calcite represents IN
+    predicates as a Sarg of discrete points (each a degenerate [a..a]
+    range), NOT IN as the complement, and range-based predicates (e.g.
+    BETWEEN) as non-degenerate ranges.
+    """
+    range_set = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
+    it = range_set.asRanges().iterator()
+    while it.hasNext():
+        r = it.next()
+        has_lower = r.hasLowerBound()
+        has_upper = r.hasUpperBound()
+        yield (
+            _sarg_endpoint_to_python(r.lowerEndpoint()) if has_lower else None,
+            r.lowerBoundType().toString() == "CLOSED" if has_lower else False,
+            _sarg_endpoint_to_python(r.upperEndpoint()) if has_upper else None,
+            r.upperBoundType().toString() == "CLOSED" if has_upper else False,
+        )
+
+
+def _sarg_range_to_pyiceberg_expr(ref, lower, lower_inclusive, upper, upper_inclusive):
+    """Convert a single non-point Sarg range to a PyIceberg comparison
+    expression against the given reference."""
+    import pyiceberg.expressions as pie
+
+    has_lower = lower is not None
+    has_upper = upper is not None
+
+    if has_lower and has_upper:
+        left = (
+            pie.GreaterThanOrEqual(ref, lower)
+            if lower_inclusive
+            else pie.GreaterThan(ref, lower)
+        )
+        right = (
+            pie.LessThanOrEqual(ref, upper)
+            if upper_inclusive
+            else pie.LessThan(ref, upper)
+        )
+        return pie.And(left, right)
+    if has_lower:
+        return (
+            pie.GreaterThanOrEqual(ref, lower)
+            if lower_inclusive
+            else pie.GreaterThan(ref, lower)
+        )
+    if has_upper:
+        return (
+            pie.LessThanOrEqual(ref, upper)
+            if upper_inclusive
+            else pie.LessThan(ref, upper)
+        )
+    # No bounds => infinite range, always true.
+    return pie.AlwaysTrue()
 
 
 def java_binop_to_pyiceberg_expr(kind, op_exprs):
@@ -2638,6 +3973,23 @@ def java_binop_to_pyiceberg_expr(kind, op_exprs):
         right = _ensure_pyiceberg_non_ref_expr(right)
         return pie.Or(left, right)
 
+    if kind.equals(SqlKind.IS_DISTINCT_FROM):
+        # Null-safe "not equal": A != B AND (A IS NOT NULL OR B IS NOT NULL).
+        # pyiceberg's NotEqualTo follows SQL semantics (null if either is
+        # null), so the additional IS_NOT_NULL clause distinguishes the
+        # "one is null" case from the "both null" case.
+        left_nn = pie.NotNull(left)
+        right_nn = pie.NotNull(right)
+        return pie.And(pie.NotEqualTo(left, right), pie.Or(left_nn, right_nn))
+
+    if kind.equals(SqlKind.IS_NOT_DISTINCT_FROM):
+        # Null-safe "equal": A == B OR (A IS NULL AND B IS NULL).
+        # pyiceberg's EqualTo follows SQL semantics (null if either is null),
+        # so the additional IS_NULL clause covers the "both null" case.
+        left_null = pie.IsNull(left)
+        right_null = pie.IsNull(right)
+        return pie.Or(pie.EqualTo(left, right), pie.And(left_null, right_null))
+
     raise NotImplementedError(
         f"Binary operator {kind.toString()} not supported yet in java_binop_to_pyiceberg_expr"
     )
@@ -2665,8 +4017,6 @@ def java_literal_to_pyiceberg_literal(java_literal):
     lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
 
-    # TODO[BSE-5156]: support all Calcite literal types
-
     if lit_type_name.equals(SqlTypeName.DECIMAL):
         lit_type_scale = lit_type.getScale()
         val = java_literal.getValue()
@@ -2678,13 +4028,35 @@ def java_literal_to_pyiceberg_literal(java_literal):
     if lit_type_name.equals(SqlTypeName.DOUBLE):
         return java_literal.getValue()
 
+    if lit_type_name.equals(SqlTypeName.FLOAT):
+        return float(java_literal.getValue())
+
+    if (
+        lit_type_name.equals(SqlTypeName.TINYINT)
+        or lit_type_name.equals(SqlTypeName.SMALLINT)
+        or lit_type_name.equals(SqlTypeName.INTEGER)
+        or lit_type_name.equals(SqlTypeName.BIGINT)
+    ):
+        return int(java_literal.getValue2())
+
+    if lit_type_name.equals(SqlTypeName.BOOLEAN):
+        return bool(java_literal.getValue())
+
     if lit_type_name.equals(SqlTypeName.CHAR):
+        return java_literal.getValue2()
+
+    if lit_type_name.equals(SqlTypeName.VARCHAR):
         return java_literal.getValue2()
 
     if lit_type_name.equals(SqlTypeName.DATE):
         # getValue2() returns an integer representing days since epoch
-        val = pa.scalar(java_literal.getValue2(), pa.date32())
-        return val
+        return date(1970, 1, 1) + timedelta(days=java_literal.getValue2())
+
+    if lit_type_name.equals(SqlTypeName.TIMESTAMP):
+        # getValue2() returns an integer representing milliseconds since epoch
+        return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(
+            milliseconds=java_literal.getValue2()
+        )
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet in java_literal_to_pyiceberg_literal"

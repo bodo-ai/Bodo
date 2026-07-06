@@ -384,6 +384,7 @@ def test_coalesce_variable_type_scalars(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_nvl2(memory_leak_check):
     """Tests NVL2 (equivalent to IF(A IS NOT NULL, B, C)"""
     query = "SELECT NVL2(A+B, B+C, C+A) from table1"
@@ -406,6 +407,7 @@ def test_nvl2(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_zeroifnull(memory_leak_check):
     """Tests ZEROIFNULL (same as COALESCE(X, 0))"""
     query = "SELECT ZEROIFNULL(A) from table1"
@@ -458,6 +460,7 @@ def test_zeroifnull(memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_regr_valx_regr_valy(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -509,6 +512,7 @@ def test_if_scalar(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_if_dt(memory_leak_check):
     """Checks if function with datetime values"""
     query = "Select IF(YEAR(A) < 2010, makedate(2010, 1), A) FROM table1"
@@ -998,6 +1002,7 @@ def test_nullifzero_cols(memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decode(args, memory_leak_check):
     """Checks if function with all column values"""
     ctx = {
@@ -1031,6 +1036,7 @@ def test_decode(args, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_decode_time(bodosql_time_types, memory_leak_check):
     """Test DECODE with time columns"""
     query = "SELECT DECODE(A, TO_TIME('14:28:57'), 1, NULL, 2, 0) from table1"

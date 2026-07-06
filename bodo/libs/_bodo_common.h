@@ -7,6 +7,15 @@
 #define __UNUSED__
 #endif
 
+// Cross-platform symbol visibility/export macro.
+// MSVC requires __declspec(dllexport), GCC/Clang use
+// __attribute__((visibility("default"))).
+#if defined(_MSC_VER)
+#define BODO_EXPORT __declspec(dllexport)
+#else
+#define BODO_EXPORT __attribute__((visibility("default")))
+#endif
+
 #include <Python.h>
 #include <arrow/type.h>
 #include <utility>

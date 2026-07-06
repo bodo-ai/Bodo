@@ -412,6 +412,7 @@ class LogicalJoinFilter(LogicalOperator):
         filter_ids,
         equality_filter_columns,
         equality_is_first_locations,
+        orig_build_key_cols,
     ):
         self.source = source
         self.filter_ids = filter_ids
@@ -423,6 +424,7 @@ class LogicalJoinFilter(LogicalOperator):
             filter_ids,
             equality_filter_columns,
             equality_is_first_locations,
+            orig_build_key_cols,
         )
 
 
@@ -500,8 +502,12 @@ class LogicalGetIcebergRead(LogicalOperatorLeaf):
         catalog_properties,
         row_filter,
         pyiceberg_schema,
+        arrow_read_schema,
         snapshot_id,
         table_len_estimate,
+        join_filter_info,
+        selected_fields,
+        limit,
         *,
         arrow_schema,
     ):
@@ -512,8 +518,12 @@ class LogicalGetIcebergRead(LogicalOperatorLeaf):
             catalog_properties,
             row_filter,
             pyiceberg_schema,
+            arrow_read_schema,
             snapshot_id,
             table_len_estimate,
+            selected_fields,
+            limit,
+            join_filter_info,
         )
         # Iceberg needs schema metadata
         # TODO: avoid this to support operations like renaming columns

@@ -3,6 +3,7 @@ Tests for the SQL Values syntax that require end to end testing.
 """
 
 import pandas as pd
+import pytest
 
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
@@ -11,6 +12,7 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_codegen
 
 
+@pytest.mark.bodosql_cpp
 def test_values_multiple_rows(memory_leak_check):
     """
     Tests an implementation of values with multiple rows

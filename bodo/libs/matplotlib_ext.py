@@ -141,6 +141,11 @@ def _install_mpl_types():
         ("mpl_event_collection_type", matplotlib.collections.EventCollection),
         ("mpl_line_collection_type", matplotlib.collections.LineCollection),
     ]
+    if matplotlib.__version__ >= "3.11.0":
+        # In matplotlib 3.11, the return type of pie is a PieContainer object.
+        mpl_types.append(
+            ("mpl_pie_container_type", matplotlib.container.PieContainer),
+        )
     for type_name, class_val in mpl_types:
         install_py_obj_class(
             types_name=type_name, python_type=class_val, module=this_module
@@ -206,6 +211,9 @@ def generate_pie_return_type(args, kws):
     The tuple returned differs depending on if the autopct argument
     is provided.
     """
+    if matplotlib.__version__ >= "3.11.0":
+        # In matplotlib 3.11, the return type of pie is a PieContainer object.
+        return types.mpl_pie_container_type
     # https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.pie.html?highlight=pie#matplotlib.pyplot.pie
     # autopct is argument 4
     autopct_typ = args[4] if len(args) > 5 else kws.get("autopct", types.none)
