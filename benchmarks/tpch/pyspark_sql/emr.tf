@@ -17,7 +17,7 @@ variable "scale_factor" {
 variable "queries" {
   description = "List of TPCH queries to run."
   type        = list(number)
-  default     = [2,3,5,6,7,8,9,10,11,14,15,17,18,19,20]
+  default     = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]
 }
 
 locals {
@@ -46,6 +46,138 @@ resource "aws_s3_object" "bootstrap_script" {
 #!/bin/bash
 sudo pip install -U pandas numpy==1.26.4 pyarrow
 EOF
+}
+
+resource "aws_s3_object" "sql_script_1" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q01.sql"
+  source = "../sql/q01.sql"
+}
+
+resource "aws_s3_object" "sql_script_2" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q02.sql"
+  source = "../sql/q02.sql"
+}
+
+resource "aws_s3_object" "sql_script_3" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q03.sql"
+  source = "../sql/q03.sql"
+}
+
+resource "aws_s3_object" "sql_script_4" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q04.sql"
+  source = "../sql/q04.sql"
+}
+
+resource "aws_s3_object" "sql_script_5" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q05.sql"
+  source = "../sql/q05.sql"
+}
+
+resource "aws_s3_object" "sql_script_6" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q06.sql"
+  source = "../sql/q06.sql"
+}
+
+resource "aws_s3_object" "sql_script_7" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q07.sql"
+  source = "../sql/q07.sql"
+}
+
+resource "aws_s3_object" "sql_script_8" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q08.sql"
+  source = "../sql/q08.sql"
+}
+
+resource "aws_s3_object" "sql_script_9" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q09.sql"
+  source = "../sql/q09.sql"
+}
+
+resource "aws_s3_object" "sql_script_10" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q10.sql"
+  source = "../sql/q10.sql"
+}
+
+resource "aws_s3_object" "sql_script_11" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q11.sql"
+  source = "../sql/q11.sql"
+}
+
+resource "aws_s3_object" "sql_script_12" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q12.sql"
+  source = "../sql/q12.sql"
+}
+
+resource "aws_s3_object" "sql_script_13" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q13.sql"
+  source = "../sql/q13.sql"
+}
+
+resource "aws_s3_object" "sql_script_14" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q14.sql"
+  source = "../sql/q14.sql"
+}
+
+resource "aws_s3_object" "sql_script_15" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q15.sql"
+  source = "../sql/q15.sql"
+}
+
+resource "aws_s3_object" "sql_script_16" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q16.sql"
+  source = "../sql/q16.sql"
+}
+
+resource "aws_s3_object" "sql_script_17" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q17.sql"
+  source = "../sql/q17.sql"
+}
+
+resource "aws_s3_object" "sql_script_18" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q18.sql"
+  source = "../sql/q18.sql"
+}
+
+resource "aws_s3_object" "sql_script_19" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q19.sql"
+  source = "../sql/q19.sql"
+}
+
+resource "aws_s3_object" "sql_script_20" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q20.sql"
+  source = "../sql/q20.sql"
+}
+
+resource "aws_s3_object" "sql_script_21" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q21.sql"
+  source = "../sql/q21.sql"
+}
+
+resource "aws_s3_object" "sql_script_22" {
+  bucket = aws_s3_bucket.emr_bucket.id
+  key    = "sql/q22.sql"
+  source = "../sql/q22.sql"
 }
 
 resource "aws_emr_cluster" "emr_cluster" {
