@@ -2465,6 +2465,30 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         arrow_func = (
             "max_element_wise" if func_name == "GREATEST" else "min_element_wise"
         )
+        # Check for supported data types in Arrow backend
+        has_string = False
+        has_nonstring = False
+        for expr in op_exprs:
+            expr_dtype = get_expr_dtype(expr)
+            if compare_types(expr_dtype, str):
+                has_string = True
+            else:
+                has_nonstring = True
+            if compare_types(expr_dtype, bool):
+                raise ValueError(f"Cannot use boolean types in {func_name} operator")
+            if (
+                isinstance(expr_dtype, pd.ArrowDtype)
+                and pa.types.is_timestamp(expr_dtype.pyarrow_dtype)
+                and expr_dtype.pyarrow_dtype.tz is not None
+            ):
+                raise ValueError(
+                    f"Cannot use timezone-aware timestamp types in {func_name} operator"
+                )
+        # TODO(ehsan): cast strings to the datetime data type to match SQL semantics
+        if has_string and has_nonstring:
+            raise ValueError(
+                f"Cannot mix string and non-string types in {func_name} operator"
+            )
         # TODO(ehsan): get empty_data for the common type of the operands
         return ArrowScalarFuncExpression(
             op_exprs[0].empty_data, op_exprs, arrow_func, ()
