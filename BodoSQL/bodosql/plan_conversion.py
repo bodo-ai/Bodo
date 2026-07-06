@@ -214,8 +214,12 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalFilter":
         return java_filter_to_python_filter(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalAggregate" and not java_plan.usesGroupingSets():
+    if java_class_name == "BodoPhysicalAggregate":
         # TODO: support grouping sets
+        if java_plan.usesGroupingSets():
+            raise NotImplementedError(
+                "BodoPhysicalAggregate with grouping sets is not supported in C++ backend yet"
+            )
         return java_agg_to_python_agg(ctx, java_plan)
 
     if java_class_name == "BodoPhysicalSort":
@@ -2405,6 +2409,45 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         raise NotImplementedError(
             f"Function name {func_name} not supported for SEARCH operator yet: "
             + java_call.toString()
+        )
+
+    if operator_class_name == "SqlLeastGreatestFunction":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+        assert func_name in ("LEAST", "GREATEST"), (
+            "Unexpected function name for SqlLeastGreatestFunction: " + func_name
+        )
+        arrow_func = (
+            "max_element_wise" if func_name == "GREATEST" else "min_element_wise"
+        )
+        # Check for supported data types in Arrow backend
+        has_string = False
+        has_nonstring = False
+        for expr in op_exprs:
+            expr_dtype = get_expr_dtype(expr)
+            if compare_types(expr_dtype, str):
+                has_string = True
+            else:
+                has_nonstring = True
+            if compare_types(expr_dtype, bool):
+                raise ValueError(f"Cannot use boolean types in {func_name} operator")
+            if (
+                isinstance(expr_dtype, pd.ArrowDtype)
+                and pa.types.is_timestamp(expr_dtype.pyarrow_dtype)
+                and expr_dtype.pyarrow_dtype.tz is not None
+            ):
+                raise ValueError(
+                    f"Cannot use timezone-aware timestamp types in {func_name} operator"
+                )
+        # TODO(ehsan): cast strings to the datetime data type to match SQL semantics
+        if has_string and has_nonstring:
+            raise ValueError(
+                f"Cannot mix string and non-string types in {func_name} operator"
+            )
+        # TODO(ehsan): get empty_data for the common type of the operands
+        return ArrowScalarFuncExpression(
+            op_exprs[0].empty_data, op_exprs, arrow_func, ()
         )
 
     raise NotImplementedError(
