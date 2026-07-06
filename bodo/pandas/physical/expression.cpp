@@ -435,6 +435,12 @@ arrow::Datum do_arrow_compute_multi_input_datum(
             }
         }
         func_res = arrow::compute::CallFunction(arrow_func_name, casted_datums);
+    } else if (arrow_func_name == "max_element_wise" ||
+               arrow_func_name == "min_element_wise") {
+        // Avoid skipping nulls to match SQL semantics.
+        arrow::compute::ElementWiseAggregateOptions agg_opts(false);
+        func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums,
+                                                &agg_opts);
     } else {
         func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums);
     }
