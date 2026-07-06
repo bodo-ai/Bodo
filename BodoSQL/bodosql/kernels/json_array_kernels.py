@@ -916,8 +916,8 @@ def overload_object_insert_util(
 
     # If the input is null, just return it.
     if json_type == bodo.types.none or json_type == bodo.types.null_array_type:
-        return (
-            lambda data, new_field_name, new_field_value, update, is_scalar: data
+        return lambda data, new_field_name, new_field_value, update, is_scalar: (
+            data
         )  # pragma: no cover
 
     arg_names = ["data", "new_field_name", "new_field_value", "update", "is_scalar"]

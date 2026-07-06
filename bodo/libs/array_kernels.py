@@ -173,26 +173,32 @@ def overload_isna(arr, i):
         string_array_split_view_type,
         timestamptz_array_type,
     ):
-        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-            arr._null_bitmap, i
+        return lambda arr, i: (
+            not bodo.libs.int_arr_ext.get_bit_bitmap_arr(arr._null_bitmap, i)
         )  # pragma: no cover
 
     # array(item) array
     if isinstance(arr, ArrayItemArrayType):
-        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-            bodo.libs.array_item_arr_ext.get_null_bitmap(arr), i
+        return lambda arr, i: (
+            not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                bodo.libs.array_item_arr_ext.get_null_bitmap(arr), i
+            )
         )  # pragma: no cover
 
     # map array
     if isinstance(arr, bodo.libs.map_arr_ext.MapArrayType):
-        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-            bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), i
+        return lambda arr, i: (
+            not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), i
+            )
         )  # pragma: no cover
 
     # struct array
     if isinstance(arr, StructArrayType):
-        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-            bodo.libs.struct_arr_ext.get_null_bitmap(arr), i
+        return lambda arr, i: (
+            not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                bodo.libs.struct_arr_ext.get_null_bitmap(arr), i
+            )
         )  # pragma: no cover
 
     # tuple array
@@ -213,8 +219,10 @@ def overload_isna(arr, i):
 
     # Binary Array
     if arr == bodo.types.binary_array_type:
-        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-            bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), i
+        return lambda arr, i: (
+            not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), i
+            )
         )  # pragma: no cover
 
     # List support
@@ -235,9 +243,8 @@ def overload_isna(arr, i):
     # dictionary encoded array
     if isinstance(arr, DictionaryArrayType):
         return lambda arr, i: (
-            not bodo.libs.int_arr_ext.get_bit_bitmap_arr(arr._indices._null_bitmap, i)
-        ) or bodo.libs.array_kernels.isna(
-            arr._data, arr._indices[i]
+            (not bodo.libs.int_arr_ext.get_bit_bitmap_arr(arr._indices._null_bitmap, i))
+            or bodo.libs.array_kernels.isna(arr._data, arr._indices[i])
         )  # pragma: no cover
 
     # Pandas Datetime Array

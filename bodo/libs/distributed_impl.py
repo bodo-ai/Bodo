@@ -415,11 +415,9 @@ def gatherv_impl_jit(
 
     if data is types.none:
         return (
-            lambda data,
-            allgather=False,
-            warn_if_rep=True,
-            root=DEFAULT_ROOT,
-            comm=0: None
+            lambda data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0: (
+                None
+            )
         )  # pragma: no cover
 
     if isinstance(data, types.Array) and data.ndim != 1:
@@ -630,11 +628,9 @@ def scatterv_impl_jit(
 
     if isinstance(data, types.Array):
         return (
-            lambda data,
-            send_counts=None,
-            warn_if_dist=True,
-            root=DEFAULT_ROOT,
-            comm=0: _scatterv_np(data, send_counts, warn_if_dist, root, comm)
+            lambda data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0: (
+                _scatterv_np(data, send_counts, warn_if_dist, root, comm)
+            )
         )  # pragma: no cover
 
     if data in (string_array_type, binary_array_type):
@@ -1434,11 +1430,9 @@ def scatterv_impl_jit(
 
     if data is types.none:  # pragma: no cover
         return (
-            lambda data,
-            send_counts=None,
-            warn_if_dist=True,
-            root=DEFAULT_ROOT,
-            comm=0: None
+            lambda data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0: (
+                None
+            )
         )
 
     if isinstance(data, bodo.types.MatrixType):

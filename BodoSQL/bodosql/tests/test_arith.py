@@ -504,9 +504,9 @@ def test_subtraction_between_dates(bodosql_date_types, memory_leak_check):
     expected_output = pd.DataFrame(
         {
             "COL1": (table1.A - table1.B).map(
-                lambda a: pd.NA
-                if pd.isna(a)
-                else (a if bodosql.use_cpp_backend else a.days)
+                lambda a: (
+                    pd.NA if pd.isna(a) else (a if bodosql.use_cpp_backend else a.days)
+                )
             ),
         }
     )

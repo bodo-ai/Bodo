@@ -633,8 +633,8 @@ def overload_array_op_std(arr, skipna=True, ddof=1):
             )
 
         return impl_dt64
-    return (
-        lambda arr, skipna=True, ddof=1: array_op_var(arr, skipna, ddof) ** 0.5
+    return lambda arr, skipna=True, ddof=1: (
+        array_op_var(arr, skipna, ddof) ** 0.5
     )  # pragma: no cover
 
 
