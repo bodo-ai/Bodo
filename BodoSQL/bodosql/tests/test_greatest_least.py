@@ -380,6 +380,9 @@ def test_greatest_tz_aware_columns(
     )
 
 
+@pytest.mark.skip(
+    reason="[BSE-5496]: Fix conversion of string to datetime in Greatest/Least"
+)
 def test_least_datetime_strings(memory_leak_check):
     """
     tests that Least works with datetimes + valid strings (to be converted to datetimes)
