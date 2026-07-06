@@ -629,11 +629,45 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
 
     // No need to cast if type is already the target type
     if (left_res.type()->Equals(arrow_ret_type)) {
-        return left_res;
+        if (arrow_ret_type->id() == arrow::Type::TIMESTAMP) {
+            auto left_timestamp_type =
+                std::static_pointer_cast<arrow::TimestampType>(left_res.type());
+            auto ret_timestamp_type =
+                std::static_pointer_cast<arrow::TimestampType>(arrow_ret_type);
+            if (left_timestamp_type->unit() == ret_timestamp_type->unit()) {
+                return left_res;
+            }
+        } else if (arrow_ret_type->id() == arrow::Type::DURATION) {
+            auto left_duration_type =
+                std::static_pointer_cast<arrow::DurationType>(left_res.type());
+            auto ret_duration_type =
+                std::static_pointer_cast<arrow::DurationType>(arrow_ret_type);
+            if (left_duration_type->unit() == ret_duration_type->unit()) {
+                return left_res;
+            }
+        } else if (arrow_ret_type->id() == arrow::Type::TIME64) {
+            auto left_time64_type =
+                std::static_pointer_cast<arrow::Time64Type>(left_res.type());
+            auto ret_time64_type =
+                std::static_pointer_cast<arrow::Time64Type>(arrow_ret_type);
+            if (left_time64_type->unit() == ret_time64_type->unit()) {
+                return left_res;
+            }
+        } else if (arrow_ret_type->id() == arrow::Type::TIME32) {
+            auto left_time32_type =
+                std::static_pointer_cast<arrow::Time32Type>(left_res.type());
+            auto ret_time32_type =
+                std::static_pointer_cast<arrow::Time32Type>(arrow_ret_type);
+            if (left_time32_type->unit() == ret_time32_type->unit()) {
+                return left_res;
+            }
+        } else {
+            return left_res;
+        }
     }
 
     // Globally set the allow_int_overflow cast option to true; in the future,
-    // CaseExpressions should support these options.
+    // CastExpressions should support these options.
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
     arrow::Result<arrow::Datum> cmp_res =

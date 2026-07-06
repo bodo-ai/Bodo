@@ -1476,15 +1476,52 @@ const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name) {
     return c_str;
 }
 
-int64_t get_py_round_arg(PyObject *args) {
+std::tuple<int64_t, arrow::compute::RoundMode> get_py_round_args(
+    PyObject *args) {
     int64_t digits = 0;  // default value if no argument is provided
-    if (PyTuple_Check(args) && PyTuple_Size(args) == 1) {
-        // Get the first element (borrowed reference)
-        PyObject *py_digits = PyTuple_GetItem(args, 0);
+    // half_to_even is the default round mode in Arrow; we could change it if we
+    // wanted
+    arrow::compute::RoundMode round_mode =
+        arrow::compute::RoundMode::HALF_TO_EVEN;
+    if (PyTuple_Check(args)) {
+        size_t num_args = PyTuple_Size(args);
+        if (num_args >= 1) {
+            // Get the first element (borrowed reference)
+            PyObject *py_digits = PyTuple_GetItem(args, 0);
+            digits = get_py_object_as_int64(py_digits, "round args element 0");
+        }
+        if (num_args == 2) {
+            PyObject *py_round_mode = PyTuple_GetItem(args, 1);
+            std::string round_mode_str = std::string(
+                get_py_object_as_cstr(py_round_mode, "round args element 1"));
 
-        digits = get_py_object_as_int64(py_digits, "round args element");
+            if (round_mode_str == "down") {
+                round_mode = arrow::compute::RoundMode::DOWN;
+            } else if (round_mode_str == "up") {
+                round_mode = arrow::compute::RoundMode::UP;
+            } else if (round_mode_str == "towards_zero") {
+                round_mode = arrow::compute::RoundMode::TOWARDS_ZERO;
+            } else if (round_mode_str == "towards_infinity") {
+                round_mode = arrow::compute::RoundMode::TOWARDS_INFINITY;
+            } else if (round_mode_str == "half_down") {
+                round_mode = arrow::compute::RoundMode::HALF_DOWN;
+            } else if (round_mode_str == "half_up") {
+                round_mode = arrow::compute::RoundMode::HALF_UP;
+            } else if (round_mode_str == "half_towards_zero") {
+                round_mode = arrow::compute::RoundMode::HALF_TOWARDS_ZERO;
+            } else if (round_mode_str == "half_towards_infinity") {
+                round_mode = arrow::compute::RoundMode::HALF_TOWARDS_INFINITY;
+            } else if (round_mode_str == "half_to_even") {
+                round_mode = arrow::compute::RoundMode::HALF_TO_EVEN;
+            } else if (round_mode_str == "half_to_odd") {
+                round_mode = arrow::compute::RoundMode::HALF_TO_ODD;
+            } else {
+                throw std::invalid_argument(
+                    "Unrecognized round mode provided: " + round_mode_str);
+            }
+        }
     }
-    return digits;
+    return {digits, round_mode};
 }
 
 template <typename StopMaxT>

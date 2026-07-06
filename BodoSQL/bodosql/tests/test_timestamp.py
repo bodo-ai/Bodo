@@ -434,6 +434,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
     check_query(query, ctx, None, expected_output=expected_output)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "table, answer",
     [
@@ -609,6 +610,7 @@ def test_date_part_epoch(table, answer, memory_leak_check):
     check_query(query, ctx, None, check_dtype=False, expected_output=answer)
 
 
+@pytest.mark.bodosql_cpp
 def test_date_part_epoch_case(memory_leak_check):
     """
     Tests date_part with an epoch unit when used in a case statement.
@@ -655,6 +657,7 @@ def test_date_part_epoch_case(memory_leak_check):
     check_query(query, ctx, None, check_dtype=False, expected_output=answer)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "table, answer",
     [
@@ -714,6 +717,7 @@ def test_date_part_timezone_unit(table, answer, memory_leak_check):
     check_query(query, ctx, None, check_dtype=False, expected_output=answer)
 
 
+@pytest.mark.bodosql_cpp
 def test_date_part_timezone_unit_case(memory_leak_check):
     """
     Tests date_part with a timezone unit when used in a case statement.

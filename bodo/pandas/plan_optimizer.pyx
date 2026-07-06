@@ -696,6 +696,7 @@ cdef class ConstantExpression(Expression):
     """
 
     def __cinit__(self, object const_schema, object value):
+        self.out_schema = const_schema
         self.c_expression = make_const_expr(const_schema, value)
 
     def __str__(self):
@@ -743,6 +744,7 @@ cdef class PythonScalarFuncExpression(Expression):
 cdef class ArrowScalarFuncExpression(Expression):
     """Wrapper around DuckDB's BoundFunctionExpression for running Python/Arrow functions.
     """
+    cdef readonly function_name
 
     def __cinit__(self,
         object out_schema,
@@ -755,6 +757,7 @@ cdef class ArrowScalarFuncExpression(Expression):
             in_c_exprs.push_back(move((<Expression>in_expr).c_expression))
 
         self.out_schema = out_schema
+        self.function_name = function_name
         self.c_expression = make_scalar_func_expr(
             out_schema, in_c_exprs, args, False, False, function_name.encode())
 

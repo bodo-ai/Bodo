@@ -969,6 +969,7 @@ def test_casting_type_to_tz(data_col, session_tz, answer, memory_leak_check):
                 bodo.types.TimestampTZ.fromLocal("2025-05-25 12:00:00", -420),
             ],
             id="no_case-no_ns-no_tz",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "CASE WHEN I <= 1 THEN NULL ELSE TIMESTAMP_TZ_FROM_PARTS(2024, 12, 31, 06, 45, 15, POW(16, I)) END",
@@ -991,6 +992,7 @@ def test_casting_type_to_tz(data_col, session_tz, answer, memory_leak_check):
                 bodo.types.TimestampTZ.fromLocal("2025-05-25 12:00:00.926", 120),
             ],
             id="no_case-with_ns-with_tz",
+            marks=pytest.mark.bodosql_cpp,
         ),
     ],
 )
