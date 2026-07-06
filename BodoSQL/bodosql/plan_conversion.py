@@ -5,7 +5,7 @@ import operator
 import re
 import zoneinfo
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -2308,134 +2308,81 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # search_expr is a ConstantExpression with org.apache.calcite.util.Sarg value
             search_expr = op_exprs[1]
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            # sarg is an org.apache.calcite.util.Sarg
             sarg = search_expr.value
-            assert sarg.getClass().getSimpleName() == "Sarg"
-            nullAs = sarg.getClass().getDeclaredField("nullAs").get(sarg).toString()
-            # sarg_rangeSet is a com.google.common.collect.ImmutableRangeSet
-            sarg_rangeSet = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
-            assert sarg_rangeSet.getClass().getSimpleName() == "ImmutableRangeSet"
-            # ranges_collection is a com.google.common.collect.RegularImmutableSortedSet
-            ranges_collection = sarg_rangeSet.asRanges()
-            assert (
-                ranges_collection.getClass().getSimpleName()
-                == "RegularImmutableSortedSet"
-            )
-            search_options = []
-            it = ranges_collection.iterator()
-            while it.hasNext():
-                # r is a com.google.common.collect.Range
-                r = it.next()
-                assert r.getClass().getSimpleName() == "Range"
-                search_options.append(r)
+            nullAs = _get_sarg_null_as(sarg)
 
-            def range_type_to_python(x):
-                if isinstance(x, py4j.java_gateway.JavaObject):
-                    return x.getValue()
-                elif isinstance(x, decimal.Decimal):
-                    return float(x)
-                else:
-                    return x
-
-            def process_one_search_option(so):
+            def process_one_search_option(lower, lower_incl, upper, upper_incl):
                 """Generate an expression to check if src satisfies this
                 current possibility from the range set."""
-                # Get and convert the lower range endpoint if it has one else None.
-                lower_lit = (
-                    range_type_to_python(so.lowerEndpoint())
-                    if so.hasLowerBound()
-                    else None
-                )
-                # Get and convert the upper range endpoint if it has one else None.
-                upper_lit = (
-                    range_type_to_python(so.upperEndpoint())
-                    if so.hasUpperBound()
-                    else None
-                )
-                lower_inclusive = so.lowerBoundType().toString() == "CLOSED"
-                upper_inclusive = so.upperBoundType().toString() == "CLOSED"
-                # There are 9 possibilities here.  NA=Not applicable
-                # HasLower HasUpper LowerInclusive UpperInclusive
-                # F        F        NA             NA
-                # T        F        T              NA
-                # T        F        F              NA
-                # F        T        NA             T
-                # F        T        NA             F
-                # T        T        T              T
-                # T        T        T              F
-                # T        T        F              T
-                # T        T        F              F
-
                 # The lower and upper bounds being equal is a special case that does not
                 # involve less-than or greater-than comparison. It can be subdivided
                 # based on whether the lower and upper bounds are inclusive or not.
                 # The typical case is that they will be inclusive, which we can simplify
                 # to an equality check.
-                if (
-                    lower_lit is not None
-                    and upper_lit is not None
-                    and lower_lit == upper_lit
-                ):
-                    if lower_inclusive and upper_inclusive:
+                if lower is not None and upper is not None and lower == upper:
+                    if lower_incl and upper_incl:
                         # Range of the form [a..a] - reduce to equality check
                         const_empty_data = arrow_to_empty_df(
-                            pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
+                            pa.schema([pa.field("equal", pa.scalar(lower).type)])
                         )
-
                         return ComparisonOpExpression(
                             bool_empty_data,
                             src,
-                            ConstantExpression(const_empty_data, input_plan, lower_lit),
+                            ConstantExpression(const_empty_data, input_plan, lower),
                             operator.eq,
                         )
-                    elif lower_inclusive or upper_inclusive:
+                    elif lower_incl or upper_incl:
                         # Range of the form [a..a) or (a..a] - interpret as empty
                         return ConstantExpression(bool_empty_data, input_plan, False)
                     else:
                         raise ValueError("SEARCH option range form (a..a) is invalid.")
 
                 # Address the standard continuous range case, e.g. BETWEEN
-                if lower_lit is not None:
+                in_range = None
+                src_greater = None
+                src_less = None
+                if lower is not None:
                     const_empty_data = arrow_to_empty_df(
-                        pa.schema([pa.field("equal", pa.scalar(lower_lit).type)])
+                        pa.schema([pa.field("equal", pa.scalar(lower).type)])
                     )
                     src_greater = ComparisonOpExpression(
                         bool_empty_data,
                         src,
-                        ConstantExpression(const_empty_data, input_plan, lower_lit),
-                        operator.ge if lower_inclusive else operator.gt,
+                        ConstantExpression(const_empty_data, input_plan, lower),
+                        operator.ge if lower_incl else operator.gt,
                     )
                     in_range = src_greater
-                if upper_lit is not None:
+                if upper is not None:
                     const_empty_data = arrow_to_empty_df(
-                        pa.schema([pa.field("equal", pa.scalar(upper_lit).type)])
+                        pa.schema([pa.field("equal", pa.scalar(upper).type)])
                     )
                     src_less = ComparisonOpExpression(
                         bool_empty_data,
                         src,
-                        ConstantExpression(const_empty_data, input_plan, upper_lit),
-                        operator.le if upper_inclusive else operator.lt,
+                        ConstantExpression(const_empty_data, input_plan, upper),
+                        operator.le if upper_incl else operator.lt,
                     )
                     in_range = src_less
 
-                if lower_lit is not None and upper_lit is not None:
+                if lower is not None and upper is not None:
                     # Assure input is within both bounds
                     in_range = ConjunctionOpExpression(
                         bool_empty_data, src_greater, src_less, "__and__"
                     )
-                elif lower_lit is None and upper_lit is None:
+                elif lower is None and upper is None:
                     # No bounds specified, inputs must be in infinite range
                     in_range = ConstantExpression(bool_empty_data, input_plan, True)
 
                 return in_range
 
-            out_expr = process_one_search_option(search_options[0])
+            search_options = list(iter_sarg_ranges(sarg))
+            out_expr = process_one_search_option(*search_options[0])
             # The definition of search is that the value is one of the
             # possibilities in the range set.  so, "or" in the other
             # possibilities below.
             for so in search_options[1:]:
                 out_expr = ConjunctionOpExpression(
-                    bool_empty_data, out_expr, process_one_search_option(so), "__or__"
+                    bool_empty_data, out_expr, process_one_search_option(*so), "__or__"
                 )
 
             if nullAs != "UNKNOWN":
@@ -3809,10 +3756,178 @@ def java_call_to_pyiceberg_call(java_call, field_names):
         if kind.equals(SqlKind.IS_NULL):
             return pie.IsNull(input)
 
+        if kind.equals(SqlKind.IS_TRUE):
+            return pie.EqualTo(input, True)
+
+        if kind.equals(SqlKind.IS_FALSE):
+            return pie.EqualTo(input, False)
+
+    if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
+        kind = op.getKind()
+        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+        if kind.equals(SqlKind.NOT):
+            operand = java_expr_to_pyiceberg_expr(
+                java_call.getOperands()[0], field_names
+            )
+            return pie.Not(operand)
+
+    if operator_class_name == "SqlSearchOperator":
+        return java_search_to_pyiceberg_expr(java_call, field_names)
+
+    if operator_class_name == "SqlNullPolicyFunction":
+        func_name = op.getName().upper()
+        if func_name == "STARTSWITH" and len(java_call.getOperands()) == 2:
+            operands = java_call.getOperands()
+            ref = java_expr_to_pyiceberg_expr(operands[0], field_names)
+            prefix = java_expr_to_pyiceberg_expr(operands[1], field_names)
+            return pie.StartsWith(ref, prefix)
+
     raise NotImplementedError(
         f"Call operator {operator_class_name} for pyiceberg not supported yet: "
         + java_call.toString()
     )
+
+
+def java_search_to_pyiceberg_expr(java_call, field_names):
+    """Convert a Calcite SEARCH call (e.g. IN/BETWEEN expressed as
+    SEARCH($col, Sarg[...])) to a PyIceberg expression.
+
+    Calcite represents IN predicates as SEARCH against a Sarg of discrete
+    points, and NOT IN as SEARCH against the complement. Range-based
+    predicates (e.g. BETWEEN) become a Sarg with non-point ranges.
+    """
+    import pyiceberg.expressions as pie
+
+    operands = java_call.getOperands()
+    ref = java_expr_to_pyiceberg_expr(operands[0], field_names)
+    sarg = operands[1].getValue()
+    null_as = _get_sarg_null_as(sarg)
+
+    # Collect each range as a Python value (point) or a comparison pair (range).
+    points = []
+    range_exprs = []
+    for lower, lower_incl, upper, upper_incl in iter_sarg_ranges(sarg):
+        if (
+            lower is not None
+            and upper is not None
+            and lower == upper
+            and lower_incl
+            and upper_incl
+        ):
+            points.append(lower)
+        elif (
+            lower is not None
+            and upper is not None
+            and lower == upper
+            and lower_incl != upper_incl
+        ):
+            # [a..a) or (a..a] is an empty range.
+            range_exprs.append(pie.AlwaysFalse())
+        else:
+            range_exprs.append(
+                _sarg_range_to_pyiceberg_expr(ref, lower, lower_incl, upper, upper_incl)
+            )
+
+    if sarg.isPoints() and points:
+        expr = pie.In(ref, set(points))
+    elif sarg.isComplementedPoints() and points:
+        expr = pie.NotIn(ref, set(points))
+    elif range_exprs:
+        expr = range_exprs[0]
+        for re_ in range_exprs[1:]:
+            expr = pie.Or(expr, re_)
+    elif points:
+        # Mixed points and ranges (shouldn't happen for isPoints/isComplementedPoints,
+        # but handle defensively): OR together In and range expressions.
+        expr = pie.In(ref, set(points))
+        for re_ in range_exprs:
+            expr = pie.Or(expr, re_)
+    else:
+        raise NotImplementedError(
+            "SEARCH with empty Sarg not supported yet: " + java_call.toString()
+        )
+
+    if null_as == "FALSE":
+        return pie.And(expr, pie.NotNull(ref))
+    if null_as == "TRUE":
+        return pie.Or(expr, pie.IsNull(ref))
+    return expr
+
+
+def _sarg_endpoint_to_python(endpoint):
+    """Convert a Java Sarg range endpoint (e.g. NlsString, BigDecimal) to a
+    Python value."""
+    if isinstance(endpoint, py4j.java_gateway.JavaObject):
+        # NlsString and other Calcite literal wrappers expose getValue()
+        return endpoint.getValue()
+    if isinstance(endpoint, decimal.Decimal):
+        return float(endpoint)
+    return endpoint
+
+
+def _get_sarg_null_as(sarg):
+    """Read the nullAs field of a Java Sarg as a string ('UNKNOWN', 'TRUE', or 'FALSE')."""
+    return sarg.getClass().getDeclaredField("nullAs").get(sarg).toString()
+
+
+def iter_sarg_ranges(sarg):
+    """Iterate over the ranges in a Calcite Sarg's range set, yielding
+    ``(lower, lower_inclusive, upper, upper_inclusive)`` tuples with
+    Python-typed endpoints.
+
+    A ``None`` bound means unbounded on that side. Calcite represents IN
+    predicates as a Sarg of discrete points (each a degenerate [a..a]
+    range), NOT IN as the complement, and range-based predicates (e.g.
+    BETWEEN) as non-degenerate ranges.
+    """
+    range_set = sarg.getClass().getDeclaredField("rangeSet").get(sarg)
+    it = range_set.asRanges().iterator()
+    while it.hasNext():
+        r = it.next()
+        has_lower = r.hasLowerBound()
+        has_upper = r.hasUpperBound()
+        yield (
+            _sarg_endpoint_to_python(r.lowerEndpoint()) if has_lower else None,
+            r.lowerBoundType().toString() == "CLOSED" if has_lower else False,
+            _sarg_endpoint_to_python(r.upperEndpoint()) if has_upper else None,
+            r.upperBoundType().toString() == "CLOSED" if has_upper else False,
+        )
+
+
+def _sarg_range_to_pyiceberg_expr(ref, lower, lower_inclusive, upper, upper_inclusive):
+    """Convert a single non-point Sarg range to a PyIceberg comparison
+    expression against the given reference."""
+    import pyiceberg.expressions as pie
+
+    has_lower = lower is not None
+    has_upper = upper is not None
+
+    if has_lower and has_upper:
+        left = (
+            pie.GreaterThanOrEqual(ref, lower)
+            if lower_inclusive
+            else pie.GreaterThan(ref, lower)
+        )
+        right = (
+            pie.LessThanOrEqual(ref, upper)
+            if upper_inclusive
+            else pie.LessThan(ref, upper)
+        )
+        return pie.And(left, right)
+    if has_lower:
+        return (
+            pie.GreaterThanOrEqual(ref, lower)
+            if lower_inclusive
+            else pie.GreaterThan(ref, lower)
+        )
+    if has_upper:
+        return (
+            pie.LessThanOrEqual(ref, upper)
+            if upper_inclusive
+            else pie.LessThan(ref, upper)
+        )
+    # No bounds => infinite range, always true.
+    return pie.AlwaysTrue()
 
 
 def java_binop_to_pyiceberg_expr(kind, op_exprs):
@@ -3858,6 +3973,23 @@ def java_binop_to_pyiceberg_expr(kind, op_exprs):
         right = _ensure_pyiceberg_non_ref_expr(right)
         return pie.Or(left, right)
 
+    if kind.equals(SqlKind.IS_DISTINCT_FROM):
+        # Null-safe "not equal": A != B AND (A IS NOT NULL OR B IS NOT NULL).
+        # pyiceberg's NotEqualTo follows SQL semantics (null if either is
+        # null), so the additional IS_NOT_NULL clause distinguishes the
+        # "one is null" case from the "both null" case.
+        left_nn = pie.NotNull(left)
+        right_nn = pie.NotNull(right)
+        return pie.And(pie.NotEqualTo(left, right), pie.Or(left_nn, right_nn))
+
+    if kind.equals(SqlKind.IS_NOT_DISTINCT_FROM):
+        # Null-safe "equal": A == B OR (A IS NULL AND B IS NULL).
+        # pyiceberg's EqualTo follows SQL semantics (null if either is null),
+        # so the additional IS_NULL clause covers the "both null" case.
+        left_null = pie.IsNull(left)
+        right_null = pie.IsNull(right)
+        return pie.Or(pie.EqualTo(left, right), pie.And(left_null, right_null))
+
     raise NotImplementedError(
         f"Binary operator {kind.toString()} not supported yet in java_binop_to_pyiceberg_expr"
     )
@@ -3885,8 +4017,6 @@ def java_literal_to_pyiceberg_literal(java_literal):
     lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
 
-    # TODO[BSE-5156]: support all Calcite literal types
-
     if lit_type_name.equals(SqlTypeName.DECIMAL):
         lit_type_scale = lit_type.getScale()
         val = java_literal.getValue()
@@ -3898,13 +4028,35 @@ def java_literal_to_pyiceberg_literal(java_literal):
     if lit_type_name.equals(SqlTypeName.DOUBLE):
         return java_literal.getValue()
 
+    if lit_type_name.equals(SqlTypeName.FLOAT):
+        return float(java_literal.getValue())
+
+    if (
+        lit_type_name.equals(SqlTypeName.TINYINT)
+        or lit_type_name.equals(SqlTypeName.SMALLINT)
+        or lit_type_name.equals(SqlTypeName.INTEGER)
+        or lit_type_name.equals(SqlTypeName.BIGINT)
+    ):
+        return int(java_literal.getValue2())
+
+    if lit_type_name.equals(SqlTypeName.BOOLEAN):
+        return bool(java_literal.getValue())
+
     if lit_type_name.equals(SqlTypeName.CHAR):
+        return java_literal.getValue2()
+
+    if lit_type_name.equals(SqlTypeName.VARCHAR):
         return java_literal.getValue2()
 
     if lit_type_name.equals(SqlTypeName.DATE):
         # getValue2() returns an integer representing days since epoch
-        val = pa.scalar(java_literal.getValue2(), pa.date32())
-        return val
+        return date(1970, 1, 1) + timedelta(days=java_literal.getValue2())
+
+    if lit_type_name.equals(SqlTypeName.TIMESTAMP):
+        # getValue2() returns an integer representing milliseconds since epoch
+        return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(
+            milliseconds=java_literal.getValue2()
+        )
 
     raise NotImplementedError(
         f"Literal type {lit_type_name.toString()} not supported yet in java_literal_to_pyiceberg_literal"

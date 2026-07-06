@@ -258,3 +258,22 @@ def test_basic_iceberg_read(iceberg_database):
     query = f'SELECT B, C FROM "{db_schema}"."{table_name}" limit 2'
     out = bc1.sql(query)
     assert len(out) == 2, "Expected only 2 rows from limit 2"
+
+    # Exercise a broad set of filter types supported by the Java→pyiceberg
+    # converter in a single pushed-down IcebergFilter: comparison operators
+    # (>, >=, <, <=, =, <>), AND/OR/NOT, IN (via SEARCH/Sarg), STARTSWITH
+    # (via LIKE 'prefix%'), and IS NOT DISTINCT FROM (column vs literal).
+    query = (
+        f'SELECT A, B, C FROM "{db_schema}"."{table_name}" WHERE '
+        f"A IN (1, 3, 5, 7) "
+        f"AND A <> 5 "
+        f"AND A >= 1 AND A <= 7 "
+        f"AND NOT (A = 1) "
+        f"AND C LIKE 'a%' "
+        f"AND A IS NOT DISTINCT FROM 3"
+    )
+    out = bc1.sql(query)
+    expected = input_df[(input_df.A == 3) & (input_df.C.str.startswith("a"))][
+        ["A", "B", "C"]
+    ].reset_index(drop=True)
+    _check_query_equal(out, expected)
