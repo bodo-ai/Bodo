@@ -46,10 +46,11 @@ required_tables = {
     15: ["LINEITEM", "SUPPLIER"],
     16: ["PART", "PARTSUPP", "SUPPLIER"],
     17: ["LINEITEM", "PART"],
-    18: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    18: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION"],
     19: ["LINEITEM", "PART"],
-    20: ["LINEITEM", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
-    21: ["LINEITEM", "ORDERS", "SUPPLIER", "NATION"],
+    20: ["LINEITEM", "PART", "NATION", "PARTSUPP", "SUPPLIER", "ORDERS"],
+    21: ["LINEITEM", "ORDERS", "SUPPLIER", "NATION", "PART"],
+    22: ["CUSTOMER"],
 }
 
 
