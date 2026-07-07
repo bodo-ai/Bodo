@@ -108,6 +108,16 @@ std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
     return out_column_names;
 }
 
+void log_filter_expressions(JoinFilterColStats &join_filter_col_stats,
+                            const std::shared_ptr<arrow::Schema> &schema) {
+    auto [filter_cols, filter_col_stats] =
+        join_filter_col_stats.get_col_stats_for_join_filter_cols();
+
+    // convert filter cols and filter col stats to PyObjects
+    // call Python logging function
+    /// ...
+}
+
 std::unique_ptr<IcebergParquetReader>
 PhysicalReadIceberg::create_internal_reader() {
     // Pipeline buffers assume everything is nullable
@@ -116,6 +126,8 @@ PhysicalReadIceberg::create_internal_reader() {
     // Insert join filter min/max stats into the duckdb table filters
     this->filter_exprs = join_filter_col_stats.insert_filters(
         std::move(this->filter_exprs), this->selected_columns);
+
+    log_filter_expressions(join_filter_col_stats, arrow_schema);
 
     // We need to & the iceberg_filter with converted duckdb table filters
     // to apply the filters at the file level.

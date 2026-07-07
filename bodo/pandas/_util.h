@@ -432,6 +432,17 @@ class JoinFilterColStats {
           join_filter_program_state(std::move(rtjf_state_map)) {}
     JoinFilterColStats() = default;
 
+    /** @brief Get the column statistics for join filter columns
+     *
+     * @return A tuple containing two vectors:
+     *         - The first vector contains the column indices of the join filter
+     * columns.
+     *         - The second vector contains the corresponding min/max statistics
+     * for each column.
+     */
+    std::pair<std::vector<int>, std::vector<std::vector<col_min_max_t>>>
+    get_col_stats_for_join_filter_cols();
+
     /**
      * @brief Insert collected min/max statistics as table filters into the
      * provided duckdb TableFilterSet for the specified column projection.

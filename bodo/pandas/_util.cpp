@@ -1183,6 +1183,18 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
         join_state);
 }
 
+std::pair<std::vector<int>,
+          std::vector<std::vector<JoinFilterColStats::col_min_max_t>>>
+JoinFilterColStats::get_col_stats_for_join_filter_cols() {
+    std::vector<int> filter_cols;
+    std::vector<std::vector<col_min_max_t>> filter_col_stats;
+    for (const auto &[col_idx, min_max_vec] : this->collect_all()) {
+        filter_cols.push_back(col_idx);
+        filter_col_stats.push_back(min_max_vec);
+    }
+    return std::make_pair(filter_cols, filter_col_stats);
+}
+
 std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
 JoinFilterColStats::collect_all() {
     // Cache the collection
