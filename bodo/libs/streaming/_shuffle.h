@@ -761,13 +761,16 @@ class AsyncShuffleRecvState {
 };
 
 /**
- * @brief If any recieve states are complete, erase them from the input and
- * append their out tables to out_builder
+ * @brief If any receive states are complete, erase them from the input and
+ * return their (source rank, table) pairs. Returned in the order the receives
+ * completed (arrival order); callers that require a deterministic combine
+ * order across ranks must sort the result by source rank before consuming it.
  */
-void consume_completed_recvs(
+std::vector<std::pair<int, std::shared_ptr<table_info>>>
+consume_completed_recvs(
     std::vector<AsyncShuffleRecvState>& recv_states, MPI_Comm shuffle_comm,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    IncrementalShuffleMetrics& metrics, TableBuildBuffer& out_builder);
+    IncrementalShuffleMetrics& metrics);
 
 /**
  * @brief Common hash-shuffle functionality for streaming operators such as
@@ -862,16 +865,19 @@ class IncrementalShuffleState {
      * This must be called in every iteration, but only if shuffle is possible
      * (i.e. data is distributed and requires shuffling). If no shuffle was
      * done, we will not return anything. If we do shuffle, we will return the
-     * output shuffle table. The DICT columns in the output will have
-     * dictionaries unified with the dict-builders. We will also reset the
+     * received tables tagged with their source rank. Callers that require a
+     * deterministic combine order across ranks must sort the returned vector
+     * by source rank before consuming it. The DICT columns in the output will
+     * have dictionaries unified with the dict-builders. We will also reset the
      * shuffle buffer after every shuffle.
      *
      * @param is_last Is the last iteration.
-     * @return std::optional<std::shared_ptr<table_info>> Output shuffle table
-     * if we did a shuffle.
+     * @return std::optional<std::vector<std::pair<int,
+     * std::shared_ptr<table_info>>>> Vector of (source rank, received table)
+     * pairs, or std::nullopt if no receives completed this iteration.
      */
-    std::optional<std::shared_ptr<table_info>> ShuffleIfRequired(
-        const bool is_last);
+    std::optional<std::vector<std::pair<int, std::shared_ptr<table_info>>>>
+    ShuffleIfRequired(const bool is_last);
 
     bool SendRecvEmpty();
 

@@ -59,6 +59,7 @@ std::shared_ptr<table_info> test_shuffle(std::shared_ptr<table_info> table) {
         state.AppendBatch(std::move(table), append);
     }
     std::shared_ptr<table_info> shuffle_table = nullptr;
+    std::unique_ptr<TableBuildBuffer> shuffle_table_builder = nullptr;
     MPI_Request finish_req = MPI_REQUEST_NULL;
     int finish_flag = 0;
     do {
@@ -74,9 +75,24 @@ std::shared_ptr<table_info> test_shuffle(std::shared_ptr<table_info> table) {
             }
         }
         if (shuffle_result.has_value()) {
-            shuffle_table = shuffle_result.value();
+            for (auto& [src, table] : shuffle_result.value()) {
+                if (table->nrows() == 0) {
+                    continue;
+                }
+                if (shuffle_table_builder == nullptr) {
+                    std::unique_ptr<bodo::Schema> schema_ = table->schema();
+                    shuffle_table_builder = std::make_unique<TableBuildBuffer>(
+                        std::move(schema_), dict_builders);
+                }
+                shuffle_table_builder->ReserveTable(table);
+                shuffle_table_builder->UnsafeAppendBatch(table);
+            }
         }
     } while (!finish_flag || !state.SendRecvEmpty());
+    if (shuffle_table_builder != nullptr &&
+        shuffle_table_builder->data_table->nrows() != 0) {
+        shuffle_table = shuffle_table_builder->data_table;
+    }
     return shuffle_table;
 }
 
@@ -99,7 +115,9 @@ int64_t shuffle_groupby(GroupbyIncrementalShuffleState& state) {
             }
         }
         if (shuffle_result.has_value()) {
-            n_recv_rows += shuffle_result.value()->nrows();
+            for (const auto& [src, table] : shuffle_result.value()) {
+                n_recv_rows += table->nrows();
+            }
         }
     } while (!finish_flag || !state.SendRecvEmpty());
     CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &n_recv_rows, 1, MPI_LONG_LONG_INT,
@@ -847,8 +865,12 @@ static bodo::tests::suite tests([] {
             TableBuildBuffer result_table(std::move(schema), dict_builders);
             IncrementalShuffleMetrics metrics;
             while (recv_states.size() != 0) {
-                consume_completed_recvs(recv_states, MPI_COMM_WORLD,
-                                        dict_builders, metrics, result_table);
+                auto completed = consume_completed_recvs(
+                    recv_states, MPI_COMM_WORLD, dict_builders, metrics);
+                for (auto& [src, table] : completed) {
+                    result_table.ReserveTable(table);
+                    result_table.UnsafeAppendBatch(table);
+                }
             }
 
             // check that the recv'd table looks correct

@@ -684,7 +684,7 @@ int get_next_available_tag(std::unordered_set<int>& inflight_tags) {
     return -1;
 }
 
-std::optional<std::shared_ptr<table_info>>
+std::optional<std::vector<std::pair<int, std::shared_ptr<table_info>>>>
 IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
     // Reduce MPI call overheads by communicating only every 10 iterations
     if (!(is_last || ((this->curr_iter % 10) == 0))) {
@@ -702,23 +702,31 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
         this->metrics.shuffle_recv_time += end_timer(start);
     }
 
-    TableBuildBuffer out_builder(this->schema, this->dict_builders);
-
     time_pt start = start_timer();
-    // Check for finished recvs
-    consume_completed_recvs(this->recv_states, this->shuffle_comm,
-                            this->dict_builders, this->metrics, out_builder);
+    // Check for finished recvs. Each completed receive is tagged with its
+    // source rank so callers (e.g. the streaming groupby) can combine partial
+    // results in a deterministic rank order at finalization rather than in
+    // network-arrival order, which matters for non-associative floating-point
+    // reductions such as SUM.
+    std::vector<std::pair<int, std::shared_ptr<table_info>>> completed_recvs =
+        consume_completed_recvs(this->recv_states, this->shuffle_comm,
+                                this->dict_builders, this->metrics);
     this->metrics.shuffle_recv_finalization_time += end_timer(start);
 
-    std::optional<std::shared_ptr<table_info>> new_data =
-        out_builder.data_table->nrows() != 0
-            ? std::make_optional(out_builder.data_table)
-            : std::nullopt;
-    this->metrics.total_recv_nrows +=
-        new_data.has_value() ? new_data.value()->nrows() : 0;
-    this->metrics.total_recv_size_bytes +=
-        new_data.has_value() ? table_local_memory_size(new_data.value(), false)
-                             : 0;
+    std::optional<std::vector<std::pair<int, std::shared_ptr<table_info>>>>
+        new_data = completed_recvs.empty()
+                       ? std::nullopt
+                       : std::make_optional(std::move(completed_recvs));
+    int64_t new_data_nrows = 0;
+    int64_t new_data_size_bytes = 0;
+    if (new_data.has_value()) {
+        for (const auto& [src, table] : new_data.value()) {
+            new_data_nrows += table->nrows();
+            new_data_size_bytes += table_local_memory_size(table, false);
+        }
+    }
+    this->metrics.total_recv_nrows += new_data_nrows;
+    this->metrics.total_recv_size_bytes += new_data_size_bytes;
 
     start = start_timer();
     // Remove send state if recv done
@@ -1127,16 +1135,18 @@ void AsyncShuffleRecvState::PostMetadataRecv(MPI_Status& status,
         "AsyncShuffleRecvState::PostMetadataRecv: MPI error on MPI_Imrecv:");
 }
 
-void consume_completed_recvs(
+std::vector<std::pair<int, std::shared_ptr<table_info>>>
+consume_completed_recvs(
     std::vector<AsyncShuffleRecvState>& recv_states, MPI_Comm shuffle_comm,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    IncrementalShuffleMetrics& metrics, TableBuildBuffer& out_builder) {
+    IncrementalShuffleMetrics& metrics) {
+    std::vector<std::pair<int, std::shared_ptr<table_info>>> completed;
     std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
         auto [done, table] = s.recvDone(dict_builders, shuffle_comm, metrics);
         if (done) {
-            out_builder.ReserveTable(table);
-            out_builder.UnsafeAppendBatch(table);
+            completed.emplace_back(s.source, table);
         }
         return done;
     });
+    return completed;
 }
