@@ -1,11 +1,30 @@
-SELECT
-  l_shipmode,
-  SUM(CASE WHEN o_orderpriority = '1-URGENT' THEN 1 ELSE 0 END) AS high_line_count,
-  SUM(CASE WHEN o_orderpriority <> '1-URGENT' THEN 1 ELSE 0 END) AS low_line_count
-FROM orders
-JOIN lineitem ON o_orderkey = l_orderkey
-WHERE o_orderdate >= DATE '1992-01-01'
-  AND o_orderdate < DATE '1993-01-01'
-  AND l_commitdate < l_receiptdate
-GROUP BY l_shipmode
-ORDER BY l_shipmode;
+-- using default substitutions
+
+select
+	l_shipmode,
+	sum(case
+		when o_orderpriority = '1-URGENT'
+			or o_orderpriority = '2-HIGH'
+			then 1
+		else 0
+	end) as high_line_count,
+	sum(case
+		when o_orderpriority <> '1-URGENT'
+			and o_orderpriority <> '2-HIGH'
+			then 1
+		else 0
+	end) as low_line_count
+from
+	orders,
+	lineitem
+where
+	o_orderkey = l_orderkey
+	and l_shipmode in ('MAIL', 'SHIP')
+	and l_commitdate < l_receiptdate
+	and l_shipdate < l_commitdate
+	and l_receiptdate >= date '1994-01-01'
+	and l_receiptdate < date '1995-01-01'
+group by
+	l_shipmode
+order by
+	l_shipmode

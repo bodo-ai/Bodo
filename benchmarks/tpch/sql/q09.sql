@@ -1,15 +1,34 @@
-SELECT
-  nation,
-  SUM(amount) AS total_revenue
-FROM (
-  SELECT
-    n_name AS nation,
-    l_extendedprice * (1 - l_discount) AS amount
-  FROM part
-  JOIN lineitem ON p_partkey = l_partkey
-  JOIN supplier ON s_suppkey = l_suppkey
-  JOIN nation ON s_nationkey = n_nationkey
-  WHERE p_name LIKE '%green%'
-) t
-GROUP BY nation
-ORDER BY total_revenue DESC;
+-- using default substitutions
+
+select
+	nation,
+	o_year,
+	sum(amount) as sum_profit
+from
+	(
+		select
+			n_name as nation,
+			year(o_orderdate) as o_year,
+			l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
+		from
+			part,
+			supplier,
+			lineitem,
+			partsupp,
+			orders,
+			nation
+		where
+			s_suppkey = l_suppkey
+			and ps_suppkey = l_suppkey
+			and ps_partkey = l_partkey
+			and p_partkey = l_partkey
+			and o_orderkey = l_orderkey
+			and s_nationkey = n_nationkey
+			and p_name like '%green%'
+	) as profit
+group by
+	nation,
+	o_year
+order by
+	nation,
+	o_year desc
