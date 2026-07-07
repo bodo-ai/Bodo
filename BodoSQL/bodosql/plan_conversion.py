@@ -445,6 +445,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # Calculate year component.
             # If month is positive, year component is year + (month-1) // 12.
             # If month is 0 or negative, year component is year + (month) // 12 - 1.
+            # Here we rely on DuckDB's integer division to truncate towards zero.
             month_positive = ComparisonOpExpression(
                 bool_empty_data, month_expr, zero_expr, operator.gt
             )
@@ -497,9 +498,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             # Pass date string to strptime to construct a timestamp from the components
-            timestamp_empty_data = pd.Series(
-                dtype=pd.ArrowDtype(pa.timestamp(precision_str))
-            )
             timestamp_expr = ArrowScalarFuncExpression(
                 timestamp_empty_data,
                 [date_string],
