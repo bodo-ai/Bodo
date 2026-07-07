@@ -1134,6 +1134,21 @@ class GroupbyState {
     // updated after the last input to avoid repeating the final steps.
     bool build_input_finalized = false;
 
+    /// @brief Per-source-rank received shuffle tables accumulated during the
+    /// build phase. Rather than folding shuffled receives into partition
+    /// running values incrementally in network-arrival order (which is
+    /// non-deterministic and breaks floating-point joins on SUM results), we
+    /// stash each received batch keyed by its source rank and fold them into
+    /// the partitions in a fixed rank order at FinalizeBuild time. This gives
+    /// a hard determinism guarantee: the final running values are a fixed
+    /// function of {local partials in input order, per-source partials in
+    /// send order, fixed rank-order fold}. See RACE_CONDITION_INVESTIGATION.md
+    /// for background.
+    /// Only the agg path (groupby_agg_build_consume_batch) uses this; the acc
+    /// path (groupby_acc_build_consume_batch) appends rows rather than
+    /// combining, so it folds received tables directly as before.
+    std::vector<std::vector<std::shared_ptr<table_info>>> pending_recv_tables;
+
     /// @brief Whether we should print debug information
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
@@ -1380,6 +1395,17 @@ class GroupbyState {
      *
      */
     void FinalizeBuild();
+
+    /**
+     * @brief Fold the per-source-rank pending shuffle receives into the
+     * partitions in fixed rank order. Called at the start of FinalizeBuild
+     * (after GetGlobalIsLast has confirmed all sends/receives are complete) so
+     * that the final running values are a deterministic function of the input
+     * regardless of network-arrival order. This matters for non-associative
+     * floating-point reductions (e.g. SUM) whose results may be joined or
+     * compared across separate aggregates. See RACE_CONDITION_INVESTIGATION.md.
+     */
+    void FinalCombinePendingRecvs();
 
     /**
      * @brief Disable partitioning by disabling threshold

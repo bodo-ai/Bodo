@@ -4059,8 +4059,53 @@ bool GroupbyState::MaxPartitionExceedsThreshold(size_t num_bits,
     }
 }
 
+void GroupbyState::FinalCombinePendingRecvs() {
+    // Fold the per-source-rank pending shuffle receives into the partitions in
+    // fixed ascending rank order. By the time we get here, GetGlobalIsLast has
+    // confirmed that every rank's sends have been received (SendRecvEmpty()),
+    // so pending_recv_tables contains the complete set of partials for this
+    // rank's groups. Combining in rank order (rather than network-arrival
+    // order) makes the final running values a deterministic function of the
+    // input, which is required for floating-point reductions like SUM whose
+    // results may be joined or compared across separate aggregates. See
+    // RACE_CONDITION_INVESTIGATION.md.
+    auto& pending = this->pending_recv_tables;
+    for (size_t src = 0; src < pending.size(); src++) {
+        for (std::shared_ptr<table_info>& new_data : pending[src]) {
+            if (new_data->nrows() == 0) {
+                continue;
+            }
+            std::shared_ptr<
+                bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
+                dict_hashes = this->GetDictionaryHashesForKeys();
+            time_pt start_hash = start_timer();
+            std::shared_ptr<uint32_t[]> batch_hashes_groupby = hash_keys_table(
+                new_data, this->n_keys, SEED_HASH_GROUPBY_SHUFFLE,
+                this->parallel, /*global_dict_needed*/ false);
+            this->metrics.input_groupby_hashing_time += end_timer(start_hash);
+            start_hash = start_timer();
+            std::shared_ptr<uint32_t[]> batch_hashes_partition =
+                hash_keys_table(new_data, this->n_keys, SEED_HASH_PARTITION,
+                                this->parallel,
+                                /*global_dict_needed*/ false, dict_hashes);
+            this->metrics.input_part_hashing_time += end_timer(start_hash);
+            this->metrics.input_hashing_nrows += new_data->nrows();
+            this->UpdateGroupsAndCombine(new_data, batch_hashes_partition,
+                                         batch_hashes_groupby);
+        }
+    }
+    pending.clear();
+    pending.shrink_to_fit();
+}
+
 void GroupbyState::FinalizeBuild() {
     time_pt start_finalize = start_timer();
+    // Fold any pending per-source shuffle receives into the partitions in a
+    // deterministic rank order before finalizing. This must happen before
+    // shuffle_state->Finalize() frees the shuffle state, since
+    // GetDictionaryHashesForKeys() may consult the shuffle state's dict
+    // builders.
+    this->FinalCombinePendingRecvs();
     // Clear the shuffle state since it is longer required.
     this->shuffle_state->Finalize();
 
@@ -4409,28 +4454,29 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     append_row_to_build_table.resize(0);
 
     if (groupby_state->parallel) {
-        std::optional<std::shared_ptr<table_info>> new_data_ =
-            groupby_state->shuffle_state->ShuffleIfRequired(local_is_last);
+        std::optional<std::vector<std::pair<int, std::shared_ptr<table_info>>>>
+            new_data_ =
+                groupby_state->shuffle_state->ShuffleIfRequired(local_is_last);
         if (new_data_.has_value()) {
-            std::shared_ptr<table_info> new_data = new_data_.value();
-            dict_hashes = groupby_state->GetDictionaryHashesForKeys();
-            start_hash = start_timer();
-            batch_hashes_groupby = hash_keys_table(
-                new_data, groupby_state->n_keys, SEED_HASH_GROUPBY_SHUFFLE,
-                groupby_state->parallel, /*global_dict_needed*/ false);
-            groupby_state->metrics.input_groupby_hashing_time +=
-                end_timer(start_hash);
-            start_hash = start_timer();
-            batch_hashes_partition =
-                hash_keys_table(new_data, groupby_state->n_keys,
-                                SEED_HASH_PARTITION, groupby_state->parallel,
-                                /*global_dict_needed*/ false, dict_hashes);
-            groupby_state->metrics.input_part_hashing_time +=
-                end_timer(start_hash);
-            groupby_state->metrics.input_hashing_nrows += new_data->nrows();
-
-            groupby_state->UpdateGroupsAndCombine(
-                new_data, batch_hashes_partition, batch_hashes_groupby);
+            // Stash each received batch keyed by its source rank. We do NOT
+            // fold into the partition running values here, because the
+            // network-arrival order is non-deterministic and folding in that
+            // order would make floating-point SUM results vary across runs
+            // (breaking joins on those sums). Instead, FinalizeBuild folds
+            // pending_recv_tables into the partitions in fixed rank order,
+            // giving a deterministic final result. See
+            // RACE_CONDITION_INVESTIGATION.md.
+            auto& pending = groupby_state->pending_recv_tables;
+            for (auto& [src, new_data] : new_data_.value()) {
+                if (new_data->nrows() == 0) {
+                    continue;
+                }
+                if ((size_t)src >= pending.size()) {
+                    pending.resize(src + 1);
+                }
+                pending[src].push_back(new_data);
+                groupby_state->metrics.input_hashing_nrows += new_data->nrows();
+            }
         }
     }
 
@@ -4518,27 +4564,29 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
 
     // Shuffle data of other ranks and append received data to local buffer
     if (groupby_state->parallel) {
-        std::optional<std::shared_ptr<table_info>> new_data_ =
-            groupby_state->shuffle_state->ShuffleIfRequired(local_is_last);
+        std::optional<std::vector<std::pair<int, std::shared_ptr<table_info>>>>
+            new_data_ =
+                groupby_state->shuffle_state->ShuffleIfRequired(local_is_last);
         if (new_data_.has_value()) {
-            std::shared_ptr<table_info> new_data = new_data_.value();
             // Dictionary hashes for the key columns which will be used for
             // the partitioning hashes:
             dict_hashes = groupby_state->GetDictionaryHashesForKeys();
+            for (auto& [src, new_data] : new_data_.value()) {
+                // Append input rows to local or shuffle buffer:
+                batch_hashes_partition = hash_keys_table(
+                    new_data, groupby_state->n_keys, SEED_HASH_PARTITION,
+                    groupby_state->parallel, false, dict_hashes);
 
-            // Append input rows to local or shuffle buffer:
-            batch_hashes_partition = hash_keys_table(
-                new_data, groupby_state->n_keys, SEED_HASH_PARTITION,
-                groupby_state->parallel, false, dict_hashes);
+                // XXX Technically, we don't need the partition hashes if
+                // there's just one partition and we aren't computing the
+                // histogram. We could move the hash computation
+                // inside AppendBuildBatch and only do it if there are multiple
+                // partitions.
+                groupby_state->AppendBuildBatch(new_data,
+                                                batch_hashes_partition);
 
-            // XXX Technically, we don't need the partition hashes if
-            // there's just one partition and we aren't computing the
-            // histogram. We could move the hash computation
-            // inside AppendBuildBatch and only do it if there are multiple
-            // partitions.
-            groupby_state->AppendBuildBatch(new_data, batch_hashes_partition);
-
-            batch_hashes_partition.reset();
+                batch_hashes_partition.reset();
+            }
         }
     }
 
