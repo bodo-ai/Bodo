@@ -1560,32 +1560,51 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 ctx, java_call.getOperands()[0], input_plan
             )
 
-            # Handle TZ-aware timestamps by first converting to UTC
-            utc_timestamp_empty_data = pd.Series(
-                dtype=pd.ArrowDtype(pa.timestamp("ns", tz="UTC"))
-            )
-            utc_timestamp_expr = CastExpression(
-                utc_timestamp_empty_data, timestamp_expr
-            )
+            # Get the scale factor from the current timestamp unit to
+            # the requested timestamp unit. This way we avoid a cast
+            # to timestamp[ns] and eliminate any chance of overflow
+            # during intermediate computation.
+            def calculate_scale_factor(current_unit, target_unit):
+                unit_scale = {"s": 1, "ms": 1_000, "us": 1_000_000, "ns": 1_000_000_000}
+                if unit_scale[target_unit] >= unit_scale[current_unit]:
+                    return "__mul__", unit_scale[target_unit] / unit_scale[current_unit]
+                else:
+                    return "__floordiv__", unit_scale[current_unit] / unit_scale[
+                        target_unit
+                    ]
 
-            # Convert to int to get epoch nanoseconds, since Arrow timestamps are
-            # stored relative to the start of the UNIX epoch
+            if func_name == "EPOCH_SECOND":
+                target_unit = "s"
+            elif func_name == "EPOCH_MILLISECOND":
+                target_unit = "ms"
+            elif func_name == "EPOCH_MICROSECOND":
+                target_unit = "us"
+            elif func_name == "EPOCH_NANOSECOND":
+                target_unit = "ns"
+
+            timestamp_pa_type = timestamp_expr.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            current_unit = timestamp_pa_type.unit
+
+            # Calculate the scale factor and direction to go from the original
+            # timestamp unit to the requested timestamp unit
+            scale_op, scale_factor = calculate_scale_factor(current_unit, target_unit)
+
+            # Convert to int to get epoch time (in the original timestamp units),
+            # since Arrow timestamps are stored relative to the start of the UNIX epoch.
+            # We don't need to cast to UTC to handle TZ-aware timestamps since
+            # the underlying timestamp integer is always in UTC.
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            timestamp_nanos = CastExpression(int_empty_data, utc_timestamp_expr)
+            epoch_time = CastExpression(int_empty_data, timestamp_expr)
 
-            if func_name != "EPOCH_NANOSECOND":
-                if func_name == "EPOCH_SECOND":
-                    divisor = 1_000_000_000
-                elif func_name == "EPOCH_MILLISECOND":
-                    divisor = 1_000_000
-                elif func_name == "EPOCH_MICROSECOND":
-                    divisor = 1_000
-                divisor_expr = ConstantExpression(int_empty_data, input_plan, divisor)
+            if scale_factor > 1:
+                scale_factor_expr = ConstantExpression(
+                    int_empty_data, input_plan, scale_factor
+                )
                 return ArithOpExpression(
-                    int_empty_data, timestamp_nanos, divisor_expr, "__floordiv__"
+                    int_empty_data, epoch_time, scale_factor_expr, scale_op
                 )
             else:
-                return timestamp_nanos
+                return epoch_time
 
     if operator_class_name in (
         "SqlMonotonicBinaryOperator",
