@@ -428,6 +428,18 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
     return result;
 }
 
+// Similar to DuckDB's code:
+// https://github.com/bodo-ai/Bodo/blob/4d9d829f25e5e6d51c96ccbdb3794e99c9d349bf/bodo/pandas/vendor/duckdb/src/planner/expression/bound_cast_expression.cpp#L13
+static duckdb::BoundCastInfo BindCastFunction(
+    const duckdb::LogicalType &source, const duckdb::LogicalType &target) {
+    duckdb::shared_ptr<duckdb::ClientContext> context = get_duckdb_context();
+
+    auto &cast_functions =
+        duckdb::DBConfig::GetConfig(*context).GetCastFunctions();
+    duckdb::GetCastFunctionInput input(*context);
+    return cast_functions.GetCastFunction(source, target, input);
+}
+
 std::unique_ptr<duckdb::Expression> make_cast_expr(
     std::unique_ptr<duckdb::Expression> &source, PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
@@ -436,8 +448,12 @@ std::unique_ptr<duckdb::Expression> make_cast_expr(
     auto field = out_schema->field(0);
     auto [_, out_type] = arrow_field_to_duckdb(field);
 
+    // NOTE: using a proper cast function here is necessary since DuckDB's
+    // expression evaluator may run it (as part of optimizer or binding other
+    // functions like arithmetic ops).
     return duckdb::make_uniq<duckdb::BoundCastExpression>(
-        std::move(source_duck), out_type, duckdb::BoundCastInfo(nullptr));
+        std::move(source_duck), out_type,
+        BindCastFunction(source_duck->return_type, out_type));
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(
