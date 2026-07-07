@@ -635,7 +635,10 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
             auto ret_timestamp_type =
                 std::static_pointer_cast<arrow::TimestampType>(arrow_ret_type);
             if (left_timestamp_type->unit() == ret_timestamp_type->unit()) {
-                return left_res;
+                if (left_timestamp_type->timezone() ==
+                    ret_timestamp_type->timezone()) {
+                    return left_res;
+                }
             }
         } else if (arrow_ret_type->id() == arrow::Type::DURATION) {
             auto left_duration_type =
