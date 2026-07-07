@@ -45,15 +45,6 @@ resource "aws_s3_object" "bootstrap_script" {
   content = <<EOF
 #!/bin/bash
 sudo pip install -U pandas numpy==1.26.4 pyarrow
-
-# create app layout and download files from S3
-APP_DIR=/home/hadoop/app
-mkdir -p $${APP_DIR}/scripts $${APP_DIR}/sql
-aws s3 cp s3://${aws_s3_bucket.emr_bucket.id}/scripts/ $${APP_DIR}/scripts/ --recursive
-aws s3 cp s3://${aws_s3_bucket.emr_bucket.id}/sql/     $${APP_DIR}/sql/     --recursive
-
-# ensure ownership
-chown -R hadoop:hadoop $${APP_DIR}
 EOF
 }
 
@@ -235,10 +226,11 @@ resource "aws_emr_cluster" "emr_cluster" {
 
         args = [
           "spark-submit",
-          "/home/hadoop/app/scripts/sql_on_spark_queries.py",
+          "s3://${aws_s3_bucket.emr_bucket.id}/scripts/sql_on_spark_queries.py",
           "--folder", var.data_folder,
           "--scale_factor", tostring(var.scale_factor),
-          "--queries", tostring(step.value)
+          "--queries", tostring(step.value),
+          "--sql_dir", "s3://${aws_s3_bucket.emr_bucket.id}/sql"
         ]
       }
     }
@@ -251,6 +243,33 @@ resource "aws_emr_cluster" "emr_cluster" {
   tags = {
     for-use-with-amazon-emr-managed-policies = "true"
   }
+
+  depends_on = [
+    aws_s3_object.python_script,
+    aws_s3_object.bootstrap_script,
+    aws_s3_object.sql_script_1,
+    aws_s3_object.sql_script_2,
+    aws_s3_object.sql_script_3,
+    aws_s3_object.sql_script_4,
+    aws_s3_object.sql_script_5,
+    aws_s3_object.sql_script_6,
+    aws_s3_object.sql_script_7,
+    aws_s3_object.sql_script_8,
+    aws_s3_object.sql_script_9,
+    aws_s3_object.sql_script_10,
+    aws_s3_object.sql_script_11,
+    aws_s3_object.sql_script_12,
+    aws_s3_object.sql_script_13,
+    aws_s3_object.sql_script_14,
+    aws_s3_object.sql_script_15,
+    aws_s3_object.sql_script_16,
+    aws_s3_object.sql_script_17,
+    aws_s3_object.sql_script_18,
+    aws_s3_object.sql_script_19,
+    aws_s3_object.sql_script_20,
+    aws_s3_object.sql_script_21,
+    aws_s3_object.sql_script_22,
+  ]
 }
 
 resource "aws_iam_role" "emr_service_role" {

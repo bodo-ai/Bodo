@@ -35,14 +35,26 @@ def load_tables(spark, base):
     return tables
 
 
-def create_queries(queries, sql_dir="../sql"):
+def load_query(spark, nn: str, sql_dir="../sql") -> str:
+    filename = f"q{nn}.sql"
+
+    if sql_dir.startswith("s3://"):
+        path = f"{sql_dir}/q{nn}.sql"
+
+        return "\n".join(spark.sparkContext.textFile(path).collect())
+
+    path = os.path.join(sql_dir, filename)
+    with open(path) as f:
+        sql_text = f.read()
+
+    return sql_text
+
+
+def create_queries(spark, queries, sql_dir="../sql"):
     for q in queries:
         nn = f"{q:02d}"  # zero-padded two-digit string
-        sql_path = os.path.join(sql_dir, f"q{nn}.sql")
 
-        # read SQL file
-        with open(sql_path, encoding="utf-8") as f:
-            sql_text = f.read()
+        sql_text = load_query(spark, nn, sql_dir)
 
         func_name = f"tpch_q{nn}"
 
@@ -63,9 +75,15 @@ def {func_name}(spark):
         exec(func_src, globals())
 
 
-def run_queries(spark, data_folder: str, queries: list[int], scale_factor: float = 1.0):
+def run_queries(
+    spark,
+    data_folder: str,
+    queries: list[int],
+    scale_factor: float = 1.0,
+    sql_dir: str = "../sql",
+):
     load_tables(spark, data_folder)
-    create_queries(queries)
+    create_queries(spark, queries, sql_dir)
 
     t1 = time.time()
 
@@ -106,6 +124,12 @@ def main():
         required=False,
         default=1.0,
         help="Scale factor (used in query 11).",
+    )
+    parser.add_argument(
+        "--sql_dir",
+        type=str,
+        default="../sql",
+        help="Directory containing SQL query files.",
     )
     parser.add_argument(
         "--gpu",
@@ -152,7 +176,7 @@ def main():
 
     warnings.filterwarnings("ignore")
 
-    run_queries(spark, folder, queries, scale_factor)
+    run_queries(spark, folder, queries, scale_factor, args.sql_dir)
 
 
 if __name__ == "__main__":
