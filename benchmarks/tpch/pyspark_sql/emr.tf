@@ -45,6 +45,15 @@ resource "aws_s3_object" "bootstrap_script" {
   content = <<EOF
 #!/bin/bash
 sudo pip install -U pandas numpy==1.26.4 pyarrow
+
+# create app layout and download files from S3
+APP_DIR=/home/hadoop/app
+mkdir -p $${APP_DIR}/scripts $${APP_DIR}/sql
+aws s3 cp s3://${aws_s3_bucket.emr_bucket.id}/scripts/ $${APP_DIR}/scripts/ --recursive
+aws s3 cp s3://${aws_s3_bucket.emr_bucket.id}/sql/     $${APP_DIR}/sql/     --recursive
+
+# ensure ownership
+chown -R hadoop:hadoop $${APP_DIR}
 EOF
 }
 
@@ -226,7 +235,7 @@ resource "aws_emr_cluster" "emr_cluster" {
 
         args = [
           "spark-submit",
-          "s3://${aws_s3_bucket.emr_bucket.id}/scripts/sql_on_spark_queries.py",
+          "/home/hadoop/app/scripts/sql_on_spark_queries.py",
           "--folder", var.data_folder,
           "--scale_factor", tostring(var.scale_factor),
           "--queries", tostring(step.value)
