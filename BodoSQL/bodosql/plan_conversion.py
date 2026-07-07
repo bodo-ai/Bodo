@@ -577,26 +577,25 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     nano_scale_expr = ConstantExpression(
                         int_empty, input_plan, 86_400_000_000_000
                     )
+
+                    return ArrowScalarFuncExpression(
+                        out_empty,
+                        [
+                            date_expr,
+                            amount_expr,
+                            ConstantExpression(int_empty, input_plan, 0),
+                            nano_scale_expr,
+                        ],
+                        "bodo_dateadd",
+                        (),
+                    )
                 else:
                     # Assume we have an interval type (e.g. a MonthDayNanoInterval tuple or duration type).
-                    # Get nanoseconds from interval literal by casting to int64.
-                    amount_expr = CastExpression(
-                        pd.Series(dtype=pd.ArrowDtype(pa.int64())), amount_expr
+                    # Add the interval via ArithOpExpression, which should use DuckDB's calendar-aware
+                    # interval arithmetic as long as amount_expr is a ConstantExpression.
+                    return ArithOpExpression(
+                        out_empty, date_expr, amount_expr, "__add__"
                     )
-                    # nano_scale is 1 since we are already in units of nanoseconds
-                    nano_scale_expr = ConstantExpression(int_empty, input_plan, 1)
-
-                return ArrowScalarFuncExpression(
-                    out_empty,
-                    [
-                        date_expr,
-                        amount_expr,
-                        ConstantExpression(int_empty, input_plan, 0),
-                        nano_scale_expr,
-                    ],
-                    "bodo_dateadd",
-                    (),
-                )
             elif num_operands == 3:
                 # 3-operand form: DATEADD(unit, amount, date) → date + (unit * amount)
                 # First operand is a FLAG(unit) interval qualifier from the Java
