@@ -509,7 +509,7 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 
 std::shared_ptr<array_info> do_arrow_compute_cast(
     std::shared_ptr<ExprResult> left_res,
-    const duckdb::LogicalType& return_type) {
+    const std::shared_ptr<arrow::DataType>& return_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
 
@@ -622,13 +622,11 @@ arrow::Datum do_arrow_compute_unary(
     return cmp_res.ValueOrDie();
 }
 
-arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
-                                   const duckdb::LogicalType& return_type) {
-    std::shared_ptr<arrow::DataType> arrow_ret_type =
-        duckdbTypeToArrow(return_type);
-
+arrow::Datum do_arrow_compute_cast(
+    arrow::Datum left_res,
+    const std::shared_ptr<arrow::DataType>& return_type) {
     // No need to cast if type is already the target type
-    if (left_res.type()->Equals(arrow_ret_type)) {
+    if (left_res.type()->Equals(return_type)) {
         return left_res;
     }
 
@@ -637,7 +635,7 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(left_res, arrow_ret_type, cast_opts);
+        arrow::compute::Cast(left_res, return_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_arrow_compute_cast: Error in Arrow compute: " +
@@ -960,7 +958,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalCastExpression>(
                     buildPhysicalExprTree(bce.child, col_ref_map, no_scalars),
-                    bce.return_type));
+                    bce.bound_cast.arrow_type));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_BETWEEN: {
             // Convert the base duckdb::Expression node to its actual derived

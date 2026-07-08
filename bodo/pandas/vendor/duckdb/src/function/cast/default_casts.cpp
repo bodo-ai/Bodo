@@ -20,12 +20,12 @@ BoundCastData::~BoundCastData() {
 }
 
 BoundCastInfo::BoundCastInfo(cast_function_t function_p, unique_ptr<BoundCastData> cast_data_p,
-                             init_cast_local_state_t init_local_state_p)
-    : function(function_p), init_local_state(init_local_state_p), cast_data(std::move(cast_data_p)) {
+                             init_cast_local_state_t init_local_state_p, std::shared_ptr<arrow::DataType> arrow_type)
+    : function(function_p), init_local_state(init_local_state_p), cast_data(std::move(cast_data_p)), arrow_type(arrow_type) {
 }
 
 BoundCastInfo BoundCastInfo::Copy() const {
-	return BoundCastInfo(function, cast_data ? cast_data->Copy() : nullptr, init_local_state);
+	return BoundCastInfo(function, cast_data ? cast_data->Copy() : nullptr, init_local_state, arrow_type);
 }
 
 bool DefaultCasts::NopCast(Vector &source, Vector &result, idx_t count, CastParameters &parameters) {

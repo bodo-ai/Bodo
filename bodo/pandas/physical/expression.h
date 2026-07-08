@@ -8,6 +8,7 @@
 #include <arrow/compute/kernel.h>
 #include <arrow/result.h>
 #include <arrow/status.h>
+#include <arrow/type_fwd.h>
 #include <arrow/type_traits.h>
 #include <future>
 #include <mutex>
@@ -244,7 +245,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
  */
 std::shared_ptr<array_info> do_arrow_compute_cast(
     std::shared_ptr<ExprResult> left_res,
-    const duckdb::LogicalType &return_type);
+    const std::shared_ptr<arrow::DataType> &return_type);
 
 /**
  * @brief Convert ExprResult to arrow and run case compute on them.
@@ -276,8 +277,8 @@ arrow::Datum do_arrow_compute_binary(
  * @brief Run cast on arrow Datum.
  *
  */
-arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
-                                   const duckdb::LogicalType &return_type);
+arrow::Datum do_arrow_compute_cast(
+    arrow::Datum left_res, const std::shared_ptr<arrow::DataType> &return_type);
 
 /**
  * @brief Physical expression tree node type for comparisons resulting in
@@ -817,7 +818,7 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
 class PhysicalCastExpression : public PhysicalExpression {
    public:
     PhysicalCastExpression(std::shared_ptr<PhysicalExpression> left,
-                           duckdb::LogicalType _return_type)
+                           std::shared_ptr<arrow::DataType> _return_type)
         : PhysicalExpression(PhysicalExpressionType::CAST),
           return_type(_return_type) {
         children.push_back(left);
@@ -854,7 +855,7 @@ class PhysicalCastExpression : public PhysicalExpression {
     }
 
    protected:
-    duckdb::LogicalType return_type;
+    std::shared_ptr<arrow::DataType> return_type;
 };
 
 /**
@@ -1555,7 +1556,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
             // The Arrow compute equivalent of Series.dt.date() is
             // year_month_day, which returns a struct. To match the output dtype
             // of Pandas, we Cast to Date32 instead.
-            result = do_arrow_compute_cast(res, duckdb::LogicalType::DATE);
+            result = do_arrow_compute_cast(res, arrow::date32());
         } else if (scalar_func_data.arrow_func_name ==
                        "match_substring_regex" ||
                    scalar_func_data.arrow_func_name ==
