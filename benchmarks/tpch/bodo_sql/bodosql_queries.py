@@ -14,16 +14,24 @@ import bodo.spawn.spawner as spawner
 from bodosql import BodoSQLContext, TablePath  # noqa
 
 
-def get_tpch_data(datapath):
+def get_tpch_data(datapath, use_stats=False):
+    print("Using stats:", use_stats)
     dataframe_dict = {
-        "CUSTOMER": TablePath(datapath + "/customer.pq", file_type="parquet"),
-        "ORDERS": TablePath(datapath + "/orders.pq", file_type="parquet"),
-        "LINEITEM": TablePath(datapath + "/lineitem.pq", file_type="parquet"),
-        "NATION": TablePath(datapath + "/nation.pq", file_type="parquet"),
-        "REGION": TablePath(datapath + "/region.pq", file_type="parquet"),
-        "SUPPLIER": TablePath(datapath + "/supplier.pq", file_type="parquet"),
-        "PART": TablePath(datapath + "/part.pq", file_type="parquet"),
-        "PARTSUPP": TablePath(datapath + "/partsupp.pq", file_type="parquet"),
+        k.upper(): TablePath(
+            datapath + f"/{k}.pq",
+            file_type="parquet",
+            statistics_file=None if not use_stats else (datapath + f"/{k}.json"),
+        )
+        for k in [
+            "customer",
+            "orders",
+            "lineitem",
+            "nation",
+            "region",
+            "supplier",
+            "part",
+            "partsupp",
+        ]
     }
     return dataframe_dict
 
@@ -106,6 +114,7 @@ def run_queries(
     log_file: str | None = None,
     answers_path: str | None = None,
     output_path: str | None = None,
+    use_stats: bool = False,
 ):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
@@ -113,7 +122,7 @@ def run_queries(
     total_start = time.time()
     n_passed = 0
     failed_queries = []
-    tpch_data = get_tpch_data(root)
+    tpch_data = get_tpch_data(root, use_stats)
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
@@ -236,6 +245,12 @@ def main():
         help="Whether to do warmup run.",
     )
     parser.add_argument(
+        "--use_stats",
+        action="store_true",
+        required=False,
+        help="Whether to use json stats files.",
+    )
+    parser.add_argument(
         "--n_iters",
         type=int,
         required=False,
@@ -267,6 +282,7 @@ def main():
     global show_output
     show_output = args.show_output
     do_warmup = not args.no_warmup
+    use_stats = args.use_stats
 
     queries = list(range(1, 23))
     if args.queries is not None:
@@ -300,6 +316,7 @@ def main():
         log_file=args.log_timings,
         answers_path=args.answers_path,
         output_path=args.output_path,
+        use_stats=use_stats,
     )
 
 
