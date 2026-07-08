@@ -6,7 +6,7 @@ from urllib.parse import ParseResult, urlparse
 
 import bodo
 import bodo.io.utils
-from bodo.io.parquet_pio import get_parquet_dataset
+from bodo.io.parquet_pio import estimate_parquet_row_count
 
 
 def check_tablepath_constant_arguments(
@@ -270,6 +270,6 @@ class TablePath:
             # If available, use the row count provided in the statistics file.
             return self._statistics["row_count"]
         elif self._file_type == "pq":
-            return get_parquet_dataset(self._file_path)._bodo_total_rows
+            return estimate_parquet_row_count(self._file_path)
         else:
             return None

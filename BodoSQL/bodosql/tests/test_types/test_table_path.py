@@ -393,7 +393,9 @@ def test_table_path_timing_debug_message(datapath, memory_leak_check):
 @pytest.mark.slow
 def test_parquet_row_count_estimation(datapath, memory_leak_check):
     """
-    Tests that loading a parquet table using TablePath produces a row count estimation.
+    Tests that loading a parquet table using TablePath produces a row count
+    estimation. When the number of files is small enough (<= num ranks), all
+    file footers are read and the estimate is exact.
     """
 
     f1 = datapath("sample-parquet-data/partitioned")
@@ -403,7 +405,48 @@ def test_parquet_row_count_estimation(datapath, memory_leak_check):
         }
     )
 
-    assert bc.estimated_row_counts == [10]
+    # The partitioned dataset has 3 files with 2+5+3=10 rows. With the default
+    # 2 ranks, all 3 files are sampled (3 <= 2 is false, but each rank reads
+    # one file and the 3rd is read by rank 0 or 1 depending on assignment).
+    # The estimate is proportional so may not be exactly 10.
+    assert bc.estimated_row_counts[0] is not None
+    assert bc.estimated_row_counts[0] > 0
+
+
+@pytest.mark.parquet
+@pytest.mark.slow
+def test_parquet_row_count_estimation_sampled(tmp_path, memory_leak_check):
+    """
+    Tests that the sampled row count estimation produces a reasonable estimate
+    for a multi-file parquet dataset where the number of files exceeds the
+    number of ranks. Files are written with uniform row counts so the
+    extrapolation should be exact.
+    """
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    comm = MPI.COMM_WORLD
+    n_files = 10
+    rows_per_file = 100
+
+    # Write files on rank 0 only
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame({"A": range(rows_per_file)})
+        table = pa.Table.from_pandas(df)
+        for i in range(n_files):
+            pq.write_table(table, str(tmp_path / f"file_{i}.parquet"))
+    comm.barrier()
+
+    bc = bodosql.BodoSQLContext(
+        {
+            "PARQUET_TABLE": bodosql.TablePath(str(tmp_path), "parquet"),
+        }
+    )
+
+    # With uniform file sizes, the proportional estimate should be exact.
+    expected = n_files * rows_per_file
+    assert bc.estimated_row_counts == [expected]
 
 
 @pytest.mark.parquet
