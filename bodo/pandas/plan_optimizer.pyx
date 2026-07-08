@@ -1049,7 +1049,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
             getfs,
             parse_fpath,
         )
-        from bodo.io.parquet_pio import get_fpath_without_protocol_prefix
+        from bodo.io.parquet_pio import estimate_parquet_row_count, get_fpath_without_protocol_prefix
 
         fpath, parsed_url, protocol = parse_fpath(self.path)
         fs = getfs(fpath, protocol, self.storage_options, parallel=False)
@@ -1065,41 +1065,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         if exact:
             return pq.read_table(fpath_noprefix, filesystem=fs, columns=[]).num_rows
 
-        if isinstance(fpath_noprefix, str):
-            fpath_noprefix = [fpath_noprefix]
-
-        # TODO: Make parquet file detection more robust.
-        def is_parquet_file(info: pa.fs.FileInfo):
-            return info.extension in ["parquet", "pq"]
-
-        files = []
-
-        for path in fpath_noprefix:
-            info = fs.get_file_info(path)
-
-            if info.type == pa.fs.FileType.File:
-                if is_parquet_file(info):
-                    files.append(path)
-
-            elif info.type == pa.fs.FileType.Directory:
-                selector = pa.fs.FileSelector(path, recursive=True)
-                infos = fs.get_file_info(selector)
-                files.extend(
-                    i.path for i in infos
-                    if i.type == pa.fs.FileType.File
-                    and is_parquet_file(i)
-                )
-
-        n_files = len(files)
-        if n_files == 0:
-            return 0
-
-        n_sampled = max(3, int(0.001 * n_files))
-        sampled = files[:min(n_sampled, n_files)]
-
-        rows = pq.read_table(sampled, filesystem=fs, columns=[]).num_rows
-
-        return int(rows * (n_files / len(sampled)))
+        return estimate_parquet_row_count(self.path, self.storage_options)
 
 
 cdef class LogicalGetSeriesRead(LogicalOperator):

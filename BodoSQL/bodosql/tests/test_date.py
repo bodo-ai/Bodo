@@ -501,6 +501,7 @@ def test_datediff_upcasting(func, unit, answer, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func_name",
     [
@@ -580,6 +581,7 @@ def test_min_date_group_by(date_df, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_str_to_date_literals(basic_df, memory_leak_check):
     """
     Checks that calling STR_TO_DATE on literals behaves as expected
@@ -594,6 +596,7 @@ def test_str_to_date_literals(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_str_to_date_columns(memory_leak_check):
     """
     Checks that calling STR_TO_DATE on columns behaves as expected
@@ -612,6 +615,7 @@ def test_str_to_date_columns(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_str_to_date_columns_format(memory_leak_check):
     """
     Checks that calling STR_TO_DATE on columns behaves as expected when
