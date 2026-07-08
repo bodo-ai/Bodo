@@ -111,7 +111,7 @@ requirements:
     - librmm ={{ rapids_version }}                # [gpu]
 
     # Constrain CUDA version to the same major version used in the build environment
-    - {{ pin_compatible("cuda-version", upper_bound="x", lower_bound="x") }}  # [gpu]
+    - {{ pin_compatible("cuda-version", min_pin="x", max_pin="x") }}  # [gpu]
 
   # run_constrained means these packages are not required deps
   # but will restrict them if they are present in the conda env.
