@@ -445,10 +445,12 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
  *
  * @param source - the source of the expression
  * @param opstr - the name of the function to apply to the source
+ * @param out_schema_py output data type
  * @return duckdb::unique_ptr<duckdb::Expression> - the output expr
  */
 std::unique_ptr<duckdb::Expression> make_unaryop_expr(
-    std::unique_ptr<duckdb::Expression> &source, std::string opstr);
+    std::unique_ptr<duckdb::Expression> &source, std::string opstr,
+    PyObject *out_schema_py);
 
 /**
  * @brief Create a cast expression.
