@@ -115,7 +115,54 @@ void log_filter_expressions(JoinFilterColStats &join_filter_col_stats,
 
     // convert filter cols and filter col stats to PyObjects
     // call Python logging function
-    /// ...
+    // TODO(scott): Avoid passing Pyarrow objects to Python
+    PyObjectPtr py_cols = PyList_New(filter_cols.size());
+    if (!py_cols) {
+        throw std::runtime_error("Failed to allocate py_cols");
+    }
+
+    for (size_t i = 0; i < filter_cols.size(); ++i) {
+        PyObjectPtr item = PyLong_FromLongLong(filter_cols[i]);
+        if (!item) {
+            throw std::runtime_error("Failed to create int");
+        }
+        PyList_SET_ITEM(py_cols.get(), i, item.release());
+    }
+
+    PyObjectPtr py_pairs_lists = PyList_New(filter_col_stats.size());
+    if (!py_pairs_lists) {
+        throw std::runtime_error("Failed to allocate py_pairs_lists");
+    }
+
+    for (size_t i = 0; i < filter_col_stats.size(); ++i) {
+        const auto &min_max_pairs = filter_col_stats[i];
+        PyObjectPtr py_pairs = PyList_New(min_max_pairs.size());
+        if (!py_pairs) {
+            throw std::runtime_error("Failed to allocate py_pairs");
+        }
+
+        for (size_t j = 0; j < min_max_pairs.size(); ++j) {
+            const auto &min_max = min_max_pairs[j];
+
+            PyObjectPtr left = arrow::py::wrap_scalar(min_max.first);
+            PyObjectPtr right = arrow::py::wrap_scalar(min_max.second);
+
+            if (!left || !right) {
+                throw std::runtime_error("Failed to wrap Arrow scalar");
+            }
+
+            PyObjectPtr tuple = PyTuple_New(2);
+            if (!tuple) {
+                throw std::runtime_error("Failed to allocate tuple");
+            }
+
+            PyTuple_SET_ITEM(tuple.get(), 0, left.release());
+            PyTuple_SET_ITEM(tuple.get(), 1, right.release());
+
+            PyList_SET_ITEM(py_pairs.get(), j, tuple.release());
+        }
+        PyList_SET_ITEM(py_pairs_lists.get(), i, py_pairs.release());
+    }
 }
 
 std::unique_ptr<IcebergParquetReader>

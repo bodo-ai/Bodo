@@ -16,6 +16,7 @@ from bodo.spawn.utils import run_rank0
 if pt.TYPE_CHECKING:  # pragma: no cover
     from typing import Any
 
+    import pyarrow as pa
     from pyiceberg.expressions import BooleanExpression
     from pyiceberg.io import FileIO
     from pyiceberg.schema import Schema
@@ -253,3 +254,13 @@ def pyiceberg_filter_to_pyarrow_format_str_and_scalars(
     bound_expr = bind(schema, expr, case_sensitive=case_sensitive)
 
     return visit(bound_expr, _ConvertToArrowExpressionStringAndScalar())
+
+
+def log_filter_expressions(
+    filter_cols: list[int],
+    min_max_values: list[tuple[pa.Scalar, pa.Scalar]],
+    schema: pa.Schema,
+) -> None:
+    named_cols: list[str] = [schema.field(i).name for i in filter_cols]
+
+    print("Received filter_cols:", named_cols, min_max_values)
