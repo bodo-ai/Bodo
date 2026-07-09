@@ -234,7 +234,15 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalCachedSubPlan":
         return java_subplan_to_python_subplan(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalTableCreate":
+        return java_table_create_to_python(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
+
+
+def java_table_create_to_python(ctx, java_plan):
+    input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+    return ctx.NewTable(input_plan, java_plan)
 
 
 def java_expr_to_python_expr(ctx, java_expr, input_plan):
