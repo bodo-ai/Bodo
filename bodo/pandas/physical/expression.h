@@ -1700,9 +1700,10 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::MatchSubstringOptions opts(pattern, ignore_case);
             result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
-            int64_t digits = get_py_round_arg(scalar_func_data.args);
+            auto [digits, round_mode] =
+                get_py_round_args(scalar_func_data.args);
 
-            arrow::compute::RoundOptions opts(digits);
+            arrow::compute::RoundOptions opts(digits, round_mode);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "is_null") {

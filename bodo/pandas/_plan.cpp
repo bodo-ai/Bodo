@@ -2015,7 +2015,7 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                     duckdb_type = duckdb::LogicalType::TIME;
                     break;
                 case arrow::TimeUnit::NANO:
-                    duckdb_type = duckdb::LogicalType::TIME;
+                    duckdb_type = duckdb::LogicalType::TIME_NS;
                     break;
                 default:
                     throw std::runtime_error("Unsupported Time64 unit");

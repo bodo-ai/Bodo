@@ -629,13 +629,15 @@ arrow::Datum do_arrow_compute_unary(
 arrow::Datum do_arrow_compute_cast(
     arrow::Datum left_res,
     const std::shared_ptr<arrow::DataType>& return_type) {
-    // No need to cast if type is already the target type
+    // No need to cast if type is already the target type.
+    // Note that arrow::DataType.Equals() also compares type parameters such
+    // as time units and timezones.
     if (left_res.type()->Equals(return_type)) {
         return left_res;
     }
 
     // Globally set the allow_int_overflow cast option to true; in the future,
-    // CaseExpressions should support these options.
+    // CastExpressions should support these options.
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
     arrow::Result<arrow::Datum> cmp_res =
