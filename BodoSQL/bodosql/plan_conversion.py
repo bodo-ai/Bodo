@@ -1350,7 +1350,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # Not a traditional arithmetic operation, but this is what
                 # we currently have available to retrieve binary functions
                 # from the DuckDB catalog.
-                print("Precision type:", get_expr_dtype(precision_digits))
                 return ArithOpExpression(out_empty, inp, precision_digits, "round")
 
         if func_name == "MOD" and len(op_exprs) == 2:
