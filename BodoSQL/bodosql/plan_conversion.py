@@ -2169,21 +2169,31 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if func_name == "EXP" and len(op_exprs) == 1:
             inp = op_exprs[0]
             out_empty = inp.empty_data
-            out_empty = out_empty.astype("float64")
             return UnaryOpExpression(out_empty, inp, "exp")
 
-        # LN(x) or LOG(x) -> natural log
-        if func_name in ("LN", "LOG") and len(op_exprs) == 1:
+        # LN(x) -> natural log
+        # The SQL function LOG(x) is mapped to Calcite LOG(x),
+        # which in Calcite and most systems means LN(x), but Bodo
+        # defines SQL LOG(x) as LOG10(x). Should we do anything
+        # about the mismatch?
+        if func_name == "LN" and len(op_exprs) == 1:
             inp = op_exprs[0]
             out_empty = inp.empty_data
-            out_empty = out_empty.astype("float64")
-            return UnaryOpExpression(out_empty, inp, "log")
+            return UnaryOpExpression(out_empty, inp, "ln")
 
         # ROUND(x, d) or ROUND(x) -> map to a unary/binary op if supported
         if func_name == "ROUND" and len(op_exprs) in (1, 2):
             inp = op_exprs[0]
             out_empty = inp.empty_data
-            return UnaryOpExpression(out_empty, inp, "round")
+
+            if len(op_exprs) == 1:
+                return UnaryOpExpression(out_empty, inp, "round")
+            else:
+                precision_digits = op_exprs[1]
+                # Not a traditional arithmetic operation, but this is what
+                # we currently have available to retrieve binary functions
+                # from the DuckDB catalog.
+                return ArithOpExpression(out_empty, inp, precision_digits, "round")
 
         if func_name == "MOD" and len(op_exprs) == 2:
             inp = op_exprs[0]
@@ -2719,7 +2729,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        if func_name == "POW" and len(op_exprs) == 2:
+        if func_name in ("FLOOR", "CEIL") and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data
+            return UnaryOpExpression(out_empty, inp, func_name.lower())
+        elif func_name == "POW" and len(op_exprs) == 2:
             left = op_exprs[0]
             right = op_exprs[1]
             out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
