@@ -86,10 +86,6 @@ class CacheSubPlanProgram : Program {
      * if we see "all aggregates" or "all joins". In addition, several places don't continue
      * caching on "groups" of inputs.
      *
-     * Note: This is not fully deployed across our test suite yet, so any change to this code
-     * should ensure we run all tests with RelationalAlgebraGenerator.coveringExpressionCaching
-     * = True before merging.
-     *
      * @param rel The original plan.
      * @return The new plan with covering expressions generated if
      * possible.
