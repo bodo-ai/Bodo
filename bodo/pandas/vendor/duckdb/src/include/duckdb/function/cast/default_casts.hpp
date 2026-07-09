@@ -13,6 +13,7 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include <arrow/type.h>
 
 namespace duckdb {
 
@@ -110,10 +111,14 @@ struct BoundCastInfo {
 	DUCKDB_API
 	BoundCastInfo( // NOLINT: allow explicit cast from cast_function_t
 	    cast_function_t function, unique_ptr<BoundCastData> cast_data = nullptr,
-	    init_cast_local_state_t init_local_state = nullptr);
+		// Bodo change: added arrow_type
+	    init_cast_local_state_t init_local_state = nullptr, std::shared_ptr<arrow::DataType> arrow_type = nullptr);
 	cast_function_t function;
 	init_cast_local_state_t init_local_state;
 	unique_ptr<BoundCastData> cast_data;
+
+	// Bodo change: add a pointer to the target Arrow type (DuckDB's types lose information e.g. interval precision)
+	std::shared_ptr<arrow::DataType> arrow_type = nullptr;  // Pointer to the target Arrow type (filled by Bodo)
 
 public:
 	BoundCastInfo Copy() const;
