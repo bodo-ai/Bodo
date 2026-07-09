@@ -41,3 +41,6 @@ is_platform:
 
 cuda_compiler:
   - cuda-nvcc
+
+rapids_version:
+  - "26.06"

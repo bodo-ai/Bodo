@@ -164,12 +164,12 @@ OperatorResult PhysicalReduce::ConsumeBatch(
             } else if (func_name == "sum") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionSum>(
-                        input_col_idx,
+                        input_col_idx, use_sql_rules,
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "product") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionProduct>(
-                        input_col_idx,
+                        input_col_idx, use_sql_rules,
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "count") {
                 reduction_functions.push_back(

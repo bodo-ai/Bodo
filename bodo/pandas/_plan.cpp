@@ -1,5 +1,6 @@
 #include "_plan.h"
 #include <arrow/python/pyarrow.h>
+#include <arrow/type.h>
 #include <fmt/format.h>
 #include <cstddef>
 #include <cstdlib>
@@ -451,9 +452,13 @@ std::unique_ptr<duckdb::Expression> make_cast_expr(
     // NOTE: using a proper cast function here is necessary since DuckDB's
     // expression evaluator may run it (as part of optimizer or binding other
     // functions like arithmetic ops).
-    return duckdb::make_uniq<duckdb::BoundCastExpression>(
+    auto res = duckdb::make_uniq<duckdb::BoundCastExpression>(
         std::move(source_duck), out_type,
         BindCastFunction(source_duck->return_type, out_type));
+    // Store the Arrow type in the cast info to have full type information (e.g.
+    // interval precision).
+    res->bound_cast.arrow_type = field->type();
+    return res;
 }
 
 duckdb::unique_ptr<duckdb::Expression> make_conjunction_expr(

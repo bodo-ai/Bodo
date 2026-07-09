@@ -314,7 +314,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 #else   // USE_CUDF
         // Otherwise, create a PhysicalReduce operator
         auto physical_op = std::make_shared<PhysicalReduce>(
-            bodo_schema, function_names, input_column_indices);
+            bodo_schema, function_names, input_column_indices, use_sql_rules);
         FinishPipelineOneOperator(physical_op);
 #endif  // USE_CUDF
         return;
