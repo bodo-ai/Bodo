@@ -237,6 +237,9 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalTableCreate":
         return java_table_create_to_python(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalWindow":
+        return java_window_to_python_window(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
 
@@ -3382,6 +3385,11 @@ def gen_plan_via_bodo_dataframe(func, *args, **kwargs):
     assert isinstance(output_dataframe, bodo.pandas.DataFrame)
     assert output_dataframe.is_lazy_plan()
     return output_dataframe._plan
+
+
+def java_window_to_python_window(ctx, java_plan):
+    java_plan_to_python_plan(ctx, java_plan.getInput())
+    assert False
 
 
 def java_agg_to_python_agg(ctx, java_plan):
