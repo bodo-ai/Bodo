@@ -3,6 +3,7 @@
 #include <arrow/api.h>
 #include <arrow/type.h>
 #include <arrow/type_traits.h>
+#include "../_util.h"
 
 /**
  * @brief Convert an unsigned Arrow integer type to its signed counterpart.
@@ -155,7 +156,7 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
             auto& bce = expr->Cast<duckdb::BoundCastExpression>();
 
             std::unique_ptr<bodo::DataType> col_type =
-                arrow_type_to_bodo_data_type(bce.bound_cast.arrow_type)->copy();
+                arrow_type_to_bodo_data_type(getCastReturnType(bce))->copy();
             output_schema->append_column(std::move(col_type));
             if (input_schema->column_names.size() > 0) {
                 col_names.emplace_back(input_schema->column_names[0]);
