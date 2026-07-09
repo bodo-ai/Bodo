@@ -9,8 +9,10 @@
 #include <arrow/table.h>
 #include <arrow/type_fwd.h>
 #include <arrow/util/decimal.h>
+#include <memory>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
+#include "_plan.h"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -974,6 +976,27 @@ PyObject *_duckdbFilterToPyicebergFilter(
             tf->DebugToString());
     }
     return py_expr;
+}
+
+std::shared_ptr<arrow::DataType> getCastReturnType(
+    const duckdb::BoundCastExpression &bce) {
+    std::shared_ptr<arrow::DataType> arrow_type = bce.bound_cast.arrow_type;
+    std::shared_ptr<arrow::DataType> duck_arrow_type =
+        duckdbTypeToArrow(bce.return_type);
+
+    auto [_, arrow_duck_type] = arrow_field_to_duckdb(
+        std::make_shared<arrow::Field>("", duck_arrow_type));
+
+    // DuckDB generated cast nodes don't have Arrow type or DuckDB may change
+    // the type so reconcile here by prioritizing the DuckDB type. BodoSQL
+    // generated nodes have Arrow type and we run minimal DuckDB optimization so
+    // Arrow type is likely used for BodoSQL which has more complex date/time
+    // types with precision issues.
+    if (!arrow_type || !arrow_duck_type.EqualTypeInfo(bce.return_type)) {
+        arrow_type = duck_arrow_type;
+    }
+
+    return arrow_type;
 }
 
 PyObject *duckdbFilterSetToPyicebergFilter(

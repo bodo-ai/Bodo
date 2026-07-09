@@ -3,6 +3,7 @@
 #include <Python.h>
 #include <arrow/api.h>
 #include <arrow/compute/api_scalar.h>
+#include <arrow/type.h>
 #include <fmt/format.h>
 #include <cstdint>
 #include <limits>
@@ -304,6 +305,18 @@ runPythonScalarFunction(std::shared_ptr<table_info> input_batch,
  */
 std::shared_ptr<table_info> runCfuncScalarFunction(
     std::shared_ptr<table_info> input_batch, table_udf_t cfunc_ptr);
+
+/**
+ * @brief Get the return type of cast nodes. Bodo generated cast nodes
+ * save the Arrow type since DuckDB types may lose information (e.g. Interval
+ * precision). DuckDB generated types don't have Arrow type or DuckDB may change
+ * the type so this function has to reconcile.
+ *
+ * @param bce Cast node
+ * @return std::shared_ptr<arrow::DataType> return type of the cast node
+ */
+std::shared_ptr<arrow::DataType> getCastReturnType(
+    const duckdb::BoundCastExpression &bce);
 
 /**
  * @brief Convert duckdb table filters to pyiceberg expressions.

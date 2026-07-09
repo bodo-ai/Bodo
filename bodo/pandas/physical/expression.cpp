@@ -509,7 +509,7 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 
 std::shared_ptr<array_info> do_arrow_compute_cast(
     std::shared_ptr<ExprResult> left_res,
-    const duckdb::LogicalType& return_type) {
+    const std::shared_ptr<arrow::DataType>& return_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
 
@@ -622,50 +622,14 @@ arrow::Datum do_arrow_compute_unary(
     return cmp_res.ValueOrDie();
 }
 
-arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
-                                   const duckdb::LogicalType& return_type) {
-    std::shared_ptr<arrow::DataType> arrow_ret_type =
-        duckdbTypeToArrow(return_type);
-
-    // No need to cast if type is already the target type
-    if (left_res.type()->Equals(arrow_ret_type)) {
-        if (arrow_ret_type->id() == arrow::Type::TIMESTAMP) {
-            auto left_timestamp_type =
-                std::static_pointer_cast<arrow::TimestampType>(left_res.type());
-            auto ret_timestamp_type =
-                std::static_pointer_cast<arrow::TimestampType>(arrow_ret_type);
-            if (left_timestamp_type->unit() == ret_timestamp_type->unit() &&
-                left_timestamp_type->timezone() ==
-                    ret_timestamp_type->timezone()) {
-                return left_res;
-            }
-        } else if (arrow_ret_type->id() == arrow::Type::DURATION) {
-            auto left_duration_type =
-                std::static_pointer_cast<arrow::DurationType>(left_res.type());
-            auto ret_duration_type =
-                std::static_pointer_cast<arrow::DurationType>(arrow_ret_type);
-            if (left_duration_type->unit() == ret_duration_type->unit()) {
-                return left_res;
-            }
-        } else if (arrow_ret_type->id() == arrow::Type::TIME64) {
-            auto left_time64_type =
-                std::static_pointer_cast<arrow::Time64Type>(left_res.type());
-            auto ret_time64_type =
-                std::static_pointer_cast<arrow::Time64Type>(arrow_ret_type);
-            if (left_time64_type->unit() == ret_time64_type->unit()) {
-                return left_res;
-            }
-        } else if (arrow_ret_type->id() == arrow::Type::TIME32) {
-            auto left_time32_type =
-                std::static_pointer_cast<arrow::Time32Type>(left_res.type());
-            auto ret_time32_type =
-                std::static_pointer_cast<arrow::Time32Type>(arrow_ret_type);
-            if (left_time32_type->unit() == ret_time32_type->unit()) {
-                return left_res;
-            }
-        } else {
-            return left_res;
-        }
+arrow::Datum do_arrow_compute_cast(
+    arrow::Datum left_res,
+    const std::shared_ptr<arrow::DataType>& return_type) {
+    // No need to cast if type is already the target type.
+    // Note that arrow::DataType.Equals() also compares type parameters such
+    // as time units and timezones.
+    if (left_res.type()->Equals(return_type)) {
+        return left_res;
     }
 
     // Globally set the allow_int_overflow cast option to true; in the future,
@@ -673,7 +637,7 @@ arrow::Datum do_arrow_compute_cast(arrow::Datum left_res,
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
     arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(left_res, arrow_ret_type, cast_opts);
+        arrow::compute::Cast(left_res, return_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_arrow_compute_cast: Error in Arrow compute: " +
@@ -996,7 +960,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalCastExpression>(
                     buildPhysicalExprTree(bce.child, col_ref_map, no_scalars),
-                    bce.return_type));
+                    getCastReturnType(bce)));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_BETWEEN: {
             // Convert the base duckdb::Expression node to its actual derived
