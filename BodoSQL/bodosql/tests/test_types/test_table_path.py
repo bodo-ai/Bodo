@@ -394,8 +394,7 @@ def test_table_path_timing_debug_message(datapath, memory_leak_check):
 def test_parquet_row_count_estimation(datapath, memory_leak_check):
     """
     Tests that loading a parquet table using TablePath produces a row count
-    estimation. When the number of files is small enough (<= num ranks), all
-    file footers are read and the estimate is exact.
+    estimation.
     """
 
     f1 = datapath("sample-parquet-data/partitioned")
