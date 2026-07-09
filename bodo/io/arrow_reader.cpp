@@ -1843,45 +1843,8 @@ PyObject* fetch_parquet_frag_row_counts(PyObject* self, PyObject* const* args,
     scan_options->use_threads = true;
     scan_options->pool = bodo::BufferPool::DefaultPtr();
 
-    auto registry = arrow::compute::GetFunctionRegistry();
-    auto maybe_fn = registry->GetFunction("make_struct");
-    if (!maybe_fn.ok()) {
-        std::cerr << "make_struct not registered: "
-                  << maybe_fn.status().ToString() << std::endl;
-    } else {
-        std::cerr << "make_struct is registered" << std::endl;
-    }
     std::vector<arrow::Future<int64_t>> futures;
     for (auto& frag : fragments) {
-        try {
-            std::cout << "Fragment type: " << frag->type_name() << std::endl;
-            //  std::cout << "Fragment source: " << frag->source().ToString() <<
-            //  std::endl; std::cout << "Fragment format: " <<
-            //  frag->source()->format()->type_name() << std::endl;
-        } catch (...) {
-            std::cout << "Could not print fragment source/format" << std::endl;
-        }
-
-        // Print fragment partition expression (very likely contains
-        // make_struct)
-        try {
-            auto part_expr = frag->partition_expression();
-            std::cout << "Fragment partition expression: "
-                      << part_expr.ToString() << std::endl;
-        } catch (const std::exception& e) {
-            std::cout << "partition_expression() threw: " << e.what()
-                      << std::endl;
-        }
-
-#if 0
-// Print physical schema
-try {
-  std::cout << "Fragment physical schema: " << frag->physical_schema_->ToString() << std::endl;
-} catch (...) {
-  std::cout << "Could not print physical schema" << std::endl;
-}
-#endif
-
         auto scanner_res = std::make_shared<arrow::dataset::ScannerBuilder>(
                                schema, frag, scan_options)
                                ->Finish();
