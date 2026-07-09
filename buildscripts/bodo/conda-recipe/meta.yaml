@@ -82,11 +82,11 @@ requirements:
 
     # GPU dependencies
     # This pin is necessary to avoid compatibility issues
-    - cudf =26.06                  # [gpu]
-    - rmm =26.06                   # [gpu]
-    - librmm =26.06                # [gpu]
-    - cuda-version 13.*            # [gpu]
-    - cuda-nvml-dev                # [gpu]
+    - cudf ={{ rapids_version }}        # [gpu]
+    - rmm ={{ rapids_version }}         # [gpu]
+    - librmm ={{ rapids_version }}      # [gpu]
+    - cuda-version 13.*                 # [gpu]
+    - cuda-nvml-dev                     # [gpu]
 
   run:
     - python
@@ -106,12 +106,13 @@ requirements:
     - pytz
 
     # GPU dependencies
-    - cudf =26.04                  # [gpu]
-    - rmm =26.04                   # [gpu]
-    - librmm =26.04                # [gpu]
-    - cuda-version 13.*            # [gpu]
+    - cudf ={{ rapids_version }}                  # [gpu]
+    - rmm ={{ rapids_version }}                   # [gpu]
+    - librmm ={{ rapids_version }}                # [gpu]
 
-    - {{ pin_compatible("cuda-version") }}  # [gpu]
+    # Constrain cuda-version to >= version installed by host and < next major version
+    # TODO[BSE-5508]: Enabled more minor versions
+    - {{ pin_compatible("cuda-version") }}        # [gpu]
 
   # run_constrained means these packages are not required deps
   # but will restrict them if they are present in the conda env.

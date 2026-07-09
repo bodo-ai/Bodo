@@ -31,7 +31,8 @@ set(DUCKDB_MODULE_BASE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_CXX_STANDARD "11" CACHE STRING "C++ standard to enforce")
+# Bodo change: Set C++ standard to 17 since we include Arrow headers in default_casts.hpp
+set(CMAKE_CXX_STANDARD "17" CACHE STRING "C++ standard to enforce")
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
