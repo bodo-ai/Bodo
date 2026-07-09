@@ -217,6 +217,7 @@ std::shared_ptr<array_info> do_arrow_compute_unary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator,
+    const arrow::compute::FunctionOptions *func_options = nullptr,
     const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
@@ -227,6 +228,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum left_res, std::shared_ptr<ExprResult> right_res,
     const std::string &comparator,
+    const arrow::compute::FunctionOptions *func_options = nullptr,
     const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
@@ -237,6 +239,7 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, arrow::Datum right_res,
     const std::string &comparator,
+    const arrow::compute::FunctionOptions *func_options = nullptr,
     const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
@@ -271,6 +274,7 @@ arrow::Datum do_arrow_compute_unary(
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string &comparator,
+    const arrow::compute::FunctionOptions *func_options = nullptr,
     const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
@@ -894,10 +898,12 @@ class PhysicalUnaryExpression : public PhysicalExpression {
     PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
                             std::string &opstr) {
         children.push_back(left);
-        if (opstr == "floor") {
-            comparator = "floor";
+        if (opstr == "floor" || opstr == "ceil" || opstr == "abs" ||
+            opstr == "sqrt" || opstr == "exp" || opstr == "ln" ||
+            opstr == "round") {
+            comparator = opstr;
         } else {
-            throw std::runtime_error("Unhandled unary expression opstr " +
+            throw std::runtime_error("Unhandled unary expression opstr: " +
                                      opstr);
         }
     }
@@ -913,7 +919,22 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         // Process child first.
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
-        auto result = do_arrow_compute_unary(left_res, comparator);
+
+        arrow::compute::FunctionOptions *func_options;
+        if (comparator == "round") {
+            // Override the default Arrow round mode to
+            // HALF_TOWARDS_INFINITY to match SQL semantics.
+            // See
+            // https://docs.bodo.ai/latest/api_docs/sql/functions/numeric/round/
+            arrow::compute::RoundOptions opts(
+                0, arrow::compute::RoundMode::HALF_TOWARDS_INFINITY);
+            func_options = &opts;
+        } else {
+            func_options = nullptr;
+        }
+        auto result =
+            do_arrow_compute_unary(left_res, comparator, func_options);
+
         auto left_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(left_res);
         if (left_as_scalar) {
@@ -980,13 +1001,13 @@ class PhysicalBinaryExpression : public PhysicalExpression {
             // "//" is integer division in DuckDB which is handled by divide
             // function of Arrow
             comparator = "divide";
-        } else if (opstr == "floor") {
-            comparator = "floor";
         } else if (opstr == "%") {
             EnsureModRegistered();
             comparator = "bodo_mod";
-        } else if (opstr == "POWER") {
-            comparator = "power";
+        } else if (opstr == "floor" || opstr == "power") {
+            comparator = opstr;
+        } else if (opstr == "round") {
+            comparator = "round_binary";
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
                                      opstr);
@@ -1007,8 +1028,21 @@ class PhysicalBinaryExpression : public PhysicalExpression {
         std::shared_ptr<ExprResult> right_res =
             children[1]->ProcessBatch(input_batch);
 
+        arrow::compute::FunctionOptions *func_options;
+        if (comparator == "round_binary") {
+            // Override the default Arrow round mode to
+            // HALF_TOWARDS_INFINITY to match SQL semantics.
+            // See
+            // https://docs.bodo.ai/latest/api_docs/sql/functions/numeric/round/
+            arrow::compute::RoundBinaryOptions opts(
+                arrow::compute::RoundMode::HALF_TOWARDS_INFINITY);
+            func_options = &opts;
+        } else {
+            func_options = nullptr;
+        }
         std::shared_ptr<array_info> result = do_arrow_compute_binary(
-            left_res, right_res, comparator, result_type);
+            left_res, right_res, comparator, func_options, result_type);
+
         auto left_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(left_res);
         auto right_as_scalar =
@@ -1666,9 +1700,10 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::MatchSubstringOptions opts(pattern, ignore_case);
             result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
-            int64_t digits = get_py_round_arg(scalar_func_data.args);
+            auto [digits, round_mode] =
+                get_py_round_args(scalar_func_data.args);
 
-            arrow::compute::RoundOptions opts(digits);
+            arrow::compute::RoundOptions opts(digits, round_mode);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "is_null") {

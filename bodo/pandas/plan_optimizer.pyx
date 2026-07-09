@@ -360,7 +360,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_scalar_func_expr(object out_schema, vector[unique_ptr[CExpression]] in_exprs, object args, c_bool is_cfunc, c_bool has_state, c_string arrow_compute_func) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
-    cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr) except +
+    cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_cast_expr(unique_ptr[CExpression] source, object out_schema) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype, object out_schema) except +
@@ -697,6 +697,7 @@ cdef class ConstantExpression(Expression):
     """
 
     def __cinit__(self, object const_schema, object value):
+        self.out_schema = const_schema
         self.c_expression = make_const_expr(const_schema, value)
 
     def __str__(self):
@@ -744,6 +745,7 @@ cdef class PythonScalarFuncExpression(Expression):
 cdef class ArrowScalarFuncExpression(Expression):
     """Wrapper around DuckDB's BoundFunctionExpression for running Python/Arrow functions.
     """
+    cdef readonly function_name
 
     def __cinit__(self,
         object out_schema,
@@ -756,6 +758,7 @@ cdef class ArrowScalarFuncExpression(Expression):
             in_c_exprs.push_back(move((<Expression>in_expr).c_expression))
 
         self.out_schema = out_schema
+        self.function_name = function_name
         self.c_expression = make_scalar_func_expr(
             out_schema, in_c_exprs, args, False, False, function_name.encode())
 
@@ -867,9 +870,22 @@ def python_arith_dunder_to_duckdb(str opstr):
         # NOTE: only used for integers since "//" is integer division in duckdb
         return "//"
     elif opstr == "__pow__":
-        return "POWER"
+        return "power"
     else:
         raise NotImplementedError("Unknown Python arith dunder method name")
+
+
+def unary_func_name_to_duckdb(str opstr):
+    """
+    Convert a unary function name to duckdb catalog name.
+    For now we just lower the function name, but we leave
+    the possibility open for special mappings.
+    """
+    opstr_lowered = opstr.lower()
+    if opstr_lowered in ("floor", "ceil", "sqrt", "abs", "exp", "ln", "round"):
+        return opstr_lowered
+    else:
+        raise NotImplementedError("Unknown unary function name: " + opstr_lowered)
 
 
 def is_integer_expr(object expr):
@@ -906,10 +922,12 @@ cdef class ArithOpExpression(Expression):
                 rhs_expr,
                 "/".encode(),
                 self.out_schema)
-            unaryop_expr = make_unaryop_expr(truediv_expression, "floor".encode())
-            self.c_expression = make_cast_expr(unaryop_expr, self.out_schema)
+            self.c_expression = make_unaryop_expr(truediv_expression, "floor".encode(), self.out_schema)
         else:
-            duckdb_op = python_arith_dunder_to_duckdb(opstr)
+            if opstr.lower() == "round":
+                duckdb_op = "round"
+            else:
+                duckdb_op = python_arith_dunder_to_duckdb(opstr)
             self.c_expression = make_arithop_expr(
                 lhs_expr,
                 rhs_expr,
@@ -948,9 +966,18 @@ cdef class UnaryOpExpression(Expression):
         source_expr = move((<Expression>source).c_expression) if isinstance(source, Expression) else move(make_const_expr(None, source))
 
         self.out_schema = out_schema
-        self.c_expression = make_unary_expr(
-            source_expr,
-            str_to_expr_type(op), out_schema)
+        try:
+            self.c_expression = make_unary_expr(
+                source_expr,
+                str_to_expr_type(op), out_schema)
+        except NotImplementedError:
+            duckdb_op = unary_func_name_to_duckdb(op)
+            try:
+                self.c_expression = make_unaryop_expr(
+                    source_expr,
+                    duckdb_op.encode(), out_schema)
+            except NotImplementedError:
+                raise NotImplementedError("Unknown Python dunder method name or unary function name: " + op)
 
     def __str__(self):
         return f"UnaryOpExpression({self.out_schema})"

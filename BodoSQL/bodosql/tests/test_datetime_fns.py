@@ -1258,6 +1258,7 @@ def test_makedate_scalars(basic_df, dt_fn_dataframe, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -4424,6 +4425,7 @@ def date_from_parts_data():
     return years, months, days, answer
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -4478,6 +4480,7 @@ def date_from_parts_float_data():
     return years, months, days, answer
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -4597,6 +4600,7 @@ def timestamp_from_parts_data(request):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func",
     [
@@ -4676,6 +4680,7 @@ def test_timestamp_from_parts(
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func, use_case, use_timestamp",
     [

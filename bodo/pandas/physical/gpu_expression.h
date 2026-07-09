@@ -669,6 +669,16 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
         children.push_back(left);
         if (opstr == "floor") {
             comparator = cudf::unary_operator::FLOOR;
+        } else if (opstr == "ceil") {
+            comparator = cudf::unary_operator::CEIL;
+        } else if (opstr == "abs") {
+            comparator = cudf::unary_operator::ABS;
+        } else if (opstr == "sqrt") {
+            comparator = cudf::unary_operator::SQRT;
+        } else if (opstr == "exp") {
+            comparator = cudf::unary_operator::EXP;
+        } else if (opstr == "ln") {
+            comparator = cudf::unary_operator::LOG;
         } else {
             throw std::runtime_error("Unhandled unary expression opstr " +
                                      opstr);
@@ -822,7 +832,7 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
             comparator = cudf::binary_operator::FLOOR_DIV;
         } else if (opstr == "%") {
             comparator = cudf::binary_operator::MOD;
-        } else if (opstr == "POWER") {
+        } else if (opstr == "power") {
             comparator = cudf::binary_operator::POW;
         } else {
             throw std::runtime_error("Unhandled binary expression opstr " +
