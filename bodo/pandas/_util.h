@@ -2,6 +2,7 @@
 
 #include <Python.h>
 #include <arrow/api.h>
+#include <arrow/compute/api_scalar.h>
 #include <arrow/type.h>
 #include <fmt/format.h>
 #include <cstdint>
@@ -562,13 +563,16 @@ auto get_py_args_as_types(PyObject *args, const char *func_name,
 const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name);
 
 /**
- * @brief Extract the number of digits to round to from Python function call's
- * args
+ * @brief Extract the number of digits to round to and the round mode enum
+ * value from Python function call's args
  *
  * @param args Python tuple containing the function arguments
- * @return int64_t The number of digits to round to
+ * @return std::tuple<int64_t, arrow::compute::RoundMode> A tuple of the
+ * number of digits to round to followed by the round mode
+ * (default HALF_TO_EVEN).
  */
-int64_t get_py_round_arg(PyObject *args);
+std::tuple<int64_t, arrow::compute::RoundMode> get_py_round_args(
+    PyObject *args);
 
 /**
  * @brief Extract slice arguments (start, stop, step) from a Python 3-element

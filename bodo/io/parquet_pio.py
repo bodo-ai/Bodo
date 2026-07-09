@@ -1247,6 +1247,76 @@ def _get_sample_pq_pieces(
     return pieces
 
 
+def estimate_parquet_row_count(fpath: str, storage_options: dict | None = None) -> int:
+    """Estimate the total number of rows in a parquet dataset by reading the
+    footers of a sample of files rather than every file.
+
+    Samples ``max(3, 0.1%)`` of files (rounded up), reads their footers via
+    ``pq.read_table(columns=[]).num_rows``, and extrapolates proportionally
+    by file count.
+
+    This is shared between the DataFrame library's ``LogicalGetParquetRead``
+    and BodoSQL's ``TablePath.estimated_row_count``.
+
+    Args:
+        fpath: Path to the parquet file or directory.
+        storage_options: Optional storage options for remote filesystems.
+
+    Returns:
+        Estimated total number of rows across all files in the dataset.
+    """
+    from bodo.io.fs_io import (
+        expand_path_globs,
+        getfs,
+        parse_fpath,
+    )
+
+    fpath, parsed_url, protocol = parse_fpath(fpath)
+    fs = getfs(fpath, protocol, storage_options, parallel=False)
+
+    # Since we are supplying the filesystem to pq.read_table,
+    # Any prefixes e.g. s3:// should be removed.
+    fpath_noprefix, _ = get_fpath_without_protocol_prefix(fpath, protocol, parsed_url)
+
+    fpath_noprefix = expand_path_globs(fpath_noprefix, protocol, fs)
+
+    if isinstance(fpath_noprefix, str):
+        fpath_noprefix = [fpath_noprefix]
+
+    # TODO: Make parquet file detection more robust.
+    def is_parquet_file(info: pa.fs.FileInfo):
+        return info.extension in ["parquet", "pq"]
+
+    files = []
+
+    for path in fpath_noprefix:
+        info = fs.get_file_info(path)
+
+        if info.type == pa.fs.FileType.File:
+            if is_parquet_file(info):
+                files.append(path)
+
+        elif info.type == pa.fs.FileType.Directory:
+            selector = pa.fs.FileSelector(path, recursive=True)
+            infos = fs.get_file_info(selector)
+            files.extend(
+                i.path
+                for i in infos
+                if i.type == pa.fs.FileType.File and is_parquet_file(i)
+            )
+
+    n_files = len(files)
+    if n_files == 0:
+        return 0
+
+    n_sampled = max(3, int(0.001 * n_files))
+    sampled = files[: min(n_sampled, n_files)]
+
+    rows = pq.read_table(sampled, filesystem=fs, columns=[]).num_rows
+
+    return int(rows * (n_files / len(sampled)))
+
+
 def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> set:
     """
     Determine which string columns (str_columns) should be read by Arrow as

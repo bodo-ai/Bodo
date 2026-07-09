@@ -465,35 +465,38 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator,
+    const arrow::compute::FunctionOptions* func_options,
     const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
     arrow::Datum src2 =
         ConvertExprResultToDatum(right_res, "do_arrow_compute right");
-    arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(src1, src2, comparator, result_type);
+    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
+        src1, src2, comparator, func_options, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
     arrow::Datum left_res, std::shared_ptr<ExprResult> right_res,
     const std::string& comparator,
+    const arrow::compute::FunctionOptions* func_options,
     const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum src2 =
         ConvertExprResultToDatum(right_res, "do_arrow_compute right");
-    arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(left_res, src2, comparator, result_type);
+    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
+        left_res, src2, comparator, func_options, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
 std::shared_ptr<array_info> do_arrow_compute_binary(
     std::shared_ptr<ExprResult> left_res, arrow::Datum right_res,
     const std::string& comparator,
+    const arrow::compute::FunctionOptions* func_options,
     const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
-    arrow::Datum cmp_res_datum =
-        do_arrow_compute_binary(src1, right_res, comparator, result_type);
+    arrow::Datum cmp_res_datum = do_arrow_compute_binary(
+        src1, right_res, comparator, func_options, result_type);
     return ConvertDatumToArrayInfo(cmp_res_datum);
 }
 
@@ -520,9 +523,10 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string& comparator,
+    const arrow::compute::FunctionOptions* func_options,
     const std::shared_ptr<arrow::DataType> result_type) {
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::CallFunction(comparator, {left_res, right_res});
+    arrow::Result<arrow::Datum> cmp_res = arrow::compute::CallFunction(
+        comparator, {left_res, right_res}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_array_compute_binary: Error in Arrow compute: " +
@@ -625,13 +629,15 @@ arrow::Datum do_arrow_compute_unary(
 arrow::Datum do_arrow_compute_cast(
     arrow::Datum left_res,
     const std::shared_ptr<arrow::DataType>& return_type) {
-    // No need to cast if type is already the target type
+    // No need to cast if type is already the target type.
+    // Note that arrow::DataType.Equals() also compares type parameters such
+    // as time units and timezones.
     if (left_res.type()->Equals(return_type)) {
         return left_res;
     }
 
     // Globally set the allow_int_overflow cast option to true; in the future,
-    // CaseExpressions should support these options.
+    // CastExpressions should support these options.
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
     arrow::Result<arrow::Datum> cmp_res =
