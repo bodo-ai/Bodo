@@ -265,6 +265,312 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
+    def timestamp_from_parts(
+        year_expr,
+        month_expr,
+        day_expr,
+        hour_expr=None,
+        minute_expr=None,
+        second_expr=None,
+        nanosecond_expr=None,
+    ):
+        """
+        Create a timestamp expression from the provided part expressions
+        (instances of bodo.pandas.plan.Expression).
+
+        If the inputs are within the normal ranges, the timestamp is constructed
+        as expected. However, the inputs (aside from the year) can also be
+        outside of the usual ranges in which they would appear in a timestamp.
+        At a high level, the resulting timestamp from this function will simply
+        be the sum of the parts.
+
+        More precisely, if month_expr = M, we add M-1 months after January of the
+        given year. Therefore, if M = 0, we subtract a month to get December of the
+        previous year, and if M = -1, we would go back two months.
+        The same rule applies to day_expr. We add day_expr - 1 days to the 1st of
+        the given month.
+        Adding the time components hour_expr, minute_expr, second_expr, and
+        nanosecond_expr is more intuitive because they start at zero.
+
+        Specifying the hour, minute, seconds, and nanosecond are optional,
+        and will default to 0 if not provided.
+
+        Any float inputs will be rounded to integers. Float inputs that cannot
+        fit in int64 will cause a NULL timestamp to be emitted.
+
+        The result will be timestamp[s] unless nanoseconds are provided, where we
+        return timestamp[ns]. In theory we can represent more years in an int64
+        timestamp this way, although the C++ backend may need better support for
+        returning timestamps of lower than ns resolution.
+        """
+
+        """
+        Since Arrow does not have a timestamp_from_parts function,
+        here is an overview of our approach:
+
+        We have a couple options to create a timestamp. One is to
+        calculate epoch time and then cast directly from an integer
+        to a timestamp. This method seems impractical
+        because you have to be conscious about days per month, leap
+        years, etc. The other option is to use Arrow's strptime, to
+        parse a formatted string as a timestamp.
+
+        Unfortunately we can't call strptime right away, because the given
+        timestamp components could be out of range. We could manully 
+        accumulate the components one by one using mod arithmetic to
+        calculate the effective timestamp part values, but it would be
+        tedious and potentially inefficient.
+        
+        Therefore we only compute the final year and month values beforehand
+        to ensure calendar awareness. Then we use those values with the first
+        day of that month to create a timestamp type via strptime. At this point,
+        we need to add the extra days, hours, minutes, seconds, and nanoseconds
+        we have yet to account for. We convert those to a common unit (seconds
+        or nanoseconds) and cast to a duration type before adding to our
+        year-month timestamp.
+        """
+
+        # Arrow currently lacks a function to make a date or timestamp from parts:
+        # https://github.com/apache/arrow/issues/49514.
+        # There is some possibility of it being added in the future,
+        # so we can revisit this strptime approach then.
+
+        int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+        float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+
+        max_int64 = ConstantExpression(
+            int_empty_data, input_plan, np.iinfo(np.int64).max
+        )
+        min_int64 = ConstantExpression(
+            int_empty_data, input_plan, np.iinfo(np.int64).min
+        )
+
+        # If any of the inputs are floats, we will round to the nearest integer.
+        # This is what the JIT implementation seems to do, even though float input isn't explicitly allowed in Snowflake.
+        # See `construct_timestamp` in BodoSQL/bodosql/kernels/datetime_array_kernels.py.
+        def int_part_expr(part_expr, part_expr_name):
+            ensure_type_of_expr(part_expr, part_expr_name, (int, float))
+            part_expr_dtype = get_expr_dtype(part_expr, part_expr_name)
+            if compare_types(part_expr_dtype, float):
+                part_expr = ArrowScalarFuncExpression(
+                    float_empty_data,
+                    [part_expr],
+                    "round",
+                    (0, "half_towards_infinity"),
+                )
+
+                # The BodoSQL docs say we should return NULL when any input cannot be converted to int64
+                part_too_large = ComparisonOpExpression(
+                    bool_empty_data, part_expr, max_int64, operator.gt
+                )
+                part_too_small = ComparisonOpExpression(
+                    bool_empty_data, part_expr, min_int64, operator.lt
+                )
+                part_out_of_bounds = ConjunctionOpExpression(
+                    bool_empty_data, part_too_large, part_too_small, "__or__"
+                )
+                part_expr = CaseExpression(
+                    float_empty_data,
+                    part_out_of_bounds,
+                    NullExpression(float_empty_data, input_plan, 0),
+                    part_expr,
+                )
+
+                part_expr = CastExpression(int_empty_data, part_expr)
+            return part_expr
+
+        year_expr = int_part_expr(year_expr, "year_expr")
+        month_expr = int_part_expr(month_expr, "month_expr")
+        day_expr = int_part_expr(day_expr, "day_expr")
+
+        if hour_expr:
+            hour_expr = int_part_expr(hour_expr, "hour_expr")
+        if minute_expr:
+            minute_expr = int_part_expr(minute_expr, "minute_expr")
+        if second_expr:
+            second_expr = int_part_expr(second_expr, "second_expr")
+            # Ensure seconds are int64 so the result of the later multiplication doesn't
+            # end up being int32 internally, potentially leading to overflow and the wrong answer.
+            second_expr = CastExpression(int_empty_data, second_expr)
+        if nanosecond_expr:
+            nanosecond_expr = int_part_expr(nanosecond_expr, "nanosecond_expr")
+
+        one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+        zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+        twelve_expr = ConstantExpression(int_empty_data, input_plan, 12)
+
+        # Timestamp components (aside from the year) can be outside the usual ranges
+        # or even negative, so we must account for this and adjust the constructed timestamp.
+
+        # Calculate the year and month manually to ensure calendar awareness.
+
+        # Calculate month component.
+        # If (month-1) % 12 is 0 or positive, month component is (month-1) % 12 + 1.
+        # If (month-1) % 12 is negative, month component is 13 + (month-1) % 12.
+        month_minus_one = ArithOpExpression(
+            int_empty_data, month_expr, one_expr, "__sub__"
+        )
+        # We rely on bodo_mod returning a negative remainder when (month-1) is negative
+        month_remainder = ArithOpExpression(
+            int_empty_data, month_minus_one, twelve_expr, "__mod__"
+        )
+        month_remainder_negative = ComparisonOpExpression(
+            bool_empty_data, month_remainder, zero_expr, operator.lt
+        )
+        month_num_to_add = CaseExpression(
+            int_empty_data,
+            month_remainder_negative,
+            ConstantExpression(int_empty_data, input_plan, 13),
+            one_expr,
+        )
+        month_component = ArithOpExpression(
+            int_empty_data, month_remainder, month_num_to_add, "__add__"
+        )
+
+        # Calculate year component.
+        # If month is positive, year component is year + (month-1) // 12.
+        # If month is 0 or negative, year component is year + (month) // 12 - 1.
+        # Here we rely on DuckDB's integer division to truncate towards zero.
+        month_positive = ComparisonOpExpression(
+            bool_empty_data, month_expr, zero_expr, operator.gt
+        )
+        month_quotient = ArithOpExpression(
+            int_empty_data, month_expr, twelve_expr, "__floordiv__"
+        )
+        month_quotient_minus_one = ArithOpExpression(
+            int_empty_data, month_quotient, one_expr, "__sub__"
+        )
+        month_minus_one_quotient = ArithOpExpression(
+            int_empty_data, month_minus_one, twelve_expr, "__floordiv__"
+        )
+        year_offset = CaseExpression(
+            int_empty_data,
+            month_positive,
+            month_minus_one_quotient,
+            month_quotient_minus_one,
+        )
+        year_component = ArithOpExpression(
+            int_empty_data, year_expr, year_offset, "__add__"
+        )
+
+        # Concatenate date components to get a string that can be parsed by strptime
+        year_string = CastExpression(string_empty_data, year_component)
+        year_string = ArrowScalarFuncExpression(
+            string_empty_data, [year_string], "utf8_lpad", (4, "0")
+        )
+        month_string = CastExpression(string_empty_data, month_component)
+        month_string = ArrowScalarFuncExpression(
+            string_empty_data, [month_string], "utf8_lpad", (2, "0")
+        )
+        day_string = ConstantExpression(string_empty_data, input_plan, "01")
+        separator = ConstantExpression(string_empty_data, input_plan, "-")
+        date_string = ArrowScalarFuncExpression(
+            string_empty_data,
+            [year_string, month_string, day_string, separator],
+            "binary_join_element_wise",
+            (),
+        )
+
+        # Only use nanosecond precision if necessary (nanoseconds provided).
+        # This helps avoid overflow in some cases, and can allow us to represent more years.
+        use_nanosecond_precision = nanosecond_expr is not None
+        precision_str = "ns" if use_nanosecond_precision else "s"
+        timestamp_empty_data = pd.Series(
+            dtype=pd.ArrowDtype(pa.timestamp(precision_str))
+        )
+        duration_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration(precision_str)))
+
+        # Pass date string to strptime to construct a timestamp from the components
+        timestamp_expr = ArrowScalarFuncExpression(
+            timestamp_empty_data,
+            [date_string],
+            "strptime",
+            ("%Y-%m-%d", precision_str),
+        )
+
+        # We passed 1 as the day, so now we need to add the remaining time to the timestamp.
+        # Convert days and time to nanosecond duration if needed or second duration
+
+        # Subtract one from the day since we already have a timestamp on the first day of the month
+        day_minus_one = ArithOpExpression(int_empty_data, day_expr, one_expr, "__sub__")
+        day_scale_factor = ConstantExpression(
+            int_empty_data,
+            input_plan,
+            86400 * (1_000_000_000 if use_nanosecond_precision else 1),
+        )
+        day_scaled = ArithOpExpression(
+            int_empty_data, day_minus_one, day_scale_factor, "__mul__"
+        )
+
+        hour_scaled, minute_scaled, second_scaled = None, None, None
+        if hour_expr:
+            hour_scale_factor = ConstantExpression(
+                int_empty_data,
+                input_plan,
+                3600 * (1_000_000_000 if use_nanosecond_precision else 1),
+            )
+            hour_scaled = ArithOpExpression(
+                int_empty_data, hour_expr, hour_scale_factor, "__mul__"
+            )
+        if minute_expr:
+            minute_scale_factor = ConstantExpression(
+                int_empty_data,
+                input_plan,
+                60 * (1_000_000_000 if use_nanosecond_precision else 1),
+            )
+            minute_scaled = ArithOpExpression(
+                int_empty_data, minute_expr, minute_scale_factor, "__mul__"
+            )
+        if second_expr and use_nanosecond_precision:
+            second_scale_factor = ConstantExpression(
+                int_empty_data, input_plan, 1_000_000_000
+            )
+            second_scaled = ArithOpExpression(
+                int_empty_data, second_expr, second_scale_factor, "__mul__"
+            )
+        else:
+            second_scaled = second_expr
+
+        # Add up the nanoseconds/seconds from each day/time component
+        additional_time = day_scaled
+        for time_component_scaled in [
+            hour_scaled,
+            minute_scaled,
+            second_scaled,
+            nanosecond_expr,
+        ]:
+            if time_component_scaled:
+                additional_time = ArithOpExpression(
+                    int_empty_data,
+                    additional_time,
+                    time_component_scaled,
+                    "__add__",
+                )
+
+        # Convert integer time to duration so it can be added to the timestamp.
+        # CastExpressions are currently broken if the unit is not nanoseconds,
+        # so in the seconds case we workaround by multiplying by a unit duration[s].
+        if use_nanosecond_precision:
+            additional_time_duration = CastExpression(
+                duration_empty_data, additional_time
+            )
+        else:
+            unit_duration = ConstantExpression(duration_empty_data, input_plan, 1)
+            additional_time_duration = ArithOpExpression(
+                duration_empty_data, additional_time, unit_duration, "__mul__"
+            )
+
+        # Add remaining time to timestamp
+        timestamp_expr = ArithOpExpression(
+            timestamp_empty_data,
+            timestamp_expr,
+            additional_time_duration,
+            "__add__",
+        )
+        return timestamp_expr
+
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
         num_operands = len(java_call.getOperands())
@@ -334,259 +640,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # We need to truncate timestamps to be consistent with the JIT implementation.
             date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
             return CastExpression(date_empty_data, timestamp_expr)
-
-        def timestamp_from_parts(
-            year_expr,
-            month_expr,
-            day_expr,
-            hour_expr=None,
-            minute_expr=None,
-            second_expr=None,
-            nanosecond_expr=None,
-        ):
-            # Arrow currently lacks a function to make a date or timestamp from parts:
-            # https://github.com/apache/arrow/issues/49514.
-            # There is some possibility of it being added in the future,
-            # so we can revisit this strptime approach then.
-
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-
-            max_int64 = ConstantExpression(
-                int_empty_data, input_plan, np.iinfo(np.int64).max
-            )
-            min_int64 = ConstantExpression(
-                int_empty_data, input_plan, np.iinfo(np.int64).min
-            )
-
-            # If any of the inputs are floats, we will round to the nearest integer.
-            # This is what the JIT implementation seems to do, even though float input isn't explicitly allowed in Snowflake.
-            def int_part_expr(part_expr, part_expr_name):
-                ensure_type_of_expr(part_expr, part_expr_name, (int, float))
-                part_expr_dtype = get_expr_dtype(part_expr, part_expr_name)
-                if compare_types(part_expr_dtype, float):
-                    part_expr = ArrowScalarFuncExpression(
-                        float_empty_data,
-                        [part_expr],
-                        "round",
-                        (0, "half_towards_infinity"),
-                    )
-
-                    # The BodoSQL docs say we should return NULL when any input cannot be converted to int64
-                    part_too_large = ComparisonOpExpression(
-                        bool_empty_data, part_expr, max_int64, operator.gt
-                    )
-                    part_too_small = ComparisonOpExpression(
-                        bool_empty_data, part_expr, min_int64, operator.lt
-                    )
-                    part_out_of_bounds = ConjunctionOpExpression(
-                        bool_empty_data, part_too_large, part_too_small, "__or__"
-                    )
-                    part_expr = CaseExpression(
-                        float_empty_data,
-                        part_out_of_bounds,
-                        NullExpression(float_empty_data, input_plan, 0),
-                        part_expr,
-                    )
-
-                    part_expr = CastExpression(int_empty_data, part_expr)
-                return part_expr
-
-            year_expr = int_part_expr(year_expr, "year_expr")
-            month_expr = int_part_expr(month_expr, "month_expr")
-            day_expr = int_part_expr(day_expr, "day_expr")
-
-            if hour_expr:
-                hour_expr = int_part_expr(hour_expr, "hour_expr")
-            if minute_expr:
-                minute_expr = int_part_expr(minute_expr, "minute_expr")
-            if second_expr:
-                second_expr = int_part_expr(second_expr, "second_expr")
-                # Ensure seconds are int64 so the result of the later multiplication doesn't
-                # end up being int32 internally, potentially leading to overflow and the wrong answer.
-                second_expr = CastExpression(int_empty_data, second_expr)
-            if nanosecond_expr:
-                nanosecond_expr = int_part_expr(nanosecond_expr, "nanosecond_expr")
-
-            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-            twelve_expr = ConstantExpression(int_empty_data, input_plan, 12)
-
-            # Timestamp components (aside from the year) can be outside the usual ranges
-            # or even negative, so we must account for this and adjust the constructed timestamp.
-
-            # Calculate the year and month manually to ensure calendar awareness.
-
-            # Calculate month component.
-            # If (month-1) % 12 is 0 or positive, month component is (month-1) % 12 + 1.
-            # If (month-1) % 12 is negative, month component is 13 + (month-1) % 12.
-            month_minus_one = ArithOpExpression(
-                int_empty_data, month_expr, one_expr, "__sub__"
-            )
-            # We rely on bodo_mod returning a negative remainder when (month-1) is negative
-            month_remainder = ArithOpExpression(
-                int_empty_data, month_minus_one, twelve_expr, "__mod__"
-            )
-            month_remainder_negative = ComparisonOpExpression(
-                bool_empty_data, month_remainder, zero_expr, operator.lt
-            )
-            month_num_to_add = CaseExpression(
-                int_empty_data,
-                month_remainder_negative,
-                ConstantExpression(int_empty_data, input_plan, 13),
-                one_expr,
-            )
-            month_component = ArithOpExpression(
-                int_empty_data, month_remainder, month_num_to_add, "__add__"
-            )
-
-            # Calculate year component.
-            # If month is positive, year component is year + (month-1) // 12.
-            # If month is 0 or negative, year component is year + (month) // 12 - 1.
-            # Here we rely on DuckDB's integer division to truncate towards zero.
-            month_positive = ComparisonOpExpression(
-                bool_empty_data, month_expr, zero_expr, operator.gt
-            )
-            month_quotient = ArithOpExpression(
-                int_empty_data, month_expr, twelve_expr, "__floordiv__"
-            )
-            month_quotient_minus_one = ArithOpExpression(
-                int_empty_data, month_quotient, one_expr, "__sub__"
-            )
-            month_minus_one_quotient = ArithOpExpression(
-                int_empty_data, month_minus_one, twelve_expr, "__floordiv__"
-            )
-            year_offset = CaseExpression(
-                int_empty_data,
-                month_positive,
-                month_minus_one_quotient,
-                month_quotient_minus_one,
-            )
-            year_component = ArithOpExpression(
-                int_empty_data, year_expr, year_offset, "__add__"
-            )
-
-            # Concatenate date components to get a string that can be parsed by strptime
-            year_string = CastExpression(string_empty_data, year_component)
-            year_string = ArrowScalarFuncExpression(
-                string_empty_data, [year_string], "utf8_lpad", (4, "0")
-            )
-            month_string = CastExpression(string_empty_data, month_component)
-            month_string = ArrowScalarFuncExpression(
-                string_empty_data, [month_string], "utf8_lpad", (2, "0")
-            )
-            day_string = ConstantExpression(string_empty_data, input_plan, "01")
-            separator = ConstantExpression(string_empty_data, input_plan, "-")
-            date_string = ArrowScalarFuncExpression(
-                string_empty_data,
-                [year_string, month_string, day_string, separator],
-                "binary_join_element_wise",
-                (),
-            )
-
-            # Only use nanosecond precision if necessary (nanoseconds provided).
-            # This helps avoid overflow in some cases, and can allow us to represent more years.
-            use_nanosecond_precision = nanosecond_expr is not None
-            precision_str = "ns" if use_nanosecond_precision else "s"
-            timestamp_empty_data = pd.Series(
-                dtype=pd.ArrowDtype(pa.timestamp(precision_str))
-            )
-            duration_empty_data = pd.Series(
-                dtype=pd.ArrowDtype(pa.duration(precision_str))
-            )
-
-            # Pass date string to strptime to construct a timestamp from the components
-            timestamp_expr = ArrowScalarFuncExpression(
-                timestamp_empty_data,
-                [date_string],
-                "strptime",
-                ("%Y-%m-%d", precision_str),
-            )
-
-            # We passed 1 as the day, so now we need to add the remaining time to the timestamp.
-            # Convert days and time to nanosecond duration if needed or second duration
-
-            # Subtract one from the day since we already have a timestamp on the first day of the month
-            day_minus_one = ArithOpExpression(
-                int_empty_data, day_expr, one_expr, "__sub__"
-            )
-            day_scale_factor = ConstantExpression(
-                int_empty_data,
-                input_plan,
-                86400 * (1_000_000_000 if use_nanosecond_precision else 1),
-            )
-            day_scaled = ArithOpExpression(
-                int_empty_data, day_minus_one, day_scale_factor, "__mul__"
-            )
-
-            hour_scaled, minute_scaled, second_scaled = None, None, None
-            if hour_expr:
-                hour_scale_factor = ConstantExpression(
-                    int_empty_data,
-                    input_plan,
-                    3600 * (1_000_000_000 if use_nanosecond_precision else 1),
-                )
-                hour_scaled = ArithOpExpression(
-                    int_empty_data, hour_expr, hour_scale_factor, "__mul__"
-                )
-            if minute_expr:
-                minute_scale_factor = ConstantExpression(
-                    int_empty_data,
-                    input_plan,
-                    60 * (1_000_000_000 if use_nanosecond_precision else 1),
-                )
-                minute_scaled = ArithOpExpression(
-                    int_empty_data, minute_expr, minute_scale_factor, "__mul__"
-                )
-            if second_expr and use_nanosecond_precision:
-                second_scale_factor = ConstantExpression(
-                    int_empty_data, input_plan, 1_000_000_000
-                )
-                second_scaled = ArithOpExpression(
-                    int_empty_data, second_expr, second_scale_factor, "__mul__"
-                )
-            else:
-                second_scaled = second_expr
-
-            # Add up the nanoseconds/seconds from each day/time component
-            additional_time = day_scaled
-            for time_component_scaled in [
-                hour_scaled,
-                minute_scaled,
-                second_scaled,
-                nanosecond_expr,
-            ]:
-                if time_component_scaled:
-                    additional_time = ArithOpExpression(
-                        int_empty_data,
-                        additional_time,
-                        time_component_scaled,
-                        "__add__",
-                    )
-
-            # Convert integer time to duration so it can be added to the timestamp.
-            # CastExpressions are currently broken if the unit is not nanoseconds,
-            # so in the seconds case we workaround by multiplying by a unit duration[s].
-            if use_nanosecond_precision:
-                additional_time_duration = CastExpression(
-                    duration_empty_data, additional_time
-                )
-            else:
-                unit_duration = ConstantExpression(duration_empty_data, input_plan, 1)
-                additional_time_duration = ArithOpExpression(
-                    duration_empty_data, additional_time, unit_duration, "__mul__"
-                )
-
-            # Add remaining time to timestamp
-            timestamp_expr = ArithOpExpression(
-                timestamp_empty_data,
-                timestamp_expr,
-                additional_time_duration,
-                "__add__",
-            )
-            return timestamp_expr
 
         if func_name == "TIMESTAMP_FROM_PARTS":
             # Redirect to TZ-aware or TZ-naive version depending on whether a timezone is provided
@@ -695,6 +748,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             # If any of the inputs are floats, we will round to the nearest integer.
             # This is what the JIT implementation seems to do, even though float input isn't explicitly allowed in Snowflake.
+            # See `time_from_parts` in BodoSQL/bodosql/kernels/time_array_kernels.py.
             def int_part_expr(op_index, part_expr_name):
                 part_expr = java_expr_to_python_expr(
                     ctx, java_call.getOperands()[op_index], input_plan

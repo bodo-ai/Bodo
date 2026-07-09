@@ -1479,8 +1479,9 @@ const char *get_py_single_arg_as_cstr(PyObject *args, const char *func_name) {
 std::tuple<int64_t, arrow::compute::RoundMode> get_py_round_args(
     PyObject *args) {
     int64_t digits = 0;  // default value if no argument is provided
-    // half_to_even is the default round mode in Arrow; we could change it if we
-    // wanted
+    // We set the default here to half_to_even to match Arrow.
+    // In BodoSQL, the default is half_towards_infinity, but we
+    // override the round mode argument elsewhere (for UnaryOpExpressions).
     arrow::compute::RoundMode round_mode =
         arrow::compute::RoundMode::HALF_TO_EVEN;
     if (PyTuple_Check(args)) {
