@@ -1827,7 +1827,6 @@ PyObject* fetch_parquet_frag_row_counts(PyObject* self, PyObject* const* args,
         return nullptr;
     }
     auto filter = filter_res.ValueOrDie();
-    std::cout << "Filter " << filter.ToString() << std::endl;
     // Convert the third argument into a schema
     PyObject* schema_arg = args[2];
     auto schema_res = arrow::py::unwrap_schema(schema_arg);
