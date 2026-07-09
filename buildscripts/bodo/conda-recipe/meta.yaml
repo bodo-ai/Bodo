@@ -111,6 +111,7 @@ requirements:
     - librmm ={{ rapids_version }}                # [gpu]
 
     # Constrain cuda-version to >= version installed by host and < next major version
+    # TODO[BSE-5508]: Enabled more minor versions
     - {{ pin_compatible("cuda-version") }}        # [gpu]
 
   # run_constrained means these packages are not required deps
