@@ -393,9 +393,7 @@ def test_table_path_timing_debug_message(datapath, memory_leak_check):
 @pytest.mark.slow
 def test_parquet_row_count_estimation(datapath, memory_leak_check):
     """
-    Tests that loading a parquet table using TablePath produces a row count
-    estimation. When the number of files is small enough (<= num ranks), all
-    file footers are read and the estimate is exact.
+    Tests that loading a parquet table using TablePath produces a row count estimation.
     """
 
     f1 = datapath("sample-parquet-data/partitioned")
@@ -405,10 +403,6 @@ def test_parquet_row_count_estimation(datapath, memory_leak_check):
         }
     )
 
-    # The partitioned dataset has 3 files with 2+5+3=10 rows. With the default
-    # 2 ranks, all 3 files are sampled (3 <= 2 is false, but each rank reads
-    # one file and the 3rd is read by rank 0 or 1 depending on assignment).
-    # The estimate is proportional so may not be exactly 10.
     assert bc.estimated_row_counts[0] is not None
     assert bc.estimated_row_counts[0] > 0
 
@@ -418,8 +412,7 @@ def test_parquet_row_count_estimation(datapath, memory_leak_check):
 def test_parquet_row_count_estimation_sampled(tmp_path, memory_leak_check):
     """
     Tests that the sampled row count estimation produces a reasonable estimate
-    for a multi-file parquet dataset where the number of files exceeds the
-    number of ranks. Files are written with uniform row counts so the
+    for a multi-file parquet dataset. Files are written with uniform row counts so the
     extrapolation should be exact.
     """
     import pandas as pd

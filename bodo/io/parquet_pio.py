@@ -1253,8 +1253,7 @@ def estimate_parquet_row_count(fpath: str, storage_options: dict | None = None) 
 
     Samples ``max(3, 0.1%)`` of files (rounded up), reads their footers via
     ``pq.read_table(columns=[]).num_rows``, and extrapolates proportionally
-    by file count. This runs on rank 0 only and the result should be
-    broadcast to other ranks by the caller.
+    by file count.
 
     This is shared between the DataFrame library's ``LogicalGetParquetRead``
     and BodoSQL's ``TablePath.estimated_row_count``.
