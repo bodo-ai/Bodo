@@ -1838,7 +1838,7 @@ PyObject* fetch_parquet_frag_row_counts(PyObject* self, PyObject* const* args,
 
     // Set up scanner options for each count rows
     auto scan_options = std::make_shared<arrow::dataset::ScanOptions>();
-    // scan_options->filter = filter;
+    scan_options->filter = filter;
     scan_options->use_threads = true;
     scan_options->pool = bodo::BufferPool::DefaultPtr();
 
