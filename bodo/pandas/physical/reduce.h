@@ -75,18 +75,22 @@ struct ReductionFunctionMin : public ReductionFunction {
 };
 
 struct ReductionFunctionSum : public ReductionFunction {
-    ReductionFunctionSum(int input_col_idx, std::shared_ptr<arrow::DataType> dt)
-        : ReductionFunction(input_col_idx, {"sum"}, {"add"},
-                            {ReductionType::AGGREGATION},
-                            {arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
+    ReductionFunctionSum(int input_col_idx, bool use_sql_rules,
+                         std::shared_ptr<arrow::DataType> dt)
+        : ReductionFunction(
+              input_col_idx, {"sum"}, {"add"}, {ReductionType::AGGREGATION},
+              {use_sql_rules ? arrow::MakeNullScalar(dt)
+                             : arrow::MakeScalar(dt, 0).ValueOrDie()}) {}
 };
 
 struct ReductionFunctionProduct : public ReductionFunction {
-    ReductionFunctionProduct(int input_col_idx,
+    ReductionFunctionProduct(int input_col_idx, bool use_sql_rules,
                              std::shared_ptr<arrow::DataType> dt)
-        : ReductionFunction(input_col_idx, {"product"}, {"multiply"},
-                            {ReductionType::AGGREGATION},
-                            {arrow::MakeScalar(dt, 1).ValueOrDie()}) {}
+        : ReductionFunction(
+              input_col_idx, {"product"}, {"multiply"},
+              {ReductionType::AGGREGATION},
+              {use_sql_rules ? arrow::MakeNullScalar(dt)
+                             : arrow::MakeScalar(dt, 1).ValueOrDie()}) {}
 };
 
 struct ReductionFunctionCount : public ReductionFunction {
@@ -134,11 +138,13 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalReduce(std::shared_ptr<bodo::Schema> out_schema,
                             std::vector<std::string> function_names,
-                            std::vector<int> input_column_indices)
+                            std::vector<int> input_column_indices,
+                            bool use_sql_rules = false)
         // Drop Index columns since not necessary in output
         : out_schema(std::move(out_schema)),
           function_names(std::move(function_names)),
-          input_column_indices(std::move(input_column_indices)) {}
+          input_column_indices(std::move(input_column_indices)),
+          use_sql_rules(use_sql_rules) {}
 
     virtual ~PhysicalReduce() = default;
 
@@ -220,6 +226,7 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     std::vector<std::unique_ptr<ReductionFunction>> reduction_functions;
     std::vector<std::string> function_names;
     std::vector<int> input_column_indices;
+    bool use_sql_rules = false;
 
     int64_t iter = 0;
     PhysicalReduceMetrics metrics;
