@@ -242,7 +242,14 @@ def java_plan_to_python_plan(ctx, java_plan):
 
 def java_table_create_to_python(ctx, java_plan):
     input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
-    return ctx.NewTable(input_plan, java_plan)
+
+    def to_iceberg(df, name):
+        return df.to_iceberg(name)
+
+    plan = gen_plan_via_bodo_dataframe(to_iceberg, input_plan, java_plan.getTableName())
+
+    return plan
+    # return ctx.NewTable(input_plan, java_plan)
 
 
 def java_expr_to_python_expr(ctx, java_expr, input_plan):
