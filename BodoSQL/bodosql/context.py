@@ -732,7 +732,7 @@ class BodoSQLContext:
                 out = bodo.pandas.plan.execute_plan(
                     plan.internal_plan, optimize=False, use_sql_rules=True
                 )
-                location = os.path.join(*plan.table_create_node.getPath())
+                location = self.catalog.connection_string
                 out.to_iceberg(plan.table_create_node.getTableName(), location=location)
                 out = None
             else:
