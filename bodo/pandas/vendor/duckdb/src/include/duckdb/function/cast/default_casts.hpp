@@ -13,7 +13,10 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/optional_ptr.hpp"
 #include "duckdb/function/scalar_function.hpp"
-#include <arrow/type.h>
+
+namespace arrow {
+class DataType;
+}
 
 namespace duckdb {
 
