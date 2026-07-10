@@ -4251,7 +4251,7 @@ def gen_plan_via_bodo_dataframe(func, *args, **kwargs):
 
 def java_window_to_python_window(ctx, java_plan):
     java_plan_to_python_plan(ctx, java_plan.getInput())
-    assert False
+    raise NotImplementedError("Plan node BodoPhysicalWindow not supported yet")
 
 
 def java_agg_to_python_agg(ctx, java_plan):
