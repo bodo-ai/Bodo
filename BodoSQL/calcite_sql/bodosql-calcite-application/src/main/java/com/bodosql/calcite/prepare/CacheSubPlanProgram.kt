@@ -1,5 +1,6 @@
 package com.bodosql.calcite.prepare
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalAggregate
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalCachedSubPlan
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
@@ -27,6 +28,7 @@ import org.apache.calcite.rel.RelCollations
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.RelVisitor
+import org.apache.calcite.rel.SingleRel
 import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.core.Filter
@@ -44,7 +46,6 @@ import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.tools.Program
 import org.apache.calcite.tools.RelBuilder
-import org.apache.calcite.tools.RelBuilder.AggCall
 import org.apache.calcite.util.ImmutableBitSet
 import org.apache.calcite.util.Util
 import org.apache.calcite.util.mapping.MappingType
@@ -459,11 +460,19 @@ class CacheSubPlanProgram : Program {
                 // Check for converters which should always match
                 // Note: We don't need to check these separately by construction because they couldn't match to this point
                 // if they had different conventions.
-                val newRoot = parents[0].second.copy(parents[0].second.traitSet, listOf(cacheRoot))
-                processCaching(
-                    newRoot,
-                    parents.map { CoveringExpressionState(it.second, it.first.keptColumns, it.first.filter) },
-                )
+                // However, if the cache root is not in the converter's source convention (e.g. a BodoPhysicalFilter
+                // was inserted by earlier filter processing), we cannot create a converter on top of it and must
+                // materialize the cache here instead.
+                val converterSourceConvention = (parents[0].second as SingleRel).input.convention
+                if (cacheRoot.convention == converterSourceConvention) {
+                    val newRoot = parents[0].second.copy(parents[0].second.traitSet, listOf(cacheRoot))
+                    processCaching(
+                        newRoot,
+                        parents.map { CoveringExpressionState(it.second, it.first.keptColumns, it.first.filter) },
+                    )
+                } else {
+                    generateCacheNodes(cacheRoot, parents, parents.size)
+                }
             } else {
                 generateCacheNodes(cacheRoot, parents, parents.size)
             }
@@ -677,20 +686,17 @@ class CacheSubPlanProgram : Program {
             input: RelNode,
             parents: List<Pair<CoveringExpressionState, RelNode>>,
         ): Triple<RelNode, List<List<Int>>, List<Pair<RexNode?, Boolean>>> {
-            relBuilder.push(input)
-            val aggCallsMap = HashMap<AggCallKey, Pair<AggCall, Int>>()
+            val aggCallsMap = HashMap<AggCallKey, Pair<AggregateCall, Int>>()
             parents.forEach {
                 val agg = it.second as Aggregate
                 val indices = it.first.keptColumns
                 agg.aggCallList.forEach { aggCall ->
-                    val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
                     val newCollation =
                         RelCollations.of(
                             aggCall.collation.fieldCollations.map { fieldCollation ->
                                 fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
                             },
                         )
-                    val newAggCall = buildEquivalentAggCall(aggCall, newArgs, newCollation)
                     val key =
                         AggCallKey(
                             aggCall.aggregation,
@@ -702,13 +708,20 @@ class CacheSubPlanProgram : Program {
                         )
                     if (!aggCallsMap.contains(key)) {
                         val newIdx = aggCallsMap.size
+                        val newAggCall = buildEquivalentAggCall(aggCall, indices, newCollation, input, groupKeys.cardinality())
                         aggCallsMap[key] = Pair(newAggCall, newIdx)
                     }
                 }
             }
             val newAggCalls = aggCallsMap.values.sortedBy { it.second }.map { it.first }
-            relBuilder.aggregate(relBuilder.groupKey(groupKeys), newAggCalls)
-            val newAggregate = relBuilder.build()
+            val newAggregate =
+                BodoPhysicalAggregate.create(
+                    relBuilder.getCluster(),
+                    input,
+                    groupKeys,
+                    listOf(groupKeys),
+                    newAggCalls,
+                )
             val newKeysIndices =
                 groupKeys.withIndex().associate {
                     Pair(it.value, it.index)
@@ -746,7 +759,6 @@ class CacheSubPlanProgram : Program {
                                         fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
                                     },
                                 )
-                            val newAggCall = buildEquivalentAggCall(aggCall, newArgs, newCollation)
                             val key =
                                 AggCallKey(
                                     aggCall.aggregation,
@@ -804,7 +816,6 @@ class CacheSubPlanProgram : Program {
                                         fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
                                     },
                                 )
-                            val newAggCall = buildEquivalentAggCall(aggCall, newArgs, newCollation)
                             val key =
                                 AggCallKey(
                                     aggCall.aggregation,
@@ -861,20 +872,39 @@ class CacheSubPlanProgram : Program {
         }
 
         /**
-         * Builds an aggCall that matches the one passed in but with new arguments.
-         * @param aggCall The aggCall to match.
+         * Builds an AggregateCall that matches the one passed in but with remapped
+         * argument indices and collation. Preserves the original return type to
+         * avoid type re-inference issues (e.g. SUM0 on BIGINT may re-infer as DOUBLE).
+         * @param aggCall The original aggregate call.
+         * @param indices The column mapping from the consumer's input to the cache root.
+         * @param newCollation The remapped collation.
+         * @param input The input rel that the new aggregate will sit on top of.
+         * @param groupCount The number of grouping keys in the new aggregate.
          */
         private fun buildEquivalentAggCall(
             aggCall: AggregateCall,
-            newArgs: List<RexNode>,
+            indices: List<Int>,
             newCollation: RelCollation,
-        ): AggCall =
-            relBuilder
-                .aggregateCall(aggCall.aggregation, newArgs)
-                .distinct(aggCall.isDistinct)
-                .approximate(aggCall.isApproximate)
-                .ignoreNulls(aggCall.ignoreNulls())
-                .sort(newCollation)
+            input: RelNode,
+            groupCount: Int,
+        ): AggregateCall {
+            val newArgIndices = aggCall.argList.map { idx -> indices[idx] }
+            return AggregateCall.create(
+                aggCall.aggregation,
+                aggCall.isDistinct,
+                aggCall.isApproximate,
+                aggCall.ignoreNulls(),
+                aggCall.rexList,
+                newArgIndices,
+                -1,
+                aggCall.distinctKeys,
+                newCollation,
+                groupCount,
+                input,
+                aggCall.type,
+                aggCall.name,
+            )
+        }
 
         /**
          * Process a join that is known to be a candidate for caching. This also includes
