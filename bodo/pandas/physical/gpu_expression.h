@@ -1004,7 +1004,19 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             // cudf::strings::strip()
             str_scalar_in = std::make_shared<cudf::string_scalar>("", true);
         } else if (scalar_func_data.arrow_func_name == "round") {
-            round_ndigits = get_py_round_arg(scalar_func_data.args);
+            arrow::compute::RoundMode arrow_round_mode;
+            std::tie(round_ndigits, arrow_round_mode) =
+                get_py_round_args(scalar_func_data.args);
+            if (arrow_round_mode == arrow::compute::RoundMode::HALF_TO_EVEN) {
+                round_mode = cudf::rounding_method::HALF_EVEN;
+            } else if (arrow_round_mode ==
+                       arrow::compute::RoundMode::HALF_TOWARDS_INFINITY) {
+                round_mode = cudf::rounding_method::HALF_UP;
+            } else {
+                throw std::invalid_argument(
+                    "Only half-to-even and half-away-from-zero rounding modes "
+                    "supported on GPU.");
+            }
         } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
             extract_slice_arg_from_python();
         } else if (scalar_func_data.arrow_func_name == "is_in") {
@@ -1062,7 +1074,7 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
             result = cudf::round(in_as_array->result->view(), round_ndigits,
-                                 cudf::rounding_method::HALF_EVEN, se->stream);
+                                 round_mode, se->stream);
 #pragma GCC diagnostic pop
         } else if (scalar_func_data.arrow_func_name == "is_null") {
             result = cudf::is_null(in_as_array->result->view(), se->stream);
@@ -1179,6 +1191,7 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     std::shared_ptr<cudf::strings::regex_program> regex_prog;
 
     int32_t round_ndigits = 0;
+    cudf::rounding_method round_mode = cudf::rounding_method::HALF_EVEN;
 
     // str.slice() arguments
     int64_t start = 0;
