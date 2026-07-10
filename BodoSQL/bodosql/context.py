@@ -732,7 +732,8 @@ class BodoSQLContext:
                 out = bodo.pandas.plan.execute_plan(
                     plan.internal_plan, optimize=False, use_sql_rules=True
                 )
-                self.tables[plan.table_create_node.getTableName()] = out
+                location = os.path.join(*plan.table_create_node.getPath())
+                out.to_iceberg(plan.table_create_node.getTableName(), location=location)
                 out = None
             else:
                 out = bodo.pandas.plan.execute_plan(
