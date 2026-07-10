@@ -457,6 +457,17 @@ class JoinFilterColStats {
 };
 
 /**
+ * @brief Log runtime join filter expressions on rank 0.
+ *
+ * @param join_filter_col_stats JoinFilterColStats object containing the column
+ * statistics
+ * @param schema Arrow schema associated with the join filter columns
+ */
+void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
+                          const std::shared_ptr<arrow::Schema> &schema,
+                          std::string header = "Iceberg I/O");
+
+/**
  * @brief Assert that the Python objects arguments is a tuple
  *
  * @param args Python tuple containing the function arguments

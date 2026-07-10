@@ -1298,6 +1298,86 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
     return filters;
 }
 
+void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
+                          const std::shared_ptr<arrow::Schema> &schema,
+                          std::string header) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (rank != 0) {
+        return;
+    }
+
+    auto [filter_cols, filter_col_stats] =
+        join_filter_col_stats.get_col_stats_for_join_filter_cols();
+
+    std::ostringstream expr_stream;
+    expr_stream << "Runtime join filter expression: ";
+    bool first_expr = true;
+
+    for (size_t i = 0; i < filter_cols.size(); ++i) {
+        const auto column_index = filter_cols[i];
+        const std::string &column_name = schema->field(column_index)->name();
+
+        for (const auto &[min_value, max_value] : filter_col_stats[i]) {
+            if (!first_expr) {
+                expr_stream << " & ";
+            }
+            first_expr = false;
+
+            expr_stream << "(ds.field('" << column_name
+                        << "') >= " << min_value->ToString() << " & ds.field('"
+                        << column_name << "') <= " << max_value->ToString()
+                        << ")";
+        }
+    }
+
+    if (first_expr) {
+        expr_stream << "True";
+    }
+    const std::string rtjf_str = expr_stream.str();
+
+    PyGILState_STATE gil = PyGILState_Ensure();
+
+    try {
+        PyObjectPtr module(PyImport_ImportModule("bodo.user_logging"));
+        if (!module) {
+            throw std::runtime_error("Failed to import bodo.user_logging");
+        }
+
+        PyObjectPtr func(
+            PyObject_GetAttrString(module.get(), "log_if_verbose"));
+        if (!func || !PyCallable_Check(func.get())) {
+            throw std::runtime_error(
+                "bodo.user_logging.log_if_verbose is not callable");
+        }
+
+        PyObjectPtr py_level(PyLong_FromLongLong(2));
+        PyObjectPtr py_header(PyUnicode_FromString(header.c_str()));
+        PyObjectPtr py_message(PyUnicode_FromStringAndSize(
+            rtjf_str.data(), static_cast<Py_ssize_t>(rtjf_str.size())));
+
+        if (!py_level || !py_header || !py_message) {
+            throw std::runtime_error("Failed to create logging arguments");
+        }
+
+        PyObjectPtr result(PyObject_CallFunctionObjArgs(
+            func.get(), py_level.get(), py_header.get(), py_message.get(),
+            nullptr));
+
+        if (!result) {
+            throw std::runtime_error("log_if_verbose() failed");
+        }
+    } catch (...) {
+        if (PyErr_Occurred()) {
+            PyErr_Print();
+        }
+        PyGILState_Release(gil);
+        throw;
+    }
+
+    PyGILState_Release(gil);
+}
+
 void assert_py_args_is_tuple(PyObject *args, const char *err_context) {
     if (!PyTuple_Check(args)) {
         throw std::runtime_error(fmt::format("Args for {} is not a tuple.",

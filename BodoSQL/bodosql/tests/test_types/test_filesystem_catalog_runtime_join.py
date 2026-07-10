@@ -64,8 +64,7 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
         log_msg = "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 1))"
 
         if bodosql.use_cpp_backend:
-            # TODO BSE-5476: Check logs in BodoSQL backend C++ tests
-            log_msg = ""
+            log_msg = "Runtime join filter expression: (ds.field('A') >= 1 & ds.field('A') <= 1)"
 
     with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
         with temp_config_override("dataframe_library_run_parallel", False):
