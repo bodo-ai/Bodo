@@ -256,11 +256,14 @@ def pyiceberg_filter_to_pyarrow_format_str_and_scalars(
     return visit(bound_expr, _ConvertToArrowExpressionStringAndScalar())
 
 
-def log_filter_expressions(
+def log_rtjf_expressions(
     filter_cols: list[int],
     min_max_values: list[tuple[pa.Scalar, pa.Scalar]],
     schema: pa.Schema,
 ) -> None:
+    """
+    Log Iceberg runtime join filter expressions for DataFrame library and C++ backend.
+    """
     named_cols: list[str] = [schema.field(i).name for i in filter_cols]
 
     print("Received filter_cols:", named_cols, min_max_values)

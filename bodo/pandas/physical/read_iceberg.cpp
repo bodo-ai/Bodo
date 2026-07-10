@@ -110,12 +110,22 @@ std::vector<std::string> PhysicalReadIceberg::create_out_column_names(
 
 void log_filter_expressions(JoinFilterColStats &join_filter_col_stats,
                             const std::shared_ptr<arrow::Schema> &schema) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (rank != 0) {
+        return;
+    }
+
     auto [filter_cols, filter_col_stats] =
         join_filter_col_stats.get_col_stats_for_join_filter_cols();
 
+    PyObjectPtr pyarrow_schema = arrow::py::wrap_schema(schema);
+    if (!pyarrow_schema) {
+        throw std::runtime_error("Failed to wrap Arrow schema");
+    }
+
     // convert filter cols and filter col stats to PyObjects
     // call Python logging function
-    // TODO(scott): Avoid passing Pyarrow objects to Python
     PyObjectPtr py_cols = PyList_New(filter_cols.size());
     if (!py_cols) {
         throw std::runtime_error("Failed to allocate py_cols");
@@ -163,6 +173,36 @@ void log_filter_expressions(JoinFilterColStats &join_filter_col_stats,
         }
         PyList_SET_ITEM(py_pairs_lists.get(), i, py_pairs.release());
     }
+
+    PyGILState_STATE gil = PyGILState_Ensure();
+    try {
+        PyObjectPtr module(PyImport_ImportModule("bodo.io.iceberg.common"));
+        if (!module) {
+            PyErr_Print();
+            throw std::runtime_error("Failed to import bodo.io.iceberg.common");
+        }
+
+        PyObjectPtr func(
+            PyObject_GetAttrString(module.get(), "log_rtjf_expressions"));
+        if (!func || !PyCallable_Check(func.get())) {
+            PyErr_Print();
+            throw std::runtime_error(
+                "bodo.io.iceberg.common.log_rtjf_expressions is not callable");
+        }
+
+        PyObjectPtr result(PyObject_CallFunctionObjArgs(
+            func.get(), py_cols.get(), py_pairs_lists.get(),
+            pyarrow_schema.get(), nullptr));
+
+        if (!result) {
+            PyErr_Print();
+            throw std::runtime_error("log_rtjf_expressions() failed");
+        }
+    } catch (...) {
+        PyGILState_Release(gil);
+        throw;
+    }
+    PyGILState_Release(gil);
 }
 
 std::unique_ptr<IcebergParquetReader>
