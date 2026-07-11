@@ -234,7 +234,15 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalCachedSubPlan":
         return java_subplan_to_python_subplan(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalTableCreate":
+        return java_table_create_to_python(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
+
+
+def java_table_create_to_python(ctx, java_plan):
+    input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+    return ctx.NewTable(input_plan, java_plan)
 
 
 def java_expr_to_python_expr(ctx, java_expr, input_plan):
@@ -3209,6 +3217,19 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     inserted_str_expr.value,
                 ),
             )
+        elif func_name == "CONVERT_TIMEZONE" and len(op_exprs) == 2:
+            str_timezone = op_exprs[0]
+            src = op_exprs[1]
+
+            ensure_arg_is_const_expr_of_type(
+                str_timezone, "str_timezone", (str, pa.binary())
+            )
+            ensure_type_of_expr(src, "src", pd._libs.tslibs.timestamps.Timestamp)
+            target_timestamp_empty_data = pd.Series(
+                dtype=pd.ArrowDtype(pa.timestamp("ns", tz=str_timezone.value))
+            )
+            target_timestamp_expr = CastExpression(target_timestamp_empty_data, src)
+            return target_timestamp_expr
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()

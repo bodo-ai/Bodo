@@ -109,6 +109,11 @@ def _get_estimated_ndv(table: pd.DataFrame | TablePath) -> dict[str, int]:
 
 
 class BodoSQLContext:
+    class NewTable:
+        def __init__(self, internal_plan, table_create_node):
+            self.internal_plan = internal_plan
+            self.table_create_node = table_create_node
+
     def __init__(self, tables=None, catalog=None, default_tz=None):
         # We only need to initialize the tables values on all ranks, since that is needed for
         # creating the JIT function on all ranks for bc.sql calls. We also initialize df_types on all ranks,
@@ -723,9 +728,17 @@ class BodoSQLContext:
             # filter translation during conversion to Python plan.
             self.join_filter_info = {}
             plan = java_plan_to_python_plan(self, java_plan)
-            out = bodo.pandas.plan.execute_plan(
-                plan, optimize=False, use_sql_rules=True
-            )
+            if isinstance(plan, self.NewTable):
+                out = bodo.pandas.plan.execute_plan(
+                    plan.internal_plan, optimize=False, use_sql_rules=True
+                )
+                location = self.catalog.connection_string
+                out.to_iceberg(plan.table_create_node.getTableName(), location=location)
+                out = None
+            else:
+                out = bodo.pandas.plan.execute_plan(
+                    plan, optimize=False, use_sql_rules=True
+                )
         except Exception as e:
             message = error_to_string(e)
             if bodosql.verbose_cpp_backend:
