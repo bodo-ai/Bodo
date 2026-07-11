@@ -4284,6 +4284,7 @@ def java_agg_to_python_agg(ctx, java_plan):
             "var_pop",
             "skew",
             "kurtosis",
+            "first",
         ]:
             assert len(arg_cols) == 1, (
                 f"Only single-argument {func_name} aggregations are supported"
@@ -4483,6 +4484,9 @@ def _agg_to_func_name(func):
         raise NotImplementedError(
             f"Aggregation {agg_name} (class={cls_name}) not supported yet\n{details}"
         )
+
+    if kind.equals(SqlKind.ANY_VALUE) and len(argList) == 1:
+        return "first"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 
