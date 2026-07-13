@@ -3503,6 +3503,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             elif pa.types.is_timestamp(timestamp_pa_type):
                 target_res = timestamp_pa_type.unit
 
+            # The definition of this operation is to convert a time from one
+            # timezone to a different one.
+            # The general algorithm is that we get to a timestamp that has a timezone
+            # and then use a cast to a different timezone which will actually perform
+            # the conversion.  However, some input types don't have a timezone to
+            # work with.  The check below find such cases and then uses the
+            # assume_timezone kernel to apply the BodoSQL context's default_timezone
+            # if it has one else use UTC.  One final wrinkle is that assume_timezone
+            # can't operate on all possible input types so we convert the input
+            # date/time type to a format that we know it can handle.
             if pa.types.is_date(timestamp_pa_type) or (
                 pa.types.is_timestamp(timestamp_pa_type)
                 and timestamp_pa_type.tz is None
