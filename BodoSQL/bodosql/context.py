@@ -728,6 +728,7 @@ class BodoSQLContext:
             # filter translation during conversion to Python plan.
             self.join_filter_info = {}
             plan = java_plan_to_python_plan(self, java_plan)
+            print(plan)
             if isinstance(plan, self.NewTable):
                 out = bodo.pandas.plan.execute_plan(
                     plan.internal_plan, optimize=False, use_sql_rules=True

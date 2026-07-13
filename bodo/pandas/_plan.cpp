@@ -400,6 +400,8 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
         client_context->transaction.BeginTransaction();
         started_transaction = true;
     }
+    std::cout << "make_unaryop_expr: looking up function for operator " << opstr
+              << std::endl;
     duckdb::EntryLookupInfo function_lookup(
         duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
@@ -492,6 +494,8 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
         case duckdb::ExpressionType::OPERATOR_NOT:
         case duckdb::ExpressionType::OPERATOR_IS_TRUE:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_TRUE:
+        case duckdb::ExpressionType::OPERATOR_IS_FALSE:
+        case duckdb::ExpressionType::OPERATOR_IS_NOT_FALSE:
         case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(

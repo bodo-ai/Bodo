@@ -6,6 +6,8 @@ import pytest
 
 from bodosql.tests.utils import check_query
 
+pytestmark = pytest.mark.bodosql_cpp
+
 
 def test_logical_or_columns(bodosql_boolean_types, memory_leak_check):
     """insures that logical logical or works  correctly for columns of boolean values"""
@@ -97,7 +99,6 @@ def test_logical_is_scalars(
     )
 
 
-@pytest.mark.slow
 def test_is_logical_not_columns(
     bodosql_boolean_types, is_clause_literal_values, memory_leak_check
 ):

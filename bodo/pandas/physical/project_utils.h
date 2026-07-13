@@ -3,6 +3,7 @@
 #include <arrow/api.h>
 #include <arrow/type.h>
 #include <arrow/type_traits.h>
+#include <stdexcept>
 #include "../_util.h"
 
 /**
@@ -208,6 +209,36 @@ inline std::shared_ptr<bodo::Schema> getProjectionOutputSchema(
                 col_names.emplace_back(input_schema->column_names[0]);
             } else {
                 col_names.emplace_back("NEGATE");
+            }
+        } else if (expr->type == duckdb::ExpressionType::OPERATOR_IS_TRUE ||
+                   expr->type == duckdb::ExpressionType::OPERATOR_IS_NOT_TRUE ||
+                   expr->type == duckdb::ExpressionType::OPERATOR_IS_FALSE ||
+                   expr->type ==
+                       duckdb::ExpressionType::OPERATOR_IS_NOT_FALSE) {
+            auto col_type = arrow_type_to_bodo_data_type(
+                                duckdbTypeToArrow(duckdb::LogicalType::BOOLEAN))
+                                ->copy();
+            output_schema->append_column(std::move(col_type));
+
+            if (!input_schema->column_names.empty()) {
+                col_names.emplace_back(input_schema->column_names[0]);
+            } else {
+                switch (expr->type) {
+                    case duckdb::ExpressionType::OPERATOR_IS_TRUE:
+                        col_names.emplace_back("is_true");
+                        break;
+                    case duckdb::ExpressionType::OPERATOR_IS_NOT_TRUE:
+                        col_names.emplace_back("is_not_true");
+                        break;
+                    case duckdb::ExpressionType::OPERATOR_IS_FALSE:
+                        col_names.emplace_back("is_false");
+                        break;
+                    case duckdb::ExpressionType::OPERATOR_IS_NOT_FALSE:
+                        col_names.emplace_back("is_not_false");
+                        break;
+                    default:
+                        throw std::runtime_error("Unexpected expression type");
+                }
             }
         } else {
             throw std::runtime_error(

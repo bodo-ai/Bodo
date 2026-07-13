@@ -11,6 +11,7 @@
 #include "duckdb/parser/parsed_expression.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/string_util.hpp"
+#include <iostream>
 
 namespace duckdb {
 //! Represents a built-in operator expression
@@ -38,6 +39,7 @@ public:
 public:
 	template <class T, class BASE>
 	static string ToString(const T &entry) {
+		std::cout << "OP EXP" << (int)entry.GetExpressionType() << '\n';
 		auto op = ExpressionTypeToOperator(entry.GetExpressionType());
 		if (!op.empty()) {
 			// use the operator string to represent the operator
@@ -90,6 +92,14 @@ public:
 		// Bodo change: add new operator
 		case ExpressionType::OPERATOR_NEG:
 			return "(-" + entry.children[0]->ToString() + ")";
+		case ExpressionType::OPERATOR_IS_TRUE:
+			return "(" + entry.children[0]->ToString() + " IS TRUE)";
+		case ExpressionType::OPERATOR_IS_NOT_TRUE:
+			return "(" + entry.children[0]->ToString() + " IS NOT TRUE)";
+		case ExpressionType::OPERATOR_IS_FALSE:
+			return "(" + entry.children[0]->ToString() + " IS FALSE)";
+		case ExpressionType::OPERATOR_IS_NOT_FALSE:
+			return "(" + entry.children[0]->ToString() + " IS NOT FALSE)";
 		case ExpressionType::ARRAY_EXTRACT:
 			return entry.children[0]->ToString() + "[" + entry.children[1]->ToString() + "]";
 		case ExpressionType::ARRAY_SLICE: {
