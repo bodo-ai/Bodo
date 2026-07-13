@@ -462,10 +462,13 @@ class JoinFilterColStats {
  * @param join_filter_col_stats JoinFilterColStats object containing the column
  * statistics
  * @param schema Arrow schema associated with the join filter columns
+ * @param column_projection Column projection mapping to align filters with
+ * @param header Header string for the log message
  */
 void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
                           const std::shared_ptr<arrow::Schema> &schema,
-                          std::string header = "Iceberg I/O");
+                          const std::vector<int> column_projection,
+                          std::string header);
 
 /**
  * @brief Assert that the Python objects arguments is a tuple

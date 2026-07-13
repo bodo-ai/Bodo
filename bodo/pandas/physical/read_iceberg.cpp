@@ -117,7 +117,8 @@ PhysicalReadIceberg::create_internal_reader() {
     this->filter_exprs = join_filter_col_stats.insert_filters(
         std::move(this->filter_exprs), this->selected_columns);
 
-    log_rtjf_expressions(join_filter_col_stats, arrow_schema);
+    log_rtjf_expressions(join_filter_col_stats, arrow_schema, selected_columns,
+                         "Iceberg I/O");
 
     // We need to & the iceberg_filter with converted duckdb table filters
     // to apply the filters at the file level.

@@ -1300,6 +1300,7 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
 
 void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
                           const std::shared_ptr<arrow::Schema> &schema,
+                          const std::vector<int> column_projection,
                           std::string header) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -1311,11 +1312,11 @@ void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
         join_filter_col_stats.get_col_stats_for_join_filter_cols();
 
     std::ostringstream expr_stream;
-    expr_stream << "Runtime join filter expression: ";
+    std::string expr_prefix = "Runtime join filter expression: ";
     bool first_expr = true;
 
     for (size_t i = 0; i < filter_cols.size(); ++i) {
-        const auto column_index = filter_cols[i];
+        const auto column_index = column_projection[filter_cols[i]];
         const std::string &column_name = schema->field(column_index)->name();
 
         for (const auto &[min_value, max_value] : filter_col_stats[i]) {
@@ -1324,17 +1325,15 @@ void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
             }
             first_expr = false;
 
-            expr_stream << "(ds.field('" << column_name
-                        << "') >= " << min_value->ToString() << " & ds.field('"
-                        << column_name << "') <= " << max_value->ToString()
-                        << ")";
+            expr_stream << "(ds.field('{" << column_name
+                        << "}') >= " << min_value->ToString()
+                        << ") & (ds.field('{" << column_name
+                        << "}') <= " << max_value->ToString() << ")";
         }
     }
 
-    if (first_expr) {
-        expr_stream << "True";
-    }
-    const std::string rtjf_str = expr_stream.str();
+    const std::string rtjf_str =
+        expr_prefix + (first_expr ? "True" : "(" + expr_stream.str() + ")");
 
     PyGILState_STATE gil = PyGILState_Ensure();
 
