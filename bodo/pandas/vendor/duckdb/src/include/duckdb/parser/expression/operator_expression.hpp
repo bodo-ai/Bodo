@@ -11,7 +11,6 @@
 #include "duckdb/parser/parsed_expression.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/string_util.hpp"
-#include <iostream>
 
 namespace duckdb {
 //! Represents a built-in operator expression
@@ -39,7 +38,6 @@ public:
 public:
 	template <class T, class BASE>
 	static string ToString(const T &entry) {
-		std::cout << "OP EXP" << (int)entry.GetExpressionType() << '\n';
 		auto op = ExpressionTypeToOperator(entry.GetExpressionType());
 		if (!op.empty()) {
 			// use the operator string to represent the operator

@@ -400,8 +400,6 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
         client_context->transaction.BeginTransaction();
         started_transaction = true;
     }
-    std::cout << "make_unaryop_expr: looking up function for operator " << opstr
-              << std::endl;
     duckdb::EntryLookupInfo function_lookup(
         duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();

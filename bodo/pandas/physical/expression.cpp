@@ -612,7 +612,7 @@ arrow::Datum do_arrow_compute_unary(
         }
 
         // is_not_true: Invert so that null/false -> true and true -> false.
-        // is_false: Invert so that null/true -> true and true -> false.
+        // is_false: Invert so that null/true -> false and true -> false.
         if (invert) {
             result =
                 arrow::compute::CallFunction("invert", {result.ValueOrDie()});

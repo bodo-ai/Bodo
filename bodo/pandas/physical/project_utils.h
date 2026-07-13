@@ -3,7 +3,6 @@
 #include <arrow/api.h>
 #include <arrow/type.h>
 #include <arrow/type_traits.h>
-#include <stdexcept>
 #include "../_util.h"
 
 /**
