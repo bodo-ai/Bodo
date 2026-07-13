@@ -3479,6 +3479,70 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     inserted_str_expr.value,
                 ),
             )
+        elif func_name == "CONVERT_TIMEZONE" and len(op_exprs) == 2:
+            str_timezone = op_exprs[0]
+            src = op_exprs[1]
+
+            ensure_arg_is_const_expr_of_type(
+                str_timezone, "str_timezone", (str, pa.binary())
+            )
+            ensure_type_of_expr(
+                src,
+                "src",
+                (
+                    pd._libs.tslibs.timestamps.Timestamp,
+                    pd.ArrowDtype(pa.timestamp("ns")),
+                ),
+            )
+            timestamp_pa_type = src.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            target_res = "ns"
+            # We figure out the right resolution to use.
+            if pa.types.is_date(timestamp_pa_type):
+                target_res = "s"
+            elif pa.types.is_timestamp(timestamp_pa_type):
+                target_res = timestamp_pa_type.unit
+
+            # For now, if the resolution isn't our default, baked-in nanosecond
+            # resolution then don't convert the operation because otherwise
+            # tests will fail.
+            if target_res == "ns":
+                # The definition of this operation is to convert a time from one
+                # timezone to a different one.
+                # The general algorithm is that we get to a timestamp that has a timezone
+                # and then use a cast to a different timezone which will actually perform
+                # the conversion.  However, some input types don't have a timezone to
+                # work with.  The check below find such cases and then uses the
+                # assume_timezone kernel to apply the BodoSQL context's default_timezone
+                # if it has one else use UTC.  One final wrinkle is that assume_timezone
+                # can't operate on all possible input types so we convert the input
+                # date/time type to a format that we know it can handle.
+                if pa.types.is_date(timestamp_pa_type) or (
+                    pa.types.is_timestamp(timestamp_pa_type)
+                    and timestamp_pa_type.tz is None
+                ):
+                    tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+                    local_timestamp_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=tz))
+                    )
+                    timestamp_empty_data_no_tz = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp(target_res))
+                    )
+                    # We first cast to a data type that assume_timezone can work with.
+                    src = CastExpression(timestamp_empty_data_no_tz, src)
+                    # We use the context default_tz to make the timezone explicit.
+                    src = ArrowScalarFuncExpression(
+                        local_timestamp_empty_data,
+                        [src],
+                        "assume_timezone",
+                        (tz,),
+                    )
+
+                target_timestamp_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=str_timezone.value))
+                )
+                # We use cast to convert timezones.
+                target_timestamp_expr = CastExpression(target_timestamp_empty_data, src)
+                return target_timestamp_expr
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()
