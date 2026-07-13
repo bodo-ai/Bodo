@@ -390,6 +390,7 @@ def test_max_literal(basic_df, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_count_if(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(

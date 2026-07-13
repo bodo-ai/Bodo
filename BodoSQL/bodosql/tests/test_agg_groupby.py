@@ -525,7 +525,7 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
         ),
     ],
 )
-# @pytest.mark.bodosql_cpp   # agg OTHER_FUNCTION not supported, SqlPostfixOperator not supported IS NULL
+@pytest.mark.bodosql_cpp
 def test_count_if(query, spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(

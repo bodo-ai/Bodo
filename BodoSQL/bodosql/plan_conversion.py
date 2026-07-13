@@ -4251,6 +4251,7 @@ def java_agg_to_python_agg(ctx, java_plan):
         )
         return plan
 
+    convert_na_to_value = {}
     # calcite supports a literal "aggregation" function but Bodo backend doesn't.
     # So capture those functions here and treat them as projections later.
     literal_aggs = []
@@ -4307,6 +4308,10 @@ def java_agg_to_python_agg(ctx, java_plan):
             # and the value of the literal.
             literal_aggs.append((aggIndex + len(keys), literal_for_literal_agg))
             continue
+        elif func_name == "count_if" and not func.hasFilter():
+            func_name = "sum"
+            out_type = pa.int64()
+            convert_na_to_value[len(out_types)] = 0
         else:
             raise NotImplementedError(
                 f"java_agg_to_python_agg: aggregation {func_name} not supported yet"
@@ -4375,6 +4380,14 @@ def java_agg_to_python_agg(ctx, java_plan):
         plan = gen_plan_via_bodo_dataframe(
             select_keys_lits, input_plan, keys, names, literal_aggs
         )
+
+    def fill_na_column(df, col_idx, val):
+        col = df.columns[col_idx]
+        df[col] = df[col].fillna(val)
+        return df
+
+    for index, na_value in convert_na_to_value.items():
+        plan = gen_plan_via_bodo_dataframe(fill_na_column, plan, index, na_value)
     return plan
 
 
@@ -4433,6 +4446,8 @@ def _agg_to_func_name(func):
             return "skew"
         if name == "KURTOSIS":
             return "kurtosis"
+        if name == "COUNT_IF":
+            return "count_if"
 
         details = ""
 
