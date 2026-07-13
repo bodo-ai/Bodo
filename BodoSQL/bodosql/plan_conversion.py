@@ -3224,7 +3224,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_arg_is_const_expr_of_type(
                 str_timezone, "str_timezone", (str, pa.binary())
             )
-            ensure_type_of_expr(src, "src", pd._libs.tslibs.timestamps.Timestamp)
+            ensure_type_of_expr(
+                src,
+                "src",
+                (
+                    pd._libs.tslibs.timestamps.Timestamp,
+                    pd.ArrowDtype(pa.timestamp("ns", tz=str_timezone.value)),
+                ),
+            )
             target_timestamp_empty_data = pd.Series(
                 dtype=pd.ArrowDtype(pa.timestamp("ns", tz=str_timezone.value))
             )
