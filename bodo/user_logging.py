@@ -120,3 +120,12 @@ def log_message(header, msg, *args, **kws):
         equal_str = "\n" + ("=" * 80)
         final_msg = "\n".join([equal_str, header.center(80, "-"), msg, equal_str])
         logger.info(final_msg, *args, **kws)
+
+
+def log_if_verbose(level, header, msg, *args, **kws):
+    """
+    Logs a message to the Bodo logger using logger.info if the
+    current verbose level is >= level.
+    """
+    if get_verbose_level() >= level:
+        log_message(header, msg, *args, **kws)

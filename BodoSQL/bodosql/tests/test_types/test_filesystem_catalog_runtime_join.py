@@ -63,10 +63,6 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
         limit = 0
         log_msg = "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 1))"
 
-        if bodosql.use_cpp_backend:
-            # TODO BSE-5476: Check logs in BodoSQL backend C++ tests
-            log_msg = ""
-
     with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
         with temp_config_override("dataframe_library_run_parallel", False):
             with set_logging_stream(logger, 2):
@@ -89,7 +85,7 @@ def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
     "allow_low_ndv_filter",
     [
         pytest.param(True, id="low_ndv"),
-        pytest.param(False, id="min_max"),
+        pytest.param(False, id="min_max", marks=pytest.mark.bodosql_cpp),
     ],
 )
 @pytest.mark.parametrize("join_same_col", [True, False])
@@ -124,6 +120,12 @@ def test_multiple_filter_join(
             if join_same_col
             else "Runtime join filter expression: ((ds.field('{A}') >= 2) & (ds.field('{A}') <= 2) & (ds.field('{G}') >= 1) & (ds.field('{G}') <= 5))"
         )
+        if bodosql.use_cpp_backend:
+            log_msg = (
+                "Runtime join filter expression: ((ds.field('{A}') >= 2) & (ds.field('{A}') <= 2) & (ds.field('{A}') >= 1) & (ds.field('{A}') <= 5))"
+                if join_same_col
+                else "Runtime join filter expression: ((ds.field('{G}') >= 1) & (ds.field('{G}') <= 5) & (ds.field('{A}') >= 2) & (ds.field('{A}') <= 2))"
+            )
 
     query = f'SELECT EVOLVED.A FROM (SELECT * FROM {table_names[0]}) EVOLVED, (SELECT * FROM "{table_names[1]}" LIMIT 10) PARTITIONED, (SELECT * FROM "{table_names[2]}" LIMIT 10) SIMPLE WHERE EVOLVED.A = PARTITIONED.A AND EVOLVED.{second_key} = SIMPLE.A'
 
@@ -133,22 +135,24 @@ def test_multiple_filter_join(
     logger = create_string_io_logger(stream)
     py_output = pd.DataFrame({"A": [2] * 200})
     with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
-        with set_logging_stream(logger, 2):
-            check_func(
-                impl,
-                (bc, query),
-                py_output=py_output,
-                only_1DVar=True,
-                sort_output=True,
-                reset_index=True,
-            )
+        with temp_config_override("dataframe_library_run_parallel", False):
+            with set_logging_stream(logger, 2):
+                check_func(
+                    impl,
+                    (bc, query),
+                    py_output=py_output,
+                    only_1DVar=True,
+                    sort_output=True,
+                    reset_index=True,
+                )
 
-            check_logger_msg(
-                stream,
-                log_msg,
-            )
+                check_logger_msg(
+                    stream,
+                    log_msg,
+                )
 
 
+@pytest.mark.bodosql_cpp
 @temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "0"})
 def test_rtjf_schema_evolved(memory_leak_check, iceberg_database):
     """
@@ -172,20 +176,21 @@ def test_rtjf_schema_evolved(memory_leak_check, iceberg_database):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     py_output = pd.DataFrame({"A": [1, 2, 3, 4, 5] * 1100})
-    with set_logging_stream(logger, 2):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=py_output,
-            only_1DVar=True,
-            sort_output=True,
-            reset_index=True,
-        )
+    with temp_config_override("dataframe_library_run_parallel", False):
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                sort_output=True,
+                only_1DVar=True,
+                reset_index=True,
+            )
 
-        check_logger_msg(
-            stream,
-            "Runtime join filter expression: ((ds.field('{C}') >= 1) & (ds.field('{C}') <= 5))",
-        )
+            check_logger_msg(
+                stream,
+                "Runtime join filter expression: ((ds.field('{C}') >= 1) & (ds.field('{C}') <= 5))",
+            )
 
 
 @temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "0"})
@@ -519,7 +524,7 @@ def test_merged_rtjf(
     "allow_low_ndv_filter",
     [
         pytest.param(True, id="low_ndv"),
-        pytest.param(False, id="min_max"),
+        pytest.param(False, id="min_max", marks=pytest.mark.bodosql_cpp),
     ],
 )
 def test_date_keys(allow_low_ndv_filter, iceberg_database, memory_leak_check):
@@ -589,30 +594,35 @@ def test_date_keys(allow_low_ndv_filter, iceberg_database, memory_leak_check):
         log_msg = "Runtime join filter expression: ((ds.field('{DAY}').isin([pa.scalar(18672, pa.date32()), pa.scalar(18778, pa.date32()), pa.scalar(18797, pa.date32()), pa.scalar(18812, pa.date32()), pa.scalar(18876, pa.date32()), pa.scalar(18931, pa.date32()), pa.scalar(18956, pa.date32()), pa.scalar(18986, pa.date32())])))"
     else:
         limit = 0
-        log_msg = "Runtime join filter expression: ((ds.field('{DAY}') >= pa.scalar(18672, pa.date32())) & (ds.field('{DAY}') <= pa.scalar(18986, pa.date32())))"
+        log_msg = (
+            "((ds.field('{DAY}') >= 2021-02-14) & (ds.field('{DAY}') <= 2021-12-25))"
+            if bodosql.use_cpp_backend
+            else "Runtime join filter expression: ((ds.field('{DAY}') >= pa.scalar(18672, pa.date32())) & (ds.field('{DAY}') <= pa.scalar(18986, pa.date32())))"
+        )
 
     with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
-        with set_logging_stream(logger, 2):
-            check_func(
-                impl,
-                (bc, query),
-                py_output=py_output,
-                only_1DVar=True,
-                sort_output=True,
-                reset_index=True,
-            )
-            check_logger_msg(
-                stream,
-                log_msg,
-            )
-            check_logger_msg(stream, "Total number of files is 3. Reading 1 files:")
+        with temp_config_override("dataframe_library_run_parallel", False):
+            with set_logging_stream(logger, 2):
+                check_func(
+                    impl,
+                    (bc, query),
+                    py_output=py_output,
+                    only_1DVar=True,
+                    sort_output=True,
+                    reset_index=True,
+                )
+                check_logger_msg(
+                    stream,
+                    log_msg,
+                )
+                check_logger_msg(stream, "Total number of files is 3. Reading 1 files:")
 
 
 @pytest.mark.parametrize(
     "allow_low_ndv_filter",
     [
         pytest.param(True, id="low_ndv"),
-        pytest.param(False, id="min_max"),
+        pytest.param(False, id="min_max", marks=pytest.mark.bodosql_cpp),
     ],
 )
 def test_float_keys(allow_low_ndv_filter, iceberg_database, memory_leak_check):
@@ -700,22 +710,27 @@ def test_float_keys(allow_low_ndv_filter, iceberg_database, memory_leak_check):
         log_msg = "Runtime join filter expression: ((ds.field('{BALANCE}').isin([0.0, 375000.81, 488000.09, 78125.42])))"
     else:
         limit = 0
-        log_msg = "Runtime join filter expression: ((ds.field('{BALANCE}') >= 0.0) & (ds.field('{BALANCE}') <= 488000.09))"
+        log_msg = (
+            "Runtime join filter expression: ((ds.field('{BALANCE}') >= 0) & (ds.field('{BALANCE}') <= 488000.09))"
+            if bodosql.use_cpp_backend
+            else "Runtime join filter expression: ((ds.field('{BALANCE}') >= 0.0) & (ds.field('{BALANCE}') <= 488000.09))"
+        )
 
     with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
-        with set_logging_stream(logger, 2):
-            check_func(
-                impl,
-                (bc, query),
-                py_output=py_output,
-                only_1DVar=True,
-                sort_output=True,
-                reset_index=True,
-            )
-            check_logger_msg(
-                stream,
-                log_msg,
-            )
+        with temp_config_override("dataframe_library_run_parallel", False):
+            with set_logging_stream(logger, 2):
+                check_func(
+                    impl,
+                    (bc, query),
+                    py_output=py_output,
+                    only_1DVar=True,
+                    sort_output=True,
+                    reset_index=True,
+                )
+                check_logger_msg(
+                    stream,
+                    log_msg,
+                )
 
 
 def test_interval_join_rtjf(memory_leak_check, iceberg_database):
