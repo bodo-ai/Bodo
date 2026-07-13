@@ -116,12 +116,16 @@ def test_multiple_filter_join(
     else:
         limit = 0
         log_msg = (
-            "Runtime join filter expression: ((ds.field('{A}') >= 2) & (ds.field('{A}') <= 2) & (ds.field('{A}') >= 1) & (ds.field('{A}') <= 5))"
-            if (join_same_col and bodosql.use_cpp_backend)
-            else "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 5) & (ds.field('{A}') >= 2) & (ds.field('{A}') <= 2))"
+            "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 5) & (ds.field('{A}') >= 2) & (ds.field('{A}') <= 2))"
             if join_same_col
             else "Runtime join filter expression: ((ds.field('{A}') >= 2) & (ds.field('{A}') <= 2) & (ds.field('{G}') >= 1) & (ds.field('{G}') <= 5))"
         )
+        if bodosql.use_cpp_backend:
+            log_msg = (
+                "Runtime join filter expression: ((ds.field('{A}') >= 2) & (ds.field('{A}') <= 2) & (ds.field('{A}') >= 1) & (ds.field('{A}') <= 5))"
+                if join_same_col
+                else "Runtime join filter expression: ((ds.field('{G}') >= 1) & (ds.field('{G}') <= 5) & (ds.field('{A}') >= 2) & (ds.field('{A}') <= 2))"
+            )
 
     query = f'SELECT EVOLVED.A FROM (SELECT * FROM {table_names[0]}) EVOLVED, (SELECT * FROM "{table_names[1]}" LIMIT 10) PARTITIONED, (SELECT * FROM "{table_names[2]}" LIMIT 10) SIMPLE WHERE EVOLVED.A = PARTITIONED.A AND EVOLVED.{second_key} = SIMPLE.A'
 
