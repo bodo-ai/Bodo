@@ -1806,9 +1806,17 @@ PyObject* fetch_parquet_frag_row_counts(PyObject* self, PyObject* const* args,
             return nullptr;
         }
 
+        auto base_frag = res.ValueOrDie();
+        if (!std::dynamic_pointer_cast<arrow::dataset::ParquetFileFragment>(
+                base_frag)) {
+            PyErr_Format(PyExc_RuntimeError,
+                         "Fragment at index %zd is not a ParquetFileFragment",
+                         i);
+            return nullptr;
+        }
         fragments.push_back(
             std::static_pointer_cast<arrow::dataset::ParquetFileFragment>(
-                res.ValueOrDie()));
+                base_frag));
     }
     // Convert the second argument into a filter expression
     PyObject* filter_arg = args[1];
@@ -1840,8 +1848,10 @@ PyObject* fetch_parquet_frag_row_counts(PyObject* self, PyObject* const* args,
                                schema, frag, scan_options)
                                ->Finish();
         if (!scanner_res.ok()) {
-            PyErr_SetString(PyExc_RuntimeError,
-                            "Failed to construct scanner for counting rows");
+            std::string msg = scanner_res.status().message();
+            PyErr_Format(PyExc_RuntimeError,
+                         "Failed to construct scanner for counting rows: %s",
+                         msg.c_str());
             return nullptr;
         }
         futures.push_back(scanner_res.ValueOrDie()->CountRowsAsync());
