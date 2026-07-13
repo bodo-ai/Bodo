@@ -4,12 +4,13 @@ Test correctness of SQL queries that are dependent on time since year 0, or the 
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
-pytestmark = pytest_slow_unless_codegen
+pytestmark = pytest_slow_unless_codegen + [pytest.mark.bodosql_cpp]
 
 
 # the difference in days between the unix epoch and the start of year 0
@@ -168,10 +169,13 @@ def test_unix_timestamp(basic_df, memory_leak_check):
     # This will sometimes randomly fail, if the test takes place
     # right as the ten thousandths place changes values
     query = "SELECT A, Floor(UNIX_TIMESTAMP() / 10000) as output from table1"
+    tz = "America/Los_Angeles"
     expected_output = pd.DataFrame(
         {
             "A": basic_df["TABLE1"]["A"],
-            "OUTPUT": np.float64(pd.Timestamp.now().value // (10000 * 1000000000)),
+            # pd.Timestamp.now() needs a timezone passed in, else it will be
+            # timezone-naive in the local timezone.
+            "OUTPUT": np.float64(pd.Timestamp.now(tz=tz).value // (10000 * 1000000000)),
         }
     )
 
@@ -181,6 +185,7 @@ def test_unix_timestamp(basic_df, memory_leak_check):
         None,
         expected_output=expected_output,
         check_dtype=False,
+        session_tz=tz,
     )
 
 

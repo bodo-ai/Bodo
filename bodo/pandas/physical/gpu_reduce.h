@@ -128,25 +128,29 @@ struct GPUReductionFunctionMin : public GPUReductionFunction {
 };
 
 struct GPUReductionFunctionSum : public GPUReductionFunction {
-    GPUReductionFunctionSum(int input_col_idx,
+    GPUReductionFunctionSum(int input_col_idx, bool use_sql_rules,
                             std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
               input_col_idx, {"sum"}, {"add"}, {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
-                  arrow::MakeScalar(dt, 0).ValueOrDie(), output_stream)),
+                  use_sql_rules ? arrow::MakeNullScalar(dt)
+                                : arrow::MakeScalar(dt, 0).ValueOrDie(),
+                  output_stream)),
               dt, MPI_SUM) {}
 };
 
 struct GPUReductionFunctionProduct : public GPUReductionFunction {
-    GPUReductionFunctionProduct(int input_col_idx,
+    GPUReductionFunctionProduct(int input_col_idx, bool use_sql_rules,
                                 std::shared_ptr<arrow::DataType> dt,
                                 rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
               input_col_idx, {"product"}, {"multiply"},
               {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
-                  arrow::MakeScalar(dt, 1).ValueOrDie(), output_stream)),
+                  use_sql_rules ? arrow::MakeNullScalar(dt)
+                                : arrow::MakeScalar(dt, 1).ValueOrDie(),
+                  output_stream)),
               dt, MPI_PROD) {}
 };
 
@@ -186,10 +190,12 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
    public:
     explicit PhysicalGPUReduce(std::shared_ptr<bodo::Schema> out_schema,
                                std::vector<std::string> function_names,
-                               std::vector<int> input_column_indices)
+                               std::vector<int> input_column_indices,
+                               bool use_sql_rules = false)
         : out_schema(std::move(out_schema)),
           function_names(std::move(function_names)),
-          input_column_indices(std::move(input_column_indices)) {
+          input_column_indices(std::move(input_column_indices)),
+          use_sql_rules(use_sql_rules) {
         PhysicalGPUSource::EnsureNoNumpyColumns(this->out_schema);
     }
 
@@ -279,6 +285,7 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
     std::vector<std::unique_ptr<GPUReductionFunction>> reduction_functions;
     std::vector<std::string> function_names;
     std::vector<int> input_column_indices;
+    bool use_sql_rules = false;
 
     int64_t iter = 0;
     PhysicalGPUReduceMetrics metrics;

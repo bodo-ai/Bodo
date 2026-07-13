@@ -2090,6 +2090,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
 
+        def cur_local_timestamp():
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            curr_ts = pd.Timestamp.now(tz=tz)
+            dummy_empty_data = pd.Series(
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+            )
+            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+
         if func_name in (
             "CURRENT_TIMESTAMP",
             "GETDATE",
@@ -2097,12 +2105,262 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "SYSTIMESTAMP",
             "NOW",
         ):
-            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
-            curr_ts = pd.Timestamp.now(tz=tz)
-            dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+            return cur_local_timestamp()
+
+        if func_name == "UNIX_TIMESTAMP":
+            # This is like EPOCH_SECOND but we retain any fractional seconds.
+            # If 0 arguments are provided, we have to get the current timestamp
+            # before calculating the seconds.
+
+            if len(op_exprs) == 0:
+                # The timezone of the timestamp here doesn't matter as long
+                # as it is TZ-aware.
+                timestamp_expr = cur_local_timestamp()
+            elif len(op_exprs) == 1:
+                timestamp_expr = op_exprs[0]
+                # If input is not TZ-aware, interpret as in local time
+                timestamp_pa_type = timestamp_expr.empty_data.iloc[
+                    :, 0
+                ].dtype.pyarrow_dtype
+                if pa.types.is_date(timestamp_pa_type) or (
+                    pa.types.is_timestamp(timestamp_pa_type)
+                    and timestamp_pa_type.tz is None
+                ):
+                    tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+                    local_timestamp_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+                    )
+                    timestamp_expr = ArrowScalarFuncExpression(
+                        local_timestamp_empty_data,
+                        [timestamp_expr],
+                        "assume_timezone",
+                        (tz,),
+                    )
+
+            # Convert to int to get epoch nanoseconds, since Arrow timestamps are
+            # stored in UTC relative to the start of the UNIX epoch
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            timestamp_nanos = CastExpression(int_empty_data, timestamp_expr)
+
+            # To get seconds since epoch as float, we need to divide by 1 billion.
+            # Using __truediv__ directly will fail because it will attempt to cast
+            # the operands to float without losing precision, and timestamp_nanos
+            # is simply too large.
+
+            # To work around this we need to calculate the integer part and fractional
+            # part separately, and then add them together.
+
+            # Get integer seconds since epoch
+            nanoseconds_per_second = ConstantExpression(
+                int_empty_data, input_plan, 1_000_000_000
             )
-            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+            timestamp_seconds_int = ArithOpExpression(
+                int_empty_data, timestamp_nanos, nanoseconds_per_second, "__floordiv__"
+            )
+
+            # Get fraction of a second unaccounted for
+            timestamp_ns_remainder = ArithOpExpression(
+                int_empty_data, timestamp_nanos, nanoseconds_per_second, "__mod__"
+            )
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            timestamp_sec_remainder = ArithOpExpression(
+                float_empty_data,
+                timestamp_ns_remainder,
+                nanoseconds_per_second,
+                "__truediv__",
+            )
+
+            timestamp_seconds = ArithOpExpression(
+                float_empty_data,
+                timestamp_seconds_int,
+                timestamp_sec_remainder,
+                "__add__",
+            )
+
+            # MySQL only accepts timestamps after 1970-01-01 00:00:01, else the function returns 0.
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            one_expr = ConstantExpression(float_empty_data, input_plan, 1.0)
+            under_one_second = ComparisonOpExpression(
+                bool_empty_data, timestamp_seconds, one_expr, operator.lt
+            )
+            zero_expr = ConstantExpression(float_empty_data, input_plan, 0.0)
+            return CaseExpression(
+                float_empty_data, under_one_second, zero_expr, timestamp_seconds
+            )
+
+        if func_name == "FROM_UNIXTIME" and len(op_exprs) == 1:
+            epoch_seconds_expr = op_exprs[0]
+            ensure_type_of_expr(epoch_seconds_expr, "epoch_seconds_expr", (int, float))
+
+            # Return timestamp in local timezone
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            epoch_seconds_type = get_expr_dtype(epoch_seconds_expr)
+            if compare_types(epoch_seconds_type, int):
+                # We need this to be timestamp[s] so that the integer input in seconds
+                # can be interpreted as in the proper unit when casting
+                timestamp_s_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp("s", tz=tz))
+                )
+
+                # Ensure input is int64 so we can cast to timestamp type
+                epoch_seconds_expr = CastExpression(int_empty_data, epoch_seconds_expr)
+                # Convert seconds since epoch to timestamp
+                return CastExpression(timestamp_s_empty_data, epoch_seconds_expr)
+            else:
+                # Input is a float, so we should use nanosecond resolution.
+                timestamp_ns_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+                )
+
+                # Convert input to nanoseconds
+                nanoseconds_per_second = ConstantExpression(
+                    int_empty_data, input_plan, 1_000_000_000
+                )
+                float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+                epoch_nanos = ArithOpExpression(
+                    float_empty_data,
+                    epoch_seconds_expr,
+                    nanoseconds_per_second,
+                    "__mul__",
+                )
+
+                # Need to round in case the input converted to nanoseconds
+                # is still not an integer.
+                epoch_nanos = UnaryOpExpression(int_empty_data, epoch_nanos, "round")
+
+                # Convert nanoseconds since epoch to timestamp
+                return CastExpression(timestamp_ns_empty_data, epoch_nanos)
+
+        if func_name == "FROM_DAYS" and len(op_exprs) == 1:
+            """Get date a number of days after January 1st of year 0"""
+            days_expr = op_exprs[0]
+            ensure_type_of_expr(days_expr, "days_expr", (int, float))
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            # If provided days are a float, we should round to match MySQL
+            days_expr_dtype = get_expr_dtype(days_expr)
+            if compare_types(days_expr_dtype, float):
+                days_expr = UnaryOpExpression(int_empty_data, days_expr, "round")
+
+            # Convert to the number of days of the start of the UNIX epoch, since this is how date32 stores dates
+            year_zero_to_epoch_start_days = ConstantExpression(
+                int_empty_data, input_plan, 719528
+            )
+            days_after_epoch = ArithOpExpression(
+                int_empty_data, days_expr, year_zero_to_epoch_start_days, "__sub__"
+            )
+
+            # Input needs to be int32 to cast to date32.
+            # If the number of days didn't fit in int32, it would be far too large anyway.
+            days_after_epoch = CastExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int32())), days_after_epoch
+            )
+
+            # Cast epoch days to date type
+            date32_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+            date_expr = CastExpression(date32_empty_data, days_after_epoch)
+
+            # If days <= 365, MySQL returns 0000-00-00.
+            # This is not possible for us, so we return NULL instead.
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            invalid_days = ComparisonOpExpression(
+                bool_empty_data,
+                days_expr,
+                ConstantExpression(int_empty_data, input_plan, 365),
+                operator.le,
+            )
+            null_date = NullExpression(date32_empty_data, input_plan, 0)
+            return CaseExpression(date32_empty_data, invalid_days, null_date, date_expr)
+
+        if func_name == "TO_DAYS" and len(op_exprs) == 1:
+            """Get the number of days between January 1st of year 0
+            and the input date"""
+            date_expr = op_exprs[0]
+
+            # date_expr could be a timestamp, so first truncate to a date.
+            # If date_expr is TZ-aware, this will be the local timestamp date.
+            date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+            date_expr = CastExpression(date_empty_data, date_expr)
+
+            # Cast date32 to int32 to get days since start of epoch
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int32()))
+            days_after_epoch = CastExpression(int_empty_data, date_expr)
+
+            # Convert to days since year 0
+            year_zero_to_epoch_start_days = ConstantExpression(
+                int_empty_data, input_plan, 719528
+            )
+            return ArithOpExpression(
+                int_empty_data,
+                days_after_epoch,
+                year_zero_to_epoch_start_days,
+                "__add__",
+            )
+
+        if func_name == "TO_SECONDS" and len(op_exprs) == 1:
+            """Get the number of seconds between January 1st of year 0
+            and the input timestamp"""
+            timestamp_expr = op_exprs[0]
+
+            timestamp_expr_dtype = timestamp_expr.empty_data.iloc[
+                :, 0
+            ].dtype.pyarrow_dtype
+            if pa.types.is_date(timestamp_expr_dtype):
+                # If the input is a date, convert to a timestamp (in seconds)
+                timestamp_unit = "s"
+                timestamp_s_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit))
+                )
+                timestamp_expr = CastExpression(timestamp_s_empty_data, timestamp_expr)
+            elif pa.types.is_timestamp(timestamp_expr_dtype):
+                timestamp_unit = timestamp_expr_dtype.unit
+                # If the timestamp is TZ-aware, use the local timestamp
+                if timestamp_expr_dtype.tz is not None:
+                    timestamp_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit))
+                    )
+                    timestamp_expr = ArrowScalarFuncExpression(
+                        timestamp_expr.empty_data, timestamp_expr, "local_timestamp", ()
+                    )
+            else:
+                raise ValueError("TO_SECONDS: Unsupported input type")
+
+            # Cast timestamp to int64 to get the timestamp value in the original units
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            timestamp_int = CastExpression(int_empty_data, timestamp_expr)
+
+            if timestamp_unit == "s":
+                # No division needed
+                timestamp_seconds = timestamp_int
+            else:
+                # Determine what to divide by get seconds
+                if timestamp_unit == "ms":
+                    divisor = 1_000
+                elif timestamp_unit == "us":
+                    divisor = 1_000_000
+                elif timestamp_unit == "ns":
+                    divisor = 1_000_000_000
+                # Get seconds since start of epoch using floor division.
+                # (MySQL appears not to round fractional seconds)
+                divisor_expr = ConstantExpression(int_empty_data, input_plan, divisor)
+                timestamp_seconds = ArithOpExpression(
+                    int_empty_data, timestamp_int, divisor_expr, "__floordiv__"
+                )
+
+            # Adjust from seconds since epoch to seconds since year 0
+            year_zero_to_epoch_start_seconds = ConstantExpression(
+                int_empty_data, input_plan, 62167219200
+            )
+            return ArithOpExpression(
+                int_empty_data,
+                timestamp_seconds,
+                year_zero_to_epoch_start_seconds,
+                "__add__",
+            )
 
         # COMBINE_INTERVALS combines multiple interval literals into a single
         # interval constant. Accumulate months (from DateOffset) and nanoseconds
@@ -2746,6 +3004,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             right = op_exprs[1]
             out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
             return ArithOpExpression(out_empty, left, right, "__pow__")
+        elif func_name == "FLOOR" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            out_empty = inp.empty_data
+            return ArrowScalarFuncExpression(out_empty, [inp], "floor", ())
         elif (
             func_name in ("BITAND", "BITOR", "BITXOR", "BITSHIFTLEFT", "BITSHIFTRIGHT")
             and len(op_exprs) == 2
@@ -3224,7 +3486,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_arg_is_const_expr_of_type(
                 str_timezone, "str_timezone", (str, pa.binary())
             )
-            ensure_type_of_expr(src, "src", pd._libs.tslibs.timestamps.Timestamp)
+            ensure_type_of_expr(
+                src,
+                "src",
+                (
+                    pd._libs.tslibs.timestamps.Timestamp,
+                    pd.ArrowDtype(pa.timestamp("ns", tz=str_timezone.value)),
+                ),
+            )
             target_timestamp_empty_data = pd.Series(
                 dtype=pd.ArrowDtype(pa.timestamp("ns", tz=str_timezone.value))
             )
