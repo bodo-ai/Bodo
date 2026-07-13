@@ -3491,12 +3491,43 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "src",
                 (
                     pd._libs.tslibs.timestamps.Timestamp,
-                    pd.ArrowDtype(pa.timestamp("ns", tz=str_timezone.value)),
+                    pd.ArrowDtype(pa.timestamp("ns")),
                 ),
             )
+            timestamp_pa_type = src.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            target_res = "ns"
+            # We figure out the right resolution to use although right now in Bodo
+            # there are multiple paths that force ns resolution.
+            if pa.types.is_date(timestamp_pa_type):
+                target_res = "s"
+            elif pa.types.is_timestamp(timestamp_pa_type):
+                target_res = timestamp_pa_type.unit
+
+            if pa.types.is_date(timestamp_pa_type) or (
+                pa.types.is_timestamp(timestamp_pa_type)
+                and timestamp_pa_type.tz is None
+            ):
+                tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+                local_timestamp_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=tz))
+                )
+                timestamp_empty_data_no_tz = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp(target_res))
+                )
+                # We first cast to a data type that assume_timezone can work with.
+                src = CastExpression(timestamp_empty_data_no_tz, src)
+                # We use the context default_tz to make the timezone explicit.
+                src = ArrowScalarFuncExpression(
+                    local_timestamp_empty_data,
+                    [src],
+                    "assume_timezone",
+                    (tz,),
+                )
+
             target_timestamp_empty_data = pd.Series(
-                dtype=pd.ArrowDtype(pa.timestamp("ns", tz=str_timezone.value))
+                dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=str_timezone.value))
             )
+            # We use cast to convert timezones.
             target_timestamp_expr = CastExpression(target_timestamp_empty_data, src)
             return target_timestamp_expr
 
