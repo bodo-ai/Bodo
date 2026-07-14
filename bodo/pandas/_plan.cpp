@@ -344,7 +344,8 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     duckdb::optional_ptr<duckdb::CatalogEntry> entry = binder->GetCatalogEntry(
         "system", "", function_lookup, duckdb::OnEntryNotFound::RETURN_NULL);
     if (!entry) {
-        throw std::runtime_error("make_arithop_expr GetCatalogEntry failed");
+        throw std::runtime_error("make_arithop_expr GetCatalogEntry failed: " +
+                                 opstr);
     }
     duckdb::ScalarFunctionCatalogEntry &func =
         entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
@@ -407,7 +408,8 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
         binder->GetCatalogEntry("system", "main", function_lookup,
                                 duckdb::OnEntryNotFound::RETURN_NULL);
     if (!entry) {
-        throw std::runtime_error("make_unaryop_expr GetCatalogEntry failed");
+        throw std::runtime_error("make_unaryop_expr GetCatalogEntry failed: " +
+                                 opstr);
     }
     duckdb::ScalarFunctionCatalogEntry &func =
         entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
@@ -1751,8 +1753,11 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
         append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
                           UNARY_INT_SIGNATURES));
     register_duckdb_scalar_func(db, "sqrt", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "cbrt", UNARY_FLOAT_SIGNATURES);
     register_duckdb_scalar_func(db, "exp", UNARY_FLOAT_SIGNATURES);
     register_duckdb_scalar_func(db, "ln", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "log10", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "log2", UNARY_FLOAT_SIGNATURES);
     // Unary and binary round
     register_duckdb_scalar_func(
         db, "round",
@@ -1763,6 +1768,13 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
              ScalarFunctionSignature(
                  {duckdb::LogicalType::FLOAT, duckdb::LogicalType::BIGINT},
                  duckdb::LogicalType::FLOAT)},
+            UNARY_FLOAT_SIGNATURES));
+    register_duckdb_scalar_func(db, "trunc", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(
+        db, "sign",
+        append_signatures(
+            {ScalarFunctionSignature({duckdb::LogicalType::BIGINT},
+                                     duckdb::LogicalType::TINYINT)},
             UNARY_FLOAT_SIGNATURES));
 
     register_duckdb_scalar_func(

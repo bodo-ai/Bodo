@@ -12,6 +12,7 @@
 #include <arrow/type_traits.h>
 #include <future>
 #include <mutex>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -899,8 +900,9 @@ class PhysicalUnaryExpression : public PhysicalExpression {
                             std::string &opstr) {
         children.push_back(left);
         if (opstr == "floor" || opstr == "ceil" || opstr == "abs" ||
-            opstr == "sqrt" || opstr == "exp" || opstr == "ln" ||
-            opstr == "round") {
+            opstr == "sqrt" || opstr == "cbrt" || opstr == "exp" ||
+            opstr == "ln" || opstr == "log10" || opstr == "log2" ||
+            opstr == "round" || opstr == "trunc" || opstr == "sign") {
             comparator = opstr;
         } else {
             throw std::runtime_error("Unhandled unary expression opstr: " +
@@ -932,8 +934,33 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         } else {
             func_options = nullptr;
         }
-        auto result =
-            do_arrow_compute_unary(left_res, comparator, func_options);
+
+        std::shared_ptr<array_info> result;
+        if (comparator == "cbrt") {
+            // Arrow doesn't have a cube root function, so we raise to the power
+            // 1/3 instead. However Arrow will return NaN for a negative base in
+            // this case, so we have to first take the absolute value and then
+            // restore the sign afterwards.
+            arrow::Datum left_res_datum =
+                ConvertExprResultToDatum(left_res, "cbrt input");
+
+            arrow::Datum abs_left_res =
+                do_arrow_compute_unary(left_res_datum, "abs");
+
+            arrow::Datum exponent_datum(
+                std::make_shared<arrow::FloatScalar>(1.0 / 3.0));
+            arrow::Datum power_result = do_arrow_compute_binary(
+                abs_left_res, exponent_datum, "power", func_options);
+
+            arrow::Datum left_res_sign =
+                do_arrow_compute_unary(left_res_datum, "sign");
+            arrow::Datum corrected_power_result = do_arrow_compute_binary(
+                power_result, left_res_sign, "multiply");
+
+            result = ConvertDatumToArrayInfo(corrected_power_result);
+        } else {
+            result = do_arrow_compute_unary(left_res, comparator, func_options);
+        }
 
         auto left_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(left_res);
@@ -1181,7 +1208,7 @@ class PhysicalCaseExpression : public PhysicalExpression {
             "if_else", {when_datum, then_datum, else_datum});
         if (!cmp_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_array_compute_case if_else: Error in Arrow compute: " +
+                "do_arrow_compute_case if_else: Error in Arrow compute: " +
                 cmp_res.status().message());
         }
         return cmp_res.ValueOrDie();
@@ -1625,6 +1652,106 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 result = if_else_res.ValueOrDie();
             } else {
                 result = ConvertDatumToArrayInfo(if_else_res.ValueOrDie());
+            }
+        } else if (scalar_func_data.arrow_func_name == "rand") {
+            // Get dummy input as an Arrow array.
+            // We need the result to match the length of this array.
+            std::shared_ptr<arrow::Array> res_array =
+                ConvertExprResultToDatum(res, "rand input").make_array();
+
+            // Retrieve the function object for random()
+            auto *registry = arrow::compute::GetFunctionRegistry();
+            std::shared_ptr<arrow::compute::Function> random_func;
+            auto lookup_status =
+                registry->GetFunction("random").Value(&random_func);
+            if (!lookup_status.ok()) {
+                throw std::runtime_error(
+                    "Failed to get the 'random' function from the Arrow "
+                    "registry.");
+            }
+
+            // Use a system-generated seed
+            arrow::compute::RandomOptions options =
+                arrow::compute::RandomOptions::FromSystemRandom();
+
+            // Since random() takes no arguments, we need to manually specify
+            // the desired output length through ExecBatch. CallFunction() has
+            // no overload for this.
+            std::vector<arrow::Datum> empty_args;
+            arrow::compute::ExecBatch batch(empty_args, res_array->length());
+
+            // Compute the array of random values
+            arrow::Result<arrow::Datum> random_result =
+                random_func->Execute(batch, &options, nullptr);
+            if (!random_result.ok()) {
+                throw std::runtime_error("Error in Arrow compute (random): " +
+                                         random_result.status().message());
+            }
+
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = random_result.ValueOrDie();
+            } else {
+                result = ConvertDatumToArrayInfo(random_result.ValueOrDie());
+            }
+        } else if (scalar_func_data.arrow_func_name == "random_int64") {
+            // Get dummy input as an Arrow array.
+            // We need the result to match the length of this array.
+            std::shared_ptr<arrow::Array> res_array =
+                ConvertExprResultToDatum(res, "random_int64 dummy array")
+                    .make_array();
+
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            size_t num_args = PyTuple_Size(scalar_func_data.args);
+
+            std::mt19937_64 gen;
+            if (num_args == 1) {
+                // Seed was explicitly provided, so use it
+                auto [seed] = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_int64);
+                // Create psuedo-random number generator
+                gen = std::mt19937_64(seed);
+            } else if (num_args == 0) {
+                // Generate a 96-bit seed from system's random_device and the
+                // curent system time. time(NULL) is mainly a backup in case
+                // std::random_device falls back to a deterministic
+                // implementation.
+                std::random_device rd;
+                std::seed_seq seed{rd(), static_cast<unsigned int>(time(NULL)),
+                                   rd()};
+                // Create psuedo-random number generator
+                gen = std::mt19937_64(seed);
+            } else {
+                throw std::runtime_error(
+                    "random_int64 only accepts 0 or 1 arguments");
+            }
+
+            // Full-range uniform int64 distribution
+            std::uniform_int_distribution<int64_t> int64_dist(
+                0x8000000000000000, 0x7FFFFFFFFFFFFFFF);
+
+            // Compute array of random integers based on the length of the dummy
+            // input
+            arrow::Int64Builder builder;
+            for (int i = 0; i < res_array->length(); i++) {
+                arrow::Status status = builder.Append(int64_dist(gen));
+                if (!status.ok()) {
+                    throw std::runtime_error(
+                        "do_arrow_compute (random_int64): Failed to append "
+                        "value to "
+                        "Int64Builder");
+                }
+            }
+            std::shared_ptr<arrow::Array> random_int64_array =
+                builder.Finish().ValueOrDie();
+
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = arrow::Datum(random_int64_array);
+            } else {
+                result =
+                    ConvertDatumToArrayInfo(arrow::Datum(random_int64_array));
             }
         } else if (scalar_func_data.arrow_func_name == "date") {
             // The Arrow compute equivalent of Series.dt.date() is

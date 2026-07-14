@@ -881,7 +881,7 @@ def unary_func_name_to_duckdb(str opstr):
     the possibility open for special mappings.
     """
     opstr_lowered = opstr.lower()
-    if opstr_lowered in ("floor", "ceil", "sqrt", "abs", "exp", "ln", "round"):
+    if opstr_lowered in ("floor", "ceil", "sqrt", "cbrt", "abs", "exp", "ln", "log10", "log2", "round", "trunc", "sign"):
         return opstr_lowered
     else:
         raise NotImplementedError("Unknown unary function name: " + opstr_lowered)
