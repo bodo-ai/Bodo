@@ -4585,6 +4585,7 @@ def java_agg_to_python_agg(ctx, java_plan):
         )
         return plan
 
+    convert_na_to_value = {}
     # calcite supports a literal "aggregation" function but Bodo backend doesn't.
     # So capture those functions here and treat them as projections later.
     literal_aggs = []
@@ -4618,6 +4619,7 @@ def java_agg_to_python_agg(ctx, java_plan):
             "var_pop",
             "skew",
             "kurtosis",
+            "first",
         ]:
             assert len(arg_cols) == 1, (
                 f"Only single-argument {func_name} aggregations are supported"
@@ -4641,6 +4643,18 @@ def java_agg_to_python_agg(ctx, java_plan):
             # and the value of the literal.
             literal_aggs.append((aggIndex + len(keys), literal_for_literal_agg))
             continue
+        elif func_name == "count_if" and not func.hasFilter():
+            func_name = "sum"
+            out_type = pa.int64()
+            # Calcite seems to prepare count_if by creating a column filled with
+            # 1, 0, or NA.  An entry is 1 if the value in the original column
+            # corresponds with true when cast to bool, 0 if the value corresponds
+            # with false, and NA if the value is NA.  "sum" can then be used to
+            # count the true/1 values.  However, if all values in the group are
+            # NA then arrow gives a NA result but the SQL spec says the result
+            # should be 0 so we have an extra fixup step where we register NA
+            # entries in the output column for this aggregation to be set to 0.
+            convert_na_to_value[len(out_types)] = 0
         else:
             raise NotImplementedError(
                 f"java_agg_to_python_agg: aggregation {func_name} not supported yet"
@@ -4709,6 +4723,21 @@ def java_agg_to_python_agg(ctx, java_plan):
         plan = gen_plan_via_bodo_dataframe(
             select_keys_lits, input_plan, keys, names, literal_aggs
         )
+
+    def fill_na_column(df, col_idx, val):
+        col = df.columns[col_idx]
+        # Convert NA to the default value.
+        df[col] = df[col].fillna(val)
+        return df
+
+    # Use the convert_na_to_value entries created when there
+    # is a count_if aggregation to convert any NA entries to
+    # 0.  We may add other aggregations that need to convert
+    # NA to some default value other than 0 so made this data
+    # structure hold the value to convert to so it could be
+    # used when such cases arise.
+    for index, na_value in convert_na_to_value.items():
+        plan = gen_plan_via_bodo_dataframe(fill_na_column, plan, index, na_value)
     return plan
 
 
@@ -4767,6 +4796,8 @@ def _agg_to_func_name(func):
             return "skew"
         if name == "KURTOSIS":
             return "kurtosis"
+        if name == "COUNT_IF":
+            return "count_if"
 
         details = ""
 
@@ -4817,6 +4848,9 @@ def _agg_to_func_name(func):
         raise NotImplementedError(
             f"Aggregation {agg_name} (class={cls_name}) not supported yet\n{details}"
         )
+
+    if kind.equals(SqlKind.ANY_VALUE) and len(argList) == 1:
+        return "first"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 
