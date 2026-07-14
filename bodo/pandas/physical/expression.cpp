@@ -578,41 +578,37 @@ arrow::Datum do_arrow_compute_unary(
         return invert_res.ValueOrDie();
     }
 
-    // Special handling for is_true since it is not supported directly
-    // by Arrow compute.
-    if (comparator == "is_true") {
-        auto arrow_false = arrow::MakeScalar(false);
-        arrow::Result<arrow::Datum> is_true_res = arrow::compute::CallFunction(
-            "coalesce", {src1, arrow_false}, func_options);
-        if (!is_true_res.ok()) [[unlikely]] {
+    // Special handling for is_true, is_not_true, is_false, is_not_false since
+    // they are not supported directly by Arrow compute.
+    if (comparator == "is_true" || comparator == "is_not_true" ||
+        comparator == "is_false" || comparator == "is_not_false") {
+        const bool test_true =
+            comparator == "is_true" || comparator == "is_not_true";
+        const bool invert =
+            comparator == "is_not_true" || comparator == "is_false";
+
+        auto na_fill_value = arrow::MakeScalar(test_true ? false : true);
+
+        arrow::Result<arrow::Datum> result = arrow::compute::CallFunction(
+            "coalesce", {src1, na_fill_value}, func_options);
+        if (!result.ok()) [[unlikely]] {
             throw std::runtime_error(
                 "do_arrow_compute_unary: Error in Arrow compute: " +
-                is_true_res.status().message());
-        }
-        return is_true_res.ValueOrDie();
-    }
-
-    // Special handling for is_not_true since it is not supported directly
-    // by Arrow compute.
-    if (comparator == "is_not_true") {
-        auto arrow_false = arrow::MakeScalar(false);
-        arrow::Result<arrow::Datum> coalesce_res = arrow::compute::CallFunction(
-            "coalesce", {src1, arrow_false}, func_options);
-        if (!coalesce_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute: " +
-                coalesce_res.status().message());
+                result.status().message());
         }
 
-        // Invert so that null/false -> true and true -> false.
-        arrow::Result<arrow::Datum> invert_res =
-            arrow::compute::CallFunction("invert", {coalesce_res.ValueOrDie()});
-        if (!invert_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute Invert: " +
-                invert_res.status().message());
+        // is_not_true: Invert so that null/false -> true and true -> false.
+        // is_false: Invert so that null/true -> false and true -> false.
+        if (invert) {
+            result =
+                arrow::compute::CallFunction("invert", {result.ValueOrDie()});
+            if (!result.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    "do_arrow_compute_unary: Error in Arrow compute Invert: " +
+                    result.status().message());
+            }
         }
-        return invert_res.ValueOrDie();
+        return result.ValueOrDie();
     }
 
     arrow::Result<arrow::Datum> cmp_res =

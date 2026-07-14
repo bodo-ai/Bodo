@@ -157,6 +157,8 @@ enum class ExpressionType : uint8_t {
 	OPERATOR_IS_TRUE = 250,
 	OPERATOR_NEG = 251,
 	OPERATOR_IS_NOT_TRUE = 252,
+	OPERATOR_IS_FALSE = 253,
+	OPERATOR_IS_NOT_FALSE = 254,
 };
 
 //===--------------------------------------------------------------------===//

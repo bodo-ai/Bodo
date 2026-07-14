@@ -525,7 +525,7 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
         ),
     ],
 )
-# @pytest.mark.bodosql_cpp   # agg OTHER_FUNCTION not supported, SqlPostfixOperator not supported IS NULL
+@pytest.mark.bodosql_cpp
 def test_count_if(query, spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -784,17 +784,24 @@ def test_nested_grouping_clauses(
 @pytest.mark.parametrize(
     "agg_col",
     [
-        pytest.param("A", id="int32_nullable"),
-        pytest.param("B", id="int32_numpy", marks=pytest.mark.slow),
-        pytest.param("C", id="string"),
-        pytest.param("D", id="float", marks=pytest.mark.slow),
-        pytest.param("E", id="bool_nullable", marks=pytest.mark.slow),
-        pytest.param("F", id="bool_numpy", marks=pytest.mark.slow),
+        pytest.param("A", id="int32_nullable", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            "B", id="int32_numpy", marks=[pytest.mark.bodosql_cpp, pytest.mark.slow]
+        ),
+        pytest.param("C", id="string", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            "D", id="float", marks=[pytest.mark.bodosql_cpp, pytest.mark.slow]
+        ),
+        pytest.param(
+            "E", id="bool_nullable", marks=[pytest.mark.bodosql_cpp, pytest.mark.slow]
+        ),
+        pytest.param(
+            "F", id="bool_numpy", marks=[pytest.mark.bodosql_cpp, pytest.mark.slow]
+        ),
         pytest.param("G", id="int_array"),
         pytest.param("H", id="string_array"),
     ],
 )
-# @pytest.mark.bodosql_cpp   # aggregation ANY_VALUE not supported
 def test_any_value(agg_col, memory_leak_check):
     """Tests ANY_VALUE, which is normally nondeterministic but has been
     implemented in a way that is reproducible (by always returning the first

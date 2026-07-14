@@ -1232,6 +1232,18 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
         join_state);
 }
 
+std::pair<std::vector<int>,
+          std::vector<std::vector<JoinFilterColStats::col_min_max_t>>>
+JoinFilterColStats::get_col_stats_for_join_filter_cols() {
+    std::vector<int> filter_cols;
+    std::vector<std::vector<col_min_max_t>> filter_col_stats;
+    for (const auto &[col_idx, min_max_vec] : this->collect_all()) {
+        filter_cols.push_back(col_idx);
+        filter_col_stats.push_back(min_max_vec);
+    }
+    return std::make_pair(filter_cols, filter_col_stats);
+}
+
 std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
 JoinFilterColStats::collect_all() {
     // Cache the collection
@@ -1307,6 +1319,85 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
         }
     }
     return filters;
+}
+
+void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
+                          const std::shared_ptr<arrow::Schema> &schema,
+                          const std::vector<int> column_projection,
+                          std::string header) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (rank != 0) {
+        return;
+    }
+
+    auto [filter_cols, filter_col_stats] =
+        join_filter_col_stats.get_col_stats_for_join_filter_cols();
+
+    std::ostringstream expr_stream;
+    std::string expr_prefix = "Runtime join filter expression: ";
+    bool first_expr = true;
+
+    for (size_t i = 0; i < filter_cols.size(); ++i) {
+        const auto column_index = column_projection[filter_cols[i]];
+        const std::string &column_name = schema->field(column_index)->name();
+
+        for (const auto &[min_value, max_value] : filter_col_stats[i]) {
+            if (!first_expr) {
+                expr_stream << " & ";
+            }
+            first_expr = false;
+
+            expr_stream << "(ds.field('{" << column_name
+                        << "}') >= " << min_value->ToString()
+                        << ") & (ds.field('{" << column_name
+                        << "}') <= " << max_value->ToString() << ")";
+        }
+    }
+
+    const std::string rtjf_str =
+        expr_prefix + (first_expr ? "True" : "(" + expr_stream.str() + ")");
+
+    PyGILState_STATE gil = PyGILState_Ensure();
+
+    try {
+        PyObjectPtr module(PyImport_ImportModule("bodo.user_logging"));
+        if (!module) {
+            throw std::runtime_error("Failed to import bodo.user_logging");
+        }
+
+        PyObjectPtr func(
+            PyObject_GetAttrString(module.get(), "log_if_verbose"));
+        if (!func || !PyCallable_Check(func.get())) {
+            throw std::runtime_error(
+                "bodo.user_logging.log_if_verbose is not callable");
+        }
+
+        PyObjectPtr py_level(PyLong_FromLongLong(2));
+        PyObjectPtr py_header(PyUnicode_FromString(header.c_str()));
+        PyObjectPtr py_message(PyUnicode_FromStringAndSize(
+            rtjf_str.data(), static_cast<Py_ssize_t>(rtjf_str.size())));
+
+        if (!py_level || !py_header || !py_message) {
+            throw std::runtime_error("Failed to create logging arguments");
+        }
+
+        PyObjectPtr result(PyObject_CallFunctionObjArgs(
+            func.get(), py_level.get(), py_header.get(), py_message.get(),
+            nullptr));
+
+        if (!result) {
+            throw std::runtime_error("log_if_verbose() failed");
+        }
+    } catch (...) {
+        if (PyErr_Occurred()) {
+            PyErr_Print();
+        }
+        PyGILState_Release(gil);
+        throw;
+    }
+
+    PyGILState_Release(gil);
 }
 
 void assert_py_args_is_tuple(PyObject *args, const char *err_context) {

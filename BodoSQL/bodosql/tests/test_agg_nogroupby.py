@@ -390,6 +390,7 @@ def test_max_literal(basic_df, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_count_if(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -530,6 +531,7 @@ def test_agg_replicated(datapath, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_any_value(query, memory_leak_check):
     """Tests ANY_VALUE, which is normally nondeterministic but has been
     implemented in a way that is reproducible (by always returning the first
