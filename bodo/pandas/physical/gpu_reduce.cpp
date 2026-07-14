@@ -39,6 +39,9 @@ std::unique_ptr<cudf::reduce_aggregation> get_reduce_agg(
     const std::string& function_name) {
     if (function_name == "max" || function_name == "greater") {
         return cudf::make_max_aggregation<cudf::reduce_aggregation>();
+    } else if (function_name == "first") {
+        return cudf::make_nth_element_aggregation<cudf::reduce_aggregation>(
+            0, cudf::null_policy::EXCLUDE);
     } else if (function_name == "min" || function_name == "less") {
         return cudf::make_min_aggregation<cudf::reduce_aggregation>();
     } else if (function_name == "sum" || function_name == "add") {
@@ -91,6 +94,10 @@ void GPUReductionFunction::CombineResults(
         } else if (result == nullptr || !result->is_valid(output_stream)) {
             // If our current result is null then just take the other
             result = std::move(other_result);
+            continue;
+        }
+
+        if (combine_reduce_name == "first") {
             continue;
         }
 

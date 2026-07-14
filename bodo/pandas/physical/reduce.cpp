@@ -65,6 +65,10 @@ void ReductionFunction::CombineResults(const arrow::ScalarVector& other) {
             continue;
         }
 
+        if (scalar_cmp_names == "first") {
+            continue;
+        }
+
         arrow::Result<arrow::Datum> cmp_res_scalar =
             arrow::compute::CallFunction(scalar_cmp_names,
                                          {other_result, result});
@@ -189,6 +193,9 @@ OperatorResult PhysicalReduce::ConsumeBatch(
             } else if (func_name == "std_pop") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionStd>(input_col_idx, 0));
+            } else if (func_name == "first") {
+                reduction_functions.push_back(
+                    std::make_unique<ReductionFunctionFirst>(input_col_idx));
             } else {
                 throw std::runtime_error("Unsupported reduction function: " +
                                          func_name);
