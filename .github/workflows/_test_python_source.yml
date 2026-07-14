@@ -71,7 +71,8 @@ jobs:
         - name: Configure GCP Credentials
           uses: google-github-actions/auth@v3
           with:
-            credentials_json: ${{ secrets.GCP_SA_KEY }}
+            service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+            workload_identity_provider: ${{ secrets.GCP_WIP_PROVIDER }}
             access_token_lifetime: 10800
         - name: Install Extra Test dependencies
           if: ${{ inputs.test-type != 'DF_LIB_GPU' }}
