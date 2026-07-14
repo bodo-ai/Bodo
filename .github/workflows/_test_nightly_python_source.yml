@@ -92,6 +92,12 @@ jobs:
           role-skip-session-tagging: true
           role-duration-seconds: 14400 # Max duration: 4 hours
 
+      - name: Configure GCP Credentials
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          access_token_lifetime: 14400
+
       - name: Install Oracle Instant Client
         if: runner.os != 'Windows' && !startsWith(inputs.test-type, 'sql')
         run: |
