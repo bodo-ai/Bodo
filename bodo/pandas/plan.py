@@ -128,6 +128,10 @@ class LazyPlan:
                     for arg in node.args[0:2]:
                         if isinstance(arg, LazyPlan):
                             queue.append(arg)
+                elif isinstance(node, LogicalSetOperation):
+                    for arg in node.args:
+                        if isinstance(arg, LazyPlan):
+                            queue.append(arg)
                 elif isinstance(node.args[0], LazyPlan):
                     # For all other node types, just look at the first arg for a
                     # source plan.
