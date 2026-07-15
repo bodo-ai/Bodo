@@ -485,8 +485,7 @@ def getfs(
         fpath (str | list[str]): Filename or list of filenames.
         protocol (str): Protocol for the filesystem. e.g. "" (for local), "s3", etc.
         storage_options (Optional[dict], optional): Optional storage_options to
-            use when building the filesystem. Only supported in the S3 case
-            at this time. Defaults to None.
+            use when building the filesystem. Defaults to None.
         parallel (bool, optional): Whether this function is being called in parallel.
             Defaults to False.
 
@@ -527,12 +526,7 @@ def getfs(
                 storage_options=storage_options,
             )
         )
-    if storage_options is not None and len(storage_options) > 0:
-        raise ValueError(
-            f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
-        )
-
-    if protocol in {"gcs", "gs"}:
+    elif protocol in {"gcs", "gs"}:
         return get_gcs_fs(fpath, storage_options=storage_options)
     elif protocol == "http":
         import fsspec

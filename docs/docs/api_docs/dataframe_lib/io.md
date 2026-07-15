@@ -24,6 +24,8 @@ Creates a BodoDataFrame object for reading from parquet file(s) lazily.
 Refer to [`pandas.read_parquet`](https://pandas.pydata.org/docs/reference/api/pandas.read_parquet.html#pandas.read_parquet) for more details.
 The type of this argument differs from Pandas.
 
+: __storage_options : *dict, optional* :__ Extra options that make sense for a particular storage connection.
+
 : All other parameters will trigger a fallback to [`pandas.read_parquet`](https://pandas.pydata.org/docs/reference/api/pandas.read_parquet.html#pandas.read_parquet) if a non-default value is provided.
 
 <p class="api-header">Returns</p>
