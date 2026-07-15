@@ -135,7 +135,7 @@ def test_tpch_q06(local_sf1_data):
 
 @pytest.mark.gpu
 def test_tpch_q07(local_sf1_data):
-    run_tpch_query_test(local_sf1_data, tpch.tpch_q07, ctes_created=1)
+    run_tpch_query_test(local_sf1_data, tpch.tpch_q07)
 
 
 @pytest.mark.gpu
