@@ -243,7 +243,7 @@ def get_hf_fs(storage_options=None):
 
 # hdfs related functions should be included in
 # coverage once hdfs tests are included in CI
-def get_hdfs_fs(path):  # pragma: no cover
+def get_hdfs_fs(path, storage_options=None):  # pragma: no cover
     """
     initialize pyarrow.fs.HadoopFileSystem from path
     """
@@ -264,7 +264,7 @@ def get_hdfs_fs(path):  # pragma: no cover
         port = options.port
     # creates a new Hadoop file system from uri
     try:
-        fs = HdFS(host=host, port=port, user=user)
+        fs = HdFS(host=host, port=port, user=user, **(storage_options or {}))
     except Exception as e:
         raise ValueError(f"Hadoop file system cannot be created: {e}")
 
@@ -339,7 +339,7 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
     from pyarrow.fs import AzureFileSystem
 
     def get_attr(opt_key: str, env_key: str) -> str | None:
-        opt_val = storage_options.get(opt_key) if storage_options else None
+        opt_val = storage_options.pop(opt_key) if storage_options else None
         if (
             opt_val is not None
             and os.environ.get(env_key) is not None
@@ -370,7 +370,9 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
 
     # Note, Azure validates credentials at use-time instead of at
     # initialization
-    return AzureFileSystem(account_name, account_key=account_key)
+    return AzureFileSystem(
+        account_name, account_key=account_key, **(storage_options or {})
+    )
 
 
 """
@@ -531,7 +533,9 @@ def getfs(
     elif protocol == "http":
         import fsspec
 
-        return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
+        return PyFileSystem(
+            FSSpecHandler(fsspec.filesystem("http", **(storage_options or {})))
+        )
     elif protocol in {"abfs", "abfss"}:  # pragma: no cover
         if not storage_options:
             storage_options = {}
@@ -546,11 +550,17 @@ def getfs(
         return abfs_get_fs(storage_options)
     elif protocol == "hdfs":  # pragma: no cover
         return (
-            get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
+            get_hdfs_fs(fpath, storage_options)
+            if not isinstance(fpath, list)
+            else get_hdfs_fs(fpath[0], storage_options)
         )
     # HuggingFace datasets
     elif protocol == "hf":
         return get_hf_fs(storage_options)
+    elif storage_options is not None and len(storage_options) > 0:
+        raise ValueError(
+            f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
+        )
     else:
         return pa.fs.LocalFileSystem()
 
