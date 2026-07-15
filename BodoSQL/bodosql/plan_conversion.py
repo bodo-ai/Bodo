@@ -1257,39 +1257,64 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         ),
                     ],
                 )
-        if func_name == "DATEDIFF" and num_operands == 3:
-            # TODO: May need TZ-aware support
+        if func_name == "DATEDIFF" and num_operands in (2, 3):
+            if num_operands == 3:
+                # First operand is a FLAG(unit) interval qualifier from the Java
+                # planner (e.g. FLAG(DAY), FLAG(MONTH)).
+                unit_str = get_java_symbol(java_call.getOperands()[0])
+                unit_str = standardize_java_time_unit(func_name, unit_str).upper()
+                assert unit_str in INTERVAL_UNIT_MAP, (
+                    f"Unsupported DATEDIFF unit: {unit_str}"
+                )
 
-            # First operand is a FLAG(unit) interval qualifier from the Java
-            # planner (e.g. FLAG(DAY), FLAG(MONTH)).
-            unit_str = get_java_symbol(java_call.getOperands()[0])
-            unit_str = standardize_java_time_unit(func_name, unit_str).upper()
-            assert unit_str in INTERVAL_UNIT_MAP, (
-                f"Unsupported DATEDIFF unit: {unit_str}"
-            )
-            # date_expr1 will be subtracted from date_expr2
-            date_expr1 = java_expr_to_python_expr(
-                ctx, java_call.getOperands()[1], input_plan
-            )
-            date_expr2 = java_expr_to_python_expr(
-                ctx, java_call.getOperands()[2], input_plan
+                # date_expr1 will be subtracted from date_expr2
+                date_expr1 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                date_expr2 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[2], input_plan
+                )
+            else:
+                # According to BodoSQL docs:
+                # If only two arguments are provided, the unit should be days.
+                # Also, the order of the dates is reversed compared to the
+                # three argument version (second date is subtracted from first).
+                unit_str = "DAY"
+                date_expr2 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[0], input_plan
+                )
+                date_expr1 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+
+            is_time_unit = unit_str in (
+                "HOUR",
+                "MINUTE",
+                "SECOND",
+                "MILLISECOND",
+                "MICROSECOND",
+                "NANOSECOND",
             )
 
             date1_pa_type = date_expr1.empty_data.iloc[:, 0].dtype.pyarrow_dtype
             date2_pa_type = date_expr2.empty_data.iloc[:, 0].dtype.pyarrow_dtype
-
-            if (
+            date1_has_tz = (
                 pa.types.is_timestamp(date1_pa_type) and date1_pa_type.tz is not None
-            ) or (
+            )
+            date2_has_tz = (
                 pa.types.is_timestamp(date2_pa_type) and date2_pa_type.tz is not None
-            ):
-                raise ValueError(
-                    "TZ-aware input not currently supported in DATEDIFF (C++ backend)"
-                )
+            )
+            date1_precision = (
+                date1_pa_type.unit if pa.types.is_timestamp(date1_pa_type) else "s"
+            )
+            date2_precision = (
+                date2_pa_type.unit if pa.types.is_timestamp(date2_pa_type) else "s"
+            )
 
-            # Only mixing DATE and TIMESTAMP is allowed
+            # We can't mix and match times and dates/timestamps.
+            # Also, the requested unit for time input needs to be a time unit.
             if pa.types.is_time(date1_pa_type) or pa.types.is_time(date2_pa_type):
-                if unit_str in ("YEAR", "QUARTER", "MONTH", "WEEK", "DAY"):
+                if not is_time_unit:
                     raise ValueError(
                         "Unsupported unit for DATEDIFF with TIME input: " + unit_str
                     )
@@ -1299,33 +1324,89 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     raise ValueError(
                         "If a time type is provided both arguments must be time types."
                     )
-            else:
+            # If only one input has a timezone, cast the other to match.
+            # This follows the JIT implementation at
+            # BodoSQL/bodosql/kernels/datetime_array_kernels.py::create_dt_diff_fn_util_overload
+            elif not date1_has_tz and date2_has_tz:
                 if pa.types.is_date(date1_pa_type):
-                    if unit_str in (
-                        "HOUR",
-                        "MINUTE",
-                        "SECOND",
-                        "MILLISECOND",
-                        "MICROSECOND",
-                        "NANOSECOND",
-                    ) or pa.types.is_timestamp(date2_pa_type):
-                        timestamp_empty_data = pd.Series(
-                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                    date_expr1 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr1
+                    )
+                date_expr1 = ArrowScalarFuncExpression(
+                    pd.Series(
+                        dtype=pd.ArrowDtype(
+                            pa.timestamp(date1_precision, tz=date2_pa_type.tz)
                         )
-                        date_expr1 = CastExpression(timestamp_empty_data, date_expr1)
+                    ),
+                    [date_expr1],
+                    "assume_timezone",
+                    (date2_pa_type.tz,),
+                )
+            elif date1_has_tz and not date2_has_tz:
                 if pa.types.is_date(date2_pa_type):
-                    if unit_str in (
-                        "HOUR",
-                        "MINUTE",
-                        "SECOND",
-                        "MILLISECOND",
-                        "MICROSECOND",
-                        "NANOSECOND",
-                    ) or pa.types.is_timestamp(date1_pa_type):
-                        timestamp_empty_data = pd.Series(
-                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                    date_expr2 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr2
+                    )
+                date_expr2 = ArrowScalarFuncExpression(
+                    pd.Series(
+                        dtype=pd.ArrowDtype(
+                            pa.timestamp(date2_precision, tz=date1_pa_type.tz)
                         )
-                        date_expr2 = CastExpression(timestamp_empty_data, date_expr2)
+                    ),
+                    [date_expr2],
+                    "assume_timezone",
+                    (date1_pa_type.tz,),
+                )
+            elif date1_has_tz and date2_has_tz:
+                # Raise an error if timezones don't match, since this is what the JIT side does
+                if date1_pa_type.tz != date2_pa_type.tz:
+                    raise ValueError(
+                        "C++ backend does not currently support DATEDIFF between timestamps with different timezones."
+                    )
+            else:
+                # Only mixing DATE and TIMESTAMP is allowed.
+                # Promote dates to timestamps if needed to unify the types or because a time unit was requested.
+                if pa.types.is_date(date1_pa_type) and (
+                    is_time_unit or pa.types.is_timestamp(date2_pa_type)
+                ):
+                    date_expr1 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr1
+                    )
+                if pa.types.is_date(date2_pa_type) and (
+                    is_time_unit or pa.types.is_timestamp(date1_pa_type)
+                ):
+                    date_expr2 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr2
+                    )
+
+            if date1_has_tz or date2_has_tz:
+                # Due to the above code, both timestamps have timezones here.
+                # Keep in mind that the Arrow datediff functions will internally
+                # call local_timestamp for TZ-aware input.
+                if is_time_unit:
+                    # If we need the difference in terms of time, cast both
+                    # timestamps to UTC, which automatically adjusts for Daylight Savings Time.
+                    # The JIT implementation does this implicitly if a time unit is requested
+                    # by getting the raw timestamp value (stored as UTC) of the TZ-aware input.
+                    date_expr1 = CastExpression(
+                        pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp(date1_precision, tz="UTC"))
+                        ),
+                        date_expr1,
+                    )
+                    date_expr2 = CastExpression(
+                        pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp(date2_precision, tz="UTC"))
+                        ),
+                        date_expr2,
+                    )
+                # Don't convert timezone if we shouldn't get the answer in units of time.
+                # If we do, we could inadvertently cross a day/month/year boundary.
+                # The JIT version directly reads the date parts and thus ignores the timezone
+                # for YEAR/QUARTER/MONTH/WEEK/DAY. However, some test cases like
+                # test_timestamp_tz.py::test_timestamp_tz_datediff[day] appear contradictory
+                # to this rule in that they are intended to test that comparison is always
+                # performed in UTC.
 
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
