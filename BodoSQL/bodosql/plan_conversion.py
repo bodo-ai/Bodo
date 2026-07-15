@@ -3212,12 +3212,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
             return ArithOpExpression(out_empty, left, right, "__pow__")
         elif func_name == "SQUARE" and len(op_exprs) == 1:
-            left = op_exprs[0]
-            out_empty = left.empty_data.iloc[:, 0] ** 2
-            exponent_expr = ConstantExpression(
-                pd.Series(dtype=pd.ArrowDtype(pa.int64())), input_plan, 2
-            )
-            return ArithOpExpression(out_empty, left, exponent_expr, "__pow__")
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, "SQUARE input", (int, float))
+            out_empty = inp.empty_data.iloc[:, 0] * inp.empty_data.iloc[:, 0]
+            return ArithOpExpression(out_empty, inp, inp, "__mul__")
         elif func_name == "LOG2" and len(op_exprs) == 1:
             inp = op_exprs[0]
             ensure_type_of_expr(inp, "LOG2 input", (int, float))
@@ -4200,6 +4198,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
+        # NOTE: Calcite maps SQL RANDOM() to RANDOM() which means a random number
+        # between [0.0, 1.0] in Calcite and does not accept a seed argument. For
+        # completeness, to match Snowflake, we support a seed parameter anyway.
         if func_name == "RANDOM" and len(op_exprs) in (0, 1):
             """Generates random 64-bit integers"""
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))

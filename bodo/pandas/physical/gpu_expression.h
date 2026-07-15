@@ -808,6 +808,7 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
                 throw std::runtime_error("Left must be array for " + opstr);
             }
         } else if (opstr == "sign") {
+            // sign(x) returns 1 if x > 0, -1 if x < 0, or 0 if x = 0
             std::shared_ptr<ArrayExprGPUResult> left_as_array =
                 std::dynamic_pointer_cast<ArrayExprGPUResult>(left_res);
             if (left_as_array) {

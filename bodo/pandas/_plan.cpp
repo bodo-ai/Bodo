@@ -1213,6 +1213,8 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
         buildPhysicalExprTree(expr_copy, empty_col_ref_map, false);
     std::shared_ptr<ExprResult> expr_res = temp_pe->ProcessBatch(in_table);
 
+    temp_pe->Finalize();
+
     std::shared_ptr<ArrayExprResult> expr_res_as_array =
         std::dynamic_pointer_cast<ArrayExprResult>(expr_res);
     std::shared_ptr<ScalarExprResult> expr_res_as_scalar =
