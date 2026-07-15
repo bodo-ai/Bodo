@@ -38,6 +38,7 @@ from bodo.pandas.plan import (
     LogicalJoinFilter,
     LogicalOrder,
     LogicalProjection,
+    LogicalSetOperation,
     LogicalTopN,
     NullExpression,
     UnaryOpExpression,
@@ -244,11 +245,14 @@ def java_plan_to_python_plan(ctx, java_plan):
 
 
 def java_union_to_python_union(ctx, java_plan):
-    def df_concat(*args):
-        return bd.concat(args)
-
     input_plans = [java_plan_to_python_plan(ctx, x) for x in java_plan.getInputs()]
-    plan = gen_plan_via_bodo_dataframe(df_concat, *input_plans)
+    plan = LogicalSetOperation(
+        input_plans[-2].empty_data, input_plans[-1], input_plans[-2], "union all"
+    )
+    for i in range(len(input_plans) - 3, -1, -1):
+        plan = LogicalSetOperation(
+            input_plans[i].empty_data, plan, input_plans[i], "union all"
+        )
     return plan
 
 
