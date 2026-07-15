@@ -261,7 +261,81 @@ def java_expr_to_python_expr(ctx, java_expr, input_plan):
     if java_class_name == "RexLiteral":
         return java_literal_to_python_literal(ctx, java_expr, input_plan)
 
+    if java_class_name == "RexNamedParam":
+        return java_named_param_to_python_literal(ctx, java_expr, input_plan)
+
+    if java_class_name == "RexDynamicParam":
+        return java_dynamic_param_to_python_literal(ctx, java_expr, input_plan)
+
     raise NotImplementedError(f"Expression {java_class_name} not supported yet")
+
+
+type_str_to_pa = {
+    "UINT8": pa.uint8(),
+    "UINT16": pa.uint16(),
+    "UINT32": pa.uint32(),
+    "UINT64": pa.uint64(),
+    "INT8": pa.int8(),
+    "INT16": pa.int16(),
+    "INT32": pa.int32(),
+    "INT64": pa.int64(),
+    "FLOAT32": pa.float32(),
+    "FLOAT64": pa.float64(),
+    "STRING": pa.string(),
+    "BOOL8": pa.bool_(),
+    "TIMESTAMP_NTZ": pa.timestamp("ns"),
+}
+
+
+def java_dynamic_param_to_python_literal(ctx, dyn_param, input_plan):
+    """Convert a BodoSQL Java dynamic param expression to a DataFrame library constant."""
+    dyn_param = dyn_param.toString()
+    if dyn_param.startswith("?"):
+        dyn_param = dyn_param[1:]
+        if not dyn_param.isnumeric():
+            raise ValueError("Dynamic parameter is not numeric.")
+        dyn_param = int(dyn_param)
+
+        if dyn_param >= len(ctx.dynamic_params_list[0]) or dyn_param >= len(
+            ctx.dynamic_params_list[1]
+        ):
+            raise ValueError(f"Dynamic parameter {dyn_param} not found.")
+
+        column = ctx.dynamic_params_list[0][dyn_param]
+        value = ctx.dynamic_params_list[1][dyn_param]
+        if isinstance(value, np.generic):
+            value = value.item()
+        cdtype = column.getDataType().toString()
+        if cdtype in type_str_to_pa:
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
+            return ConstantExpression(dummy_empty_data, input_plan, value)
+
+    raise NotImplementedError("DynamicParam format or type not supported yet")
+
+
+def java_named_param_to_python_literal(ctx, named_param, input_plan):
+    """Convert a BodoSQL Java named param expression to a DataFrame library constant."""
+    named_param = named_param.toString()
+    if named_param.startswith("@"):
+        named_param = named_param[1:]
+        if (
+            named_param not in ctx.named_params_dict[0]
+            or named_param not in ctx.named_params_dict[1]
+        ):
+            raise ValueError(f"Named parameter {named_param} not found.")
+
+        column = ctx.named_params_dict[0][named_param]
+        value = ctx.named_params_dict[1][named_param]
+        if isinstance(value, np.generic):
+            value = value.item()
+        cdtype = column.getDataType().toString()
+        if cdtype in type_str_to_pa:
+            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
+            return ConstantExpression(dummy_empty_data, input_plan, value)
+        else:
+            print("cdtype not found:", cdtype)
+
+    raise NotImplementedError("NamedParam format or type not supported yet")
 
 
 def java_call_to_python_call(ctx, java_call, input_plan):
@@ -324,11 +398,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         parse a formatted string as a timestamp.
 
         Unfortunately we can't call strptime right away, because the given
-        timestamp components could be out of range. We could manully 
+        timestamp components could be out of range. We could manually
         accumulate the components one by one using mod arithmetic to
         calculate the effective timestamp part values, but it would be
         tedious and potentially inefficient.
-        
+
         Therefore we only compute the final year and month values beforehand
         to ensure calendar awareness. Then we use those values with the first
         day of that month to create a timestamp type via strptime. At this point,
@@ -3957,8 +4031,24 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
         return expr
 
     if kind.equals(SqlKind.MINUS):
-        out_empty = left.empty_data.iloc[:, 0] - right.empty_data.iloc[:, 0]
-        expr = ArithOpExpression(out_empty, left, right, "__sub__")
+        left_type = left.empty_data.iloc[:, 0]
+        right_type = right.empty_data.iloc[:, 0]
+        left_unsigned = pd.api.types.is_unsigned_integer_dtype(left_type.dtype)
+        right_unsigned = pd.api.types.is_unsigned_integer_dtype(right_type.dtype)
+        left_integer = left_unsigned or pd.api.types.is_signed_integer_dtype(
+            left_type.dtype
+        )
+        right_integer = right_unsigned or pd.api.types.is_signed_integer_dtype(
+            right_type.dtype
+        )
+        if left_integer and right_integer and (left_unsigned or right_unsigned):
+            out_empty = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            left_cast = CastExpression(out_empty, left) if left_unsigned else left
+            right_cast = CastExpression(out_empty, right) if right_unsigned else right
+            expr = ArithOpExpression(out_empty, left_cast, right_cast, "__sub__")
+        else:
+            out_empty = left_type - right_type
+            expr = ArithOpExpression(out_empty, left, right, "__sub__")
         return expr
 
     if kind.equals(SqlKind.TIMES):
