@@ -4690,6 +4690,7 @@ def test_join_filter_pushdown_aggregate_split_keys():
     )
 
 
+@pytest.mark.gpu
 def test_read_parquet_s3_storage_options():
     """Tests that Bodo can use storage options to read from a requester pays S3 bucket."""
 

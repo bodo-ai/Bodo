@@ -212,13 +212,15 @@ class RankBatchGenerator {
                        const std::vector<std::string> &_selected_columns,
                        std::shared_ptr<arrow::Schema> _arrow_schema,
                        std::shared_ptr<arrow::Schema> _output_arrow_schema,
-                       MPI_Comm comm)
+                       MPI_Comm comm, PyObject *storage_options)
         : path_(dataset_path),
           filesystem_(nullptr),
+          storage_options(storage_options),
           target_rows_(target_rows),
           selected_columns(_selected_columns),
           arrow_schema(std::move(_arrow_schema)),
           output_arrow_schema(std::move(_output_arrow_schema)) {
+        Py_INCREF(storage_options);
         get_dataset();
 
         // Only assign parts to GPU-pinned ranks
@@ -507,10 +509,11 @@ class RankBatchGenerator {
 
         // ds = bodo.io.parquet_pio.get_parquet_dataset(path,
         // get_row_counts=False)
-        // TODO(Ehsan): pass other options filters, storage_options,
+        // TODO(Ehsan): pass other options filters,
         // read_categories, tot_rows_to_read, schema, partitioning
         PyObjectPtr ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset",
-                                             "OO", this->path_, Py_False);
+                                             "OOOO", this->path_, Py_False,
+                                             Py_None, this->storage_options);
         if (ds == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
@@ -605,9 +608,12 @@ class RankBatchGenerator {
         return result;
     }
 
+    ~RankBatchGenerator() { Py_XDECREF(storage_options); }
+
    private:
     PyObject *path_;
     std::shared_ptr<arrow::fs::FileSystem> filesystem_;
+    PyObject *storage_options;
     std::size_t target_rows_;
     int rank_{0}, size_{1};
 
