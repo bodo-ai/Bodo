@@ -184,20 +184,19 @@ void GPUReductionFunction::Finalize(MPI_Comm comm) {
                 CHECK_MPI(
                     MPI_Bcast(result_ptr, 1, mpi_dtype, 0, has_data_comm),
                     "GPUReductionFunction::Finalize: MPI error on MPI_Bcast:");
+            } else {
+                CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
+                                        this->mpi_reduce_op, has_data_comm),
+                          "GPUReductionFunction::Finalize: MPI error on "
+                          "MPI_Allreduce:");
             }
-        } else {
-            CHECK_MPI(
-                MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
-                              this->mpi_reduce_op, has_data_comm),
-                "GPUReductionFunction::Finalize: MPI error on MPI_Allreduce:");
-        }
 
-        // Copy the reduced CPU result back to cudf scalar
-        std::shared_ptr<arrow::Scalar> arrow_scalar =
-            arrow_table->column(0)->GetScalar(0).ValueOrDie();
-        this->results[i] = arrow_scalar_to_cudf(arrow_scalar);
+            // Copy the reduced CPU result back to cudf scalar
+            std::shared_ptr<arrow::Scalar> arrow_scalar =
+                arrow_table->column(0)->GetScalar(0).ValueOrDie();
+            this->results[i] = arrow_scalar_to_cudf(arrow_scalar);
+        }
     }
-}
 }
 
 void GPUReductionFunctionMean::Finalize(MPI_Comm comm) {
