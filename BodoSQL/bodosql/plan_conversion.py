@@ -38,6 +38,7 @@ from bodo.pandas.plan import (
     LogicalJoinFilter,
     LogicalOrder,
     LogicalProjection,
+    LogicalSetOperation,
     LogicalTopN,
     NullExpression,
     UnaryOpExpression,
@@ -237,7 +238,22 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalTableCreate":
         return java_table_create_to_python(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalUnion":
+        return java_union_to_python_union(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
+
+
+def java_union_to_python_union(ctx, java_plan):
+    input_plans = [java_plan_to_python_plan(ctx, x) for x in java_plan.getInputs()]
+    plan = LogicalSetOperation(
+        input_plans[-2].empty_data, input_plans[-1], input_plans[-2], "union all"
+    )
+    for i in range(len(input_plans) - 3, -1, -1):
+        plan = LogicalSetOperation(
+            input_plans[i].empty_data, plan, input_plans[i], "union all"
+        )
+    return plan
 
 
 def java_table_create_to_python(ctx, java_plan):
