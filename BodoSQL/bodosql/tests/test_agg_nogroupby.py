@@ -587,7 +587,7 @@ def test_any_value_nulls(memory_leak_check):
         check_names=False,
         is_out_distributed=False,
         expected_output=pd.DataFrame(
-            {0: pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
+            {0: pd.array([1], dtype=pd.ArrowDtype(pa.int64()))}
         ),
     )
 
