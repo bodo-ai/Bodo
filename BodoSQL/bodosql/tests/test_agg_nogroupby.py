@@ -13,13 +13,12 @@ from bodo.tests.utils import (
     check_func,
     count_array_REPs,
     dist_IR_contains,
-    pytest_slow_unless_groupby,
 )
 from bodo.tests.utils_jit import DistTestPipeline
 from bodosql.tests.utils import check_query
 
 # Skip unless any groupby-related files were changed
-pytestmark = pytest_slow_unless_groupby
+# pytestmark = pytest_slow_unless_groupby
 
 
 def test_agg_numeric(
