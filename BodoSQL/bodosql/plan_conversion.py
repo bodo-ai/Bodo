@@ -4545,22 +4545,6 @@ def get_common_int_type_list(
         common_type = eval(
             f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
         )
-        """
-        if common_is_signed == expr_is_signed:
-            # Use wider type if inputs have same signedness
-            if expr_width > common_width:
-                common_type = dtype
-        else:
-            # For mixed signedness, use the wider bit width of the two.
-            # The common type is signed only if the max value of the unsigned input can fit in the signed int
-            common_type_width = max(common_width, expr_width)
-            common_type_signed = (common_is_signed and common_width > expr_width) or (
-                expr_is_signed and expr_width > common_width
-            )
-            common_type = eval(
-                f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
-            )
-        """
 
     cast_needed_list = [not expr_type.equals(common_type) for expr_type in types]
 
