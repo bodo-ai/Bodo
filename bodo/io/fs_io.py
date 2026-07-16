@@ -203,9 +203,11 @@ def get_gcs_fs(path, storage_options=None):
     options = {"retry_time_limit": datetime.timedelta(seconds=GCS_RETRY_LIMIT_SECONDS)}
 
     anon = False
-    options = storage_options.copy() if storage_options else {}
-    anon = options.pop("anon", anon)
-    anon = options.pop("anonymous", anon)
+    if storage_options:
+        options.update(storage_options)
+        anon = options.pop("anon", anon)
+        anon = options.pop("anonymous", anon)
+
     fs = GcsFileSystem(anonymous=anon, **options)
 
     if anon:
