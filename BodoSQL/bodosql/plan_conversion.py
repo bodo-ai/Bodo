@@ -4643,12 +4643,20 @@ def java_agg_to_python_agg(ctx, java_plan):
             "var_pop",
             "skew",
             "kurtosis",
-            "first",
         ]:
             assert len(arg_cols) == 1, (
                 f"Only single-argument {func_name} aggregations are supported"
             )
             in_type = input_plan.pa_schema.field(arg_cols[0]).type
+            out_type = _get_agg_output_type(
+                GroupbyAggFunc("dummy", func_name), in_type, "dummy"
+            )
+        elif func_name == "first":
+            assert len(arg_cols) == 1, (
+                f"Only single-argument {func_name} aggregations are supported"
+            )
+            in_type = input_plan.pa_schema.field(arg_cols[0]).type
+            assert not isinstance(in_type, pa.lib.LargeListType)
             out_type = _get_agg_output_type(
                 GroupbyAggFunc("dummy", func_name), in_type, "dummy"
             )
