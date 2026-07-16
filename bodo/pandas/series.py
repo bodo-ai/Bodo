@@ -533,6 +533,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback(unsupported="errors")
     def astype(self, dtype, copy=False, errors="raise"):
+        # According to Pandas docs, copy is part of the API but its value
+        # is now ignored.
         if dtype not in PANDAS_ARROW_TYPE_MAP:
             raise BodoLibNotImplementedException(
                 f"Series.astype is not supported for dtype {dtype} yet."
