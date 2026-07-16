@@ -2444,66 +2444,143 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
             return ConstantExpression(dummy_empty_data, input_plan, combined_val)
 
+        if func_name == "SIGN" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+
+            inp_dtype = get_expr_dtype(inp, func_name + " input")
+            if compare_types(inp_dtype, int):
+                # If input is an int, first use int8 empty data since
+                # we have to match the return type of Arrow's sign().
+                int8_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
+                int8_sign = UnaryOpExpression(int8_empty_data, inp, "sign")
+
+                # Calcite retains the size of the input integer type.
+                # Using inp.empty_data directly could be problematic
+                # if it is unsigned, so cast to the equivalent pyarrow
+                # type of what is in the plan.
+                inp_sql_type = java_call.getOperands()[0].getType()
+                pa_int_type = sql_type_to_pa_type(ctx, inp_sql_type.getSqlTypeName())
+                sql_pa_empty = pd.Series(dtype=pd.ArrowDtype(pa_int_type))
+                return CastExpression(sql_pa_empty, int8_sign)
+            else:
+                # If input is a float, return the original float type
+                return UnaryOpExpression(inp.empty_data, inp, "sign")
+
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
             left = op_exprs[0]
             right = op_exprs[1]
+            ensure_type_of_expr(left, func_name + " left input", (int, float))
+            ensure_type_of_expr(right, func_name + " right input", (int, float))
             out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
             return ArithOpExpression(out_empty, left, right, "__pow__")
 
         # SQRT(x) -> unary sqrt
         if func_name == "SQRT" and len(op_exprs) == 1:
             inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
             out_empty = inp.empty_data.iloc[:, 0] ** 0.5
             return UnaryOpExpression(out_empty, inp, "sqrt")
+
+        # CBRT(x) -> unary cube root
+        if func_name == "CBRT" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+            out_empty = inp.empty_data
+            return UnaryOpExpression(out_empty, inp, "cbrt")
 
         # ABS(x)
         if func_name == "ABS" and len(op_exprs) == 1:
             inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
             out_empty = inp.empty_data.iloc[:, 0].abs()
             return UnaryOpExpression(out_empty, inp, "abs")
 
-        # CEIL(x) / CEILING(x)
-        if func_name in ("CEIL", "CEILING") and len(op_exprs) == 1:
-            inp = op_exprs[0]
-            out_empty = inp.empty_data
-            return UnaryOpExpression(out_empty, inp, "ceil")
+        # CEILING(x)
+        if func_name == "CEILING" and len(op_exprs) == 1:
+            # Redirect to CEIL below.
+            func_name = "CEIL"
 
-        # FLOOR(x)
-        if func_name == "FLOOR" and len(op_exprs) == 1:
+        if func_name in ("FLOOR", "CEIL") and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data
-            return UnaryOpExpression(out_empty, inp, "floor")
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+
+            inp_dtype = get_expr_dtype(inp, func_name + " input")
+            if compare_types(inp_dtype, int):
+                # If input is an integer, FLOOR/CEIL is a no-op
+                return inp
+            else:
+                # If input is a float, return FLOOR(inp) or CEIL(inp) as normal
+                return UnaryOpExpression(inp.empty_data, inp, func_name.lower())
 
         # EXP(x)
         if func_name == "EXP" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data
+            ensure_type_of_expr(inp, "EXP input", (int, float))
+
+            # Retain current float output type if input is a float,
+            # otherwise use float64.
+            inp_dtype = get_expr_dtype(inp, "EXP input")
+            if compare_types(inp_dtype, int):
+                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            else:
+                out_empty = inp.empty_data
+
             return UnaryOpExpression(out_empty, inp, "exp")
 
         # LN(x) -> natural log
-        # The SQL function LOG(x) is mapped to Calcite LOG(x),
-        # which in Calcite and most systems means LN(x), but Bodo
-        # defines SQL LOG(x) as LOG10(x). Should we do anything
-        # about the mismatch?
         if func_name == "LN" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data
+            ensure_type_of_expr(inp, "LN input", (int, float))
+
+            # Retain current float output type if input is a float,
+            # otherwise use float64.
+            inp_dtype = get_expr_dtype(inp, "LN input")
+            if compare_types(inp_dtype, int):
+                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            else:
+                out_empty = inp.empty_data
+
             return UnaryOpExpression(out_empty, inp, "ln")
+
+        elif func_name == "LOG10" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, "LOG10 input", (int, float))
+            out_empty = inp.empty_data
+            return UnaryOpExpression(out_empty, inp, "log10")
 
         # ROUND(x, d) or ROUND(x) -> map to a unary/binary op if supported
         if func_name == "ROUND" and len(op_exprs) in (1, 2):
             inp = op_exprs[0]
+            ensure_type_of_expr(inp, "ROUND input", (int, float))
             out_empty = inp.empty_data
 
             if len(op_exprs) == 1:
-                return UnaryOpExpression(out_empty, inp, "round")
+                inp_dtype = get_expr_dtype(inp, "ROUND input")
+                if compare_types(inp_dtype, int):
+                    # If input is an integer, single-argument ROUND is a no-op
+                    return inp
+                else:
+                    return UnaryOpExpression(out_empty, inp, "round")
             else:
                 precision_digits = op_exprs[1]
                 # Not a traditional arithmetic operation, but this is what
                 # we currently have available to retrieve binary functions
                 # from the DuckDB catalog.
                 return ArithOpExpression(out_empty, inp, precision_digits, "round")
+
+        if func_name == "TRUNCATE" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+
+            inp_dtype = get_expr_dtype(inp, func_name + " input")
+            if compare_types(inp_dtype, int):
+                # If input is an integer, TRUNCATE is a no-op
+                return inp
+            else:
+                # If input is a float, return trunc(inp) as normal
+                return UnaryOpExpression(inp.empty_data, inp, "trunc")
 
         if func_name == "MOD" and len(op_exprs) == 2:
             inp = op_exprs[0]
@@ -2512,6 +2589,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(modulus_expr, "modulus_expr", int)
 
             return ArithOpExpression(inp.empty_data, inp, modulus_expr, "__mod__")
+
+        if func_name == "RAND" and len(op_exprs) == 0:
+            """Generates random doubles in the range [0, 1)"""
+            # Create a dummy expression from the input plan which will be used on the
+            # C++ side to check the row count (number of random values to generate).
+            row_count_info_expr = ConstantExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int64())), input_plan, 0
+            )
+            # Note that we pass "rand" instead of "random" to distinguish between Arrow's random()
+            # and this, which take different arguments. (Though we do ultimately rely on random())
+            return ArrowScalarFuncExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.float64())),
+                [row_count_info_expr],
+                "rand",
+                (),
+            )
 
         if func_name in ("BOOLAND", "BOOLOR", "BOOLXOR") and len(op_exprs) == 2:
             left_expr = op_exprs[0]
@@ -3039,19 +3132,343 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        if func_name in ("FLOOR", "CEIL") and len(op_exprs) == 1:
+        if func_name in ("FLOOR", "CEIL") and len(op_exprs) in (1, 2):
             inp = op_exprs[0]
-            out_empty = inp.empty_data
-            return UnaryOpExpression(out_empty, inp, func_name.lower())
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+
+            inp_dtype = get_expr_dtype(inp, func_name + " input")
+
+            if len(op_exprs) == 1:
+                if compare_types(inp_dtype, int):
+                    # If input is an integer, FLOOR/CEIL is a no-op
+                    return inp
+                else:
+                    # If input is a float, return FLOOR(inp) or CEIL(inp) as normal
+                    return UnaryOpExpression(inp.empty_data, inp, func_name.lower())
+            else:
+                # Snowflake / BodoSQL has a scale option that dictates how many digits
+                # after the decimal point the input should be raised or lowered to.
+                # DuckDB and Arrow have no such option, so we have to emulate it.
+                scale_expr = op_exprs[1]
+                ensure_type_of_expr(scale_expr, "scale_expr", int)
+
+                int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+                ten_expr = ConstantExpression(int_empty_data, input_plan, 10)
+
+                if compare_types(inp_dtype, int):
+                    # If input is an int, we don't need to do anything for scale >= 0.
+                    # If scale < 0, we can use a formula that allows us to retain
+                    # the integer type throughout the calculation.
+                    # Division is not ideal for ints because __floordiv__ truncates
+                    # towards zero, and __truediv__ could result in loss of precision.
+
+                    # For FLOOR, result = inp - (inp % 10^abs(scale)), minus 10^abs(scale)
+                    #   if inp % 10^abs(scale) is negative.
+                    # For CEIL, result = inp - (inp % 10^abs(scale)), plus 10^abs(scale)
+                    #   if inp % 10^abs(scale) is positive.
+
+                    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+                    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+                    scale_negative = ComparisonOpExpression(
+                        bool_empty_data, scale_expr, zero_expr, operator.lt
+                    )
+
+                    # Calculate inp % 10^abs(scale)
+                    scale_magnitude = UnaryOpExpression(
+                        scale_expr.empty_data, scale_expr, "abs"
+                    )
+                    power_of_10 = ArithOpExpression(
+                        int_empty_data, ten_expr, scale_magnitude, "__pow__"
+                    )
+                    inp_remainder = ArithOpExpression(
+                        inp.empty_data, inp, power_of_10, "__mod__"
+                    )
+
+                    # inp - inp % 10^abs(scale)
+                    inp_minus_remainder = ArithOpExpression(
+                        inp.empty_data, inp, inp_remainder, "__sub__"
+                    )
+
+                    if func_name == "FLOOR":
+                        # FLOOR: Subtract power of 10 if remainder is negative (not including 0)
+                        should_add_remainder = ComparisonOpExpression(
+                            bool_empty_data, inp_remainder, zero_expr, operator.lt
+                        )
+                        adjusted_inp_minus_remainder = ArithOpExpression(
+                            inp.empty_data, inp_minus_remainder, power_of_10, "__sub__"
+                        )
+                    else:
+                        # CEIL: Add power of 10 if remainder is positive (not including 0)
+                        should_add_remainder = ComparisonOpExpression(
+                            bool_empty_data, inp_remainder, zero_expr, operator.gt
+                        )
+                        adjusted_inp_minus_remainder = ArithOpExpression(
+                            inp.empty_data, inp_minus_remainder, power_of_10, "__add__"
+                        )
+
+                    # Final result for the scale < 0 case
+                    negative_scale_result = CaseExpression(
+                        inp.empty_data,
+                        should_add_remainder,
+                        adjusted_inp_minus_remainder,
+                        inp_minus_remainder,
+                    )
+
+                    # For 0 or positive scale, we don't have to do anything.
+                    return CaseExpression(
+                        inp.empty_data, scale_negative, negative_scale_result, inp
+                    )
+                else:
+                    # If input is a float, we do:
+                    # result = [FLOOR/CEIL](inp * 10^scale) / 10^scale
+                    power_of_10 = ArithOpExpression(
+                        float_empty_data, ten_expr, scale_expr, "__pow__"
+                    )
+                    scaled_inp = ArithOpExpression(
+                        float_empty_data, inp, power_of_10, "__mul__"
+                    )
+                    scaled_inp_rounded = UnaryOpExpression(
+                        float_empty_data, scaled_inp, func_name.lower()
+                    )
+                    return ArithOpExpression(
+                        inp.empty_data, scaled_inp_rounded, power_of_10, "__truediv__"
+                    )
         elif func_name == "POW" and len(op_exprs) == 2:
             left = op_exprs[0]
             right = op_exprs[1]
             out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
             return ArithOpExpression(out_empty, left, right, "__pow__")
-        elif func_name == "FLOOR" and len(op_exprs) == 1:
+        elif func_name == "SQUARE" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data
-            return ArrowScalarFuncExpression(out_empty, [inp], "floor", ())
+            ensure_type_of_expr(inp, "SQUARE input", (int, float))
+            out_empty = inp.empty_data.iloc[:, 0] * inp.empty_data.iloc[:, 0]
+            return ArithOpExpression(out_empty, inp, inp, "__mul__")
+        elif func_name == "LOG2" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, "LOG2 input", (int, float))
+
+            # Retain current float output type if input is a float,
+            # otherwise use float64.
+            inp_dtype = get_expr_dtype(inp, "LOG2 input")
+            if compare_types(inp_dtype, int):
+                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            else:
+                out_empty = inp.empty_data
+
+            return UnaryOpExpression(out_empty, inp, "log2")
+        elif func_name == "LOG" and len(op_exprs) == 1:
+            # The SQL function LOG(x) is mapped to Calcite LOG(x),
+            # which in Calcite and most systems means LN(x), but Bodo
+            # defines SQL LOG(x) as LOG10(x). For now, we raise an
+            # informative error while we decide on the best solution.
+            raise ValueError(
+                "LOG with 1 argument is not currently supported in the C++ backend. Consider using the unambiguous LN or LOG10 instead."
+            )
+        elif func_name == "LOG" and len(op_exprs) == 2:
+            # We read the first argument as the operand and
+            # the second argument as the base, which is different
+            # than e.g. Snowflake.
+            inp = op_exprs[0]
+            base_expr = op_exprs[1]
+            ensure_type_of_expr(inp, "LOG input", (int, float))
+            ensure_type_of_expr(base_expr, "LOG base", (int, float))
+
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+            # Retain current float output type if input is a float,
+            # otherwise use float64.
+            inp_dtype = get_expr_dtype(inp, "LOG input")
+            if compare_types(inp_dtype, int):
+                out_empty = float_empty_data
+            else:
+                out_empty = inp.empty_data
+
+            if isinstance(base_expr, ConstantExpression):
+                # If the base is a constant, we can use shortcuts.
+
+                # Use dedicated log functions for special bases (e, 10, 2)
+                if base_expr.value == 10:
+                    return UnaryOpExpression(out_empty, inp, "log10")
+                elif base_expr.value == 2:
+                    return UnaryOpExpression(out_empty, inp, "log2")
+                elif np.isclose(base_expr.value, np.e):
+                    return UnaryOpExpression(out_empty, inp, "ln")
+
+                # If not a special base, calculate scalar ln(base)
+                log_of_base_expr = ConstantExpression(
+                    float_empty_data, input_plan, np.log(base_expr.value)
+                )
+            else:
+                # Calculate ln(base)
+                log_of_base_expr = UnaryOpExpression(float_empty_data, base_expr, "ln")
+
+            # Use change of base formula: log_base_(x) = log(x) / log(base)
+            log_of_inp = UnaryOpExpression(out_empty, inp, "ln")
+            return ArithOpExpression(
+                out_empty, log_of_inp, log_of_base_expr, "__truediv__"
+            )
+
+        elif func_name in ("DIV0", "DIV0NULL") and len(op_exprs) == 2:
+            dividend_expr = op_exprs[0]
+            divisor_expr = op_exprs[1]
+            ensure_type_of_expr(dividend_expr, "dividend_expr", (int, float))
+            ensure_type_of_expr(divisor_expr, "divisor_expr", (int, float))
+
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            quotient_expr = ArithOpExpression(
+                float_empty_data, dividend_expr, divisor_expr, "__truediv__"
+            )
+
+            # Return 0 if divisor is 0 (or NULL, for DIV0NULL);
+            # otherwise, return the standard quotient.
+
+            zero_expr = ConstantExpression(float_empty_data, input_plan, 0.0)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            divisor_is_zero = ComparisonOpExpression(
+                bool_empty_data, divisor_expr, zero_expr, operator.eq
+            )
+
+            if func_name == "DIV0NULL":
+                divisor_is_null = UnaryOpExpression(
+                    bool_empty_data, divisor_expr, "isnull"
+                )
+                invalid_divisor = ConjunctionOpExpression(
+                    bool_empty_data, divisor_is_zero, divisor_is_null, "__or__"
+                )
+            else:
+                invalid_divisor = divisor_is_zero
+
+            div0_quotient = CaseExpression(
+                float_empty_data, invalid_divisor, zero_expr, quotient_expr
+            )
+
+            # Ensure NULL is always returned if the dividend is NULL
+            dividend_is_null = UnaryOpExpression(
+                bool_empty_data, dividend_expr, "isnull"
+            )
+            return CaseExpression(
+                float_empty_data,
+                dividend_is_null,
+                NullExpression(float_empty_data, input_plan, 0),
+                div0_quotient,
+            )
+        elif func_name == "WIDTH_BUCKET" and len(op_exprs) == 4:
+            """Get the bucket the input number would be in if we had a histogram with a certain contiguous value range and number of buckets"""
+            numeric_expr = op_exprs[0]
+            min_val_expr = op_exprs[1]  # inclusive
+            max_val_expr = op_exprs[2]  # exclusive
+            num_buckets_expr = op_exprs[3]
+
+            ensure_type_of_expr(numeric_expr, "numeric_expr", (int, float))
+            ensure_type_of_expr(min_val_expr, "min_val_expr", (int, float))
+            ensure_type_of_expr(max_val_expr, "max_val_expr", (int, float))
+            ensure_type_of_expr(num_buckets_expr, "num_buckets_expr", int)
+
+            # The min value of the range must be strictly less than the max value
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            min_max_valid = ComparisonOpExpression(
+                bool_empty_data, min_val_expr, max_val_expr, operator.lt
+            )
+
+            # The number of buckets must be 1 or more
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            num_buckets_valid = ComparisonOpExpression(
+                bool_empty_data, num_buckets_expr, zero_expr, operator.gt
+            )
+
+            valid_inputs = ConjunctionOpExpression(
+                bool_empty_data, min_max_valid, num_buckets_valid, "__and__"
+            )
+
+            # Custom logic for get_common_int_type to ensure the result is signed after subtraction.
+            # Technically this isn't necessary here since we won't be getting any negative
+            # results, but it's a good example for future situations where this might be needed.
+            def get_common_signed(
+                expr1_width, expr2_width, expr1_is_signed, expr2_is_signed
+            ):
+                return True
+
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            # Calculate the length of the range between min_val_expr and max_value_expr.
+            # Note that we first determine the common integer type so that we can get the
+            # appropriate empty_data for the operation.
+            common_int_type = get_common_int_type(
+                max_val_expr, min_val_expr, get_common_signed=get_common_signed
+            )[0]
+            range_length = ArithOpExpression(
+                pd.Series(dtype=pd.ArrowDtype(common_int_type))
+                if common_int_type is not None
+                else float_empty_data,
+                max_val_expr,
+                min_val_expr,
+                "__sub__",
+            )
+
+            # By doing numeric_expr - min_val_expr, we normalize the input to the range [0, max_val_expr - min_val_expr).
+            # We can assume this since we check earlier for numeric_expr being less than min_val_expr or greater than max_val_expr.
+            common_int_type = get_common_int_type(
+                numeric_expr, min_val_expr, get_common_signed=get_common_signed
+            )[0]
+            normalized_input = ArithOpExpression(
+                pd.Series(dtype=pd.ArrowDtype(common_int_type))
+                if common_int_type is not None
+                else float_empty_data,
+                numeric_expr,
+                min_val_expr,
+                "__sub__",
+            )
+
+            # Get the position of numeric_expr in the range as a float in [0.0, 1.0).
+            range_position = ArithOpExpression(
+                float_empty_data, normalized_input, range_length, "__truediv__"
+            )
+            # Multiply by the number of buckets to scale to the range [0.0, num_buckets)
+            scaled_range_position = ArithOpExpression(
+                float_empty_data, range_position, num_buckets_expr, "__mul__"
+            )
+
+            # Get the 1-based integer bucket number.
+            # We use floor(scaled_range_position) + 1 instead of ceil() so that 0.0 is mapped to a bucket number of 1.
+            # Note that scaled_range_position cannot equal num_buckets_expr.
+            bucket_number = UnaryOpExpression(
+                int_empty_data, scaled_range_position, "floor"
+            )
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            bucket_number = ArithOpExpression(
+                int_empty_data, bucket_number, one_expr, "__add__"
+            )
+
+            # Check if numeric_expr is outside of [min_val_expr, max_val_expr)
+            val_below_range = ComparisonOpExpression(
+                bool_empty_data, numeric_expr, min_val_expr, operator.lt
+            )
+            val_above_range = ComparisonOpExpression(
+                bool_empty_data, numeric_expr, max_val_expr, operator.ge
+            )
+            # If numeric_expr < min_val_expr, return bucket number of 0.
+            # If numeric_expr >= max_val_expr, return bucket number of num_buckets + 1.
+            num_buckets_plus_one = ArithOpExpression(
+                int_empty_data, num_buckets_expr, one_expr, "__add__"
+            )
+            final_bucket_number = CaseExpression(
+                int_empty_data,
+                val_below_range,
+                zero_expr,
+                CaseExpression(
+                    int_empty_data, val_above_range, num_buckets_plus_one, bucket_number
+                ),
+            )
+
+            return CaseExpression(
+                int_empty_data,
+                valid_inputs,
+                final_bucket_number,
+                NullExpression(int_empty_data, input_plan, 0),
+            )
+
         elif (
             func_name in ("BITAND", "BITOR", "BITXOR", "BITSHIFTLEFT", "BITSHIFTRIGHT")
             and len(op_exprs) == 2
@@ -3805,6 +4222,37 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             + java_call.toString()
         )
 
+    if operator_class_name == "SqlRandomOperator":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        # NOTE: Calcite maps SQL RANDOM() to RANDOM() which means a random number
+        # between [0.0, 1.0] in Calcite and does not accept a seed argument. For
+        # completeness, to match Snowflake, we support a seed parameter anyway.
+        if func_name == "RANDOM" and len(op_exprs) in (0, 1):
+            """Generates random 64-bit integers"""
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            # Create a dummy expression from the input plan which will be used on the
+            # C++ side to check the row count (number of random values to generate).
+            row_count_info_expr = ConstantExpression(int_empty_data, input_plan, 0)
+
+            # Get and pass seed if given, else we rely on a system-generated seed
+            # which is set on the C++ side.
+            if len(op_exprs) == 1:
+                seed_expr = op_exprs[0]
+                # Should be a constant
+                ensure_arg_is_const_expr_of_type(seed_expr, "seed_expr", int)
+                seed_options = (seed_expr.value,)
+            else:
+                seed_options = ()
+
+            # Arrow doesn't have any sort of randint function, so call our own that
+            # has the name random_int64.
+            return ArrowScalarFuncExpression(
+                int_empty_data, [row_count_info_expr], "random_int64", seed_options
+            )
+
     if operator_class_name == "SqlLeastGreatestFunction":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
@@ -3934,11 +4382,19 @@ def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
         )
 
 
-def get_expr_dtype(expr, expr_name="Expression"):
+def get_expr_dtype(expr, expr_name="Expression", get_const_val_type=True):
+    """
+    Get the type of the input `bodo.pandas.plan.Expression`.
+
+    If `get_const_val_type` = `True` (the default), this will return the
+    actual type of the constant value if `expr` is a `ConstantExpression`.
+    Pass `get_const_val_type` = `False` to always get the empty_data type.
+    """
+
     if not isinstance(expr, bodo.pandas.plan.Expression):
         return type(expr)
 
-    if isinstance(expr, bodo.pandas.plan.ConstantExpression):
+    if isinstance(expr, bodo.pandas.plan.ConstantExpression) and get_const_val_type:
         return type(expr.value)
     else:
         if isinstance(expr.empty_data, (pd.Series, np.ndarray)):
@@ -4053,17 +4509,38 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
-def get_common_int_type_list(exprs):
+def get_common_int_type_list(
+    exprs,
+    get_common_width=lambda expr1_width,
+    expr2_width,
+    expr1_is_signed,
+    expr2_is_signed: max(expr1_width, expr2_width),
+    get_common_signed=lambda expr1_width,
+    expr2_width,
+    expr1_is_signed,
+    expr2_is_signed: expr1_is_signed
+    if expr1_is_signed == expr2_is_signed
+    else (expr1_is_signed and expr1_width > expr2_width)
+    or (expr2_is_signed and expr2_width > expr1_width),
+):
     """Find a common integer type for a list of expressions with integer dtypes.
 
-    The bit width of the common type will be the maximum of the bit widths of the input types.
-    If all expressions have the same signedness, the signedness does not change.
-    If expressions have different signedness, the common type will be unsigned unless
-    the unsigned inputs have shorter bit widths than the signed inputs.
+    `get_common_width` and `get_common_signed` are functions accepting the arguments
+    `expr1_width`, `expr2_width`, `expr1_is_signed`, `expr2_is_signed`, and respectively
+    returning what the common bit width and signedness of the expr1 and expr2
+    integers should be.
 
-    Returns a tuple: (common_arrow_type, cast_needed_list) where each element in cast_needed_list
+    For the default `get_common_width()`: The bit width of the common type will be
+    the maximum of the bit widths of the input types.
+
+    For the default `get_common_signed()`: If all expressions have the same signedness,
+    the signedness does not change. If expressions have different signedness, the
+    common type will be unsigned unless the unsigned inputs have shorter bit widths
+    than the signed inputs.
+
+    Returns a tuple: `(common_arrow_type, cast_needed_list)` where each element in cast_needed_list
     is a boolean representing if the corresponding expr needs to be casted to match the common type.
-    (None, [False] * len(exprs)) is returned if any of the input exprs does not have integer dtype.
+    `(None, [False] * len(exprs))` is returned if any of the input exprs does not have integer dtype.
     """
     if not exprs:
         return None, []
@@ -4089,7 +4566,7 @@ def get_common_int_type_list(exprs):
 
     types = []
     for expr in exprs:
-        dtype = get_expr_dtype(expr)
+        dtype = get_expr_dtype(expr, get_const_val_type=False)
         if not compare_types(dtype, int):
             return None, [False] * len(exprs)
         types.append(get_as_pyarrow_dtype(dtype))
@@ -4105,39 +4582,33 @@ def get_common_int_type_list(exprs):
         common_width = common_type.bit_width
         expr_width = dtype.bit_width
 
-        if common_is_signed == expr_is_signed:
-            # Use wider type if inputs have same signedness
-            if expr_width > common_width:
-                common_type = dtype
-        else:
-            # For mixed signedness, use the wider bit width of the two.
-            # The common type is signed only if the max value of the unsigned input can fit in the signed int
-            common_type_width = max(common_width, expr_width)
-            common_type_signed = (common_is_signed and common_width > expr_width) or (
-                expr_is_signed and expr_width > common_width
-            )
-            common_type = eval(
-                f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
-            )
+        common_type_width = get_common_width(
+            common_width, expr_width, common_is_signed, expr_is_signed
+        )
+        common_type_signed = get_common_signed(
+            common_width, expr_width, common_is_signed, expr_is_signed
+        )
+        common_type = eval(
+            f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
+        )
 
     cast_needed_list = [not expr_type.equals(common_type) for expr_type in types]
 
     return common_type, cast_needed_list
 
 
-def get_common_int_type(left_expr, right_expr):
+def get_common_int_type(left_expr, right_expr, *args, **kwargs):
     """Find a common integer type for two expressions with integer dtypes.
 
-    The bit width of the common type will be the maximum of the bit widths of the input types.
-    If `left_expr` and `right_expr` have the same signedness, the signedness does not change.
-    If `left_expr` and `right_expr` have different signedness, the common type will be
-    unsigned unless the unsigned input has a shorter bit width than the signed input.
+    See `get_common_int_type_list` for more details.
 
-    Returns a tuple: (common_arrow_type, left_cast_needed, right_cast_needed)
-    (None, False, False) is returned if `left_expr` or `right_expr` does not have integer dtype.
+    Returns a tuple: `(common_arrow_type, left_cast_needed, right_cast_needed)`
+    `(None, False, False)` is returned if `left_expr` or `right_expr` does not have integer dtype.
     """
 
-    common_type, casts_needed = get_common_int_type_list([left_expr, right_expr])
+    common_type, casts_needed = get_common_int_type_list(
+        [left_expr, right_expr], *args, **kwargs
+    )
     return (
         common_type,
         casts_needed[0],

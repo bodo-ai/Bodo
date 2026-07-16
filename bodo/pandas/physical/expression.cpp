@@ -529,7 +529,7 @@ arrow::Datum do_arrow_compute_binary(
         comparator, {left_res, right_res}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_binary: Error in Arrow compute: " +
+            "do_arrow_compute_binary: Error in Arrow compute: " +
             cmp_res.status().message());
     }
 
@@ -1228,6 +1228,9 @@ arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
             for (int64_t i = 0; i < left.length; ++i) {
                 if (!is_valid_bit(left_valid_bits, left.offset, i)) {
                     clear_valid(out_valid_bits, offset + i);
+                } else if (r == 0) {
+                    // Return NULL when modulus is 0
+                    clear_valid(out_valid_bits, offset + i);
                 } else {
                     // Get ith element of left.
                     CType l = left_values[i];
@@ -1255,12 +1258,17 @@ arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
                 // Get corresponding ith elements of left and right arrays.
                 CType l = left_values[i];
                 CType r = right_values[i];
-                // Calculate modulus operator.
-                CType res = ModOp::apply(l, r);
-                // Assign result.
-                out_values[i] = res;
-                // Indicate index has valid data.
-                set_valid(out_valid_bits, offset + i);
+                if (r == 0) {
+                    // Return NULL when modulus is 0
+                    clear_valid(out_valid_bits, offset + i);
+                } else {
+                    // Calculate modulus operator.
+                    CType res = ModOp::apply(l, r);
+                    // Assign result.
+                    out_values[i] = res;
+                    // Indicate index has valid data.
+                    set_valid(out_valid_bits, offset + i);
+                }
             }
         }
     }
@@ -1271,14 +1279,14 @@ arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
 struct NativeMod {
     template <typename T>
     static T apply(T l, T r) {
-        return (r == 0 ? 0 : (l % r));
+        return l % r;
     }
 };
 
 struct AltMod {
     template <typename T>
     static T apply(T l, T r) {
-        return (r == 0 ? 0 : (l - ((int64_t)(l / r) * r)));
+        return l - ((int64_t)(l / r) * r);
     }
 };
 
@@ -1289,48 +1297,94 @@ void RegisterMod(arrow::compute::FunctionRegistry* registry) {
         arrow::compute::FunctionDoc{
             "Modulo of two arrays", "Returns lhs % rhs", {"lhs", "rhs"}});
 
+    // Declare int8,int8->int8 mod kernel.
+    arrow::compute::ScalarKernel kernel8(
+        {arrow::compute::InputType(arrow::int8()),
+         arrow::compute::InputType(arrow::int8())},
+        arrow::compute::OutputType(arrow::int8()),
+        ModImpl<arrow::Int8Type, NativeMod>);
+    kernel8.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
+    // Declare int16,int16->int16 mod kernel.
+    arrow::compute::ScalarKernel kernel16(
+        {arrow::compute::InputType(arrow::int16()),
+         arrow::compute::InputType(arrow::int16())},
+        arrow::compute::OutputType(arrow::int16()),
+        ModImpl<arrow::Int16Type, NativeMod>);
+    kernel16.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
     // Declare int32,int32->int32 mod kernel.
     arrow::compute::ScalarKernel kernel32(
         {arrow::compute::InputType(arrow::int32()),
          arrow::compute::InputType(arrow::int32())},
         arrow::compute::OutputType(arrow::int32()),
         ModImpl<arrow::Int32Type, NativeMod>);
+    kernel32.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
     // Declare int64,int64->int64 mod kernel.
     arrow::compute::ScalarKernel kernel64(
         {arrow::compute::InputType(arrow::int64()),
          arrow::compute::InputType(arrow::int64())},
         arrow::compute::OutputType(arrow::int64()),
         ModImpl<arrow::Int64Type, NativeMod>);
+    kernel64.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
+    // Declare uint64,uint64->uint64 mod kernel.
+    arrow::compute::ScalarKernel kernelu64(
+        {arrow::compute::InputType(arrow::uint64()),
+         arrow::compute::InputType(arrow::uint64())},
+        arrow::compute::OutputType(arrow::uint64()),
+        ModImpl<arrow::UInt64Type, NativeMod>);
+    kernelu64.null_handling =
+        arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
     // Declare float,float->float mod kernel.
     arrow::compute::ScalarKernel floatkernel32(
         {arrow::compute::InputType(arrow::float32()),
          arrow::compute::InputType(arrow::float32())},
         arrow::compute::OutputType(arrow::float32()),
         ModImpl<arrow::FloatType, AltMod>);
+    floatkernel32.null_handling =
+        arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
     // Declare double,double->double mod kernel.
     arrow::compute::ScalarKernel floatkernel64(
         {arrow::compute::InputType(arrow::float64()),
          arrow::compute::InputType(arrow::float64())},
         arrow::compute::OutputType(arrow::float64()),
         ModImpl<arrow::DoubleType, AltMod>);
+    floatkernel64.null_handling =
+        arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
 
     arrow::Status status;
     // Add all the above kernels to the function.
+    status = func->AddKernel(kernel8);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod int8 AddKernel failed.");
+    }
+    status = func->AddKernel(kernel16);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod int16 AddKernel failed.");
+    }
     status = func->AddKernel(kernel32);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterMod 32 AddKernel failed.");
+        throw std::runtime_error("RegisterMod int32 AddKernel failed.");
     }
     status = func->AddKernel(kernel64);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterMod 64 AddKernel failed.");
+        throw std::runtime_error("RegisterMod int64 AddKernel failed.");
+    }
+    status = func->AddKernel(kernelu64);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod uint64 AddKernel failed.");
     }
     status = func->AddKernel(floatkernel32);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterMod 32 AddKernel failed.");
+        throw std::runtime_error("RegisterMod float32 AddKernel failed.");
     }
     status = func->AddKernel(floatkernel64);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterMod 64 AddKernel failed.");
+        throw std::runtime_error("RegisterMod float64 AddKernel failed.");
     }
     // Register the function.
     status = registry->AddFunction(std::move(func));

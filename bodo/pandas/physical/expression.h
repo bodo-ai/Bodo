@@ -10,8 +10,10 @@
 #include <arrow/status.h>
 #include <arrow/type_fwd.h>
 #include <arrow/type_traits.h>
+#include <mpi.h>
 #include <future>
 #include <mutex>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -132,6 +134,16 @@ class PhysicalExpression {
      */
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
+
+    virtual void Finalize() {
+        // Base implementation just calls Finalize()
+        // on all the children in case the child happens
+        // to have an override of Finalize(), e.g.
+        // PhysicalArrowExpression.
+        for (const auto &child : children) {
+            child->Finalize();
+        }
+    }
 
     static bool join_expr(array_info **left_table, array_info **right_table,
                           void **left_data, void **right_data,
@@ -905,8 +917,9 @@ class PhysicalUnaryExpression : public PhysicalExpression {
                             std::string &opstr) {
         children.push_back(left);
         if (opstr == "floor" || opstr == "ceil" || opstr == "abs" ||
-            opstr == "sqrt" || opstr == "exp" || opstr == "ln" ||
-            opstr == "round") {
+            opstr == "sqrt" || opstr == "cbrt" || opstr == "exp" ||
+            opstr == "ln" || opstr == "log10" || opstr == "log2" ||
+            opstr == "round" || opstr == "trunc" || opstr == "sign") {
             comparator = opstr;
         } else {
             throw std::runtime_error("Unhandled unary expression opstr: " +
@@ -938,8 +951,33 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         } else {
             func_options = nullptr;
         }
-        auto result =
-            do_arrow_compute_unary(left_res, comparator, func_options);
+
+        std::shared_ptr<array_info> result;
+        if (comparator == "cbrt") {
+            // Arrow doesn't have a cube root function, so we raise to the power
+            // 1/3 instead. However Arrow will return NaN for a negative base in
+            // this case, so we have to first take the absolute value and then
+            // restore the sign afterwards.
+            arrow::Datum left_res_datum =
+                ConvertExprResultToDatum(left_res, "cbrt input");
+
+            arrow::Datum abs_left_res =
+                do_arrow_compute_unary(left_res_datum, "abs");
+
+            arrow::Datum exponent_datum(
+                std::make_shared<arrow::FloatScalar>(1.0 / 3.0));
+            arrow::Datum power_result = do_arrow_compute_binary(
+                abs_left_res, exponent_datum, "power", func_options);
+
+            arrow::Datum left_res_sign =
+                do_arrow_compute_unary(left_res_datum, "sign");
+            arrow::Datum corrected_power_result = do_arrow_compute_binary(
+                power_result, left_res_sign, "multiply");
+
+            result = ConvertDatumToArrayInfo(corrected_power_result);
+        } else {
+            result = do_arrow_compute_unary(left_res, comparator, func_options);
+        }
 
         auto left_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(left_res);
@@ -1187,7 +1225,7 @@ class PhysicalCaseExpression : public PhysicalExpression {
             "if_else", {when_datum, then_datum, else_datum});
         if (!cmp_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_array_compute_case if_else: Error in Arrow compute: " +
+                "do_arrow_compute_case if_else: Error in Arrow compute: " +
                 cmp_res.status().message());
         }
         return cmp_res.ValueOrDie();
@@ -1417,6 +1455,15 @@ class PhysicalArrowExpression : public PhysicalExpression {
     std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override;
 
+    void Finalize() {
+        for (const auto &child : children) {
+            child->Finalize();
+        }
+
+        // Reset RNG
+        gen = nullptr;
+    }
+
     arrow::Datum join_expr_internal(array_info **left_table,
                                     array_info **right_table, void **left_data,
                                     void **right_data, void **left_null_bitmap,
@@ -1435,6 +1482,9 @@ class PhysicalArrowExpression : public PhysicalExpression {
     }
 
    protected:
+    // PRNG for random_int64
+    std::shared_ptr<std::mt19937_64> gen;
+
     BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalArrowExpressionMetrics metrics;
@@ -1608,6 +1658,98 @@ class PhysicalArrowExpression : public PhysicalExpression {
     }
 
     template <typename T>
+    arrow::Datum do_arrow_compute_random_int64(T res) {
+        // Get dummy input as an Arrow array.
+        // We need the result to match the length of this array.
+        std::shared_ptr<arrow::Array> res_array =
+            ConvertExprResultToDatum(res, "random_int64 dummy array")
+                .make_array();
+
+        // Only create PRNG once so we keep state across batches
+        // and don't start from the same position for each batch.
+        if (!gen) {
+            int rank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            size_t num_args = PyTuple_Size(scalar_func_data.args);
+
+            if (num_args == 1) {
+                // Seed was explicitly provided, so use it
+                auto [seed] = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_int64);
+
+                if (rank == 0) {
+                    // Create psuedo-random number generator.
+                    // For rank 0 we use the input seed directly
+                    gen = std::make_shared<std::mt19937_64>(
+                        std::mt19937_64(seed));
+                } else {
+                    // seed_seq applies a transformation on the master seed and
+                    // the rank number to scramble and break linear correlation
+                    // between the seeds used by each rank.
+                    // Because of this, the generated sequence will be different
+                    // depending on the number of workers used, but it should
+                    // still be deterministic.
+                    // The Dynamic Creator algorithm might be theoretically
+                    // better here, but seed_seq is probably sufficient in
+                    // practice.
+
+                    // Note that we have to split the 64-bit input seed because
+                    // seed_seq only accepts 32-bit integers
+                    std::seed_seq rank_seed{
+                        static_cast<uint32_t>(seed >> 32),
+                        static_cast<uint32_t>(seed & 0xFFFFFFFF),
+                        static_cast<uint32_t>(rank)};
+
+                    // Create PRNG with a (hopefully) independent seed
+                    gen = std::make_shared<std::mt19937_64>(
+                        std::mt19937_64(rank_seed));
+                }
+            } else if (num_args == 0) {
+                // Generate a seed with 96-bits of entropy from system's
+                // random_device and the current system time. time(NULL) is
+                // mainly a backup in case std::random_device falls back
+                // to a deterministic implementation.
+                // We also integrate the rank number in the seed calculation
+                // to ensure that two ranks do not get the same seed by chance.
+                std::random_device rd;
+                std::seed_seq seed{rd(), static_cast<uint32_t>(time(NULL)),
+                                   rd(), static_cast<uint32_t>(rank)};
+                // Create psuedo-random number generator
+                gen = std::make_shared<std::mt19937_64>(std::mt19937_64(seed));
+            } else {
+                throw std::runtime_error(
+                    "random_int64 only accepts 0 or 1 arguments");
+            }
+        }
+
+        // Full-range uniform int64 distribution
+        std::uniform_int_distribution<int64_t> int64_dist(0x8000000000000000,
+                                                          0x7FFFFFFFFFFFFFFF);
+
+        // Compute array of random integers based on the length of the dummy
+        // input
+        arrow::Int64Builder builder;
+        for (int i = 0; i < res_array->length(); i++) {
+            arrow::Status status = builder.Append(int64_dist(*gen));
+            if (!status.ok()) {
+                throw std::runtime_error(
+                    "do_arrow_compute (random_int64): Failed to append "
+                    "value to "
+                    "Int64Builder");
+            }
+        }
+        std::shared_ptr<arrow::Array> random_int64_array =
+            builder.Finish().ValueOrDie();
+
+        return arrow::Datum(random_int64_array);
+    }
+
+    template <typename T>
     compute_return_t<T> do_arrow_compute(T res) {
         compute_return_t<T> result;
 
@@ -1631,6 +1773,60 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 result = if_else_res.ValueOrDie();
             } else {
                 result = ConvertDatumToArrayInfo(if_else_res.ValueOrDie());
+            }
+        } else if (scalar_func_data.arrow_func_name == "rand") {
+            // Get dummy input as an Arrow array.
+            // We need the result to match the length of this array.
+            std::shared_ptr<arrow::Array> res_array =
+                ConvertExprResultToDatum(res, "rand input").make_array();
+
+            // Retrieve the function object for random()
+            static auto *registry = arrow::compute::GetFunctionRegistry();
+            static std::shared_ptr<arrow::compute::Function> random_func;
+            static std::once_flag once_flag_;
+            std::call_once(once_flag_, [&]() {
+                auto lookup_status =
+                    registry->GetFunction("random").Value(&random_func);
+                if (!lookup_status.ok()) {
+                    throw std::runtime_error(
+                        "Failed to get the 'random' function from the Arrow "
+                        "registry.");
+                }
+            });
+
+            // Use a system-generated seed
+            arrow::compute::RandomOptions options =
+                arrow::compute::RandomOptions::FromSystemRandom();
+
+            // Since random() takes no arguments, we need to manually specify
+            // the desired output length through ExecBatch. CallFunction() has
+            // no overload for this.
+            std::vector<arrow::Datum> empty_args;
+            arrow::compute::ExecBatch batch(empty_args, res_array->length());
+
+            // Compute the array of random values
+            arrow::Result<arrow::Datum> random_result =
+                random_func->Execute(batch, &options, nullptr);
+            if (!random_result.ok()) {
+                throw std::runtime_error("Error in Arrow compute (random): " +
+                                         random_result.status().message());
+            }
+
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = random_result.ValueOrDie();
+            } else {
+                result = ConvertDatumToArrayInfo(random_result.ValueOrDie());
+            }
+        } else if (scalar_func_data.arrow_func_name == "random_int64") {
+            // Not a real Arrow compute function; we use this to implement
+            // Snowflake SQL RANDOM().
+            arrow::Datum random_int64_datum =
+                do_arrow_compute_random_int64(res);
+
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = random_int64_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(random_int64_datum);
             }
         } else if (scalar_func_data.arrow_func_name == "date") {
             // The Arrow compute equivalent of Series.dt.date() is

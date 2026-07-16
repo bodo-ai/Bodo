@@ -655,13 +655,13 @@ size_t col_ref_map_lookup(
 cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype);
 
 /**
- * @brief Create invalid cudf scalar from a valid one.
+ * @brief Create invalid cudf scalar from a cudf datatype.
  *
- * @param src the valid cudf scalar input
+ * @param dtype the cudf::data_type to make an invalid scalar for
  * @return cudf::scalar the output cudf scalar with valid bit off
  */
-std::unique_ptr<cudf::scalar> make_invalid_like(
-    cudf::scalar const &src,
+std::unique_ptr<cudf::scalar> make_invalid_cudf_scalar(
+    cudf::data_type dtype,
     rmm::cuda_stream_view stream = cudf::get_default_stream(),
     rmm::device_async_resource_ref mr =
         cudf::get_current_device_resource_ref());

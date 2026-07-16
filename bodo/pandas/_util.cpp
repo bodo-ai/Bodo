@@ -548,7 +548,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::timestamp(arrow::TimeUnit::MILLI);
         case duckdb::LogicalTypeId::TIMESTAMP:
             // DuckDB TIMESTAMP is microsecond precision, but we use nanosecond
-            // Arrow arrays throughout. Map to NANO so do_array_compute_cast
+            // Arrow arrays throughout. Map to NANO so do_arrow_compute_cast
             // becomes a no-op (prepare_arrow_compute also produces NANO).
             // arrowArrayToDuckdbVector handles the ns→us conversion.
             return arrow::timestamp(arrow::TimeUnit::NANO);
@@ -1039,7 +1039,7 @@ std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum) {
             arrow::MakeArrayFromScalar(*datum.scalar(), 1);
         if (!scalar_array_result.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "ConvertDatumToArrowInfo: Error making Arrow array from "
+                "ConvertDatumToArrayInfo: Error making Arrow array from "
                 "scalar: " +
                 scalar_array_result.status().message());
         }
@@ -1791,12 +1791,10 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
     }
 }
 
-std::unique_ptr<cudf::scalar> make_invalid_like(
-    cudf::scalar const &src, rmm::cuda_stream_view stream,
+std::unique_ptr<cudf::scalar> make_invalid_cudf_scalar(
+    cudf::data_type dtype, rmm::cuda_stream_view stream,
     rmm::device_async_resource_ref mr) {
-    cudf::data_type t = src.type();
-
-    switch (t.id()) {
+    switch (dtype.id()) {
         // **numeric types**
         case cudf::type_id::INT8:
             return std::make_unique<cudf::numeric_scalar<int8_t>>(0, false,
@@ -1868,7 +1866,7 @@ std::unique_ptr<cudf::scalar> make_invalid_like(
 
         default:
             throw std::runtime_error(
-                "Unsupported cudf::type_id in make_invalid_like");
+                "Unsupported cudf::type_id in make_invalid_cudf_scalar");
     }
 }
 
