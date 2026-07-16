@@ -2428,15 +2428,24 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             inp = op_exprs[0]
             ensure_type_of_expr(inp, func_name + " input", (int, float))
 
-            # To match Arrow's sign(), we return int8 if input is an integer,
-            # or the original float type if input is a float.
             inp_dtype = get_expr_dtype(inp, func_name + " input")
             if compare_types(inp_dtype, int):
-                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
-            else:
-                out_empty = inp.empty_data
+                # If input is an int, first use int8 empty data since
+                # we have to match the return type of Arrow's sign().
+                int8_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
+                int8_sign = UnaryOpExpression(int8_empty_data, inp, "sign")
 
-            return UnaryOpExpression(out_empty, inp, "sign")
+                # Calcite retains the size of the input integer type.
+                # Using inp.empty_data directly could be problematic
+                # if it is unsigned, so cast to the equivalent pyarrow
+                # type of what is in the plan.
+                inp_sql_type = java_call.getOperands()[0].getType()
+                pa_int_type = sql_type_to_pa_type(ctx, inp_sql_type.getSqlTypeName())
+                sql_pa_empty = pd.Series(dtype=pd.ArrowDtype(pa_int_type))
+                return CastExpression(sql_pa_empty, int8_sign)
+            else:
+                # If input is a float, return the original float type
+                return UnaryOpExpression(inp.empty_data, inp, "sign")
 
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
