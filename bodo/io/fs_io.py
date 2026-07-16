@@ -372,7 +372,7 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
 
     # Note, Azure validates credentials at use-time instead of at
     # initialization
-    return AzureFileSystem(account_name, account_key=account_key, **(options or {}))
+    return AzureFileSystem(account_name, account_key=account_key, **options)
 
 
 """

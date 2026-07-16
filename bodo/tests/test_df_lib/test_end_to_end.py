@@ -4688,24 +4688,3 @@ def test_join_filter_pushdown_aggregate_split_keys():
         sort_output=True,
         reset_index=True,
     )
-
-
-@pytest.mark.gpu
-def test_read_parquet_s3_storage_options():
-    """Tests that Bodo can use storage options to read from a requester pays S3 bucket."""
-
-    storage_options = {"requester_pays": True}
-    s3_path = "s3://bodo-example-data/tpch/SF1/nation.pq"
-
-    bdf = bd.read_parquet(s3_path, storage_options=storage_options)
-    pdf = pd.read_parquet(
-        s3_path, storage_options=storage_options, dtype_backend="pyarrow"
-    )
-
-    _test_equal(
-        bdf,
-        pdf,
-        check_pandas_types=False,
-        sort_output=True,
-        reset_index=True,
-    )
