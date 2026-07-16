@@ -1670,3 +1670,30 @@ def scalarOutputNACheck(out, dtype):
             # plain NumPy ints/bools can't hold NA, pandas promotes to float NaN
             return np.nan
     return out
+
+
+PANDAS_ARROW_TYPE_MAP = {
+    # integer kinds (numpy/pandas)
+    "int8": pa.int8(),
+    "int16": pa.int16(),
+    "int32": pa.int32(),
+    "int64": pa.int64(),
+    # unsigned ints (pandas uses 'uint8' etc.)
+    "uint8": pa.uint8(),
+    "uint16": pa.uint16(),
+    "uint32": pa.uint32(),
+    "uint64": pa.uint64(),
+    # floats
+    "float32": pa.float32(),
+    "float64": pa.float64(),
+    # bool
+    "bool": pa.bool_(),
+    # string/object -> arrow string
+    "string": pa.string(),
+    # datetime / timedelta
+    "datetime64[ns]": pa.timestamp("ns"),
+    "timedelta64[ns]": pa.duration("ns"),
+    # date
+    "date32": pa.date32(),
+    "date64": pa.date64(),
+}

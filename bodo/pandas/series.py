@@ -39,6 +39,7 @@ from bodo.pandas.plan import (
     ArithOpExpression,
     ArrowScalarFuncExpression,
     CaseExpression,
+    CastExpression,
     ColRefExpression,
     ComparisonOpExpression,
     ConjunctionOpExpression,
@@ -73,6 +74,7 @@ from bodo.pandas.plan import (
     reset_index,
 )
 from bodo.pandas.utils import (
+    PANDAS_ARROW_TYPE_MAP,
     BodoCompilationFailedWarning,
     BodoLibFallbackWarning,
     BodoLibNotImplementedException,
@@ -311,7 +313,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
     @check_args_fallback("all")
     def __invert__(self):
-        """Called when a BodoSeries is element-wise not'ed with a different entity (other)"""
+        """Called when a BodoSeries is element-wise not'ed"""
         from bodo.pandas.base import _empty_like
 
         # Get empty Pandas objects for self and other with same schema.
@@ -528,6 +530,35 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             {},
             is_method=False,
         )
+
+    @check_args_fallback(unsupported="errors")
+    def astype(self, dtype, copy=False, errors="raise"):
+        if dtype not in PANDAS_ARROW_TYPE_MAP:
+            raise BodoLibNotImplementedException(
+                f"Series.astype is not supported for dtype {dtype} yet."
+            )
+
+        arrow_dtype = PANDAS_ARROW_TYPE_MAP[dtype]
+        empty_data = pd.Series(dtype=pd.ArrowDtype(arrow_dtype))
+
+        assert isinstance(empty_data, pd.Series), "Series expected"
+        source_expr = get_proj_expr_single(self._plan)
+        expr = CastExpression(
+            empty_data,
+            source_expr,
+        )
+
+        key_indices = [i + 1 for i in range(get_n_index_arrays(empty_data.index))]
+        plan_keys = get_single_proj_source_if_present(self._plan)
+        key_exprs = tuple(make_col_ref_exprs(key_indices, plan_keys))
+
+        plan = LogicalProjection(
+            empty_data,
+            # Use the original table without the Series projection node.
+            self._plan.args[0],
+            (expr,) + key_exprs,
+        )
+        return wrap_plan(plan=plan)
 
     @staticmethod
     def from_lazy_mgr(
