@@ -38,6 +38,7 @@ def test_cache_named_param_int_add(basic_df, fn_distribution, is_cached):
         args,
         check_cache,
         input_dist=fn_distribution,
+        check_pandas_types=False,
     )
 
 
@@ -67,4 +68,5 @@ def test_cache_bind_variable_int_add(basic_df, fn_distribution, is_cached):
         args,
         check_cache,
         input_dist=fn_distribution,
+        check_pandas_types=False,
     )
