@@ -294,5 +294,5 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: junit-reports-${{ inputs.test-type }}-${{ inputs.runner-id }}-${{ inputs.partition }}
+          name: junit-reports-${{ inputs.test-type }}-${{ inputs.runner-id }}-${{ inputs.partition }}-${{ inputs.num-workers }}
           path: '**/pytest-report*.xml'

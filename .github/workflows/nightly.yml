@@ -206,3 +206,84 @@ jobs:
       runner-id: ${{ inputs.runner-id || 'ubuntu-latest' }}
       num-workers: 2
     secrets: inherit
+
+  merge-junit:
+    needs: [
+      bodo-compiler-1p,
+      bodo-compiler-2p,
+      bodo-cache,
+      bodo-spawn-1p,
+      bodo-spawn-2p,
+      bodo-df-lib-1p,
+      bodo-df-lib-2p,
+      bodosql-1p,
+      bodosql-2p,
+      bodosql-cache,
+      bodosql-spawn-1p,
+      bodosql-spawn-2p
+    ]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.14"
+
+    - name: Install report tools
+      run: pip install junitparser junit2html
+
+    - name: Download Bodo reports
+      uses: actions/download-artifact@v4
+      with:
+        pattern: "junit-reports-{compiler,spawn,df_lib}-*"
+        path: bodo-reports
+        merge-multiple: true
+
+    - name: Download BodoSQL reports
+      uses: actions/download-artifact@v4
+      with:
+        pattern: "junit-reports-{sql,sql_spawn}-*"
+        path: bodosql-reports
+        merge-multiple: true
+
+    - name: Merge XML and generate HTML
+      shell: bash
+      run: |
+        set -euo pipefail
+        shopt -s globstar nullglob
+
+        bodo_reports=(bodo-reports/**/*.xml)
+        bodosql_reports=(bodosql-reports/**/*.xml)
+
+        if (( ${#bodo_reports[@]} == 0 )); then
+          echo "No Bodo JUnit XML reports found"
+          exit 1
+        fi
+
+        if (( ${#bodosql_reports[@]} == 0 )); then
+          echo "No BodoSQL JUnit XML reports found"
+          exit 1
+        fi
+
+        echo "Merging ${#bodo_reports[@]} Bodo reports"
+        junitparser merge "${bodo_reports[@]}" bodo.xml
+        junit2html bodo.xml bodo.html
+
+        echo "Merging ${#bodosql_reports[@]} BodoSQL reports"
+        junitparser merge "${bodosql_reports[@]}" bodosql.xml
+        junit2html bodosql.xml bodosql.html
+
+    - name: Upload merged reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: merged-junit-reports
+        path: |
+          bodo.xml
+          bodo.html
+          bodosql.xml
+          bodosql.html
+        if-no-files-found: warn
