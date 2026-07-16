@@ -258,6 +258,8 @@ class RankBatchGenerator {
         chunked_reader_se = make_stream_and_event(g_use_async);
     }
 
+    ~RankBatchGenerator() { Py_XDECREF(storage_options); }
+
     std::pair<std::unique_ptr<cudf::table>, bool> next(
         std::shared_ptr<StreamAndEvent> se) {
         if (parts_.empty()) {
@@ -608,8 +610,6 @@ class RankBatchGenerator {
         return result;
     }
 
-    ~RankBatchGenerator() { Py_XDECREF(storage_options); }
-
    private:
     PyObject *path_;
     std::shared_ptr<arrow::fs::FileSystem> filesystem_;
@@ -855,6 +855,6 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
 
         batch_gen = std::make_shared<RankBatchGenerator>(
             path, filter_exprs, batch_size, output_schema->column_names,
-            arrow_schema, output_arrow_schema, comm);
+            arrow_schema, output_arrow_schema, comm, storage_options);
     }
 };

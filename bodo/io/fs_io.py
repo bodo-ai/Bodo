@@ -203,11 +203,9 @@ def get_gcs_fs(path, storage_options=None):
     options = {"retry_time_limit": datetime.timedelta(seconds=GCS_RETRY_LIMIT_SECONDS)}
 
     anon = False
-    if storage_options:
-        anon = storage_options.pop("anon", anon)
-        anon = storage_options.pop("anonymous", anon)
-        options.update(storage_options)
-
+    options = storage_options.copy() if storage_options else {}
+    anon = options.pop("anon", anon)
+    anon = options.pop("anonymous", anon)
     fs = GcsFileSystem(anonymous=anon, **options)
 
     if anon:
@@ -338,8 +336,10 @@ def pa_fs_list_dir_fnames(fs, path):
 def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
     from pyarrow.fs import AzureFileSystem
 
+    options = storage_options.copy() if storage_options else {}
+
     def get_attr(opt_key: str, env_key: str) -> str | None:
-        opt_val = storage_options.pop(opt_key) if storage_options else None
+        opt_val = options.pop(opt_key, None)
         if (
             opt_val is not None
             and os.environ.get(env_key) is not None
@@ -370,9 +370,7 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
 
     # Note, Azure validates credentials at use-time instead of at
     # initialization
-    return AzureFileSystem(
-        account_name, account_key=account_key, **(storage_options or {})
-    )
+    return AzureFileSystem(account_name, account_key=account_key, **(options or {}))
 
 
 """
@@ -561,8 +559,8 @@ def getfs(
         raise ValueError(
             f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
         )
-    else:
-        return pa.fs.LocalFileSystem()
+
+    return pa.fs.LocalFileSystem()
 
 
 def get_uri_scheme(path):
