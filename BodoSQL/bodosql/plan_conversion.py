@@ -254,6 +254,25 @@ def java_union_to_python_union(ctx, java_plan):
         plan = LogicalSetOperation(
             input_plans[i].empty_data, plan, input_plans[i], "union all"
         )
+    # Can't see how to get the value of "all" out of the java_plan directly
+    # so use regex on the string conversion.
+    re_res = re.search(
+        r"\ball\b\s*[:=]\s*(true|false)\b", java_plan.toString(), flags=re.IGNORECASE
+    )
+    if not re_res:
+        raise ValueError("BodoPhysicalUnion toString() did not contain 'all' value.")
+    set_all = re_res.group(1).lower() == "true"
+    if not set_all:
+        # UNION and UNION DISTINCT are the same and won't have the all flag set
+        # which means they expect the result to not have duplicate rows so add
+        # a distinct to the plan.
+        exprs = make_col_ref_exprs(list(range(len(plan.empty_data.columns))), plan)
+        plan = LogicalDistinct(
+            plan.empty_data,
+            plan,
+            exprs,
+        )
+
     return plan
 
 
