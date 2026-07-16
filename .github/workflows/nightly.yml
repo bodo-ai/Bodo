@@ -226,43 +226,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.14"
 
-      - run: |
-          pip install junitparser junit2html
+    - name: Install report tools
+      run: pip install junitparser junit2html
 
-      - name: Download Bodo reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: junit-reports-compiler-*
-          path: bodo-reports
-          merge-multiple: true
+    - name: Download Bodo reports
+      uses: actions/download-artifact@v4
+      with:
+        pattern: "junit-reports-{compiler,spawn,df_lib}-*"
+        path: bodo-reports
+        merge-multiple: true
 
-      - name: Download BodoSQL reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: junit-reports-sql-*
-          path: bodosql-reports
-          merge-multiple: true
+    - name: Download BodoSQL reports
+      uses: actions/download-artifact@v4
+      with:
+        pattern: "junit-reports-{sql,sql_spawn}-*"
+        path: bodosql-reports
+        merge-multiple: true
 
-      - name: Merge XML
-        run: |
-          junitparser merge bodo-reports/*.xml bodo.xml
-          junit2html bodo.xml bodo.html
+    - name: Merge XML and generate HTML
+      shell: bash
+      run: |
+        set -euo pipefail
+        shopt -s globstar nullglob
 
-          junitparser merge bodosql-reports/*.xml bodosql.xml
-          junit2html bodosql.xml bodosql.html
+        bodo_reports=(bodo-reports/**/*.xml)
+        bodosql_reports=(bodosql-reports/**/*.xml)
 
-      - name: Upload merged reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: merged-junit-reports
-          path: |
-            bodo.xml
-            bodo.html
-            bodosql.xml
-            bodosql.html
+        if (( ${#bodo_reports[@]} == 0 )); then
+          echo "No Bodo JUnit XML reports found"
+          exit 1
+        fi
+
+        if (( ${#bodosql_reports[@]} == 0 )); then
+          echo "No BodoSQL JUnit XML reports found"
+          exit 1
+        fi
+
+        echo "Merging ${#bodo_reports[@]} Bodo reports"
+        junitparser merge "${bodo_reports[@]}" bodo.xml
+        junit2html bodo.xml bodo.html
+
+        echo "Merging ${#bodosql_reports[@]} BodoSQL reports"
+        junitparser merge "${bodosql_reports[@]}" bodosql.xml
+        junit2html bodosql.xml bodosql.html
+
+    - name: Upload merged reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: merged-junit-reports
+        path: |
+          bodo.xml
+          bodo.html
+          bodosql.xml
+          bodosql.html
+        if-no-files-found: warn
