@@ -3835,6 +3835,7 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 @pytest.mark.slow
 def test_tz_aware_next_day(memory_leak_check):
@@ -3864,6 +3865,7 @@ def test_tz_aware_next_day(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_next_day_case(
     memory_leak_check,
 ):
@@ -3894,6 +3896,7 @@ def test_tz_aware_next_day_case(
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 @pytest.mark.slow
 def test_tz_aware_previous_day(memory_leak_check):
@@ -3918,6 +3921,7 @@ def test_tz_aware_previous_day(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_previous_day_case(
     memory_leak_check,

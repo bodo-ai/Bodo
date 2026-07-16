@@ -41,6 +41,7 @@ from bodo.pandas.plan import (
     LogicalSetOperation,
     LogicalTopN,
     NullExpression,
+    PythonScalarFuncExpression,
     UnaryOpExpression,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -967,6 +968,25 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 ctx, java_call.getOperands()[1], input_plan
             )
             ensure_type_of_expr(dow_string_expr, "dow_string_expr", str)
+
+            # Arrow and DuckDB don't support timezone-aware compute so we fall back
+            # to our JIT kernel.
+            pa_type = date_expr.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            if pa.types.is_timestamp(pa_type) and pa_type.tz is not None:
+                return PythonScalarFuncExpression(
+                    pd.Series(dtype=pd.ArrowDtype(pa.date32())),
+                    [date_expr, dow_string_expr],
+                    (
+                        f"bodosql.kernels.datetime_array_kernels.{func_name.lower()}_wrapper",
+                        False,  # is_series
+                        False,  # is_method
+                        (),  # args
+                        {},  # kwargs
+                        True,  # use_arrow_dtypes
+                    ),
+                    False,  # is_cfunc
+                    False,  # has_state
+                )
 
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 

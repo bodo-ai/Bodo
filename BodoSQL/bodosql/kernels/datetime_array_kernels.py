@@ -2540,6 +2540,36 @@ def next_day_util(arr0, arr1):
     )
 
 
+def next_day_wrapper(df):
+    """Wrapper for next_day_util kernel for BodoSQL C++ backend to use for tz-aware
+    data.
+    Not using a general wrapper for all kernels since creating a function from text is
+    fragile in JIT caching.
+    """
+
+    @bodo.jit(cache=True, spawn=False, distributed=False)
+    def wrapper_inner(A, B):
+        return next_day_util(A, B)
+
+    out = wrapper_inner(df.iloc[:, 0].array, df.iloc[:, 1].array)
+    return pd.Series(out)
+
+
+def previous_day_wrapper(df):
+    """Wrapper for previous_day_util kernel for BodoSQL C++ backend to use for tz-aware
+    data.
+    Not using a general wrapper for all kernels since creating a function from text is
+    fragile in JIT caching.
+    """
+
+    @bodo.jit(cache=True, spawn=False, distributed=False)
+    def wrapper_inner(A, B):
+        return previous_day_util(A, B)
+
+    out = wrapper_inner(df.iloc[:, 0].array, df.iloc[:, 1].array)
+    return pd.Series(out)
+
+
 @numba.generated_jit(nopython=True)
 def previous_day_util(arr0, arr1):
     """A dedicated kernel for the SQL function PREVIOUS_DAY which takes in a datetime
