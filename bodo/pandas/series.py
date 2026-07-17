@@ -3246,8 +3246,6 @@ def _get_series_func_plan(
     if func in arrow_compute_list and len(kwargs) == 0:
         func_name = get_arrow_func(func)
         func_args = tuple(args)
-        is_cfunc = False
-        has_state = False
         expr = ArrowScalarFuncExpression(
             empty_data,
             # Arrow functions don't need index columns as input
