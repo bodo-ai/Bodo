@@ -1670,3 +1670,12 @@ def scalarOutputNACheck(out, dtype):
             # plain NumPy ints/bools can't hold NA, pandas promotes to float NaN
             return np.nan
     return out
+
+
+def getUnusedColumnName(columns):
+    index = 0
+    while True:
+        attempt = "bodo" + str(index)
+        if attempt not in columns:
+            return attempt
+        index += 1

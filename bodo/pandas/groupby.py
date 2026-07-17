@@ -27,6 +27,7 @@ from bodo.pandas.utils import (
     check_args_fallback,
     convert_to_pandas_types,
     fallback_warn,
+    getUnusedColumnName,
     wrap_plan,
 )
 
@@ -612,6 +613,32 @@ def _groupby_agg_plan(
     pandas_name = kwargs.pop("pandas_name", func)
     grouped_selection = grouped.selection_for_plan
 
+    added_columns = []
+    if isinstance(grouped, DataFrameGroupBy):
+
+        def fix_agg(agg, keys, grouped_selection, df, added_columns):
+            if (
+                not isinstance(agg, pd.core.groupby.generic.NamedAgg)
+                and isinstance(agg, tuple)
+                and len(agg) == 2
+            ):
+                agg = pd.core.groupby.generic.NamedAgg(column=agg[0], aggfunc=agg[1])
+            if isinstance(agg, pd.core.groupby.generic.NamedAgg):
+                if agg.column in keys:
+                    temp_col = getUnusedColumnName(df)
+                    added_columns.append(temp_col)
+                    df[temp_col] = df[agg.column]
+                    grouped_selection.append(temp_col)
+                    return pd.core.groupby.generic.NamedAgg(
+                        column=temp_col, aggfunc=agg.aggfunc
+                    )
+            return agg
+
+        kwargs = {
+            k: fix_agg(v, grouped._keys, grouped_selection, grouped._obj, added_columns)
+            for k, v in kwargs.items()
+        }
+
     zero_size_df = _empty_like(grouped._obj)
 
     # Convert to Pandas types to avoid gaps in Arrow types of Pandas <3
@@ -620,6 +647,14 @@ def _groupby_agg_plan(
         if pandas_version < (3, 0)
         else zero_size_df
     )
+
+    todd0 = zero_size_df_pandas.groupby(grouped._keys, as_index=grouped._as_index)
+    todd1 = todd0[
+        grouped_selection[0]
+        if isinstance(grouped, SeriesGroupBy)
+        else grouped_selection
+    ]
+    todd1.agg(pandas_name, *args, **kwargs)
     empty_data_pandas = zero_size_df_pandas.groupby(
         grouped._keys, as_index=grouped._as_index
     )[
@@ -675,7 +710,12 @@ def _groupby_agg_plan(
             )
         )
 
-    return _make_logical_agg_plan(grouped, exprs, empty_data)
+    ret = _make_logical_agg_plan(grouped, exprs, empty_data)
+
+    if len(added_columns) > 0:
+        grouped._obj.drop(columns=added_columns)
+
+    return ret
 
 
 def _make_logical_agg_plan(
