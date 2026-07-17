@@ -334,6 +334,15 @@ def test_timestamp_tz_dateadd(
             # is a different day from the local date - this tests that datediff
             # is comparing using the UTC date
             "TIMESTAMPDIFF(day, T, TO_TIMESTAMP_TZ('2024-01-01 00:00:00 +1234'))",
+            # FIXME: Are the expected outputs here correct?
+            # '2024-01-01 00:00:00 +1234' should correspond to 2024-01-01 00:00:00
+            # in local time, or 2023-12-31 11:26:00 UTC. So we would expect to be
+            # subtracting from datetime.date(2023, 12, 31).
+            # Also, the JIT implementation may not behave well when the timestamps
+            # have different UTC offsets. When the input is a bodo.types.TimestampTZ,
+            # it fails to get a timezone/offset and eventually calls local_timestamp().
+            # Thus, any difference in UTC offset will wrongly contribute to the final
+            # timestamp diff.
             pd.array(
                 [
                     (datetime.date(2024, 1, 1) - datetime.date(2024, 4, 1)).days,
