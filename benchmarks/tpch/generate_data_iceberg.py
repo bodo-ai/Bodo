@@ -2,8 +2,11 @@
 Create a directory-based Iceberg catalog and generate TPC-H data as Iceberg tables
 using DuckDB's TPCH extension.
 
-Usage:
+Usage (local paths):
     python generate_data_iceberg.py --sf 1 --outdir /path/to/output [--recreate_dir]
+
+Or to write to S3:
+    python generate_data_iceberg.py --sf 1 --iceberg_path s3://your-bucket/tpch_sf1_iceberg
 """
 
 import argparse
@@ -11,6 +14,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 import duckdb
 import pyarrow.dataset as ds
@@ -28,6 +32,10 @@ TPCH_TABLES = [
     "nation",
     "region",
 ]
+
+
+def is_s3_path(path: str) -> bool:
+    return urlparse(path).scheme == "s3"
 
 
 def generate_duckdb_parquet(sf: int, parquet_path: str):
@@ -95,10 +103,14 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
     """
     from bodo.io.iceberg.catalog.dir import DirCatalog
 
-    os.makedirs(iceberg_path, exist_ok=True)
-    catalog = DirCatalog(
-        f"TPCH_SF{sf}", **{WAREHOUSE_LOCATION: os.path.abspath(iceberg_path)}
+    if not is_s3_path(iceberg_path):
+        os.makedirs(iceberg_path, exist_ok=True)
+
+    warehouse = (
+        os.path.abspath(iceberg_path) if not is_s3_path(iceberg_path) else iceberg_path
     )
+
+    catalog = DirCatalog(f"TPCH_SF{sf}", **{WAREHOUSE_LOCATION: warehouse})
 
     for table in TPCH_TABLES:
         table_dir = Path(parquet_path) / table
@@ -133,8 +145,18 @@ def main():
     parser.add_argument(
         "--outdir",
         type=str,
-        required=True,
-        help="The output directory where the Parquet files will be stored.",
+        required=False,
+        default="/tmp",
+        help="The output directory where the Parquet files will be stored."
+        "The Iceberg tables will be stored here if --iceberg_path is"
+        "not specified (in subdirectory `tpch_sf{sf}_iceberg`).",
+    )
+    parser.add_argument(
+        "--iceberg_path",
+        type=str,
+        required=False,
+        help="The output directory where the Iceberg tables will be stored. "
+        "If not specified, it will default to a subdirectory in --outdir.",
     )
     parser.add_argument(
         "--recreate_dir",
@@ -149,8 +171,7 @@ def main():
         os.makedirs(args.outdir, exist_ok=True)
 
     parquet_path = f"{args.outdir}/tpch_sf{args.sf}_pq"
-    # TODO(scott): Support S3 paths?
-    iceberg_path = f"{args.outdir}/tpch_sf{args.sf}_iceberg"
+    iceberg_path = args.iceberg_path or f"{args.outdir}/tpch_sf{args.sf}_iceberg"
 
     try:
         generate_duckdb_parquet(args.sf, parquet_path)
