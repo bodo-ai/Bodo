@@ -92,6 +92,7 @@ def test_multi_col_null_pivot(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 @pytest.mark.slow
 def test_tz_aware_pivot(memory_leak_check):

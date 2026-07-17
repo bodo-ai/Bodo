@@ -1923,6 +1923,12 @@ std::shared_ptr<array_info> broadcast_array(
             "broadcast_array: MPI error on MPI_Bcast:");
     }
 
+    // Preserve timezone for datetime arrays
+    if (ref_arr && arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+        dtype == Bodo_CTypes::DATETIME) {
+        out_arr->timezone = ref_arr->timezone;
+    }
+
     // Free communicator if created
     if (comm_ranks && comm_ranks->size() > 0) {
         MPI_Comm_free(&comm);
