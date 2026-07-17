@@ -138,8 +138,8 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
 /**
  * @brief Broadcast an array (including child arrays).
  *
- * @param ref_arr : the reference array used for the dictionaries if available
- * (can be nullptr)
+ * @param ref_arr : the reference array used for the dictionaries and timezone
+ * if available (can be nullptr)
  * @param in_arr : the array to broadcast
  * @param comm_ranks : target ranks to send data to (can be nullptr if sending
  * to all)
