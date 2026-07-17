@@ -1455,7 +1455,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
     std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override;
 
-    void Finalize() {
+    void Finalize() override {
         for (const auto &child : children) {
             child->Finalize();
         }
