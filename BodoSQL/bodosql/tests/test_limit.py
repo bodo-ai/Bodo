@@ -5,6 +5,7 @@ from bodo.tests.timezone_common import representative_tz  # noqa
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.bodosql_cpp
 def test_limit_numeric(bodosql_numeric_types, memory_leak_check):
     """test queries with limit"""
     query = "select B,C from table1 limit 4"
@@ -90,6 +91,7 @@ def test_fetch(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_top(basic_df, memory_leak_check):
     """test queries with top"""

@@ -51,13 +51,16 @@ from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
 _DATE_PART_ARROW_FUNCS = {
     "YEAR": "year",
+    "QUARTER": "quarter",
     "MONTH": "month",
     "DAY": "day",
     "DAYOFMONTH": "day",
     "HOUR": "hour",
     "MINUTE": "minute",
     "SECOND": "second",
-    "QUARTER": "quarter",
+    "MILLISECOND": "millisecond",
+    "MICROSECOND": "microsecond",
+    "NANOSECOND": "nanosecond",
     "WEEK": "iso_week",
     "WEEKOFYEAR": "iso_week",
     "WEEKISO": "iso_week",
@@ -67,8 +70,6 @@ _DATE_PART_ARROW_FUNCS = {
     "WEEKDAY": "day_of_week",
     "YEAROFWEEK": "iso_year",
     "YEAROFWEEKISO": "iso_year",
-    "MICROSECOND": "microsecond",
-    "NANOSECOND": "nanosecond",
     "DOW": "day_of_week",
     "DOY": "day_of_year",
 }

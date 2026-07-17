@@ -12,6 +12,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.utils import pytest_mark_one_rank, temp_config_override
+from bodosql.tests.conftest import mark_if_param_id_not_in
 from bodosql.tests.utils import check_query
 
 
@@ -1906,6 +1907,7 @@ def test_decimal_trunc(df, expr, memory_leak_check):
         )
 
 
+@mark_if_param_id_not_in(pytest.mark.bodosql_cpp, {"log_onearg_vector"})
 @pytest.mark.parametrize(
     "df, expr, answer",
     [
@@ -2493,6 +2495,7 @@ def test_decimal_to_float_functions(df, expr, answer, memory_leak_check):
         )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "df, expr, answer",
     [

@@ -7,7 +7,7 @@ from bodo.tests.utils import pytest_slow_unless_join, temp_env_override
 from bodosql.tests.utils import check_query
 
 # Skip unless any join-related files were changed
-pytestmark = pytest_slow_unless_join
+pytestmark = pytest_slow_unless_join + [pytest.mark.bodosql_cpp]
 
 
 @pytest.mark.parametrize("broadcast", [True, False])

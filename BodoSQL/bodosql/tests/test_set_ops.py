@@ -19,9 +19,13 @@ pytestmark = pytest_slow_unless_codegen
 
 @pytest.fixture(
     params=[
-        pytest.param("UNION", id="union_op"),
-        pytest.param("UNION DISTINCT", id="union_distinct", marks=pytest.mark.slow),
-        pytest.param("UNION ALL", id="union_all"),
+        pytest.param("UNION", id="union_op", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            "UNION DISTINCT",
+            id="union_distinct",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
+        pytest.param("UNION ALL", id="union_all", marks=pytest.mark.bodosql_cpp),
     ]
 )
 def union_cmds(request) -> str:
@@ -55,9 +59,13 @@ def except_cmds(request) -> str:
 
 @pytest.fixture(
     params=[
-        pytest.param("UNION", id="union_op"),
-        pytest.param("UNION DISTINCT", id="union_distinct", marks=pytest.mark.slow),
-        pytest.param("UNION ALL", id="union_all"),
+        pytest.param("UNION", id="union_op", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            "UNION DISTINCT",
+            id="union_distinct",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
+        pytest.param("UNION ALL", id="union_all", marks=pytest.mark.bodosql_cpp),
         pytest.param("INTERSECT", id="intersect_op"),
         pytest.param(
             "INTERSECT DISTINCT", id="intersect_distinct", marks=pytest.mark.slow

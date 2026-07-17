@@ -54,6 +54,7 @@ def test_literal_project(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_project_numeric(bodosql_numeric_types, memory_leak_check):
     """test projection queries"""
     query = "select B, C from table1"
@@ -67,6 +68,7 @@ def test_project_numeric(bodosql_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_project_null(memory_leak_check):
     """
     Test select based on a simple null array.
@@ -84,6 +86,7 @@ def test_project_null(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_select_multi_table(join_dataframes, memory_leak_check):
     """test selecting columns from multiple tables"""
     check_query(
@@ -94,6 +97,7 @@ def test_select_multi_table(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_select_multi_table_order_by(join_dataframes, memory_leak_check):
     """test selecting and sorting columns from multiple tables"""
@@ -105,6 +109,7 @@ def test_select_multi_table_order_by(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_select_all_numerics(bodosql_numeric_types, memory_leak_check):
     """
     Simplest query possible on numeric types.
@@ -119,6 +124,7 @@ def test_select_all_numerics(bodosql_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_select_all_large_numerics(bodosql_large_numeric_types, memory_leak_check):
     """
     Simplest query possible on large numeric types.
@@ -134,6 +140,7 @@ def test_select_all_large_numerics(bodosql_large_numeric_types, memory_leak_chec
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_select_all_datetime(bodosql_datetime_types, memory_leak_check):
     """
     Simplest query possible on datetime/timedelta types.
@@ -142,6 +149,7 @@ def test_select_all_datetime(bodosql_datetime_types, memory_leak_check):
     check_query(query, bodosql_datetime_types, None, use_duckdb=True)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_select_all_interval(bodosql_interval_types, memory_leak_check):
     """
@@ -157,6 +165,7 @@ def test_select_all_interval(bodosql_interval_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_select_all_boolean(bodosql_boolean_types, memory_leak_check):
     """
     Simplest query possible on boolean tables.
@@ -171,6 +180,7 @@ def test_select_all_boolean(bodosql_boolean_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_select_all_string(bodosql_string_types, memory_leak_check):
     """
@@ -185,6 +195,7 @@ def test_select_all_string(bodosql_string_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_select_expand_literal(basic_df, memory_leak_check):
     """
     Tests select with all literals is expanded to
@@ -200,6 +211,7 @@ def test_select_expand_literal(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_select_literal_no_table(basic_df, memory_leak_check):
     """
@@ -216,6 +228,7 @@ def test_select_literal_no_table(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_select_all_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_check):
     """
     Simplest query possible on nullable numeric tables.
@@ -230,6 +243,7 @@ def test_select_all_nullable_numeric(bodosql_nullable_numeric_types, memory_leak
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_select_from_simple(join_dataframes, memory_leak_check):
     """
     tests that the select and from operators are working correctly for simple cases
@@ -271,6 +285,7 @@ def test_select_from_simple(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_nested_select_from(join_dataframes, memory_leak_check):
     """
@@ -301,6 +316,7 @@ def test_nested_select_from(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_heavily_nested_select_from(join_dataframes, memory_leak_check):
     """
@@ -340,6 +356,7 @@ def test_heavily_nested_select_from(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_decimal(memory_leak_check):
     """
     Verify we can pass decimal columns to BodoSQL.
