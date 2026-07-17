@@ -289,53 +289,43 @@ type_str_to_pa = {
 
 def java_dynamic_param_to_python_literal(ctx, dyn_param, input_plan):
     """Convert a BodoSQL Java dynamic param expression to a DataFrame library constant."""
-    dyn_param = dyn_param.toString()
-    if dyn_param.startswith("?"):
-        dyn_param = dyn_param[1:]
-        if not dyn_param.isnumeric():
-            raise ValueError("Dynamic parameter is not numeric.")
-        dyn_param = int(dyn_param)
+    dyn_param = dyn_param.getIndex()
+    if dyn_param >= len(ctx.dynamic_params_list[0]) or dyn_param >= len(
+        ctx.dynamic_params_list[1]
+    ):
+        raise ValueError(f"Dynamic parameter {dyn_param} not found.")
 
-        if dyn_param >= len(ctx.dynamic_params_list[0]) or dyn_param >= len(
-            ctx.dynamic_params_list[1]
-        ):
-            raise ValueError(f"Dynamic parameter {dyn_param} not found.")
-
-        column = ctx.dynamic_params_list[0][dyn_param]
-        value = ctx.dynamic_params_list[1][dyn_param]
-        if isinstance(value, np.generic):
-            value = value.item()
-        cdtype = column.getDataType().toString()
-        if cdtype in type_str_to_pa:
-            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
-            return ConstantExpression(dummy_empty_data, input_plan, value)
-
-    raise NotImplementedError("DynamicParam format or type not supported yet")
+    column = ctx.dynamic_params_list[0][dyn_param]
+    value = ctx.dynamic_params_list[1][dyn_param]
+    if isinstance(value, np.generic):
+        value = value.item()
+    cdtype = column.getDataType().toString()
+    if cdtype in type_str_to_pa:
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
+        return ConstantExpression(dummy_empty_data, input_plan, value)
+    else:
+        raise NotImplementedError(f"DynamicParam type {cdtype} not supported yet")
 
 
 def java_named_param_to_python_literal(ctx, named_param, input_plan):
     """Convert a BodoSQL Java named param expression to a DataFrame library constant."""
-    named_param = named_param.toString()
-    if named_param.startswith("@"):
-        named_param = named_param[1:]
-        if (
-            named_param not in ctx.named_params_dict[0]
-            or named_param not in ctx.named_params_dict[1]
-        ):
-            raise ValueError(f"Named parameter {named_param} not found.")
+    named_param = named_param.getParamName()
+    if (
+        named_param not in ctx.named_params_dict[0]
+        or named_param not in ctx.named_params_dict[1]
+    ):
+        raise ValueError(f"Named parameter {named_param} not found.")
 
-        column = ctx.named_params_dict[0][named_param]
-        value = ctx.named_params_dict[1][named_param]
-        if isinstance(value, np.generic):
-            value = value.item()
-        cdtype = column.getDataType().toString()
-        if cdtype in type_str_to_pa:
-            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
-            return ConstantExpression(dummy_empty_data, input_plan, value)
-        else:
-            print("cdtype not found:", cdtype)
-
-    raise NotImplementedError("NamedParam format or type not supported yet")
+    column = ctx.named_params_dict[0][named_param]
+    value = ctx.named_params_dict[1][named_param]
+    if isinstance(value, np.generic):
+        value = value.item()
+    cdtype = column.getDataType().toString()
+    if cdtype in type_str_to_pa:
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
+        return ConstantExpression(dummy_empty_data, input_plan, value)
+    else:
+        raise NotImplementedError(f"NamedParam type {cdtype} not supported yet")
 
 
 def java_call_to_python_call(ctx, java_call, input_plan):
