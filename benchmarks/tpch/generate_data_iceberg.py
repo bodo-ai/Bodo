@@ -149,12 +149,14 @@ def main():
         os.makedirs(args.outdir, exist_ok=True)
 
     parquet_path = f"{args.outdir}/tpch_sf{args.sf}_pq"
-
     # TODO(scott): Support S3 paths?
     iceberg_path = f"{args.outdir}/tpch_sf{args.sf}_iceberg"
 
-    generate_duckdb_parquet(args.sf, parquet_path)
-    create_iceberg_tables(parquet_path, iceberg_path, args.sf)
+    try:
+        generate_duckdb_parquet(args.sf, parquet_path)
+        create_iceberg_tables(parquet_path, iceberg_path, args.sf)
+    finally:
+        shutil.rmtree(parquet_path, ignore_errors=True)
 
 
 if __name__ == "__main__":
