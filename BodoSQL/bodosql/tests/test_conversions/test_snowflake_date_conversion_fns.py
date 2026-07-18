@@ -68,7 +68,6 @@ def date_casting_input_type(request):
     return request.param
 
 
-@pytest.mark.bodosql_cpp
 def test_date_casting_functions(
     dt_fn_dataframe, test_fn, date_casting_input_type, memory_leak_check
 ):
