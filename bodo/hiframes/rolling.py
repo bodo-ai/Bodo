@@ -92,15 +92,8 @@ def overload_rolling_fixed(
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
         return (
-            lambda arr,
-            index_arr,
-            win,
-            minp,
-            center,
-            fname,
-            raw=True,
-            parallel=False: roll_fixed_apply(
-                arr, index_arr, win, minp, center, parallel, func, raw
+            lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: (
+                roll_fixed_apply(arr, index_arr, win, minp, center, parallel, func, raw)
             )
         )  # pragma: no cover
 
@@ -126,28 +119,16 @@ def overload_rolling_fixed(
         kernel_func = register_jitable(loc_vars["kernel_func"])
 
         return (
-            lambda arr,
-            index_arr,
-            win,
-            minp,
-            center,
-            fname,
-            raw=True,
-            parallel=False: roll_fixed_apply(
-                arr, index_arr, win, minp, center, parallel, kernel_func
+            lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: (
+                roll_fixed_apply(
+                    arr, index_arr, win, minp, center, parallel, kernel_func
+                )
             )
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return (
-        lambda arr,
-        index_arr,
-        win,
-        minp,
-        center,
-        fname,
-        raw=True,
-        parallel=False: roll_fixed_linear_generic(
+    return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: (
+        roll_fixed_linear_generic(
             arr,
             win,
             minp,
@@ -170,16 +151,10 @@ def overload_rolling_variable(
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
         return (
-            lambda arr,
-            on_arr,
-            index_arr,
-            win,
-            minp,
-            center,
-            fname,
-            raw=True,
-            parallel=False: roll_variable_apply(
-                arr, on_arr, index_arr, win, minp, center, parallel, func, raw
+            lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: (
+                roll_variable_apply(
+                    arr, on_arr, index_arr, win, minp, center, parallel, func, raw
+                )
             )
         )  # pragma: no cover
 
@@ -206,40 +181,28 @@ def overload_rolling_variable(
         kernel_func = register_jitable(loc_vars["kernel_func"])
 
         return (
-            lambda arr,
-            on_arr,
-            index_arr,
-            win,
-            minp,
-            center,
-            fname,
-            raw=True,
-            parallel=False: roll_variable_apply(
-                arr, on_arr, index_arr, win, minp, center, parallel, kernel_func
+            lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: (
+                roll_variable_apply(
+                    arr, on_arr, index_arr, win, minp, center, parallel, kernel_func
+                )
             )
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
     return (
-        lambda arr,
-        on_arr,
-        index_arr,
-        win,
-        minp,
-        center,
-        fname,
-        raw=True,
-        parallel=False: roll_var_linear_generic(
-            arr,
-            on_arr,
-            win,
-            minp,
-            center,
-            parallel,
-            init_kernel,
-            add_kernel,
-            remove_kernel,
-            calc_kernel,
+        lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: (
+            roll_var_linear_generic(
+                arr,
+                on_arr,
+                win,
+                minp,
+                center,
+                parallel,
+                init_kernel,
+                add_kernel,
+                remove_kernel,
+                calc_kernel,
+            )
         )
     )  # pragma: no cover
 

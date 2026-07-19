@@ -117,9 +117,11 @@ def test_series_map_isna_check(memory_leak_check):
 
     def impl1(S):
         return S.map(
-            lambda a: pd.Timestamp("2019-01-01")
-            if pd.isna(a)
-            else a + datetime.timedelta(days=1)
+            lambda a: (
+                pd.Timestamp("2019-01-01")
+                if pd.isna(a)
+                else a + datetime.timedelta(days=1)
+            )
         )
 
     def impl2(S):

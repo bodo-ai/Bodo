@@ -271,23 +271,26 @@ def test_interval_literals(basic_df, timedelta_equivalent_values, memory_leak_ch
         pytest.param(
             (
                 "1 year, 2 month, 3 second",
-                lambda x: (x + pd.DateOffset(years=1, months=2))
-                + pd.Timedelta(seconds=3),
+                lambda x: (
+                    (x + pd.DateOffset(years=1, months=2)) + pd.Timedelta(seconds=3)
+                ),
             ),
             marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
                 "1 days, 2 hrs, 3 mins, 4s, 5ms, 6us, 7ns",
-                lambda x: x
-                + pd.Timedelta(
-                    days=1,
-                    hours=2,
-                    minutes=3,
-                    seconds=4,
-                    milliseconds=5,
-                    microseconds=6,
-                    nanoseconds=7,
+                lambda x: (
+                    x
+                    + pd.Timedelta(
+                        days=1,
+                        hours=2,
+                        minutes=3,
+                        seconds=4,
+                        milliseconds=5,
+                        microseconds=6,
+                        nanoseconds=7,
+                    )
                 ),
             ),
             marks=pytest.mark.weekly,
@@ -302,23 +305,26 @@ def test_interval_literals(basic_df, timedelta_equivalent_values, memory_leak_ch
         pytest.param(
             (
                 "1 year, 2 month, 3 second",
-                lambda x: (x + pd.DateOffset(years=1, months=2))
-                + pd.Timedelta(seconds=3),
+                lambda x: (
+                    (x + pd.DateOffset(years=1, months=2)) + pd.Timedelta(seconds=3)
+                ),
             ),
             marks=pytest.mark.weekly,
         ),
         pytest.param(
             (
                 "1 days, 2 hrs, 3 mins, 4s, 5ms, 6us, 7ns",
-                lambda x: x
-                + pd.Timedelta(
-                    days=1,
-                    hours=2,
-                    minutes=3,
-                    seconds=4,
-                    milliseconds=5,
-                    microseconds=6,
-                    nanoseconds=7,
+                lambda x: (
+                    x
+                    + pd.Timedelta(
+                        days=1,
+                        hours=2,
+                        minutes=3,
+                        seconds=4,
+                        milliseconds=5,
+                        microseconds=6,
+                        nanoseconds=7,
+                    )
                 ),
             ),
             marks=pytest.mark.weekly,
@@ -327,9 +333,9 @@ def test_interval_literals(basic_df, timedelta_equivalent_values, memory_leak_ch
             (
                 "1 months, 2 days, 3 hrs, 4 mins, 5s, 6ms, 7us, 8ns",
                 lambda x: (
-                    x + pd.DateOffset(months=1, days=2, hours=3, minutes=4, seconds=5)
-                )
-                + pd.Timedelta(milliseconds=6, microseconds=7, nanoseconds=8),
+                    (x + pd.DateOffset(months=1, days=2, hours=3, minutes=4, seconds=5))
+                    + pd.Timedelta(milliseconds=6, microseconds=7, nanoseconds=8)
+                ),
             ),
         ),
     ]
