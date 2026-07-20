@@ -636,6 +636,7 @@ arrow::Datum do_arrow_compute_cast(
     // CastExpressions should support these options.
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
+    cast_opts.allow_float_truncate = true;
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::Cast(left_res, return_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {

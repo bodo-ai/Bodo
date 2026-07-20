@@ -2072,6 +2072,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (tz,),
             )
 
+        if is_float_type(operand_type) and is_int_type(target_type):
+            # CastExpression truncates instead of rounds.
+            in_expr = ArrowScalarFuncExpression(
+                in_expr.empty_data,
+                [in_expr],
+                "round",
+                (0, "half_towards_infinity"),
+            )
+
         # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
         if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
             SqlTypeName.TIMESTAMP
@@ -5283,6 +5292,13 @@ def is_int_type(java_type):
         or type_name.equals(SqlTypeName.INTEGER)
         or type_name.equals(SqlTypeName.BIGINT)
     )
+
+
+def is_float_type(java_type):
+    """Check if a Calcite type is a float type."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    type_name = java_type.getSqlTypeName()
+    return type_name.equals(SqlTypeName.FLOAT) or type_name.equals(SqlTypeName.DOUBLE)
 
 
 def gen_plan_via_bodo_dataframe(func, *args, **kwargs):
