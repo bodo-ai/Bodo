@@ -2698,6 +2698,7 @@ def date_add_sub_date_df():
                 ),
             ),
             id="DATE_ADD-vector_scalar_date_interval_with_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2726,6 +2727,7 @@ def date_add_sub_date_df():
                 ),
             ),
             id="ADDDATE-vector_time_interval_with_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2831,6 +2833,7 @@ def date_add_sub_date_df():
                 ),
             ),
             id="date_add_date_interval_with_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -4877,6 +4880,7 @@ def test_current_date(fn_name, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_months_between(date_df, memory_leak_check):
     query = "SELECT MONTHS_BETWEEN(B, A) from table1"
 

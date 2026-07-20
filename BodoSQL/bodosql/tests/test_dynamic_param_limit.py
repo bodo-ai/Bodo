@@ -4,6 +4,7 @@ a SQL LIMIT expression.
 """
 
 import pandas as pd
+import pytest
 
 import bodo
 import bodosql
@@ -11,6 +12,7 @@ from bodosql.tests.named_params_common import int_named_params  # noqa
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.bodosql_cpp
 def test_named_param_limit_unsigned(basic_df, int_named_params, memory_leak_check):
     """
     Checks using a named parameter
@@ -28,6 +30,7 @@ def test_named_param_limit_unsigned(basic_df, int_named_params, memory_leak_chec
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_bind_variable_limit_unsigned(basic_df, int_named_params, memory_leak_check):
     """
     Checks using a named parameter

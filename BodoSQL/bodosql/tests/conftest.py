@@ -10,6 +10,7 @@ import py4j
 import pyarrow as pa
 import pyspark
 import pytest
+from _pytest.mark.structures import ParameterSet
 from pyspark.sql.types import (
     DoubleType,
     IntegerType,
@@ -133,6 +134,180 @@ def cpp_backend_run_with_test_dataframe_library_enabled(request):
             set_config("bodo.test_dataframe_library_enabled", False)
             return
     yield
+
+
+def mark_bodosql_cpp_if(condition):
+    """
+    Decorator to conditionally add the bodosql_cpp marker to a test.
+    `condition` can be a constant or a function accepting the pytest
+    item and returning a boolean.
+
+    This decorator sets an attribute on the test function which is read
+    in the `pytest_collection_modifyitems()` hook to decide whether to
+    mark the test or not.
+    """
+
+    def decorator(test_func):
+        test_func._mark_bodosql_cpp = condition
+        return test_func
+
+    return decorator
+
+
+def fixture_value_is_in(fixture_name, values):
+    """Get a condition function that returns True if the
+    value of the fixture `fixture_name` for the input test
+    is in the list of `values`. Mainly intended for use with
+    `mark_bodosql_cpp_if()`."""
+
+    def condition(item):
+        if hasattr(item, "callspec") and fixture_name in item.callspec.params:
+            return item.callspec.params[fixture_name] in values
+        return False
+
+    return condition
+
+
+def fixture_value_not_in(fixture_name, values):
+    """Get a condition function that returns True if the
+    value of the fixture `fixture_name` for the input test
+    is not in the list of `values`. Mainly intended for use
+    with `mark_bodosql_cpp_if()`."""
+
+    def condition(item):
+        if hasattr(item, "callspec") and fixture_name in item.callspec.params:
+            return item.callspec.params[fixture_name] not in values
+        return False
+
+    return condition
+
+
+def id_of_test_is_in(included_ids):
+    """Get a condition function that returns True if the
+    final ID of a test case is in the list of `included_ids`.
+    Mainly intended for use with `mark_bodosql_cpp_if()`."""
+
+    def condition(item):
+        if hasattr(item, "callspec"):
+            return item.callspec.id in included_ids
+        return False
+
+    return condition
+
+
+def id_of_test_not_in(excluded_ids):
+    """Get a condition function that returns True if the
+    final ID of a test case is not in the list of `excluded_ids`.
+    Mainly intended for use with `mark_bodosql_cpp_if()`."""
+
+    def condition(item):
+        if hasattr(item, "callspec"):
+            return item.callspec.id not in excluded_ids
+        return False
+
+    return condition
+
+
+def mark_based_on_param_id(pytest_marker, should_mark):
+    """
+    Decorator to mark parametrized test cases based on the value
+    of the parameter ID. This decorator must sit directly
+    on top of the `pytest.mark.parametrize` marker it
+    refers to.
+
+    `should_mark` is a function accepting the parameter ID
+    and returning a boolean. The parameter ID can be `None`.
+    `pytest_marker` is the marker that should be added to the
+    item if `should_mark` returns True.
+
+    The primary variants of this decorator are `mark_if_param_id_in`
+    and `mark_if_param_id_not_in`.
+    """
+
+    def decorator(func):
+        marks = getattr(func, "pytestmark", [])
+        if not isinstance(marks, list):
+            marks = [marks]
+
+        assert len(marks) > 0, (
+            "There must be a pytest (parametrize) mark directly below the @mark_based_on_param_id decorator."
+        )
+
+        parametrize_mark = marks[-1]
+        assert parametrize_mark.name == "parametrize", (
+            "The @mark_based_on_param_id decorator must be placed directly above a parametrize mark."
+        )
+
+        params = parametrize_mark.args[1]
+
+        marked_params = []
+        for i, param in enumerate(params):
+            # The ID could be either an attribute of the pytest.param (most common),
+            # of from the `ids` list of pytest.mark.parametrize().
+            if isinstance(param, ParameterSet):
+                param_id = param.id
+            else:
+                ids = parametrize_mark.kwargs.get("ids", None)
+                param_id = ids[i] if ids else None
+
+            if should_mark(param_id):
+                if isinstance(param, ParameterSet):
+                    # If it's a pytest.param, add the new marker to the existing markers
+                    if isinstance(param.marks, (list, set, tuple)):
+                        new_param_marks = [pytest_marker]
+                        new_param_marks.extend(param.marks)
+                    else:
+                        new_param_marks = [pytest_marker, param.marks]
+                    param = pytest.param(
+                        *param.values, id=param.id, marks=new_param_marks
+                    )
+                else:
+                    # If it's a tuple or a single value, package it in a pytest.param
+                    # so we can add the new marker.
+                    if not isinstance(param, tuple):
+                        param = (param,)
+                    param = pytest.param(*param, id=param_id, marks=pytest_marker)
+
+            marked_params.append(param)
+
+        # Create new parametrize marker; the old one is frozen and cannot be modified
+        arg_names = parametrize_mark.args[0]
+        marks[-1] = pytest.mark.parametrize(arg_names, marked_params)
+
+        return func
+
+    return decorator
+
+
+def mark_if_param_id_in(pytest_marker, included_ids):
+    """
+    Decorator to mark parametrized test cases where the value
+    of the parameter ID is in `included_ids`. This decorator
+    must sit directly on top of the `pytest.mark.parametrize`
+    marker it refers to.
+
+    `pytest_marker` is the marker that should be added to the
+    item if the parameter ID is in `included_ids`.
+    """
+    return mark_based_on_param_id(
+        pytest_marker,
+        lambda param_id: param_id is not None and param_id in included_ids,
+    )
+
+
+def mark_if_param_id_not_in(pytest_marker, excluded_ids):
+    """
+    Decorator to mark parametrized test cases where the value
+    of the parameter ID is not in `excluded_ids`. This decorator
+    must sit directly on top of the `pytest.mark.parametrize`
+    marker it refers to.
+
+    `pytest_marker` is the marker that should be added to the
+    item if the parameter ID is not in `excluded_ids`.
+    """
+    return mark_based_on_param_id(
+        pytest_marker, lambda param_id: param_id is None or param_id not in excluded_ids
+    )
 
 
 @pytest.fixture(scope="module")
@@ -1900,6 +2075,15 @@ def pytest_collection_modifyitems(items):
         item.add_marker(azure_1p_marker)
         item.add_marker(azure_2p_marker)
         item.add_marker(azure_3p_marker)
+
+        # If the item function has the attribute "_mark_bodosql_cpp"
+        # (set by @mark_bodosql_cpp_if), evaluate the condition
+        # and mark the test accordingly.
+        if isinstance(item, pytest.Function):
+            if hasattr(item.function, "_mark_bodosql_cpp"):
+                condition = item.function._mark_bodosql_cpp
+                if condition(item) if callable(condition) else condition:
+                    item.add_marker(pytest.mark.bodosql_cpp)
 
 
 def group_from_hash(testname, num_groups):

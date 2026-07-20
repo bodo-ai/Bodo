@@ -51,13 +51,16 @@ from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
 _DATE_PART_ARROW_FUNCS = {
     "YEAR": "year",
+    "QUARTER": "quarter",
     "MONTH": "month",
     "DAY": "day",
     "DAYOFMONTH": "day",
     "HOUR": "hour",
     "MINUTE": "minute",
     "SECOND": "second",
-    "QUARTER": "quarter",
+    "MILLISECOND": "millisecond",
+    "MICROSECOND": "microsecond",
+    "NANOSECOND": "nanosecond",
     "WEEK": "iso_week",
     "WEEKOFYEAR": "iso_week",
     "WEEKISO": "iso_week",
@@ -67,8 +70,6 @@ _DATE_PART_ARROW_FUNCS = {
     "WEEKDAY": "day_of_week",
     "YEAROFWEEK": "iso_year",
     "YEAROFWEEKISO": "iso_year",
-    "MICROSECOND": "microsecond",
-    "NANOSECOND": "nanosecond",
     "DOW": "day_of_week",
     "DOY": "day_of_year",
 }
@@ -297,7 +298,71 @@ def java_expr_to_python_expr(ctx, java_expr, input_plan):
     if java_class_name == "RexLiteral":
         return java_literal_to_python_literal(ctx, java_expr, input_plan)
 
+    if java_class_name == "RexNamedParam":
+        return java_named_param_to_python_literal(ctx, java_expr, input_plan)
+
+    if java_class_name == "RexDynamicParam":
+        return java_dynamic_param_to_python_literal(ctx, java_expr, input_plan)
+
     raise NotImplementedError(f"Expression {java_class_name} not supported yet")
+
+
+type_str_to_pa = {
+    "UINT8": pa.uint8(),
+    "UINT16": pa.uint16(),
+    "UINT32": pa.uint32(),
+    "UINT64": pa.uint64(),
+    "INT8": pa.int8(),
+    "INT16": pa.int16(),
+    "INT32": pa.int32(),
+    "INT64": pa.int64(),
+    "FLOAT32": pa.float32(),
+    "FLOAT64": pa.float64(),
+    "STRING": pa.string(),
+    "BOOL8": pa.bool_(),
+    "TIMESTAMP_NTZ": pa.timestamp("ns"),
+}
+
+
+def java_dynamic_param_to_python_literal(ctx, dyn_param, input_plan):
+    """Convert a BodoSQL Java dynamic param expression to a DataFrame library constant."""
+    dyn_param = dyn_param.getIndex()
+    if dyn_param >= len(ctx.dynamic_params_list[0]) or dyn_param >= len(
+        ctx.dynamic_params_list[1]
+    ):
+        raise ValueError(f"Dynamic parameter {dyn_param} not found.")
+
+    column = ctx.dynamic_params_list[0][dyn_param]
+    value = ctx.dynamic_params_list[1][dyn_param]
+    if isinstance(value, np.generic):
+        value = value.item()
+    cdtype = column.getDataType().toString()
+    if cdtype in type_str_to_pa:
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
+        return ConstantExpression(dummy_empty_data, input_plan, value)
+    else:
+        raise NotImplementedError(f"DynamicParam type {cdtype} not supported yet")
+
+
+def java_named_param_to_python_literal(ctx, named_param, input_plan):
+    """Convert a BodoSQL Java named param expression to a DataFrame library constant."""
+    named_param = named_param.getParamName()
+    if (
+        named_param not in ctx.named_params_dict[0]
+        or named_param not in ctx.named_params_dict[1]
+    ):
+        raise ValueError(f"Named parameter {named_param} not found.")
+
+    column = ctx.named_params_dict[0][named_param]
+    value = ctx.named_params_dict[1][named_param]
+    if isinstance(value, np.generic):
+        value = value.item()
+    cdtype = column.getDataType().toString()
+    if cdtype in type_str_to_pa:
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
+        return ConstantExpression(dummy_empty_data, input_plan, value)
+    else:
+        raise NotImplementedError(f"NamedParam type {cdtype} not supported yet")
 
 
 def java_call_to_python_call(ctx, java_call, input_plan):
@@ -360,11 +425,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         parse a formatted string as a timestamp.
 
         Unfortunately we can't call strptime right away, because the given
-        timestamp components could be out of range. We could manully 
+        timestamp components could be out of range. We could manually
         accumulate the components one by one using mod arithmetic to
         calculate the effective timestamp part values, but it would be
         tedious and potentially inefficient.
-        
+
         Therefore we only compute the final year and month values beforehand
         to ensure calendar awareness. Then we use those values with the first
         day of that month to create a timestamp type via strptime. At this point,
@@ -1296,39 +1361,64 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         ),
                     ],
                 )
-        if func_name == "DATEDIFF" and num_operands == 3:
-            # TODO: May need TZ-aware support
+        if func_name == "DATEDIFF" and num_operands in (2, 3):
+            if num_operands == 3:
+                # First operand is a FLAG(unit) interval qualifier from the Java
+                # planner (e.g. FLAG(DAY), FLAG(MONTH)).
+                unit_str = get_java_symbol(java_call.getOperands()[0])
+                unit_str = standardize_java_time_unit(func_name, unit_str).upper()
+                assert unit_str in INTERVAL_UNIT_MAP, (
+                    f"Unsupported DATEDIFF unit: {unit_str}"
+                )
 
-            # First operand is a FLAG(unit) interval qualifier from the Java
-            # planner (e.g. FLAG(DAY), FLAG(MONTH)).
-            unit_str = get_java_symbol(java_call.getOperands()[0])
-            unit_str = standardize_java_time_unit(func_name, unit_str).upper()
-            assert unit_str in INTERVAL_UNIT_MAP, (
-                f"Unsupported DATEDIFF unit: {unit_str}"
-            )
-            # date_expr1 will be subtracted from date_expr2
-            date_expr1 = java_expr_to_python_expr(
-                ctx, java_call.getOperands()[1], input_plan
-            )
-            date_expr2 = java_expr_to_python_expr(
-                ctx, java_call.getOperands()[2], input_plan
+                # date_expr1 will be subtracted from date_expr2
+                date_expr1 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                date_expr2 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[2], input_plan
+                )
+            else:
+                # According to BodoSQL docs:
+                # If only two arguments are provided, the unit should be days.
+                # Also, the order of the dates is reversed compared to the
+                # three argument version (second date is subtracted from first).
+                unit_str = "DAY"
+                date_expr2 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[0], input_plan
+                )
+                date_expr1 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+
+            is_time_unit = unit_str in (
+                "HOUR",
+                "MINUTE",
+                "SECOND",
+                "MILLISECOND",
+                "MICROSECOND",
+                "NANOSECOND",
             )
 
             date1_pa_type = date_expr1.empty_data.iloc[:, 0].dtype.pyarrow_dtype
             date2_pa_type = date_expr2.empty_data.iloc[:, 0].dtype.pyarrow_dtype
-
-            if (
+            date1_has_tz = (
                 pa.types.is_timestamp(date1_pa_type) and date1_pa_type.tz is not None
-            ) or (
+            )
+            date2_has_tz = (
                 pa.types.is_timestamp(date2_pa_type) and date2_pa_type.tz is not None
-            ):
-                raise ValueError(
-                    "TZ-aware input not currently supported in DATEDIFF (C++ backend)"
-                )
+            )
+            date1_precision = (
+                date1_pa_type.unit if pa.types.is_timestamp(date1_pa_type) else "s"
+            )
+            date2_precision = (
+                date2_pa_type.unit if pa.types.is_timestamp(date2_pa_type) else "s"
+            )
 
-            # Only mixing DATE and TIMESTAMP is allowed
+            # We can't mix and match times and dates/timestamps.
+            # Also, the requested unit for time input needs to be a time unit.
             if pa.types.is_time(date1_pa_type) or pa.types.is_time(date2_pa_type):
-                if unit_str in ("YEAR", "QUARTER", "MONTH", "WEEK", "DAY"):
+                if not is_time_unit:
                     raise ValueError(
                         "Unsupported unit for DATEDIFF with TIME input: " + unit_str
                     )
@@ -1338,33 +1428,89 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     raise ValueError(
                         "If a time type is provided both arguments must be time types."
                     )
-            else:
+            # If only one input has a timezone, cast the other to match.
+            # This follows the JIT implementation at
+            # BodoSQL/bodosql/kernels/datetime_array_kernels.py::create_dt_diff_fn_util_overload
+            elif not date1_has_tz and date2_has_tz:
                 if pa.types.is_date(date1_pa_type):
-                    if unit_str in (
-                        "HOUR",
-                        "MINUTE",
-                        "SECOND",
-                        "MILLISECOND",
-                        "MICROSECOND",
-                        "NANOSECOND",
-                    ) or pa.types.is_timestamp(date2_pa_type):
-                        timestamp_empty_data = pd.Series(
-                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                    date_expr1 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr1
+                    )
+                date_expr1 = ArrowScalarFuncExpression(
+                    pd.Series(
+                        dtype=pd.ArrowDtype(
+                            pa.timestamp(date1_precision, tz=date2_pa_type.tz)
                         )
-                        date_expr1 = CastExpression(timestamp_empty_data, date_expr1)
+                    ),
+                    [date_expr1],
+                    "assume_timezone",
+                    (date2_pa_type.tz,),
+                )
+            elif date1_has_tz and not date2_has_tz:
                 if pa.types.is_date(date2_pa_type):
-                    if unit_str in (
-                        "HOUR",
-                        "MINUTE",
-                        "SECOND",
-                        "MILLISECOND",
-                        "MICROSECOND",
-                        "NANOSECOND",
-                    ) or pa.types.is_timestamp(date1_pa_type):
-                        timestamp_empty_data = pd.Series(
-                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                    date_expr2 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr2
+                    )
+                date_expr2 = ArrowScalarFuncExpression(
+                    pd.Series(
+                        dtype=pd.ArrowDtype(
+                            pa.timestamp(date2_precision, tz=date1_pa_type.tz)
                         )
-                        date_expr2 = CastExpression(timestamp_empty_data, date_expr2)
+                    ),
+                    [date_expr2],
+                    "assume_timezone",
+                    (date1_pa_type.tz,),
+                )
+            elif date1_has_tz and date2_has_tz:
+                # Raise an error if timezones don't match, since this is what the JIT side does
+                if date1_pa_type.tz != date2_pa_type.tz:
+                    raise ValueError(
+                        "C++ backend does not currently support DATEDIFF between timestamps with different timezones."
+                    )
+            else:
+                # Only mixing DATE and TIMESTAMP is allowed.
+                # Promote dates to timestamps if needed to unify the types or because a time unit was requested.
+                if pa.types.is_date(date1_pa_type) and (
+                    is_time_unit or pa.types.is_timestamp(date2_pa_type)
+                ):
+                    date_expr1 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr1
+                    )
+                if pa.types.is_date(date2_pa_type) and (
+                    is_time_unit or pa.types.is_timestamp(date1_pa_type)
+                ):
+                    date_expr2 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr2
+                    )
+
+            if date1_has_tz or date2_has_tz:
+                # Due to the above code, both timestamps have timezones here.
+                # Keep in mind that the Arrow datediff functions will internally
+                # call local_timestamp for TZ-aware input.
+                if is_time_unit:
+                    # If we need the difference in terms of time, cast both
+                    # timestamps to UTC, which automatically adjusts for Daylight Savings Time.
+                    # The JIT implementation does this implicitly if a time unit is requested
+                    # by getting the raw timestamp value (stored as UTC) of the TZ-aware input.
+                    date_expr1 = CastExpression(
+                        pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp(date1_precision, tz="UTC"))
+                        ),
+                        date_expr1,
+                    )
+                    date_expr2 = CastExpression(
+                        pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp(date2_precision, tz="UTC"))
+                        ),
+                        date_expr2,
+                    )
+                # Don't convert timezone if we shouldn't get the answer in units of time.
+                # If we do, we could inadvertently cross a day/month/year boundary.
+                # The JIT version directly reads the date parts and thus ignores the timezone
+                # for YEAR/QUARTER/MONTH/WEEK/DAY. However, some test cases like
+                # test_timestamp_tz.py::test_timestamp_tz_datediff[day] appear contradictory
+                # to this rule in that they are intended to test that comparison is always
+                # performed in UTC.
 
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
@@ -3945,6 +4091,21 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return ArrowScalarFuncExpression(
                 int_empty_data, [rtrimmed_expr], "utf8_length", ()
             )
+        elif func_name in ("LTRIM", "RTRIM") and len(op_exprs) in (1, 2):
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            if len(op_exprs) == 2:
+                trim_chars_expr = op_exprs[1]
+                ensure_arg_is_const_expr_of_type(
+                    trim_chars_expr, "trim_chars_expr", (str, pa.binary())
+                )
+                trim_chars = trim_chars_expr.value
+            else:
+                trim_chars = " "
+            return ArrowScalarFuncExpression(
+                src.empty_data, [src], f"utf8_{func_name.lower()}", (trim_chars,)
+            )
         elif func_name == "INSERT" and len(op_exprs) == 4:
             src = op_exprs[0]
             start_expr = op_exprs[1]
@@ -4032,6 +4193,40 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # We use cast to convert timezones.
                 target_timestamp_expr = CastExpression(target_timestamp_empty_data, src)
                 return target_timestamp_expr
+
+    if operator_class_name == "SqlTrimFunction":
+        operands = java_call.getOperands()
+        func_name = op.getName().upper()
+
+        if func_name == "TRIM" and len(operands) == 3:
+            # Snowflake's TRIM accepts 1 or 2 arguments but Calcite will convert it to
+            # a 3-arguments form, including using a space character as the default when
+            # trim characters are not specified.
+            trim_chars_expr = java_expr_to_python_expr(ctx, operands[1], input_plan)
+            src = java_expr_to_python_expr(ctx, operands[2], input_plan)
+            ensure_arg_is_const_expr_of_type(
+                trim_chars_expr, "trim_chars_expr", (str, pa.binary())
+            )
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            # Get which side of the string to TRIM.
+            # Snowflake's TRIM always trims from both sides.
+            # LTRIM and RTRIM are instead mapped to SqlNullPolicyFunctions.
+            side_str = get_java_symbol(operands[0])
+            assert side_str in ("BOTH", "LEADING", "TRAILING")
+
+            # We support LEADING and TRAILING for completeness even
+            # though we don't expect them here.
+            if side_str == "BOTH":
+                arrow_trim_func = "utf8_trim"
+            elif side_str == "LEADING":
+                arrow_trim_func = "utf8_ltrim"
+            elif side_str == "TRAILING":
+                arrow_trim_func = "utf8_rtrim"
+
+            return ArrowScalarFuncExpression(
+                src.empty_data, [src], arrow_trim_func, (trim_chars_expr.value,)
+            )
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()
@@ -4477,8 +4672,24 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
         return expr
 
     if kind.equals(SqlKind.MINUS):
-        out_empty = left.empty_data.iloc[:, 0] - right.empty_data.iloc[:, 0]
-        expr = ArithOpExpression(out_empty, left, right, "__sub__")
+        left_type = left.empty_data.iloc[:, 0]
+        right_type = right.empty_data.iloc[:, 0]
+        left_unsigned = pd.api.types.is_unsigned_integer_dtype(left_type.dtype)
+        right_unsigned = pd.api.types.is_unsigned_integer_dtype(right_type.dtype)
+        left_integer = left_unsigned or pd.api.types.is_signed_integer_dtype(
+            left_type.dtype
+        )
+        right_integer = right_unsigned or pd.api.types.is_signed_integer_dtype(
+            right_type.dtype
+        )
+        if left_integer and right_integer and (left_unsigned or right_unsigned):
+            out_empty = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            left_cast = CastExpression(out_empty, left) if left_unsigned else left
+            right_cast = CastExpression(out_empty, right) if right_unsigned else right
+            expr = ArithOpExpression(out_empty, left_cast, right_cast, "__sub__")
+        else:
+            out_empty = left_type - right_type
+            expr = ArithOpExpression(out_empty, left, right, "__sub__")
         return expr
 
     if kind.equals(SqlKind.TIMES):

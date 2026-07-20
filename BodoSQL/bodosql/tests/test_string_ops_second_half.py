@@ -438,6 +438,26 @@ def mk_broadcasted_string_queries():
                     reason=f"Cannot test {name} until next mini release",
                 ),
             )
+        if tag in [
+            "LPAD-scalar_int-2args",
+            "LPAD-all_scalar-2args",
+            "RPAD-scalar_int-2args",
+            "RPAD-all_scalar-2args",
+            "LPAD-all_scalar",
+            "LEFT_scalar_int",
+            "LEFT_all_scalar",
+            "RIGHT_scalar_int",
+            "RIGHT_all_scalar",
+            "REPEAT_scalar_int",
+            "REPEAT_all_scalar",
+            "REVERSE_vector",
+            "REPLACE_scalar_str_2",
+            "REPLACE_all_scalar",
+            "SPACE_scalar",
+            "INSTR_vector_scalar",
+            "INSTR_all_scalar",
+        ]:
+            marks += (pytest.mark.bodosql_cpp,)
         param = pytest.param(query, id=tag, marks=marks)
         result.append(param)
     return result

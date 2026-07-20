@@ -3,6 +3,7 @@ import operator
 import os
 import tempfile
 import warnings
+from decimal import Decimal
 
 import numba  # noqa TID253
 import numpy as np
@@ -2338,6 +2339,30 @@ def test_series_astype(astype_case):
     _test_equal(
         bodo_out,
         pandas_out,
+        check_pandas_types=False,
+    )
+
+    
+def test_decimal_cmp(index_val):
+    """Test comparison operation on decimal columns."""
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [Decimal("1.1"), Decimal("2.2"), Decimal("3.3")],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            )
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(0):
+        S = df.A > 2.1
+        bodo_S = bdf.A > 2.1
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
         check_pandas_types=False,
     )
 

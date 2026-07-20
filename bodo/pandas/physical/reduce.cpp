@@ -119,13 +119,15 @@ void ReductionFunction::Finalize() {
         arrow_array = array_res.ValueOrDie();
     }
     // Broadcast local reduction from each rank to all other ranks
+    std::shared_ptr<array_info> bodo_array =
+        arrow_array_to_bodo(arrow_array, bodo::BufferPool::DefaultPtr());
     for (int i = 0; i < n_ranks; i++) {
         std::shared_ptr<array_info> send_array =
-            i == rank ? arrow_array_to_bodo(arrow_array,
-                                            bodo::BufferPool::DefaultPtr())
-                      : nullptr;
+            (i == rank) ? bodo_array : nullptr;
+        // Setting ref_arr is needed to ensure that the timezone is preserved
+        // for datetime arrays
         std::shared_ptr<array_info> array =
-            broadcast_array(nullptr, send_array, nullptr, false, i, rank);
+            broadcast_array(bodo_array, send_array, nullptr, false, i, rank);
         std::shared_ptr<arrow::Array> received_arrow_array =
             bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), array,
                                 false /*convert_timedelta_to_int64*/, "",

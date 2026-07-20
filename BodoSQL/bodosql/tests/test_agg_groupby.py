@@ -261,7 +261,7 @@ def test_count_string(bodosql_string_types, memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp   # dataframe are different
+@pytest.mark.bodosql_cpp
 def test_count_binary(bodosql_binary_types, memory_leak_check):
     """test various count queries on binary data."""
     check_query(
@@ -282,7 +282,7 @@ def test_count_binary(bodosql_binary_types, memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp   # dataframe are different
+@pytest.mark.bodosql_cpp
 def test_count_boolean(bodosql_boolean_types, memory_leak_check):
     """test various count queries on boolean data."""
     check_query(
@@ -1216,7 +1216,7 @@ def test_booland_agg_having(memory_leak_check):
 
 
 @pytest.mark.slow
-# @pytest.mark.bodosql_cpp   # aggregations without group by not supported yet
+@pytest.mark.bodosql_cpp
 def test_boolor_agg_output_type(memory_leak_check):
     """Test boolor_agg to verify the output type is boolean"""
     query = """WITH TEMP AS(SELECT boolor_agg(A) as agg_A, B FROM table1 GROUP BY B)
@@ -1327,7 +1327,7 @@ def test_count_tz_aware(memory_leak_check):
 
 @pytest.mark.tz_aware
 @pytest.mark.slow
-# @pytest.mark.bodosql_cpp   # aggregation ANY_VALUE not supported yet
+@pytest.mark.bodosql_cpp
 def test_any_value_tz_aware(memory_leak_check):
     """
     Test any_value on a tz-aware timestamp column

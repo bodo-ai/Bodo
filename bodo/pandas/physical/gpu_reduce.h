@@ -125,7 +125,8 @@ struct GPUReductionFunctionFirst : public GPUReductionFunction {
         : GPUReductionFunction(input_col_idx, {"first"}, {"first"},
                                {GPUReductionType::COMPARISON},
                                make_vector_of_one_nullptr(), dt,
-                               nullptr /* handled specially in Finalize*/) {}
+                               MPI_OP_NULL /* handled specially in Finalize*/) {
+    }
 };
 
 struct GPUReductionFunctionMin : public GPUReductionFunction {

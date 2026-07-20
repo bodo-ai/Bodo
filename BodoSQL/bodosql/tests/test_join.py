@@ -25,6 +25,7 @@ from bodo.tests.utils import (
     temp_env_override,
 )
 from bodo.utils.typing import BodoError
+from bodosql.tests.conftest import fixture_value_is_in, mark_bodosql_cpp_if
 from bodosql.tests.utils import check_query
 
 # Skip unless any join-related files were changed
@@ -335,6 +336,7 @@ def test_nested_and_join(join_dataframes, memory_leak_check):
     )
 
 
+@mark_bodosql_cpp_if(fixture_value_is_in("join_type", {"INNER", "RIGHT"}))
 def test_join_boolean(bodosql_boolean_types, join_type, memory_leak_check):
     """test all possible join types on boolean table"""
 
@@ -503,6 +505,7 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
     )
 
 
+@mark_bodosql_cpp_if(fixture_value_is_in("join_type", "INNER"))
 def test_join_pow(join_type, memory_leak_check):
     """
     Make sure pow() works inside join conditions
