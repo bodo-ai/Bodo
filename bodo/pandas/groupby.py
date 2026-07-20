@@ -179,6 +179,8 @@ class DataFrameGroupBy:
             # that sums column A.
             normalized_func = [
                 GroupbyAggFunc(named_agg.column, named_agg.aggfunc)
+                if hasattr(named_agg, "column")
+                else GroupbyAggFunc(named_agg[0], named_agg[1])
                 for named_agg in kwargs.values()
             ]
         elif is_dict_like(func):
