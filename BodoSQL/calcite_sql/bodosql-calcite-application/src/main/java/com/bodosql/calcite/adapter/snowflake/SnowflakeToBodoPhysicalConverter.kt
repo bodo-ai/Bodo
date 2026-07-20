@@ -13,6 +13,7 @@ import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
@@ -69,10 +70,30 @@ class SnowflakeToBodoPhysicalConverter(
 
     override fun loggingTitle() = "IO TIMING"
 
+    /**
+     * Find the SnowflakeRel in the input chain, traversing through BodoPhysical nodes
+     * and CachedSubPlanBase bodies inserted by covering expression caching.
+     */
+    private fun findSnowflakeRel(node: RelNode): SnowflakeRel =
+        findSnowflakeRelOrNull(node)
+            ?: throw IllegalStateException("Cannot find SnowflakeRel in input chain")
+
+    private fun findSnowflakeRelOrNull(node: RelNode): SnowflakeRel? {
+        if (node is SnowflakeRel) return node
+        if (node is CachedSubPlanBase) {
+            return findSnowflakeRelOrNull(node.cachedPlan.plan)
+        }
+        for (input in node.inputs) {
+            val result = findSnowflakeRelOrNull(input)
+            if (result != null) return result
+        }
+        return null
+    }
+
     override fun nodeDetails() =
         (
             if (isSimpleWholeTableRead()) {
-                getTableName(input as SnowflakeRel)
+                getTableName(findSnowflakeRel(input))
             } else {
                 getSnowflakeSQL()
             }
@@ -186,7 +207,7 @@ class SnowflakeToBodoPhysicalConverter(
         val tableName = getTableName(tableScan)
         val schemaName = getSchemaName(tableScan)
         val databaseName = getDatabaseName(tableScan)
-        val relInput = input as SnowflakeRel
+        val relInput = findSnowflakeRel(input)
         val args =
             listOf(
                 StringLiteral(tableName),
@@ -327,7 +348,7 @@ class SnowflakeToBodoPhysicalConverter(
         // node and run them after the read. Will deal with pushing
         // them into the IO node later.
         val sql = getSnowflakeSQL()
-        val relInput = (skipRuntimeJoinFilters()) as SnowflakeRel
+        val relInput = findSnowflakeRel(skipRuntimeJoinFilters())
 
         val passTableInfo = canUseOptimizedReadSqlPath(relInput)
 

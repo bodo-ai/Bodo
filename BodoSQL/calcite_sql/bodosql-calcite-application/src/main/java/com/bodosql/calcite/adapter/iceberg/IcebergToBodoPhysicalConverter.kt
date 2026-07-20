@@ -13,6 +13,7 @@ import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataQuery
 import com.bodosql.calcite.traits.BatchingProperty
@@ -65,7 +66,27 @@ class IcebergToBodoPhysicalConverter(
     override fun loggingTitle() = "ICEBERG TIMING"
 
     // TODO: What to do with this function?
-    override fun nodeDetails(): String = getTableName(input as IcebergRel)
+    override fun nodeDetails(): String = getTableName(findIcebergRel(input))
+
+    /**
+     * Find the IcebergRel in the input chain, traversing through BodoPhysical nodes
+     * and CachedSubPlanBase bodies inserted by covering expression caching.
+     */
+    private fun findIcebergRel(node: RelNode): IcebergRel =
+        findIcebergRelOrNull(node)
+            ?: throw IllegalStateException("Cannot find IcebergRel in input chain")
+
+    private fun findIcebergRelOrNull(node: RelNode): IcebergRel? {
+        if (node is IcebergRel) return node
+        if (node is CachedSubPlanBase) {
+            return findIcebergRelOrNull(node.cachedPlan.plan)
+        }
+        for (input in node.inputs) {
+            val result = findIcebergRelOrNull(input)
+            if (result != null) return result
+        }
+        return null
+    }
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         // TODO: Can simplify now?
@@ -158,7 +179,7 @@ class IcebergToBodoPhysicalConverter(
      * Generate the code required to read from Iceberg.
      */
     private fun generateReadExpr(ctx: BodoPhysicalRel.BuildContext): Expr.Call {
-        val relInput = input as IcebergRel
+        val relInput = findIcebergRel(input)
         val flattenedInfo = flattenIcebergTree()
         val cols = flattenedInfo.colNames
         val filters = flattenedInfo.filters
@@ -259,7 +280,7 @@ class IcebergToBodoPhysicalConverter(
 
     private fun flattenIcebergTree(): FlattenedIcebergInfo {
         if (cachedIcebergFlattenedInfo == null) {
-            val node = input as IcebergRel
+            val node = findIcebergRel(input)
             val visitor =
                 object : RelVisitor() {
                     // Initialize all columns to be in the original location.
