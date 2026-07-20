@@ -2357,7 +2357,7 @@ def test_series_astype(astype_case):
         check_pandas_types=False,
     )
 
-    
+
 def test_decimal_cmp(index_val):
     """Test comparison operation on decimal columns."""
     df = pd.DataFrame(
