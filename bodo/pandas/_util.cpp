@@ -129,6 +129,30 @@ extractValue(const duckdb::Value &value) {
             auto dur_type = arrow::duration(arrow::TimeUnit::NANO);
             return arrow::MakeScalar(dur_type, total_nanos).ValueOrDie();
         } break;
+        case duckdb::LogicalTypeId::DECIMAL: {
+            // Similar to DuckDB's DECIMAL Value creation function here:
+            // https://github.com/bodo-ai/Bodo/blob/b6831ac9551f6cbb7fd6a4a50bb281021d0265e7/bodo/pandas/vendor/duckdb/src/common/types/value.cpp#L606
+            uint8_t width = duckdb::DecimalType::GetWidth(value.type());
+            uint8_t scale = duckdb::DecimalType::GetScale(value.type());
+            switch (value.type().InternalType()) {
+                case duckdb::PhysicalType::INT128: {
+                    duckdb::hugeint_t val =
+                        value.GetValueUnsafe<duckdb::hugeint_t>();
+                    return arrow::MakeScalar(
+                               arrow::decimal128(width, scale),
+                               arrow::Decimal128(val.upper, val.lower))
+                        .ValueOrDie();
+                } break;
+                default: {
+                    // TODO[BSE-5532]: Handle other physical types for DECIMAL
+                    throw std::runtime_error(
+                        "Unhandled DuckDB physical type for DECIMAL Value: " +
+                        std::to_string(
+                            static_cast<int>(value.type().InternalType())));
+                } break;
+            }
+        } break;
+
         default:
             throw std::runtime_error("extractValue unhandled type: " +
                                      std::to_string(static_cast<int>(type)));
