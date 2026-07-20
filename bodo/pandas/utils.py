@@ -1672,6 +1672,15 @@ def scalarOutputNACheck(out, dtype):
     return out
 
 
+def getUnusedColumnName(columns):
+    index = 0
+    while True:
+        attempt = "bodo" + str(index)
+        if attempt not in columns:
+            return attempt
+        index += 1
+
+
 PANDAS_ARROW_TYPE_MAP = {
     # integer kinds (numpy/pandas)
     "int8": pa.int8(),
