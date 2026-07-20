@@ -20,7 +20,11 @@ pytestmark = pytest_slow_unless_codegen
 @pytest.fixture(
     params=[
         pytest.param("UNION", id="union_op"),
-        pytest.param("UNION DISTINCT", id="union_distinct", marks=pytest.mark.slow),
+        pytest.param(
+            "UNION DISTINCT",
+            id="union_distinct",
+            marks=pytest.mark.slow,
+        ),
         pytest.param("UNION ALL", id="union_all"),
     ]
 )
@@ -55,9 +59,13 @@ def except_cmds(request) -> str:
 
 @pytest.fixture(
     params=[
-        pytest.param("UNION", id="union_op"),
-        pytest.param("UNION DISTINCT", id="union_distinct", marks=pytest.mark.slow),
-        pytest.param("UNION ALL", id="union_all"),
+        pytest.param("UNION", id="union_op", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            "UNION DISTINCT",
+            id="union_distinct",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
+        pytest.param("UNION ALL", id="union_all", marks=pytest.mark.bodosql_cpp),
         pytest.param("INTERSECT", id="intersect_op"),
         pytest.param(
             "INTERSECT DISTINCT", id="intersect_distinct", marks=pytest.mark.slow
@@ -414,6 +422,7 @@ def test_set_ops_binary_cols(bodosql_binary_types, set_ops_cmds, memory_leak_che
 # ===== String Restrictions
 
 
+@pytest.mark.bodosql_cpp
 def test_union_string_restrictions(bodosql_string_types, union_cmds, memory_leak_check):
     """
     Test that UNION [ALL/DISTINCT] works for string columns when used with restrictions
@@ -480,6 +489,7 @@ def test_except_string_restrictions(
 # ===== Timezone-Aware Cols
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_union_tz_aware_cols(union_cmds, representative_tz, memory_leak_check):
     """

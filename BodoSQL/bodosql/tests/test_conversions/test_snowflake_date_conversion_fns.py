@@ -50,9 +50,15 @@ def test_fn(request):
 
 @pytest.fixture(
     params=[
-        pytest.param("DATETIME_STRINGS", id="valid_datetime_strings"),
+        pytest.param(
+            "DATETIME_STRINGS",
+            id="valid_datetime_strings",
+            marks=pytest.mark.bodosql_cpp,
+        ),
         pytest.param("DIGIT_STRINGS", id="valid_digit_strings"),
-        pytest.param("TIMESTAMPS", id="valid_timestamps"),
+        pytest.param(
+            "TIMESTAMPS", id="valid_timestamps", marks=pytest.mark.bodosql_cpp
+        ),
     ]
 )
 def date_casting_input_type(request):
@@ -563,6 +569,7 @@ _to_timestamp_timestamp_data = [
             None,
         ),
         id="naive_timestamp",
+        marks=pytest.mark.bodosql_cpp,
     ),
     pytest.param(
         (
@@ -588,6 +595,7 @@ _to_timestamp_timestamp_data = [
             "Australia/Sydney",
         ),
         id="tz_timestamp",
+        marks=pytest.mark.bodosql_cpp,
     ),
     pytest.param(
         (
@@ -612,6 +620,7 @@ _to_timestamp_timestamp_data = [
             None,
         ),
         id="date",
+        marks=pytest.mark.bodosql_cpp,
     ),
 ]
 
@@ -719,6 +728,7 @@ def test_to_timestamp_non_numeric(
                 "",
             ),
             id="integers-no_scale",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (

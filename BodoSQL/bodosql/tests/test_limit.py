@@ -91,6 +91,7 @@ def test_fetch(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_top(basic_df, memory_leak_check):

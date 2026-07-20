@@ -191,12 +191,16 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
                 arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
             return arrow::MakeNullScalar(timestamp_type);
         } break;
+        case duckdb::LogicalTypeId::BLOB: {
+            auto binary_type = arrow::binary();
+            return arrow::MakeNullScalar(binary_type);
+        } break;
         case duckdb::LogicalTypeId::SQLNULL: {
             return arrow::MakeNullScalar(arrow::null());
         } break;
         default:
             throw std::runtime_error(
-                "getDefaultValueForDuckdbValueType unhandled type." +
+                "getDefaultValueForDuckdbValueType unhandled type: " +
                 std::to_string(static_cast<int>(type)));
     }
 }

@@ -97,6 +97,7 @@ def test_select_multi_table(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_select_multi_table_order_by(join_dataframes, memory_leak_check):
@@ -149,6 +150,7 @@ def test_select_all_datetime(bodosql_datetime_types, memory_leak_check):
     check_query(query, bodosql_datetime_types, None, use_duckdb=True)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_select_all_interval(bodosql_interval_types, memory_leak_check):
@@ -180,6 +182,7 @@ def test_select_all_boolean(bodosql_boolean_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_select_all_string(bodosql_string_types, memory_leak_check):
@@ -211,6 +214,7 @@ def test_select_expand_literal(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_select_literal_no_table(basic_df, memory_leak_check):
@@ -285,6 +289,7 @@ def test_select_from_simple(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_nested_select_from(join_dataframes, memory_leak_check):
@@ -316,6 +321,7 @@ def test_nested_select_from(join_dataframes, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
 def test_heavily_nested_select_from(join_dataframes, memory_leak_check):

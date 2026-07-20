@@ -80,6 +80,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             pd.Series([12, 1, 9, 20, 23]),
             None,
             id="valid-hour-date_part",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "minute",
@@ -87,6 +88,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             pd.Series([30, 2, 59, 45, 50]),
             None,
             id="valid-minute-regular",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "second",
@@ -94,6 +96,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             pd.Series([15, 3, 0, 1, 59]),
             None,
             id="valid-second-date_part",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "millisecond",
@@ -101,6 +104,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             pd.Series([0, 4, 100, 123, 500]),
             None,
             id="valid-millisecond-extract",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "microsecond",
@@ -108,6 +112,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             pd.Series([0, 0, 250, 456, 0]),
             None,
             id="valid-microsecond-regular",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "nanosecond",
@@ -115,6 +120,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             pd.Series([0, 0, 0, 789, 999]),
             None,
             id="valid-nanosecond-extract",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "day",

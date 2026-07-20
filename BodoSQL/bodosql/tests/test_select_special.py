@@ -3,10 +3,12 @@ Test correctness of special SELECT operators
 """
 
 import pandas as pd
+import pytest
 
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.bodosql_cpp
 def test_exclude(memory_leak_check):
     """
     Test selecting all columns except some excluded names

@@ -37,6 +37,7 @@ def project_merge_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_project_merge(simple_join_fixture, project_merge_queries, memory_leak_check):
     """checks for bugs with project_merge"""

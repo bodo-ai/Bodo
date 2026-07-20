@@ -40,6 +40,7 @@ def test_spark_name_matching_invalid(memory_leak_check):
             )
 
 
+@pytest.mark.bodosql_cpp
 def test_spark_name_matching_valid(memory_leak_check):
     """
     Same setup as test_spark_name_matching_invalid but with a correct

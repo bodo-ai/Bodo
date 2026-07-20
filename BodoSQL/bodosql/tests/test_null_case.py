@@ -7,6 +7,8 @@ import pytest
 
 from bodosql.tests.utils import check_query
 
+pytestmark = pytest.mark.bodosql_cpp
+
 
 @pytest.mark.slow
 def test_null_then(bodosql_nullable_numeric_types, memory_leak_check):

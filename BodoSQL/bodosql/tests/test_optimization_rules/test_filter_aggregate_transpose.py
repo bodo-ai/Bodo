@@ -45,6 +45,7 @@ def filter_aggregate_transpose_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_filter_aggregate_transpose(basic_df, filter_aggregate_transpose_queries):
     """checks for bugs with filter aggregate transpose"""
