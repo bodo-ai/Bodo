@@ -1837,6 +1837,21 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
             // on your convention)
             return cudf::data_type{type_id::INT64};
 
+        case LogicalTypeId::DECIMAL: {
+            uint8_t precision = 0;
+            uint8_t scale = 0;
+
+            dtype.GetDecimalProperties(precision, scale);
+
+            if (precision <= 0 || precision > 38) {
+                throw std::runtime_error(
+                    "duckdbTypeToArrow invalid DECIMAL precision " +
+                    std::to_string(precision));
+            }
+
+            return cudf::data_type{type_id::DECIMAL128, scale};
+        } break;
+
         // Fallback for unknown/unsupported types
         default:
             throw std::runtime_error(

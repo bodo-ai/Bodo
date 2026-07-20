@@ -1254,14 +1254,14 @@ def test_set_df_column_arith(datapath, index_val):
 
 
 @pytest.mark.parametrize(
-    "arith_ops",
+    "arith_op",
     [
         pytest.param(operator.add, id="add"),
         pytest.param(operator.sub, id="sub"),
         pytest.param(operator.mul, id="mul"),
     ],
 )
-def test_set_df_column_arith_decimal(datapath, arith_ops):
+def test_set_df_column_arith_decimal(datapath, arith_op):
     """Test setting a dataframe column with a Series function of the same dataframe."""
 
     with assert_executed_plan_count(0):
@@ -1273,9 +1273,9 @@ def test_set_df_column_arith_decimal(datapath, arith_ops):
         )
 
         bdf = bd.from_pandas(df)
-        bdf["D"] = arith_ops(bdf["A"], bdf["B"])
+        bdf["D"] = arith_op(bdf["A"], bdf["B"])
         pdf = df.copy()
-        pdf["D"] = arith_ops(pdf["A"], pdf["B"])
+        pdf["D"] = arith_op(pdf["A"], pdf["B"])
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
