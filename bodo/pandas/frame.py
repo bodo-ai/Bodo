@@ -1555,7 +1555,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
 
     @check_args_fallback(unsupported="all")
     def copy(self, deep: bool = True) -> BodoDataFrame:
-        # breakpoint()
         if self._exec_state == ExecState.PLAN:
             return wrap_plan(self._plan)
         return super().copy(deep)

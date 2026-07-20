@@ -1898,6 +1898,21 @@ def groupby_agg_df(request):
             },
             id="func_kwargs",
         ),
+        pytest.param(
+            None,
+            {
+                "count_B": pd.NamedAgg("B", "count"),
+            },
+            id="agg_on_key_col_only",
+        ),
+        pytest.param(
+            None,
+            {
+                "count_B": pd.NamedAgg("B", "count"),
+                "mean_A": pd.NamedAgg("A", "mean"),
+            },
+            id="agg_on_key_col",
+        ),
     ],
 )
 def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
