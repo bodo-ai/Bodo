@@ -83,6 +83,7 @@ def test_bind_variable_string_offset(basic_df, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_string_function_cast(
     bodosql_string_types, int_named_params, memory_leak_check
 ):
@@ -104,6 +105,7 @@ def test_named_param_string_function_cast(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_bind_variable_string_function_cast(
     bodosql_string_types, int_named_params, memory_leak_check
 ):

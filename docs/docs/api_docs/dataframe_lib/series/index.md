@@ -141,6 +141,11 @@ Bodo DataFrames supports Pandas Series methods and accessors that are listed bel
 
 ---
 
+## Data type manipulation
+- ['bodo.pandas.BodoSeries.astype'][bodoseriesastype]
+
+---
+
 ## String handling
 
 - [`bodo.pandas.BodoSeries.str.capitalize`][bodoseriesstrcapitalize]
@@ -214,6 +219,7 @@ Bodo DataFrames supports Pandas Series methods and accessors that are listed bel
 [bodoseriesaiquerys3vectors]: ../series/ai/query_s3_vectors.md
 
 
+[bodoseriesastype]: https://pandas.pydata.org/docs/reference/api/pandas.Series.astype.html
 [bodoseriesstrcapitalize]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.capitalize.html
 [bodoseriesstrcasefold]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.casefold.html
 [bodoseriesstrcenter]: https://pandas.pydata.org/docs/reference/api/pandas.Series.str.center.html

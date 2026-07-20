@@ -30,6 +30,7 @@ def generate_comparison_filter(comparison_op, A, B):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_int_compare(
     bodosql_nullable_numeric_types,
     spark_info,
@@ -58,6 +59,7 @@ def test_named_param_int_compare(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_bind_variable_int_compare(
     bodosql_nullable_numeric_types,
     comparison_ops,
@@ -90,6 +92,7 @@ def test_bind_variable_int_compare(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_float_compare(
     bodosql_numeric_types,
     spark_info,
@@ -118,6 +121,7 @@ def test_named_param_float_compare(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_bind_variable_float_compare(
     bodosql_numeric_types,
     comparison_ops,
@@ -149,6 +153,7 @@ def test_bind_variable_float_compare(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_named_param_string_compare(
     bodosql_string_types,
     spark_info,
@@ -176,6 +181,7 @@ def test_named_param_string_compare(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_bind_variable_string_compare(
     bodosql_string_types,
     comparison_ops,
@@ -208,6 +214,7 @@ def test_bind_variable_string_compare(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_datetime_compare(
     bodosql_datetime_types,
     spark_info,
@@ -236,6 +243,7 @@ def test_named_param_datetime_compare(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_bind_variable_datetime_compare(
     bodosql_datetime_types,
     comparison_ops,

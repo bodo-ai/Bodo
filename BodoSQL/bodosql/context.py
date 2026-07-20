@@ -727,7 +727,13 @@ class BodoSQLContext:
             # Keeps track of join ids and their join filter key locations for join
             # filter translation during conversion to Python plan.
             self.join_filter_info = {}
+            # Temporarily monkey-patch so java_plan_to_python_plan
+            # can see dynamic and named params.
+            self.named_params_dict = (java_named_params_map, named_params_dict)
+            self.dynamic_params_list = (java_params_array, dynamic_params_list)
             plan = java_plan_to_python_plan(self, java_plan)
+            del self.named_params_dict
+            del self.dynamic_params_list
             if isinstance(plan, self.NewTable):
                 out = bodo.pandas.plan.execute_plan(
                     plan.internal_plan, optimize=False, use_sql_rules=True

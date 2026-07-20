@@ -31,6 +31,7 @@ def filter_into_join_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_filter_into_join(simple_join_fixture, filter_into_join_queries):
     """checks for bugs with the Filter into Join rule"""

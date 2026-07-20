@@ -41,6 +41,7 @@ def timedelta_equivalent_values(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_timestamp_literals(basic_df, timestamp_literal_strings, memory_leak_check):
     """
     tests that timestamp literals are correctly parsed by BodoSQL
@@ -62,6 +63,7 @@ def test_timestamp_literals(basic_df, timestamp_literal_strings, memory_leak_che
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_timestamp_literal_pd_error(basic_df, memory_leak_check):
     """This is a specific test case that is parsed correctly by calcite, but generates a runtime pandas error.
     If we want to support this, it'll probably be a quicker fix then the other ones
@@ -155,6 +157,7 @@ def test_timestamptz_literal(basic_df, memory_leak_check):
         )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_date_literal(basic_df, memory_leak_check):
     """
@@ -175,6 +178,7 @@ def test_date_literal(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_time_literal(basic_df, memory_leak_check):
     """
@@ -380,6 +384,7 @@ def test_interval_literals_addition(interval_addition_values, memory_leak_check)
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_boolean_literals(basic_df, memory_leak_check):
     """
     tests that boolean literals are correctly parsed by BodoSQL
@@ -401,6 +406,7 @@ def test_boolean_literals(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_boolean_literals_case_insensitivity(basic_df, memory_leak_check):
     """
@@ -423,6 +429,7 @@ def test_boolean_literals_case_insensitivity(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_string_literals(basic_df, memory_leak_check):
     """
     tests that string literals are correctly parsed by BodoSQL
@@ -467,6 +474,7 @@ def test_binary_literals(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_integer_literals(basic_df, memory_leak_check):
     """
@@ -488,6 +496,7 @@ def test_integer_literals(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_float_literals(basic_df, memory_leak_check):
     """
@@ -509,6 +518,7 @@ def test_float_literals(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_timestamp_null_literal(basic_df, memory_leak_check):
     """
@@ -530,6 +540,7 @@ def test_timestamp_null_literal(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_boolean_null_literals(bodosql_boolean_types, memory_leak_check):
     """
     tests that boolean literals are correctly parsed by BodoSQL
@@ -599,6 +610,7 @@ def test_integer_null_literals(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_backslash_literals(memory_leak_check):
     """
     tests that integer literals are correctly parsed by BodoSQL

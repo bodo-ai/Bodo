@@ -31,6 +31,7 @@ def filter_merge_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_filter_merge(basic_df, filter_merge_queries):
     """checking for alias bugs with filter_merge"""

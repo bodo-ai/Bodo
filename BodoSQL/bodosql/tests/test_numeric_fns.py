@@ -953,14 +953,23 @@ def test_div0null_scalars(df, ans, request):
 @pytest.mark.parametrize(
     "values, expected_output",
     [
-        pytest.param(["1"], 1, id="int", marks=pytest.mark.slow),
-        pytest.param(["1.0"], 1, id="float"),
+        pytest.param(
+            ["1"], 1, id="int", marks=[pytest.mark.slow, pytest.mark.bodosql_cpp]
+        ),
+        pytest.param(["1.0"], 1, id="float", marks=pytest.mark.bodosql_cpp),
         pytest.param(
             ["1.5", "1", "0"], 2, id="float_with_scale", marks=pytest.mark.slow
         ),
-        pytest.param(["'1.23456789'"], 1, id="str", marks=pytest.mark.slow),
+        pytest.param(
+            ["'1.23456789'"],
+            1,
+            id="str",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
         pytest.param(["'1.23456789'", "5", "4"], 1.2346, id="str_with_scale"),
-        pytest.param(["NULL"], None, id="null", marks=pytest.mark.slow),
+        pytest.param(
+            ["NULL"], None, id="null", marks=[pytest.mark.slow, pytest.mark.bodosql_cpp]
+        ),
     ],
 )
 @pytest.mark.parametrize(

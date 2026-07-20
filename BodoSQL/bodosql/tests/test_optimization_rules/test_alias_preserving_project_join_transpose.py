@@ -44,6 +44,7 @@ def alias_preserving_project_join_transpose_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_alias_preserving_project_join_transpose(
     simple_join_fixture, alias_preserving_project_join_transpose_queries

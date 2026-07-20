@@ -73,10 +73,12 @@ valid_bool_params = [
     pytest.param(
         pd.DataFrame({"A": pd.Series([1, 0, 2, 0, None, -2, -400] * 3, dtype="Int64")}),
         id="valid_to_boolean_ints",
+        marks=pytest.mark.bodosql_cpp,
     ),
     pytest.param(
         pd.DataFrame({"A": [1.1, 0.0, None, 0.1, 0, -2, -400] * 3}),
         id="valid_to_boolean_floats",
+        marks=pytest.mark.bodosql_cpp,
     ),
 ]
 
@@ -92,6 +94,7 @@ invalid_bool_params = [
     pytest.param(
         pd.DataFrame({"A": [1.1, 0.0, np.inf, 0.1, np.nan, -2, -400] * 3}),
         id="invalid_to_boolean_floats",
+        marks=pytest.mark.bodosql_cpp,
     ),
 ]
 
@@ -302,6 +305,7 @@ def to_char_test_dfs(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func",
     [
@@ -346,6 +350,7 @@ def test_to_char_cols(to_char_test_dfs, func, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func",
     [
@@ -411,6 +416,7 @@ def test_tz_aware_datetime_to_char(tz_aware_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_timestamp_to_char(memory_leak_check):
     """simplest test for TO_CHAR on timezone-naive timestamps"""
     query = "SELECT TO_CHAR(A) as A from table1"
@@ -435,6 +441,7 @@ def test_timestamp_to_char(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_date_to_char(memory_leak_check):
     """simplest test for TO_CHAR on date inputs"""
     query = "SELECT TO_CHAR(A) as A from table1"
@@ -503,6 +510,7 @@ def test_to_char_datetime_format_str(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -787,6 +795,7 @@ def to_double_equiv(arr):
     return pd.Series(out_arr, dtype=pd.ArrowDtype(pa.float64()))
 
 
+@pytest.mark.bodosql_cpp
 def test_to_double_valid_cols(to_double_valid_test_dfs, memory_leak_check):
     df = to_double_valid_test_dfs
     query = "SELECT TO_DOUBLE(a) FROM table1"
@@ -825,6 +834,7 @@ def test_to_double_invalid_cols(to_double_invalid_test_dfs):
             bc.sql(query)
 
 
+@pytest.mark.bodosql_cpp
 def test_to_double_scalars(memory_leak_check):
     df = pd.DataFrame(
         {
@@ -897,6 +907,7 @@ def test_try_to_double_cols(to_double_all_test_dfs, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_try_to_double_scalars():
     df = pd.DataFrame(
         {

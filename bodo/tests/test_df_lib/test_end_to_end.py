@@ -3,6 +3,7 @@ import operator
 import os
 import tempfile
 import warnings
+from decimal import Decimal
 
 import numba  # noqa TID253
 import numpy as np
@@ -2270,6 +2271,109 @@ def test_series_cmp_binops(datapath, index_val):
     with assert_executed_plan_count(0):
         S = df["A"] + 1 > df["C"].sum()
         bodo_S = bdf["A"] + 1 > bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (pd.Series([1, 2, 3], dtype="int64"), "float64"),
+            id="int_float",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series([1.9, -2.1, 3.0], dtype="float64"), "int64"),
+            id="float_int",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series([1, 0, 2], dtype="int64"), "bool"),
+            id="int_bool",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series([True, False, True], dtype="bool"), "int64"),
+            id="bool_int",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series(["1", "2", "3"], dtype="object"), "int64"), id="str_int_valid"
+        ),
+        pytest.param(
+            (pd.Series(["1.5", "2.0", "-3.2"], dtype="object"), "float64"),
+            id="str_float_valid",
+        ),
+        pytest.param(
+            (pd.Series(["2020-01-01", "2021-12-31"], dtype="object"), "datetime64[ns]"),
+            id="str_datetime",
+        ),
+        pytest.param(
+            (pd.Series(pd.date_range("2020-01-01", periods=2)), "object"),
+            id="datetime_str",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series(["a", "1"], dtype="object"), "int64"), id="str_int_invalid"
+        ),
+    ]
+)
+def astype_case(request):
+    """
+    Fixture that yields tuples:
+      (source_series, target_dtype)
+    """
+    return request.param
+
+
+def test_series_astype(astype_case):
+    pandas_series, target_dtype = astype_case
+    bodo_series = bd.Series(pandas_series)
+
+    pandas_raised = False
+    try:
+        pandas_out = pandas_series.astype(target_dtype)
+    except Exception:
+        pandas_raised = True
+
+    bodo_raised = False
+    try:
+        bodo_out = bodo_series.astype(target_dtype)
+        bodo_out.execute_plan()
+    except Exception:
+        bodo_raised = True
+
+    assert bodo_raised == pandas_raised
+    if bodo_raised:
+        return
+
+    _test_equal(
+        bodo_out,
+        pandas_out,
+        check_pandas_types=False,
+    )
+
+    
+def test_decimal_cmp(index_val):
+    """Test comparison operation on decimal columns."""
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [Decimal("1.1"), Decimal("2.2"), Decimal("3.3")],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            )
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(0):
+        S = df.A > 2.1
+        bodo_S = bdf.A > 2.1
 
     _test_equal(
         bodo_S.execute_plan(),

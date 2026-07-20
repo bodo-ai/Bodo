@@ -11,6 +11,7 @@ from bodosql.tests.utils import check_query
 import bodo  # noqa
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_simple(memory_leak_check):
     dataframe_dict = {"TABLE1": pd.DataFrame({"A": [1, 2, 3]})}

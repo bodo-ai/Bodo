@@ -180,6 +180,7 @@ def test_date_cast_from_date(to_type, expected, memory_leak_check):
             "DAYOFWEEKISO",
             pd.Series([5, None, 5, 7, 6], dtype=pd.Int32Dtype()),
             id="valid-dayofweekiso-regular",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "hour",
