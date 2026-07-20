@@ -4081,6 +4081,21 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return ArrowScalarFuncExpression(
                 int_empty_data, [rtrimmed_expr], "utf8_length", ()
             )
+        elif func_name in ("LTRIM", "RTRIM") and len(op_exprs) in (1, 2):
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            if len(op_exprs) == 2:
+                trim_chars_expr = op_exprs[1]
+                ensure_arg_is_const_expr_of_type(
+                    trim_chars_expr, "trim_chars_expr", (str, pa.binary())
+                )
+                trim_chars = trim_chars_expr.value
+            else:
+                trim_chars = " "
+            return ArrowScalarFuncExpression(
+                src.empty_data, [src], f"utf8_{func_name.lower()}", (trim_chars,)
+            )
         elif func_name == "INSERT" and len(op_exprs) == 4:
             src = op_exprs[0]
             start_expr = op_exprs[1]
@@ -4168,6 +4183,40 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # We use cast to convert timezones.
                 target_timestamp_expr = CastExpression(target_timestamp_empty_data, src)
                 return target_timestamp_expr
+
+    if operator_class_name == "SqlTrimFunction":
+        operands = java_call.getOperands()
+        func_name = op.getName().upper()
+
+        if func_name == "TRIM" and len(operands) == 3:
+            # Snowflake's TRIM accepts 1 or 2 arguments but Calcite will convert it to
+            # a 3-arguments form, including using a space character as the default when
+            # trim characters are not specified.
+            trim_chars_expr = java_expr_to_python_expr(ctx, operands[1], input_plan)
+            src = java_expr_to_python_expr(ctx, operands[2], input_plan)
+            ensure_arg_is_const_expr_of_type(
+                trim_chars_expr, "trim_chars_expr", (str, pa.binary())
+            )
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            # Get which side of the string to TRIM.
+            # Snowflake's TRIM always trims from both sides.
+            # LTRIM and RTRIM are instead mapped to SqlNullPolicyFunctions.
+            side_str = get_java_symbol(operands[0])
+            assert side_str in ("BOTH", "LEADING", "TRAILING")
+
+            # We support LEADING and TRAILING for completeness even
+            # though we don't expect them here.
+            if side_str == "BOTH":
+                arrow_trim_func = "utf8_trim"
+            elif side_str == "LEADING":
+                arrow_trim_func = "utf8_ltrim"
+            elif side_str == "TRAILING":
+                arrow_trim_func = "utf8_rtrim"
+
+            return ArrowScalarFuncExpression(
+                src.empty_data, [src], arrow_trim_func, (trim_chars_expr.value,)
+            )
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()
