@@ -5084,7 +5084,7 @@ def is_int_type(java_type):
 
 
 def is_float_type(java_type):
-    """Check if a Calcite type is an float type."""
+    """Check if a Calcite type is a float type."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     type_name = java_type.getSqlTypeName()
     return type_name.equals(SqlTypeName.FLOAT) or type_name.equals(SqlTypeName.DOUBLE)
