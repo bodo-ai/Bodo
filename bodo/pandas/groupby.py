@@ -613,10 +613,14 @@ def _groupby_agg_plan(
     pandas_name = kwargs.pop("pandas_name", func)
     grouped_selection = grouped.selection_for_plan
 
-    added_columns = []
+    grouped_obj = grouped._obj
+
+    # We deal with aggregations on key columns by duplicating the key
+    # column in the copy of the dataframe that we created in
+    # dataframe.groupby.
     if isinstance(grouped, DataFrameGroupBy):
 
-        def fix_agg(agg, keys, grouped_selection, df, added_columns):
+        def fix_agg(agg, keys, grouped_selection, df):
             if (
                 not isinstance(agg, pd.core.groupby.generic.NamedAgg)
                 and isinstance(agg, tuple)
@@ -626,7 +630,6 @@ def _groupby_agg_plan(
             if isinstance(agg, pd.core.groupby.generic.NamedAgg):
                 if agg.column in keys:
                     temp_col = getUnusedColumnName(df)
-                    added_columns.append(temp_col)
                     df[temp_col] = df[agg.column]
                     grouped_selection.append(temp_col)
                     return pd.core.groupby.generic.NamedAgg(
@@ -635,11 +638,11 @@ def _groupby_agg_plan(
             return agg
 
         kwargs = {
-            k: fix_agg(v, grouped._keys, grouped_selection, grouped._obj, added_columns)
+            k: fix_agg(v, grouped._keys, grouped_selection, grouped_obj)
             for k, v in kwargs.items()
         }
 
-    zero_size_df = _empty_like(grouped._obj)
+    zero_size_df = _empty_like(grouped_obj)
 
     # Convert to Pandas types to avoid gaps in Arrow types of Pandas <3
     zero_size_df_pandas = (
@@ -648,13 +651,6 @@ def _groupby_agg_plan(
         else zero_size_df
     )
 
-    todd0 = zero_size_df_pandas.groupby(grouped._keys, as_index=grouped._as_index)
-    todd1 = todd0[
-        grouped_selection[0]
-        if isinstance(grouped, SeriesGroupBy)
-        else grouped_selection
-    ]
-    todd1.agg(pandas_name, *args, **kwargs)
     empty_data_pandas = zero_size_df_pandas.groupby(
         grouped._keys, as_index=grouped._as_index
     )[
@@ -697,12 +693,12 @@ def _groupby_agg_plan(
             else None
         )
         col_idx = (
-            grouped._obj.columns.get_loc(func.in_col) if func.func_name != "size" else 0
+            grouped_obj.columns.get_loc(func.in_col) if func.func_name != "size" else 0
         )
         exprs.append(
             AggregateExpression(
                 out_type,
-                grouped._obj._plan,
+                grouped_obj._plan,
                 func_name,
                 cfunc_wrapper,
                 [col_idx],
@@ -711,9 +707,6 @@ def _groupby_agg_plan(
         )
 
     ret = _make_logical_agg_plan(grouped, exprs, empty_data)
-
-    if len(added_columns) > 0:
-        grouped._obj.drop(columns=added_columns)
 
     return ret
 

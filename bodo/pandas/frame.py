@@ -1164,7 +1164,11 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "groupby: only string keys are supported"
             )
 
-        return DataFrameGroupBy(self, by, as_index, dropna)
+        # We use a copy (which is free if the plan is unexecuted)
+        # because for aggregations on key columns we duplicated the
+        # key column in the dataframe and don't want that column
+        # to appear in the original dataframe after the aggregation.
+        return DataFrameGroupBy(self.copy(), by, as_index, dropna)
 
     @check_args_fallback(supported=["columns"])
     def drop(
@@ -1548,6 +1552,13 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         return _get_df_python_func_plan(
             self._plan, empty_series, "apply", (func,), apply_kwargs
         )
+
+    @check_args_fallback(unsupported="all")
+    def copy(self, deep: bool = True) -> BodoDataFrame:
+        # breakpoint()
+        if self._exec_state == ExecState.PLAN:
+            return wrap_plan(self._plan)
+        return super().copy(deep)
 
     @check_args_fallback(unsupported="none")
     def filter(
