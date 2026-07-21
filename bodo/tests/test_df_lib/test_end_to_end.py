@@ -1253,6 +1253,32 @@ def test_set_df_column_arith(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+@pytest.mark.parametrize(
+    "arith_op",
+    [
+        pytest.param(operator.add, id="add"),
+        pytest.param(operator.sub, id="sub"),
+        pytest.param(operator.mul, id="mul"),
+    ],
+)
+def test_set_df_column_arith_decimal(datapath, arith_op):
+    """Test setting a dataframe column with a Series function of the same dataframe."""
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": [Decimal("1.10"), Decimal("2.25"), Decimal("3.333")],
+                "B": [Decimal("0.90"), Decimal("1.75"), Decimal("0.667")],
+            }
+        )
+
+        bdf = bd.from_pandas(df)
+        bdf["D"] = arith_op(bdf["A"], bdf["B"])
+        pdf = df.copy()
+        pdf["D"] = arith_op(pdf["A"], pdf["B"])
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+
 def test_set_df_column_extra_proj(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe to
     a dataframe that has column projections on top of the source dataframe.

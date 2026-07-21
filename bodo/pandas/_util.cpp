@@ -601,6 +601,20 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             // NOTE: using ns by default but DuckDB interval type loses
             // precision in Arrow type roundtrips
             return arrow::duration(arrow::TimeUnit::NANO);
+        case duckdb::LogicalTypeId::DECIMAL: {
+            uint8_t precision = 0;
+            uint8_t scale = 0;
+
+            type.GetDecimalProperties(precision, scale);
+
+            if (precision <= 0 || precision > 38) {
+                throw std::runtime_error(
+                    "duckdbTypeToArrow invalid DECIMAL precision " +
+                    std::to_string(precision));
+            }
+
+            return arrow::decimal128(precision, scale);
+        } break;
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +
@@ -681,6 +695,19 @@ duckdb::LogicalType arrowTypeToDuckDB(
                         std::to_string(static_cast<int>(dur_type->unit())));
             }
         } break;
+        case arrow::Type::DECIMAL128: {
+            auto dec_type =
+                std::static_pointer_cast<arrow::Decimal128Type>(type);
+            int32_t precision = dec_type->precision();
+            int32_t scale = dec_type->scale();
+            // DuckDB typically supports up to 38 digits of precision
+            if (precision < 1 || precision > 38) {
+                throw std::runtime_error(
+                    "arrowTypeToDuckDB unsupported Decimal128 precision " +
+                    std::to_string(precision));
+            }
+            return duckdb::LogicalType::DECIMAL(precision, scale);
+        }
         default:
             throw std::runtime_error(
                 "arrowTypeToDuckDB unsupported Arrow type conversion " +
@@ -1809,6 +1836,21 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
             // Represent as 64-bit integer (nanoseconds/microseconds depending
             // on your convention)
             return cudf::data_type{type_id::INT64};
+
+        case LogicalTypeId::DECIMAL: {
+            uint8_t precision = 0;
+            uint8_t scale = 0;
+
+            dtype.GetDecimalProperties(precision, scale);
+
+            if (precision <= 0 || precision > 38) {
+                throw std::runtime_error(
+                    "duckdb_logicaltype_to_cudf: invalid DECIMAL precision " +
+                    std::to_string(precision));
+            }
+
+            return cudf::data_type{type_id::DECIMAL128, scale};
+        } break;
 
         // Fallback for unknown/unsupported types
         default:
