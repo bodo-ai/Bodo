@@ -468,7 +468,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int8",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 20, 30, 0, 50], dtype=pd.Int16Dtype()),
@@ -477,7 +477,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int16",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, -125, 300, 0, 131072], dtype=pd.Int32Dtype()),
@@ -486,7 +486,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int32",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 2, 3, 0, 987654321], dtype=pd.Int64Dtype()),
@@ -503,7 +503,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint8",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 20, 300, 0, 5000], dtype=pd.UInt16Dtype()),
@@ -512,7 +512,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint16",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 21, 321, 0, 54321], dtype=pd.UInt32Dtype()),
@@ -521,7 +521,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint32",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 54321, 654321, 0, 7654321], dtype=pd.UInt64Dtype()),
