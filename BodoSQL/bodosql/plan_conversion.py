@@ -989,9 +989,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 )
             empty_data = pd.Series(
                 [],
-                dtype=pd.ArrowDtype(
-                    sql_type_to_pa_type(ctx, java_call.getType().getSqlTypeName())
-                ),
+                dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, java_call.getType())),
             )
             return ArrowScalarFuncExpression(
                 empty_data, [input], "floor_temporal", (1, arrow_unit)
@@ -1913,7 +1911,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return in_expr
 
         empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type.getSqlTypeName()))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type))
         )
 
         if operand_type.getSqlTypeName().equals(
@@ -2620,7 +2618,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "SIGN" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            ensure_type_of_expr(inp, func_name + " input", (int, float))
+            ensure_type_of_expr(
+                inp, func_name + " input", (int, float, pa.Decimal128Type)
+            )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
             if compare_types(inp_dtype, int):
@@ -2634,7 +2634,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # if it is unsigned, so cast to the equivalent pyarrow
                 # type of what is in the plan.
                 inp_sql_type = java_call.getOperands()[0].getType()
-                pa_int_type = sql_type_to_pa_type(ctx, inp_sql_type.getSqlTypeName())
+                pa_int_type = sql_type_to_pa_type(ctx, inp_sql_type)
                 sql_pa_empty = pd.Series(dtype=pd.ArrowDtype(pa_int_type))
                 return CastExpression(sql_pa_empty, int8_sign)
             else:
@@ -2667,7 +2667,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # ABS(x)
         if func_name == "ABS" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            ensure_type_of_expr(inp, func_name + " input", (int, float))
+            ensure_type_of_expr(
+                inp, func_name + " input", (int, float, pa.Decimal128Type)
+            )
             out_empty = inp.empty_data.iloc[:, 0].abs()
             return UnaryOpExpression(out_empty, inp, "abs")
 
@@ -2678,7 +2680,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name in ("FLOOR", "CEIL") and len(op_exprs) == 1:
             inp = op_exprs[0]
-            ensure_type_of_expr(inp, func_name + " input", (int, float))
+            ensure_type_of_expr(
+                inp, func_name + " input", (int, float, pa.Decimal128Type)
+            )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
             if compare_types(inp_dtype, int):
@@ -2727,7 +2731,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         # ROUND(x, d) or ROUND(x) -> map to a unary/binary op if supported
         if func_name == "ROUND" and len(op_exprs) in (1, 2):
             inp = op_exprs[0]
-            ensure_type_of_expr(inp, "ROUND input", (int, float))
+            ensure_type_of_expr(inp, "ROUND input", (int, float, pa.Decimal128Type))
             out_empty = inp.empty_data
 
             if len(op_exprs) == 1:
@@ -2746,7 +2750,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "TRUNCATE" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            ensure_type_of_expr(inp, func_name + " input", (int, float))
+            ensure_type_of_expr(
+                inp, func_name + " input", (int, float, pa.Decimal128Type)
+            )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
             if compare_types(inp_dtype, int):
@@ -3308,7 +3314,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name in ("FLOOR", "CEIL") and len(op_exprs) in (1, 2):
             inp = op_exprs[0]
-            ensure_type_of_expr(inp, func_name + " input", (int, float))
+            ensure_type_of_expr(
+                inp, func_name + " input", (int, float, pa.Decimal128Type)
+            )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
 
@@ -3432,22 +3440,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 out_empty = inp.empty_data
 
             return UnaryOpExpression(out_empty, inp, "log2")
-        elif func_name == "LOG" and len(op_exprs) == 1:
-            # The SQL function LOG(x) is mapped to Calcite LOG(x),
-            # which in Calcite and most systems means LN(x), but Bodo
-            # defines SQL LOG(x) as LOG10(x). For now, we raise an
-            # informative error while we decide on the best solution.
-            raise ValueError(
-                "LOG with 1 argument is not currently supported in the C++ backend. Consider using the unambiguous LN or LOG10 instead."
-            )
-        elif func_name == "LOG" and len(op_exprs) == 2:
+        elif func_name == "LOG" and len(op_exprs) in (1, 2):
             # We read the first argument as the operand and
             # the second argument as the base, which is different
             # than e.g. Snowflake.
             inp = op_exprs[0]
-            base_expr = op_exprs[1]
             ensure_type_of_expr(inp, "LOG input", (int, float))
-            ensure_type_of_expr(base_expr, "LOG base", (int, float))
+
+            if len(op_exprs) == 2:
+                base_expr = op_exprs[1]
+                ensure_type_of_expr(base_expr, "LOG base", (int, float))
 
             float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
 
@@ -3459,24 +3461,29 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 out_empty = inp.empty_data
 
-            if isinstance(base_expr, ConstantExpression):
-                # If the base is a constant, we can use shortcuts.
-
-                # Use dedicated log functions for special bases (e, 10, 2)
-                if base_expr.value == 10:
-                    return UnaryOpExpression(out_empty, inp, "log10")
-                elif base_expr.value == 2:
-                    return UnaryOpExpression(out_empty, inp, "log2")
-                elif np.isclose(base_expr.value, np.e):
-                    return UnaryOpExpression(out_empty, inp, "ln")
-
-                # If not a special base, calculate scalar ln(base)
-                log_of_base_expr = ConstantExpression(
-                    float_empty_data, input_plan, np.log(base_expr.value)
-                )
+            if len(op_exprs) == 1:
+                return UnaryOpExpression(out_empty, inp, "log10")
             else:
-                # Calculate ln(base)
-                log_of_base_expr = UnaryOpExpression(float_empty_data, base_expr, "ln")
+                if isinstance(base_expr, ConstantExpression):
+                    # If the base is a constant, we can use shortcuts.
+
+                    # Use dedicated log functions for special bases (e, 10, 2)
+                    if base_expr.value == 10:
+                        return UnaryOpExpression(out_empty, inp, "log10")
+                    elif base_expr.value == 2:
+                        return UnaryOpExpression(out_empty, inp, "log2")
+                    elif np.isclose(base_expr.value, np.e):
+                        return UnaryOpExpression(out_empty, inp, "ln")
+
+                    # If not a special base, calculate scalar ln(base)
+                    log_of_base_expr = ConstantExpression(
+                        float_empty_data, input_plan, np.log(base_expr.value)
+                    )
+                else:
+                    # Calculate ln(base)
+                    log_of_base_expr = UnaryOpExpression(
+                        float_empty_data, base_expr, "ln"
+                    )
 
             # Use change of base formula: log_base_(x) = log(x) / log(base)
             log_of_inp = UnaryOpExpression(out_empty, inp, "ln")
@@ -5158,7 +5165,7 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
 
     if java_literal.getTypeName().equals(SqlTypeName.NULL):
         dummy_empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, lit_type_name))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, lit_type))
         )
         return NullExpression(dummy_empty_data, input_plan, 0)
 
@@ -5239,7 +5246,7 @@ def java_literal_to_python_literal(ctx, java_literal, input_plan):
         or lit_type_name.equals(SqlTypeName.BIGINT)
     ):
         dummy_empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, lit_type_name))
+            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, lit_type))
         )
         return ConstantExpression(
             dummy_empty_data, input_plan, java_literal.getValue2()
@@ -5711,14 +5718,14 @@ def java_field_to_pa_field(ctx, java_field):
     """Convert a Calcite RelDataTypeField to a PyArrow field."""
     name = java_field.getName()
     java_type = java_field.getType()
-    type_name = java_type.getSqlTypeName()
 
-    return pa.field(name, sql_type_to_pa_type(ctx, type_name))
+    return pa.field(name, sql_type_to_pa_type(ctx, java_type))
 
 
-def sql_type_to_pa_type(ctx, sql_type_name):
+def sql_type_to_pa_type(ctx, sql_type):
     """Convert a Calcite SqlTypeName to a PyArrow data type."""
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    sql_type_name = sql_type.getSqlTypeName()
 
     if sql_type_name.equals(SqlTypeName.TINYINT):
         return pa.int8()
@@ -5754,6 +5761,13 @@ def sql_type_to_pa_type(ctx, sql_type_name):
         return pa.time64("ns")
     if sql_type_name.equals(SqlTypeName.NULL):
         return pa.null()
+    if sql_type_name.equals(SqlTypeName.DECIMAL):
+        precision = sql_type.getPrecision()
+        scale = sql_type.getScale()
+        if scale > 38:
+            raise ValueError("BodoSQL cpp backend does not support decimal256.")
+        else:
+            return pa.decimal128(precision, scale)
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
