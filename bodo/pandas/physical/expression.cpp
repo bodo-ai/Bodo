@@ -447,8 +447,8 @@ arrow::Datum do_arrow_compute_multi_input_datum(
 
     if (!func_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_arrow_compute_multi_input: Error in Arrow compute: " +
-            func_res.status().message());
+            "do_arrow_compute_multi_input: Error in Arrow compute (" +
+            arrow_func_name + "): " + func_res.status().message());
     }
 
     return func_res.ValueOrDie();
@@ -529,8 +529,8 @@ arrow::Datum do_arrow_compute_binary(
         comparator, {left_res, right_res}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_arrow_compute_binary: Error in Arrow compute: " +
-            cmp_res.status().message());
+            "do_arrow_compute_binary: Error in Arrow compute (" + comparator +
+            "): " + cmp_res.status().message());
     }
 
     arrow::Datum cmp_datum = cmp_res.ValueOrDie();
@@ -544,8 +544,8 @@ arrow::Datum do_arrow_compute_binary(
             arrow::compute::Cast(cmp_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
-                cast_res.status().message());
+                "do_arrow_compute_binary cast_res: Error in Arrow compute (" +
+                comparator + "): " + cast_res.status().message());
         }
         cmp_res = cast_res;
     }
@@ -563,7 +563,7 @@ arrow::Datum do_arrow_compute_unary(
             arrow::compute::CallFunction("is_null", {src1}, func_options);
         if (!is_null_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute: " +
+                "do_arrow_compute_unary: Error in Arrow compute (is_null): " +
                 is_null_res.status().message());
         }
 
@@ -572,7 +572,7 @@ arrow::Datum do_arrow_compute_unary(
             arrow::compute::CallFunction("invert", {is_null_res.ValueOrDie()});
         if (!invert_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute Invert: " +
+                "do_arrow_compute_unary: Error in Arrow compute (invert): " +
                 invert_res.status().message());
         }
         return invert_res.ValueOrDie();
@@ -593,7 +593,7 @@ arrow::Datum do_arrow_compute_unary(
             "coalesce", {src1, na_fill_value}, func_options);
         if (!result.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute: " +
+                "do_arrow_compute_unary: Error in Arrow compute (coalesce): " +
                 result.status().message());
         }
 
@@ -604,7 +604,8 @@ arrow::Datum do_arrow_compute_unary(
                 arrow::compute::CallFunction("invert", {result.ValueOrDie()});
             if (!result.ok()) [[unlikely]] {
                 throw std::runtime_error(
-                    "do_arrow_compute_unary: Error in Arrow compute Invert: " +
+                    "do_arrow_compute_unary: Error in Arrow compute "
+                    "(invert): " +
                     result.status().message());
             }
         }
@@ -615,8 +616,8 @@ arrow::Datum do_arrow_compute_unary(
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_arrow_compute_unary: Error in Arrow compute: " +
-            cmp_res.status().message());
+            "do_arrow_compute_unary: Error in Arrow compute (" + comparator +
+            "): " + cmp_res.status().message());
     }
 
     return cmp_res.ValueOrDie();
