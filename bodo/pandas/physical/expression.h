@@ -1560,7 +1560,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
             regex_params_str.find('e') != std::string::npos;
 
         // Ensure all groups are named so that we can pass to extract_regex.
-        // Do this once per batch.
+        // Do this once per operator.
         if (!named_regexp) {
             named_regexp = std::make_shared<std::tuple<std::string, int>>(
                 convert_to_named_regexp(pattern_str));
@@ -1639,7 +1639,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
             regex_params_str.find('e') != std::string::npos;
 
         // Ensure all groups are named so that we can pass to
-        // extract_regex_span. Do this once per batch.
+        // extract_regex_span. Do this once per operator.
         if (!named_regexp) {
             named_regexp = std::make_shared<std::tuple<std::string, int>>(
                 convert_to_named_regexp(pattern_str));

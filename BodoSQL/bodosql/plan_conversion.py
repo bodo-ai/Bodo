@@ -680,7 +680,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         )
         return timestamp_expr
 
-    def clean_regex_params(regex_params_expr):
+    def clean_regex_params(regex_params_expr, func_name):
         """Verify the raw regex parameters passed into functions such as REGEXP_SUBSTR
         or REGEXP_INSTR and turn them into a standard form."""
         if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
@@ -3107,8 +3107,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
                 if start_expr.value > 0:
                     start = start_expr.value - 1
+                elif start_expr.value == 0:
+                    start = 0
                 else:
-                    start = start_expr.value
+                    raise ValueError("Start index must be positive for REGEXP_SUBSTR.")
             else:
                 start = 0
 
@@ -3131,7 +3133,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 ensure_arg_is_const_expr_of_type(
                     regex_params_expr, "regex_params_expr", str
                 )
-                regex_params = clean_regex_params(regex_params_expr)
+                regex_params = clean_regex_params(regex_params_expr, func_name)
             else:
                 regex_params = "c"
 
@@ -4022,8 +4024,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
                 if start_expr.value > 0:
                     start = start_expr.value - 1
+                elif start_expr.value == 0:
+                    start = 0
                 else:
-                    start = start_expr.value
+                    raise ValueError("Start index must be positive for REGEXP_INSTR.")
             else:
                 start = 0
 
@@ -4059,7 +4063,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 ensure_arg_is_const_expr_of_type(
                     regex_params_expr, "regex_params_expr", str
                 )
-                regex_params = clean_regex_params(regex_params_expr)
+                regex_params = clean_regex_params(regex_params_expr, func_name)
             else:
                 regex_params = "c"
 

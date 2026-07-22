@@ -17,6 +17,8 @@ if __name__ == "__main__":
     # the third is the directory of the caching tests
     cache_test_dir = sys.argv[3]
 
+    os.environ["BODOSQL_CPP_BACKEND"] = "0"
+
     # Pipeline name is only used when testing on Azure
     use_run_name = "AGENT_NAME" in os.environ
 
