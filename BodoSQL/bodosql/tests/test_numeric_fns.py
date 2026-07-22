@@ -117,7 +117,10 @@ def bodosql_conv_df(request):
         pytest.param(
             ("SQRT", "SQRT", "POSITIVE_FLOATS"), marks=pytest.mark.bodosql_cpp
         ),
-        pytest.param(("LOG", "LOG10", "POSITIVE_FLOATS"), marks=pytest.mark.slow),
+        pytest.param(
+            ("LOG", "LOG10", "POSITIVE_FLOATS"),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
     ]
     # currently, behavior for log(0) differs from sparks behavior, see BS-374
     # + [(x, x, "negative_floats") for x in ["LOG10", "LOG2", "LN", "EXP", "SQRT"]]

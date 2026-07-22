@@ -365,7 +365,7 @@ def java_named_param_to_python_literal(ctx, named_param, input_plan):
         raise NotImplementedError(f"NamedParam type {cdtype} not supported yet")
 
 
-def adjustScale(inp_dtype, scale_expr, output_empty_data):
+def adjust_scale(inp_dtype, scale_expr, output_empty_data):
     if compare_types(inp_dtype, pa.Decimal128Type):
         new_scale = None
         if isinstance(scale_expr, ConstantExpression) and isinstance(
@@ -375,7 +375,7 @@ def adjustScale(inp_dtype, scale_expr, output_empty_data):
         elif isinstance(scale_expr, int):
             new_scale = scale_expr
 
-        if new_scale:
+        if new_scale is not None:
             # get the pyarrow decimal type for the column
             pa_dtype = output_empty_data.dtypes.iloc[0].pyarrow_dtype
 
@@ -387,7 +387,7 @@ def adjustScale(inp_dtype, scale_expr, output_empty_data):
             precision = pa_dtype.precision
             current_scale = pa_dtype.scale
 
-            if new_scale < current_scale:
+            if new_scale != current_scale:
                 output_empty_data = pd.Series(
                     dtype=pd.ArrowDtype(pa.decimal128(precision, new_scale))
                 ).to_frame(output_empty_data.columns[0])
@@ -2653,16 +2653,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
-            sign_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            if compare_types(inp_dtype, int):
-                # If input is an int, first use int8 empty data since
-                # we have to match the return type of Arrow's sign().
-                int8_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
-                int8_sign = UnaryOpExpression(int8_empty_data, inp, "sign")
-                return CastExpression(sign_empty_data, int8_sign)
-            else:
-                # If input is a float, return the original float type
-                return UnaryOpExpression(sign_empty_data, inp, "sign")
+            sign_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
+            # Strictly speaking, the type of the UnaryOpExpression may not match
+            # what arrow creates but the subsequent cast makes that irrelevant.
+            return CastExpression(
+                sign_empty_data, UnaryOpExpression(sign_empty_data, inp, "sign")
+            )
 
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
@@ -2766,7 +2762,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     return UnaryOpExpression(out_empty, inp, "round")
             else:
                 precision_digits = op_exprs[1]
-                out_empty = adjustScale(inp_dtype, precision_digits, out_empty)
+                out_empty = adjust_scale(inp_dtype, precision_digits, out_empty)
                 # Not a traditional arithmetic operation, but this is what
                 # we currently have available to retrieve binary functions
                 # from the DuckDB catalog.
@@ -3471,7 +3467,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     scaled_inp_rounded = UnaryOpExpression(
                         float_empty_data, scaled_inp, func_name.lower()
                     )
-                    output_empty_data = adjustScale(
+                    output_empty_data = adjust_scale(
                         inp_dtype, scale_expr, inp.empty_data
                     )
 
@@ -5828,7 +5824,7 @@ def sql_type_to_pa_type(ctx, sql_type):
     if sql_type_name.equals(SqlTypeName.DECIMAL):
         precision = sql_type.getPrecision()
         scale = sql_type.getScale()
-        if scale > 38:
+        if precision > 38:
             raise ValueError("BodoSQL cpp backend does not support decimal256.")
         else:
             return pa.decimal128(precision, scale)
