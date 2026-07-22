@@ -3415,7 +3415,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                             new_scale = scale_expr.value
 
                             # get the pyarrow decimal type for the column
-                            pa_dtype = output_empty_data.dtypes[0].pyarrow_dtype
+                            pa_dtype = output_empty_data.dtypes.iloc[0].pyarrow_dtype
 
                             if not pa.types.is_decimal(pa_dtype):
                                 raise TypeError(
