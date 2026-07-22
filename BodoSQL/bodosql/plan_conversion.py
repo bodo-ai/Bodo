@@ -365,6 +365,36 @@ def java_named_param_to_python_literal(ctx, named_param, input_plan):
         raise NotImplementedError(f"NamedParam type {cdtype} not supported yet")
 
 
+def adjustScale(inp_dtype, scale_expr, output_empty_data):
+    if compare_types(inp_dtype, pa.Decimal128Type):
+        new_scale = None
+        if isinstance(scale_expr, ConstantExpression) and isinstance(
+            scale_expr.value, int
+        ):
+            new_scale = scale_expr.value
+        elif isinstance(scale_expr, int):
+            new_scale = scale_expr
+
+        if new_scale:
+            # get the pyarrow decimal type for the column
+            pa_dtype = output_empty_data.dtypes.iloc[0].pyarrow_dtype
+
+            if not pa.types.is_decimal(pa_dtype):
+                raise TypeError(
+                    f"column {output_empty_data.columns[0]} is not a decimal Arrow dtype: {pa_dtype!r}"
+                )
+
+            precision = pa_dtype.precision
+            current_scale = pa_dtype.scale
+
+            if new_scale < current_scale:
+                output_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.decimal128(precision, new_scale))
+                ).to_frame(output_empty_data.columns[0])
+
+    return output_empty_data
+
+
 def java_call_to_python_call(ctx, java_call, input_plan):
     """Convert a BodoSQL Java call expression to a DataFrame library expression
     (bodo.pandas.plan.Expression).
@@ -2726,9 +2756,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             inp = op_exprs[0]
             ensure_type_of_expr(inp, "ROUND input", (int, float, pa.Decimal128Type))
             out_empty = inp.empty_data
+            inp_dtype = get_expr_dtype(inp, "ROUND input")
 
             if len(op_exprs) == 1:
-                inp_dtype = get_expr_dtype(inp, "ROUND input")
                 if compare_types(inp_dtype, int):
                     # If input is an integer, single-argument ROUND is a no-op
                     return inp
@@ -2736,6 +2766,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     return UnaryOpExpression(out_empty, inp, "round")
             else:
                 precision_digits = op_exprs[1]
+                out_empty = adjustScale(inp_dtype, precision_digits, out_empty)
                 # Not a traditional arithmetic operation, but this is what
                 # we currently have available to retrieve binary functions
                 # from the DuckDB catalog.
@@ -3407,30 +3438,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     scaled_inp_rounded = UnaryOpExpression(
                         float_empty_data, scaled_inp, func_name.lower()
                     )
-                    output_empty_data = inp.empty_data
-                    if compare_types(inp_dtype, pa.Decimal128Type):
-                        if isinstance(scale_expr, ConstantExpression) and isinstance(
-                            scale_expr.value, int
-                        ):
-                            new_scale = scale_expr.value
-
-                            # get the pyarrow decimal type for the column
-                            pa_dtype = output_empty_data.dtypes.iloc[0].pyarrow_dtype
-
-                            if not pa.types.is_decimal(pa_dtype):
-                                raise TypeError(
-                                    f"column {output_empty_data.columns[0]} is not a decimal Arrow dtype: {pa_dtype!r}"
-                                )
-
-                            precision = pa_dtype.precision
-                            current_scale = pa_dtype.scale
-
-                            if new_scale < current_scale:
-                                output_empty_data = pd.Series(
-                                    dtype=pd.ArrowDtype(
-                                        pa.decimal128(precision, new_scale)
-                                    )
-                                ).to_frame(output_empty_data.columns[0])
+                    output_empty_data = adjustScale(
+                        inp_dtype, scale_expr, inp.empty_data
+                    )
 
                     return ArithOpExpression(
                         output_empty_data,
