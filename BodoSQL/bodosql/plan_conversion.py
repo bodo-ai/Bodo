@@ -3801,24 +3801,84 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[1]
 
             ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+            src_dtype = get_expr_dtype(src, "src")
 
-            out_empty = src.empty_data.iloc[:, 0]
-            return ArrowScalarFuncExpression(
-                out_empty, [src], "utf8_slice_codeunits", (0, len_expr.value, 1)
-            )
+            if compare_types(src_dtype, str):
+                ensure_type_of_expr(len_expr, "len_expr", int)
+
+                # Cast length to int64 to match the bodo_substr_three kernel definition
+                int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                len_expr = CastExpression(int_empty_data, len_expr)
+
+                zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+                return ArrowScalarFuncExpression(
+                    src.empty_data, [src, zero_expr, len_expr], "bodo_substr_three", ()
+                )
+            else:
+                # bodo_substr_three doesn't support binary for now, so we use Arrow's binary_slice as
+                # a fallback for scalar length input in the binary case.
+                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+                # Note: utf8_slice_codeunits redirects to binary_slice on the C++ side if the input is binary
+                return ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (0, len_expr.value, 1),
+                )
         elif func_name == "RIGHT" and len(op_exprs) == 2:
             # Implement RIGHT as substr(-len,...)
             src = op_exprs[0]
             len_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
-            out_empty = src.empty_data.iloc[:, 0]
-            return ArrowScalarFuncExpression(
-                out_empty, [src], "utf8_slice_codeunits", (-len_expr.value, None, 1)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            src_dtype = get_expr_dtype(src, "src")
+
+            if compare_types(src_dtype, str):
+                ensure_type_of_expr(len_expr, "len_expr", int)
+
+                # Cast length to int64 to match the bodo_substr_three kernel definition
+
+                len_expr = CastExpression(int_empty_data, len_expr)
+
+                # Multiply by negative one to get a start index `len_expr` characters from the right
+                negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+                negative_len_expr = ArithOpExpression(
+                    int_empty_data, len_expr, negative_one_expr, "__mul__"
+                )
+
+                # Not passing a third argument means substring stops at end of string
+                right_substring = ArrowScalarFuncExpression(
+                    src.empty_data, [src, negative_len_expr], "bodo_substr_three", ()
+                )
+            else:
+                # bodo_substr_three doesn't support binary for now, so we use Arrow's binary_slice as
+                # a fallback for scalar length input in the binary case.
+                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+                # Note: utf8_slice_codeunits redirects to binary_slice on the C++ side if the input is binary
+                right_substring = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (-len_expr.value, None, 1),
+                )
+
+            # Always return an empty string if the length was 0 or negative to start with
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            len_is_negative = ComparisonOpExpression(
+                bool_empty_data, len_expr, zero_expr, operator.le
             )
+            src_is_not_null = UnaryOpExpression(bool_empty_data, src, "notnull")
+            return_empty_string = ConjunctionOpExpression(
+                bool_empty_data, len_is_negative, src_is_not_null, "__and__"
+            )
+            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+            return CaseExpression(
+                src.empty_data, return_empty_string, empty_string_expr, right_substring
+            )
+
         elif func_name == "STARTSWITH" and len(op_exprs) == 2:
             src = op_exprs[0]
             match_expr = op_exprs[1]

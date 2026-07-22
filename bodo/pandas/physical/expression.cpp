@@ -1504,11 +1504,11 @@ void EnsureModRegistered() {
     });
 }
 
-// Helper function to count UTF-8 characters in a byte string
+// Helper to count UTF-8 characters in a byte string
 int64_t utf8_char_count(const char* data, int64_t byte_len) {
     int64_t char_count = 0;
     for (int64_t i = 0; i < byte_len; i++) {
-        // Count only bytes that are NOT continuation bytes (10xxxxxx)
+        // Only count bytes that are not continuation bytes (10xxxxxx)
         if ((data[i] & 0xC0) != 0x80) {
             char_count++;
         }
@@ -1516,18 +1516,21 @@ int64_t utf8_char_count(const char* data, int64_t byte_len) {
     return char_count;
 }
 
-// Helper to convert character offset to byte offset
+// Helper to convert UTF-8 character number offset to byte offset
 int64_t utf8_char_to_byte_offset(const char* data, int64_t byte_len,
                                  int64_t char_offset) {
     int64_t char_count = 0;
     for (int64_t i = 0; i < byte_len; i++) {
+        // Only count bytes that are not continuation bytes (10xxxxxx)
         if ((data[i] & 0xC0) != 0x80) {
             if (char_count == char_offset)
                 return i;
             char_count++;
         }
     }
-    return byte_len;  // If offset beyond string
+    // If the string has less than char_offset characters, just return the
+    // string length in bytes We don't expect to hit this case.
+    return byte_len;
 }
 
 // The execution function for the kernel.
