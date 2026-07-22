@@ -48,6 +48,11 @@ class PhysicalProjection : public PhysicalProcessBatch {
     virtual ~PhysicalProjection() = default;
 
     void FinalizeProcessBatch() override {
+        for (const std::shared_ptr<PhysicalExpression>& expr :
+             this->physical_exprs) {
+            expr->Finalize();
+        }
+
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),

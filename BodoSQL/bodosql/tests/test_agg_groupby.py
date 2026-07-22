@@ -261,7 +261,7 @@ def test_count_string(bodosql_string_types, memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp   # dataframe are different
+@pytest.mark.bodosql_cpp
 def test_count_binary(bodosql_binary_types, memory_leak_check):
     """test various count queries on binary data."""
     check_query(
@@ -282,7 +282,7 @@ def test_count_binary(bodosql_binary_types, memory_leak_check):
     )
 
 
-# @pytest.mark.bodosql_cpp   # dataframe are different
+@pytest.mark.bodosql_cpp
 def test_count_boolean(bodosql_boolean_types, memory_leak_check):
     """test various count queries on boolean data."""
     check_query(
@@ -525,7 +525,7 @@ def test_groupby_interval_types(bodosql_interval_types, memory_leak_check):
         ),
     ],
 )
-# @pytest.mark.bodosql_cpp   # agg OTHER_FUNCTION not supported, SqlPostfixOperator not supported IS NULL
+@pytest.mark.bodosql_cpp
 def test_count_if(query, spark_info, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -784,17 +784,24 @@ def test_nested_grouping_clauses(
 @pytest.mark.parametrize(
     "agg_col",
     [
-        pytest.param("A", id="int32_nullable"),
-        pytest.param("B", id="int32_numpy", marks=pytest.mark.slow),
-        pytest.param("C", id="string"),
-        pytest.param("D", id="float", marks=pytest.mark.slow),
-        pytest.param("E", id="bool_nullable", marks=pytest.mark.slow),
-        pytest.param("F", id="bool_numpy", marks=pytest.mark.slow),
+        pytest.param("A", id="int32_nullable", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            "B", id="int32_numpy", marks=[pytest.mark.bodosql_cpp, pytest.mark.slow]
+        ),
+        pytest.param("C", id="string", marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            "D", id="float", marks=[pytest.mark.bodosql_cpp, pytest.mark.slow]
+        ),
+        pytest.param(
+            "E", id="bool_nullable", marks=[pytest.mark.bodosql_cpp, pytest.mark.slow]
+        ),
+        pytest.param(
+            "F", id="bool_numpy", marks=[pytest.mark.bodosql_cpp, pytest.mark.slow]
+        ),
         pytest.param("G", id="int_array"),
         pytest.param("H", id="string_array"),
     ],
 )
-# @pytest.mark.bodosql_cpp   # aggregation ANY_VALUE not supported
 def test_any_value(agg_col, memory_leak_check):
     """Tests ANY_VALUE, which is normally nondeterministic but has been
     implemented in a way that is reproducible (by always returning the first
@@ -1209,7 +1216,7 @@ def test_booland_agg_having(memory_leak_check):
 
 
 @pytest.mark.slow
-# @pytest.mark.bodosql_cpp   # aggregations without group by not supported yet
+@pytest.mark.bodosql_cpp
 def test_boolor_agg_output_type(memory_leak_check):
     """Test boolor_agg to verify the output type is boolean"""
     query = """WITH TEMP AS(SELECT boolor_agg(A) as agg_A, B FROM table1 GROUP BY B)
@@ -1320,7 +1327,7 @@ def test_count_tz_aware(memory_leak_check):
 
 @pytest.mark.tz_aware
 @pytest.mark.slow
-# @pytest.mark.bodosql_cpp   # aggregation ANY_VALUE not supported yet
+@pytest.mark.bodosql_cpp
 def test_any_value_tz_aware(memory_leak_check):
     """
     Test any_value on a tz-aware timestamp column

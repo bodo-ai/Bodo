@@ -304,10 +304,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
         bool run_on_gpu = node_run_on_gpu(op);
         if (run_on_gpu) {
             physical_op = std::make_shared<PhysicalGPUReduce>(
-                bodo_schema, function_names, input_column_indices);
+                bodo_schema, function_names, input_column_indices,
+                use_sql_rules);
         } else {
             physical_op = std::make_shared<PhysicalReduce>(
-                bodo_schema, function_names, input_column_indices);
+                bodo_schema, function_names, input_column_indices,
+                use_sql_rules);
         }
         std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); },
                    physical_op);

@@ -12,6 +12,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodosql.tests.conftest import fixture_value_not_in, mark_bodosql_cpp_if
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
@@ -311,19 +312,14 @@ def test_binary_to_str(basic_df, use_sf_cast_syntax, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.usefixtures("numeric_type_names")
+@mark_bodosql_cpp_if(fixture_value_not_in("numeric_type_names", {"DECIMAL"}))
 def test_numeric_scalar_to_numeric(
-    request,
     bodosql_numeric_types,
+    numeric_type_names,
     use_sf_cast_syntax,
     memory_leak_check,
 ):
     """Tests casting int scalars (from columns) to other numeric types"""
-
-    numeric_type_names = request.getfixturevalue("numeric_type_names")
-    if numeric_type_names != "DECIMAL":
-        request.node.add_marker(pytest.mark.bodosql_cpp)
-
     spark_query = f"SELECT CASE WHEN B > 5 THEN CAST(A AS {numeric_type_names}) ELSE CAST(1 AS {numeric_type_names}) END FROM TABLE1"
 
     if use_sf_cast_syntax:
@@ -368,19 +364,14 @@ def test_numeric_nullable_scalar_to_numeric(
 
 
 @pytest.mark.slow
-@pytest.mark.usefixtures("numeric_type_names")
+@mark_bodosql_cpp_if(fixture_value_not_in("numeric_type_names", {"DECIMAL"}))
 def test_string_scalar_to_numeric(
-    request,
     bodosql_integers_string_types,
+    numeric_type_names,
     use_sf_cast_syntax,
     memory_leak_check,
 ):
     """Tests casting string scalars (from columns) to numeric types"""
-
-    numeric_type_names = request.getfixturevalue("numeric_type_names")
-    if numeric_type_names != "DECIMAL":
-        request.node.add_marker(pytest.mark.bodosql_cpp)
-
     spark_query = f"SELECT CASE WHEN B = '43' THEN CAST(A AS {numeric_type_names}) ELSE CAST (1 AS {numeric_type_names}) END FROM TABLE1"
 
     if use_sf_cast_syntax:

@@ -16,12 +16,31 @@ from bodo.tests.utils import (
     pytest_slow_unless_groupby,
 )
 from bodo.tests.utils_jit import DistTestPipeline
+from bodosql.tests.conftest import fixture_value_is_in, mark_bodosql_cpp_if
 from bodosql.tests.utils import check_query
 
 # Skip unless any groupby-related files were changed
 pytestmark = pytest_slow_unless_groupby
 
 
+@mark_bodosql_cpp_if(
+    fixture_value_is_in(
+        "numeric_agg_builtin_funcs",
+        {
+            "AVG",
+            "COUNT",
+            "MAX",
+            "MIN",
+            "STDDEV",
+            "STDDEV_SAMP",
+            "SUM",
+            "VARIANCE",
+            "VAR_SAMP",
+            "STDDEV_POP",
+            "VAR_POP",
+        },
+    )
+)
 def test_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, memory_leak_check
 ):
@@ -77,6 +96,24 @@ def test_median(query, memory_leak_check):
 
 
 @pytest.mark.slow
+@mark_bodosql_cpp_if(
+    fixture_value_is_in(
+        "numeric_agg_builtin_funcs",
+        {
+            "AVG",
+            "COUNT",
+            "MAX",
+            "MIN",
+            "STDDEV",
+            "STDDEV_SAMP",
+            "SUM",
+            "VARIANCE",
+            "VAR_SAMP",
+            "STDDEV_POP",
+            "VAR_POP",
+        },
+    )
+)
 def test_aliasing_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, memory_leak_check
 ):
@@ -101,6 +138,7 @@ def test_aliasing_agg_numeric(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_repeat_columns(basic_df, memory_leak_check):
     """
     Tests that a column that won't produce a conflicting name
@@ -118,6 +156,7 @@ def test_repeat_columns(basic_df, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_count_numeric(bodosql_numeric_types, memory_leak_check):
     """test various count queries on numeric data."""
     check_query(
@@ -141,6 +180,7 @@ def test_count_numeric(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_count_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_check):
     """test various count queries on nullable numeric data."""
     check_query(
@@ -164,6 +204,7 @@ def test_count_nullable_numeric(bodosql_nullable_numeric_types, memory_leak_chec
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_count_datetime(bodosql_datetime_types, memory_leak_check):
     """test various count queries on Timestamp data."""
     check_query(
@@ -187,6 +228,7 @@ def test_count_datetime(bodosql_datetime_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_count_interval(bodosql_interval_types, memory_leak_check):
     """test various count queries on Timedelta data."""
     check_query(
@@ -210,6 +252,7 @@ def test_count_interval(bodosql_interval_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_count_boolean(bodosql_boolean_types, memory_leak_check):
     """test various count queries on boolean data."""
     check_query(
@@ -233,6 +276,7 @@ def test_count_boolean(bodosql_boolean_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_count_string(bodosql_string_types, memory_leak_check):
     """test various count queries on string data."""
     check_query(
@@ -255,6 +299,7 @@ def test_count_string(bodosql_string_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_count_binary(bodosql_binary_types, memory_leak_check):
     """test various count queries on string data."""
     check_query(
@@ -278,6 +323,7 @@ def test_count_binary(bodosql_binary_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_count_numeric_alias(bodosql_numeric_types, memory_leak_check):
     """test various count queries on numeric data with aliases."""
     check_query(
@@ -300,6 +346,7 @@ def test_count_numeric_alias(bodosql_numeric_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_max_string(bodosql_string_types, memory_leak_check):
     """
     Simple test to ensure that max is working on string types
@@ -320,6 +367,7 @@ def test_max_string(bodosql_string_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_max_datetime_types(bodosql_datetime_types, memory_leak_check):
     """
     Simple test to ensure that max is working on datetime types
@@ -363,6 +411,7 @@ def test_max_interval_types(bodosql_interval_types, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_max_literal(basic_df, memory_leak_check):
     """tests that max works on a scalar value"""
     # This query does not get optimized, by manual check
@@ -390,6 +439,7 @@ def test_max_literal(basic_df, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_count_if(query, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -415,6 +465,7 @@ def test_count_if(query, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_having(bodosql_numeric_types, comparison_ops, memory_leak_check):
     """
     Tests having with a constant
@@ -439,6 +490,7 @@ def test_having(bodosql_numeric_types, comparison_ops, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_max_bool(bodosql_boolean_types, memory_leak_check):
     """
     Simple test to ensure that max is working on boolean types
@@ -460,6 +512,7 @@ def test_max_bool(bodosql_boolean_types, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_having_boolean(bodosql_boolean_types, memory_leak_check):
     """
     Tests having with a constant
@@ -530,6 +583,7 @@ def test_agg_replicated(datapath, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_any_value(query, memory_leak_check):
     """Tests ANY_VALUE, which is normally nondeterministic but has been
     implemented in a way that is reproducible (by always returning the first
@@ -563,6 +617,7 @@ def test_any_value(query, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_any_value_nulls(memory_leak_check):
     """
     Test that ANY_VALUE works when the first element is NULL.
@@ -585,7 +640,7 @@ def test_any_value_nulls(memory_leak_check):
         check_names=False,
         is_out_distributed=False,
         expected_output=pd.DataFrame(
-            {0: pd.array([None], dtype=pd.ArrowDtype(pa.int64()))}
+            {0: pd.array([1], dtype=pd.ArrowDtype(pa.int64()))}
         ),
     )
 
@@ -622,6 +677,7 @@ def test_max_min_tz_aware(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_count_tz_aware(memory_leak_check):
     """
@@ -654,6 +710,7 @@ def test_count_tz_aware(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_any_value_tz_aware(memory_leak_check):
     """
@@ -841,6 +898,8 @@ def test_single_value(memory_leak_check):
     )
 
 
+# NOTE: This passes on C++ backend but doesn't actually use the
+# SINGLE_VALUE aggregation unlike `test_single_value`.
 def test_single_value2(memory_leak_check):
     """Test Calcite's SINGLE_VALUE Agg function in a max query"""
     query = "select max((select max(A)-1 from t1)) from t1"

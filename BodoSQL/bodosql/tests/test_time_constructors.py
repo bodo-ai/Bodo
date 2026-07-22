@@ -190,6 +190,7 @@ def to_time_invalid_data():
     return ctx, answer
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -200,9 +201,9 @@ def to_time_invalid_data():
 def test_to_time_valid(to_time_fn, to_time_valid_data, use_case, memory_leak_check):
     ctx, result = to_time_valid_data
     if use_case:
-        query = f"SELECT {to_time_fn}(S) as A FROM table1"
-    else:
         query = f"SELECT CASE WHEN B THEN {to_time_fn}(S) END AS A FROM table1"
+    else:
+        query = f"SELECT {to_time_fn}(S) as A FROM table1"
     expected_output = pd.DataFrame({"A": result.copy()})
     check_query(query, ctx, None, expected_output=expected_output)
 
@@ -496,6 +497,7 @@ def time_from_parts_data(request):
     return ctx, answer, args
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [

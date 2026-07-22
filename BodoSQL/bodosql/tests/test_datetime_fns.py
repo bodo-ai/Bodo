@@ -1258,6 +1258,7 @@ def test_makedate_scalars(basic_df, dt_fn_dataframe, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -2697,6 +2698,7 @@ def date_add_sub_date_df():
                 ),
             ),
             id="DATE_ADD-vector_scalar_date_interval_with_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2725,6 +2727,7 @@ def date_add_sub_date_df():
                 ),
             ),
             id="ADDDATE-vector_time_interval_with_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -2830,6 +2833,7 @@ def date_add_sub_date_df():
                 ),
             ),
             id="date_add_date_interval_with_case",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -3834,6 +3838,7 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 @pytest.mark.slow
 def test_tz_aware_next_day(memory_leak_check):
@@ -3863,6 +3868,7 @@ def test_tz_aware_next_day(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.bodosql_cpp
 def test_tz_aware_next_day_case(
     memory_leak_check,
 ):
@@ -3893,6 +3899,7 @@ def test_tz_aware_next_day_case(
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 @pytest.mark.slow
 def test_tz_aware_previous_day(memory_leak_check):
@@ -3917,6 +3924,7 @@ def test_tz_aware_previous_day(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_previous_day_case(
     memory_leak_check,
@@ -4424,6 +4432,7 @@ def date_from_parts_data():
     return years, months, days, answer
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -4478,6 +4487,7 @@ def date_from_parts_float_data():
     return years, months, days, answer
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -4597,6 +4607,7 @@ def timestamp_from_parts_data(request):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func",
     [
@@ -4676,6 +4687,7 @@ def test_timestamp_from_parts(
     check_query(query, ctx, None, expected_output=py_output, check_names=False)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "func, use_case, use_timestamp",
     [
@@ -4868,6 +4880,7 @@ def test_current_date(fn_name, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_months_between(date_df, memory_leak_check):
     query = "SELECT MONTHS_BETWEEN(B, A) from table1"
 

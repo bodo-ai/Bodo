@@ -3,6 +3,7 @@ import operator
 import os
 import tempfile
 import warnings
+from decimal import Decimal
 
 import numba  # noqa TID253
 import numpy as np
@@ -1252,6 +1253,32 @@ def test_set_df_column_arith(datapath, index_val):
     _test_equal(bdf, pdf, check_pandas_types=False)
 
 
+@pytest.mark.parametrize(
+    "arith_op",
+    [
+        pytest.param(operator.add, id="add"),
+        pytest.param(operator.sub, id="sub"),
+        pytest.param(operator.mul, id="mul"),
+    ],
+)
+def test_set_df_column_arith_decimal(datapath, arith_op):
+    """Test setting a dataframe column with a Series function of the same dataframe."""
+
+    with assert_executed_plan_count(0):
+        df = pd.DataFrame(
+            {
+                "A": [Decimal("1.10"), Decimal("2.25"), Decimal("3.333")],
+                "B": [Decimal("0.90"), Decimal("1.75"), Decimal("0.667")],
+            }
+        )
+
+        bdf = bd.from_pandas(df)
+        bdf["D"] = arith_op(bdf["A"], bdf["B"])
+        pdf = df.copy()
+        pdf["D"] = arith_op(pdf["A"], pdf["B"])
+    _test_equal(bdf, pdf, check_pandas_types=False)
+
+
 def test_set_df_column_extra_proj(datapath, index_val):
     """Test setting a dataframe column with a Series function of the same dataframe to
     a dataframe that has column projections on top of the source dataframe.
@@ -1898,6 +1925,21 @@ def groupby_agg_df(request):
             },
             id="func_kwargs",
         ),
+        pytest.param(
+            None,
+            {
+                "count_B": pd.NamedAgg("B", "count"),
+            },
+            id="agg_on_key_col_only",
+        ),
+        pytest.param(
+            None,
+            {
+                "count_B": pd.NamedAgg("B", "count"),
+                "mean_A": pd.NamedAgg("A", "mean"),
+            },
+            id="agg_on_key_col",
+        ),
     ],
 )
 def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
@@ -2255,6 +2297,109 @@ def test_series_cmp_binops(datapath, index_val):
     with assert_executed_plan_count(0):
         S = df["A"] + 1 > df["C"].sum()
         bodo_S = bdf["A"] + 1 > bdf["C"].sum()
+
+    _test_equal(
+        bodo_S.execute_plan(),
+        S,
+        check_pandas_types=False,
+    )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (pd.Series([1, 2, 3], dtype="int64"), "float64"),
+            id="int_float",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series([1.9, -2.1, 3.0], dtype="float64"), "int64"),
+            id="float_int",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series([1, 0, 2], dtype="int64"), "bool"),
+            id="int_bool",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series([True, False, True], dtype="bool"), "int64"),
+            id="bool_int",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series(["1", "2", "3"], dtype="object"), "int64"), id="str_int_valid"
+        ),
+        pytest.param(
+            (pd.Series(["1.5", "2.0", "-3.2"], dtype="object"), "float64"),
+            id="str_float_valid",
+        ),
+        pytest.param(
+            (pd.Series(["2020-01-01", "2021-12-31"], dtype="object"), "datetime64[ns]"),
+            id="str_datetime",
+        ),
+        pytest.param(
+            (pd.Series(pd.date_range("2020-01-01", periods=2)), "object"),
+            id="datetime_str",
+            marks=pytest.mark.gpu,
+        ),
+        pytest.param(
+            (pd.Series(["a", "1"], dtype="object"), "int64"), id="str_int_invalid"
+        ),
+    ]
+)
+def astype_case(request):
+    """
+    Fixture that yields tuples:
+      (source_series, target_dtype)
+    """
+    return request.param
+
+
+def test_series_astype(astype_case):
+    pandas_series, target_dtype = astype_case
+    bodo_series = bd.Series(pandas_series)
+
+    pandas_raised = False
+    try:
+        pandas_out = pandas_series.astype(target_dtype)
+    except Exception:
+        pandas_raised = True
+
+    bodo_raised = False
+    try:
+        bodo_out = bodo_series.astype(target_dtype)
+        bodo_out.execute_plan()
+    except Exception:
+        bodo_raised = True
+
+    assert bodo_raised == pandas_raised
+    if bodo_raised:
+        return
+
+    _test_equal(
+        bodo_out,
+        pandas_out,
+        check_pandas_types=False,
+    )
+
+
+def test_decimal_cmp(index_val):
+    """Test comparison operation on decimal columns."""
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [Decimal("1.1"), Decimal("2.2"), Decimal("3.3")],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            )
+        }
+    )
+    df.index = index_val[: len(df)]
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(0):
+        S = df.A > 2.1
+        bodo_S = bdf.A > 2.1
 
     _test_equal(
         bodo_S.execute_plan(),
@@ -4688,3 +4833,34 @@ def test_join_filter_pushdown_aggregate_split_keys():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_df_copy(datapath):
+    """Test that dataframe copy on an unexecuted plan behaves as expected."""
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] + 13
+
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] + 13
+    assert bdf.is_lazy_plan()
+
+    # New dataframe with the same plan.
+    bdf_copy = bdf.copy()
+    # Make sure they are both still lazy.
+    assert bdf.is_lazy_plan()
+    assert bdf_copy.is_lazy_plan()
+
+    _test_equal(bdf, pdf, check_pandas_types=False)
+    # Make sure first dataframe isn't a lazy plan but the copy is.
+    assert not bdf.is_lazy_plan()
+    assert bdf_copy.is_lazy_plan()
+    # make sure the copy got the same answer.
+    _test_equal(bdf_copy, pdf, check_pandas_types=False)

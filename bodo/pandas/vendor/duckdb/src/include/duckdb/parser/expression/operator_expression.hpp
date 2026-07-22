@@ -90,6 +90,14 @@ public:
 		// Bodo change: add new operator
 		case ExpressionType::OPERATOR_NEG:
 			return "(-" + entry.children[0]->ToString() + ")";
+		case ExpressionType::OPERATOR_IS_TRUE:
+			return "(" + entry.children[0]->ToString() + " IS TRUE)";
+		case ExpressionType::OPERATOR_IS_NOT_TRUE:
+			return "(" + entry.children[0]->ToString() + " IS NOT TRUE)";
+		case ExpressionType::OPERATOR_IS_FALSE:
+			return "(" + entry.children[0]->ToString() + " IS FALSE)";
+		case ExpressionType::OPERATOR_IS_NOT_FALSE:
+			return "(" + entry.children[0]->ToString() + " IS NOT FALSE)";
 		case ExpressionType::ARRAY_EXTRACT:
 			return entry.children[0]->ToString() + "[" + entry.children[1]->ToString() + "]";
 		case ExpressionType::ARRAY_SLICE: {

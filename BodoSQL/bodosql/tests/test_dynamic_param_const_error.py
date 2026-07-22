@@ -10,6 +10,8 @@ import bodo
 import bodosql
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.bodosql_cpp
+
 
 @pytest.mark.slow
 def test_named_param_extract(bodosql_datetime_types, memory_leak_check):

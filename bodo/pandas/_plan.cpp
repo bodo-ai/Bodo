@@ -344,7 +344,8 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     duckdb::optional_ptr<duckdb::CatalogEntry> entry = binder->GetCatalogEntry(
         "system", "", function_lookup, duckdb::OnEntryNotFound::RETURN_NULL);
     if (!entry) {
-        throw std::runtime_error("make_arithop_expr GetCatalogEntry failed");
+        throw std::runtime_error("make_arithop_expr GetCatalogEntry failed: " +
+                                 opstr);
     }
     duckdb::ScalarFunctionCatalogEntry &func =
         entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
@@ -381,9 +382,12 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
 }
 
 std::unique_ptr<duckdb::Expression> make_unaryop_expr(
-    std::unique_ptr<duckdb::Expression> &source, std::string opstr) {
+    std::unique_ptr<duckdb::Expression> &source, std::string opstr,
+    PyObject *out_schema_py) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(source);
+    std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
+
     duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> children;
     children.emplace_back(std::move(lhs_duck));
 
@@ -404,7 +408,8 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
         binder->GetCatalogEntry("system", "main", function_lookup,
                                 duckdb::OnEntryNotFound::RETURN_NULL);
     if (!entry) {
-        throw std::runtime_error("make_unaryop_expr GetCatalogEntry failed");
+        throw std::runtime_error("make_unaryop_expr GetCatalogEntry failed: " +
+                                 opstr);
     }
     duckdb::ScalarFunctionCatalogEntry &func =
         entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
@@ -423,9 +428,16 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
             "make_unaryop_expr BindScalarFunction did not return a "
             "BOUND_FUNCTION");
     }
+
+    auto &bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
+    bound_func_expr.bind_info =
+        duckdb::make_uniq<BodoScalarFunctionData>(out_schema);
+
     if (started_transaction) {
         client_context->transaction.Rollback({});
     }
+
+    result->return_type = arrowTypeToDuckDB(out_schema->field(0)->type());
     return result;
 }
 
@@ -482,6 +494,8 @@ duckdb::unique_ptr<duckdb::Expression> make_unary_expr(
         case duckdb::ExpressionType::OPERATOR_NOT:
         case duckdb::ExpressionType::OPERATOR_IS_TRUE:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_TRUE:
+        case duckdb::ExpressionType::OPERATOR_IS_FALSE:
+        case duckdb::ExpressionType::OPERATOR_IS_NOT_FALSE:
         case duckdb::ExpressionType::OPERATOR_IS_NULL:
         case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
             auto ret = duckdb::make_uniq<duckdb::BoundOperatorExpression>(
@@ -1199,6 +1213,8 @@ static void RunFunction(duckdb::DataChunk &args, duckdb::ExpressionState &state,
         buildPhysicalExprTree(expr_copy, empty_col_ref_map, false);
     std::shared_ptr<ExprResult> expr_res = temp_pe->ProcessBatch(in_table);
 
+    temp_pe->Finalize();
+
     std::shared_ptr<ArrayExprResult> expr_res_as_array =
         std::dynamic_pointer_cast<ArrayExprResult>(expr_res);
     std::shared_ptr<ScalarExprResult> expr_res_as_scalar =
@@ -1680,56 +1696,110 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     return out_get;
 }
 
-void registerFloor(duckdb::shared_ptr<duckdb::DuckDB> db) {
-    duckdb::LogicalType double_type(duckdb::LogicalType::DOUBLE);
-    duckdb::LogicalType float_type(duckdb::LogicalType::FLOAT);
-    duckdb::vector<duckdb::LogicalType> double_arguments = {double_type};
-    duckdb::vector<duckdb::LogicalType> float_arguments = {float_type};
-    duckdb::ScalarFunction floor_fun_double("floor", double_arguments,
-                                            double_type, nullptr);
-    duckdb::ScalarFunction floor_fun_float("floor", float_arguments, float_type,
-                                           nullptr);
-    duckdb::ScalarFunctionSet floor_set("floor");
-    floor_set.AddFunction(floor_fun_double);
-    floor_set.AddFunction(floor_fun_float);
-    duckdb::CreateScalarFunctionInfo floor_info(floor_set);
+struct ScalarFunctionSignature {
+    duckdb::vector<duckdb::LogicalType> param_types;
+    duckdb::LogicalType return_type;
+};
+
+void register_duckdb_scalar_func(
+    duckdb::shared_ptr<duckdb::DuckDB> db, const std::string &func_name,
+    const duckdb::vector<ScalarFunctionSignature> &signatures) {
+    duckdb::ScalarFunctionSet func_set(func_name);
+
+    for (const ScalarFunctionSignature &signature : signatures) {
+        duckdb::ScalarFunction scalar_func(func_name, signature.param_types,
+                                           signature.return_type, nullptr);
+        func_set.AddFunction(scalar_func);
+    }
+
+    duckdb::CreateScalarFunctionInfo func_info(func_set);
     auto &system_catalog = duckdb::Catalog::GetSystemCatalog(*(db->instance));
     auto data =
         duckdb::CatalogTransaction::GetSystemTransaction(*(db->instance));
-    system_catalog.CreateFunction(data, floor_info);
+    system_catalog.CreateFunction(data, func_info);
 }
 
-void registerPower(duckdb::shared_ptr<duckdb::DuckDB> db) {
-    duckdb::LogicalType double_type(duckdb::LogicalType::DOUBLE);
-    duckdb::LogicalType float_type(duckdb::LogicalType::FLOAT);
-    duckdb::vector<duckdb::LogicalType> double_arguments = {double_type,
-                                                            double_type};
-    duckdb::vector<duckdb::LogicalType> float_arguments = {float_type,
-                                                           float_type};
-    duckdb::ScalarFunction power_fun_double("POWER", double_arguments,
-                                            double_type, nullptr);
-    duckdb::ScalarFunction power_fun_float("POWER", float_arguments, float_type,
-                                           nullptr);
-    duckdb::ScalarFunctionSet power_set("POWER");
-    power_set.AddFunction(power_fun_double);
-    power_set.AddFunction(power_fun_float);
-    duckdb::CreateScalarFunctionInfo power_info(power_set);
-    auto &system_catalog = duckdb::Catalog::GetSystemCatalog(*(db->instance));
-    auto data =
-        duckdb::CatalogTransaction::GetSystemTransaction(*(db->instance));
-    system_catalog.CreateFunction(data, power_info);
+const duckdb::vector<ScalarFunctionSignature> UNARY_FLOAT_SIGNATURES = {
+    ScalarFunctionSignature({duckdb::LogicalType::DOUBLE},
+                            duckdb::LogicalType::DOUBLE),
+    ScalarFunctionSignature({duckdb::LogicalType::FLOAT},
+                            duckdb::LogicalType::FLOAT)};
+
+const duckdb::vector<ScalarFunctionSignature> UNARY_INT_SIGNATURES = {
+    ScalarFunctionSignature({duckdb::LogicalType::TINYINT},
+                            duckdb::LogicalType::TINYINT),
+    ScalarFunctionSignature({duckdb::LogicalType::SMALLINT},
+                            duckdb::LogicalType::SMALLINT),
+    ScalarFunctionSignature({duckdb::LogicalType::INTEGER},
+                            duckdb::LogicalType::INTEGER),
+    ScalarFunctionSignature({duckdb::LogicalType::BIGINT},
+                            duckdb::LogicalType::BIGINT)};
+
+duckdb::vector<ScalarFunctionSignature> &&append_signatures(
+    duckdb::vector<ScalarFunctionSignature> &&signatures,
+    const duckdb::vector<ScalarFunctionSignature> &signatures_to_append) {
+    for (const ScalarFunctionSignature &signature : signatures_to_append) {
+        signatures.emplace_back(signature);
+    }
+    return std::move(signatures);
+}
+
+duckdb::vector<ScalarFunctionSignature> copy_signatures(
+    const duckdb::vector<ScalarFunctionSignature> &signatures) {
+    return signatures;
+}
+
+void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
+    register_duckdb_scalar_func(db, "floor", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "ceil", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(
+        db, "abs",
+        append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
+                          UNARY_INT_SIGNATURES));
+    register_duckdb_scalar_func(db, "sqrt", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "cbrt", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "exp", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "ln", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "log10", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(db, "log2", UNARY_FLOAT_SIGNATURES);
+    // Unary and binary round
+    register_duckdb_scalar_func(
+        db, "round",
+        append_signatures(
+            {ScalarFunctionSignature(
+                 {duckdb::LogicalType::DOUBLE, duckdb::LogicalType::BIGINT},
+                 duckdb::LogicalType::DOUBLE),
+             ScalarFunctionSignature(
+                 {duckdb::LogicalType::FLOAT, duckdb::LogicalType::BIGINT},
+                 duckdb::LogicalType::FLOAT)},
+            UNARY_FLOAT_SIGNATURES));
+    register_duckdb_scalar_func(db, "trunc", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(
+        db, "sign",
+        append_signatures(
+            {ScalarFunctionSignature({duckdb::LogicalType::BIGINT},
+                                     duckdb::LogicalType::TINYINT)},
+            UNARY_FLOAT_SIGNATURES));
+
+    register_duckdb_scalar_func(
+        db, "power",
+        {ScalarFunctionSignature(
+             {duckdb::LogicalType::DOUBLE, duckdb::LogicalType::DOUBLE},
+             duckdb::LogicalType::DOUBLE),
+         ScalarFunctionSignature(
+             {duckdb::LogicalType::FLOAT, duckdb::LogicalType::FLOAT},
+             duckdb::LogicalType::FLOAT)});
 }
 
 duckdb::shared_ptr<duckdb::DuckDB> get_duckdb() {
     static duckdb::shared_ptr<duckdb::DuckDB> db =
         duckdb::make_shared_ptr<duckdb::DuckDB>(nullptr);
-    static bool floor_registered = []() {
-        registerFloor(db);
-        registerPower(db);
+    static bool scalar_funcs_registered = []() {
+        register_duckdb_scalar_funcs(db);
         return true;
     }();
     // Prevent unused variable error.
-    (void)floor_registered;
+    (void)scalar_funcs_registered;
     return db;
 }
 
@@ -1961,7 +2031,7 @@ std::pair<duckdb::string, duckdb::LogicalType> arrow_field_to_duckdb(
                     duckdb_type = duckdb::LogicalType::TIME;
                     break;
                 case arrow::TimeUnit::NANO:
-                    duckdb_type = duckdb::LogicalType::TIME;
+                    duckdb_type = duckdb::LogicalType::TIME_NS;
                     break;
                 default:
                     throw std::runtime_error("Unsupported Time64 unit");

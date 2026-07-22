@@ -415,6 +415,14 @@ def start_write_rank_0(
     if create_table_info.table_comment is not None:
         properties["comment"] = create_table_info.table_comment
 
+    # Convert ns timestamps to us timestamps for Iceberg
+    for field in df_schema:
+        if pa.types.is_timestamp(field.type) and field.type.unit == "ns":
+            df_schema = df_schema.set(
+                df_schema.get_field_index(field.name),
+                field.with_type(pa.timestamp("us", tz=field.type.tz)),
+            )
+
     if mode == "create":
         output_schema = assign_fresh_schema_ids(
             _pyarrow_to_schema_without_ids(df_schema)

@@ -82,21 +82,41 @@ def bodosql_conv_df(request):
 
 @pytest.fixture(
     params=[
-        pytest.param(("ABS", "ABS", "MIXED_INTS"), marks=pytest.mark.slow),
-        ("ABS", "ABS", "MIXED_FLOATS"),
-        pytest.param(("CBRT", "CBRT", "MIXED_FLOATS"), marks=pytest.mark.slow),
-        ("CBRT", "CBRT", "MIXED_INTS"),
+        pytest.param(
+            ("ABS", "ABS", "MIXED_INTS"),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
+        pytest.param(("ABS", "ABS", "MIXED_FLOATS"), marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            ("CBRT", "CBRT", "MIXED_FLOATS"),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
+        pytest.param(("CBRT", "CBRT", "MIXED_INTS"), marks=pytest.mark.bodosql_cpp),
         pytest.param(
             ("FACTORIAL", "FACTORIAL", "POSITIVE_INTS"), marks=pytest.mark.slow
         ),
-        pytest.param(("SIGN", "SIGN", "MIXED_FLOATS"), marks=pytest.mark.slow),
-        ("SIGN", "SIGN", "MIXED_INTS"),
+        pytest.param(
+            ("SIGN", "SIGN", "MIXED_FLOATS"),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
+        pytest.param(("SIGN", "SIGN", "MIXED_INTS"), marks=pytest.mark.bodosql_cpp),
         # the second argument to POW for SQUARE (2) is provided below
-        pytest.param(("SQUARE", "POW", "MIXED_FLOATS"), marks=pytest.mark.slow),
-        ("SQUARE", "POW", "MIXED_INTS"),
-    ]
-    + [(x, x, "POSITIVE_FLOATS") for x in ["LOG10", "LOG2", "LN", "EXP", "SQRT"]]
-    + [
+        pytest.param(
+            ("SQUARE", "POW", "MIXED_FLOATS"),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
+        pytest.param(("SQUARE", "POW", "MIXED_INTS"), marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            ("LOG10", "LOG10", "POSITIVE_FLOATS"), marks=pytest.mark.bodosql_cpp
+        ),
+        pytest.param(
+            ("LOG2", "LOG2", "POSITIVE_FLOATS"), marks=pytest.mark.bodosql_cpp
+        ),
+        pytest.param(("LN", "LN", "POSITIVE_FLOATS"), marks=pytest.mark.bodosql_cpp),
+        pytest.param(("EXP", "EXP", "POSITIVE_FLOATS"), marks=pytest.mark.bodosql_cpp),
+        pytest.param(
+            ("SQRT", "SQRT", "POSITIVE_FLOATS"), marks=pytest.mark.bodosql_cpp
+        ),
         pytest.param(("LOG", "LOG10", "POSITIVE_FLOATS"), marks=pytest.mark.slow),
     ]
     # currently, behavior for log(0) differs from sparks behavior, see BS-374
@@ -114,20 +134,28 @@ def single_op_numeric_fn_info(request):
     params=[
         ("MOD", "MOD", "MIXED_FLOATS", "MIXED_FLOATS"),
         pytest.param(
-            ("MOD", "MOD", "MIXED_INTS", "MIXED_INTS"), marks=pytest.mark.slow
+            ("MOD", "MOD", "MIXED_INTS", "MIXED_INTS"),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         ("MOD", "MOD", "MIXED_INTS", "MIXED_FLOATS"),
         pytest.param(
-            ("MOD", "MOD", "UNSIGNED_INT64S", "UNSIGNED_INT32S"), marks=pytest.mark.slow
+            ("MOD", "MOD", "UNSIGNED_INT64S", "UNSIGNED_INT32S"),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
-        ("POW", "POW", "POSITIVE_FLOATS", "MIXED_FLOATS"),
+        pytest.param(
+            ("POW", "POW", "POSITIVE_FLOATS", "MIXED_FLOATS"),
+            marks=pytest.mark.bodosql_cpp,
+        ),
         pytest.param(
             ("POWER", "POWER", "POSITIVE_FLOATS", "MIXED_FLOATS"),
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
-        ("POW", "POW", "MIXED_FLOATS", "MIXED_INTS"),
         pytest.param(
-            ("POW", "POW", "MIXED_FLOATS", "MIXED_FLOATS"), marks=pytest.mark.slow
+            ("POW", "POW", "MIXED_FLOATS", "MIXED_INTS"), marks=pytest.mark.bodosql_cpp
+        ),
+        pytest.param(
+            ("POW", "POW", "MIXED_FLOATS", "MIXED_FLOATS"),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
     ]
 )
@@ -198,6 +226,7 @@ def test_double_op_numeric_fns_cols(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query_args",
     [
@@ -232,6 +261,7 @@ def test_width_bucket_cols(query_args, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_width_bucket_scalars(spark_info, memory_leak_check):
     t0 = pd.DataFrame(
         {
@@ -538,6 +568,7 @@ def test_double_op_numeric_fns_scalars(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_rand(basic_df, memory_leak_check):
     """tests the behavior of rand"""
     query = "Select (A >= 0.0 AND A < 1.0) as cond, B from (select RAND() as A, B from table1)"
@@ -671,6 +702,7 @@ def test_conv_scalars(bodosql_conv_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query",
     [
@@ -708,6 +740,7 @@ def test_log_hybrid(query, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -740,6 +773,7 @@ def test_div0_cols(args, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_div0_scalars():
     df = pd.DataFrame(
         {
@@ -763,6 +797,7 @@ def test_div0_scalars():
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "df, ans",
     [
@@ -833,6 +868,7 @@ def test_div0null_cols(df, ans, request):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "df, ans",
     [
@@ -917,14 +953,23 @@ def test_div0null_scalars(df, ans, request):
 @pytest.mark.parametrize(
     "values, expected_output",
     [
-        pytest.param(["1"], 1, id="int", marks=pytest.mark.slow),
-        pytest.param(["1.0"], 1, id="float"),
+        pytest.param(
+            ["1"], 1, id="int", marks=[pytest.mark.slow, pytest.mark.bodosql_cpp]
+        ),
+        pytest.param(["1.0"], 1, id="float", marks=pytest.mark.bodosql_cpp),
         pytest.param(
             ["1.5", "1", "0"], 2, id="float_with_scale", marks=pytest.mark.slow
         ),
-        pytest.param(["'1.23456789'"], 1, id="str", marks=pytest.mark.slow),
+        pytest.param(
+            ["'1.23456789'"],
+            1,
+            id="str",
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+        ),
         pytest.param(["'1.23456789'", "5", "4"], 1.2346, id="str_with_scale"),
-        pytest.param(["NULL"], None, id="null", marks=pytest.mark.slow),
+        pytest.param(
+            ["NULL"], None, id="null", marks=[pytest.mark.slow, pytest.mark.bodosql_cpp]
+        ),
     ],
 )
 @pytest.mark.parametrize(
@@ -1043,6 +1088,7 @@ def test_to_number_columns_with_scale(fn_name):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "fn_name",
@@ -1334,6 +1380,7 @@ def round_data(request):
     return ctx, scale_str, answer
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -1357,18 +1404,28 @@ def test_round(round_data, use_case, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
-def test_floor_ceil(memory_leak_check):
+@pytest.mark.parametrize(
+    "operand_data",
+    [
+        pytest.param([2.71828] * 3 + [123.456] * 3, id="float"),
+        pytest.param([8] * 3 + [-192] * 3, id="int"),
+    ],
+)
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param("SELECT FLOOR(X), CEIL(X) FROM table1", id="one_arg"),
+        pytest.param("SELECT FLOOR(X, P), CEIL(X, P) FROM table1", id="two_args"),
+    ],
+)
+def test_floor_ceil(operand_data, query, memory_leak_check):
     """
     Tests the rounding functions FLOOR and CEIL with 1 argument and with
     2 arguments.
     """
-    query = "SELECT FLOOR(X), CEIL(X), FLOOR(X, P), CEIL(X, P) FROM table1"
-    ctx = {
-        "TABLE1": pd.DataFrame(
-            {"X": [2.71828] * 3 + [123.456] * 3, "P": [1, -1, 3] * 2}
-        )
-    }
+    ctx = {"TABLE1": pd.DataFrame({"X": operand_data, "P": [1, -1, 3] * 2})}
     check_query(
         query,
         ctx,
@@ -1379,6 +1436,12 @@ def test_floor_ceil(memory_leak_check):
     )
 
 
+# TODO: Enable on C++ backend once we support:
+#   1. BodoPhysicalAggregate with grouping sets
+#   2. SKEW aggregation
+#   3. AVG aggregation with large int64 values
+#       (currently Arrow will cast int64 to float and
+#       throw an error if input is not within [-2^53, 2^53])
 @pytest.mark.parametrize(
     "use_case",
     [
@@ -1435,6 +1498,7 @@ def test_random(use_case, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_trunc_truncate_single_arg(memory_leak_check):
     """
     Tests TRUNC and TRUNCATE on numeric values with a single argument

@@ -9,6 +9,7 @@ import pytest
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "query_info",
@@ -90,6 +91,7 @@ def test_logical_filter_rule(basic_df, query_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "query_info",

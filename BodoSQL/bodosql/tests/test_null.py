@@ -9,6 +9,8 @@ import pytest
 
 from bodosql.tests.utils import check_query
 
+pytestmark = pytest.mark.bodosql_cpp
+
 
 @pytest.fixture(
     params=[

@@ -38,8 +38,10 @@ from bodo.pandas.plan import (
     LogicalJoinFilter,
     LogicalOrder,
     LogicalProjection,
+    LogicalSetOperation,
     LogicalTopN,
     NullExpression,
+    PythonScalarFuncExpression,
     UnaryOpExpression,
     arrow_to_empty_df,
     make_col_ref_exprs,
@@ -49,13 +51,16 @@ from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
 _DATE_PART_ARROW_FUNCS = {
     "YEAR": "year",
+    "QUARTER": "quarter",
     "MONTH": "month",
     "DAY": "day",
     "DAYOFMONTH": "day",
     "HOUR": "hour",
     "MINUTE": "minute",
     "SECOND": "second",
-    "QUARTER": "quarter",
+    "MILLISECOND": "millisecond",
+    "MICROSECOND": "microsecond",
+    "NANOSECOND": "nanosecond",
     "WEEK": "iso_week",
     "WEEKOFYEAR": "iso_week",
     "WEEKISO": "iso_week",
@@ -65,8 +70,6 @@ _DATE_PART_ARROW_FUNCS = {
     "WEEKDAY": "day_of_week",
     "YEAROFWEEK": "iso_year",
     "YEAROFWEEKISO": "iso_year",
-    "MICROSECOND": "microsecond",
-    "NANOSECOND": "nanosecond",
     "DOW": "day_of_week",
     "DOY": "day_of_year",
 }
@@ -234,7 +237,49 @@ def java_plan_to_python_plan(ctx, java_plan):
     if java_class_name == "BodoPhysicalCachedSubPlan":
         return java_subplan_to_python_subplan(ctx, java_plan)
 
+    if java_class_name == "BodoPhysicalTableCreate":
+        return java_table_create_to_python(ctx, java_plan)
+
+    if java_class_name == "BodoPhysicalUnion":
+        return java_union_to_python_union(ctx, java_plan)
+
     raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
+
+
+def java_union_to_python_union(ctx, java_plan):
+    input_plans = [java_plan_to_python_plan(ctx, x) for x in java_plan.getInputs()]
+    plan = LogicalSetOperation(
+        input_plans[-2].empty_data, input_plans[-1], input_plans[-2], "union all"
+    )
+    for i in range(len(input_plans) - 3, -1, -1):
+        plan = LogicalSetOperation(
+            input_plans[i].empty_data, plan, input_plans[i], "union all"
+        )
+    # Can't see how to get the value of "all" out of the java_plan directly
+    # so use regex on the string conversion.
+    re_res = re.search(
+        r"\ball\b\s*[:=]\s*(true|false)\b", java_plan.toString(), flags=re.IGNORECASE
+    )
+    if not re_res:
+        raise ValueError("BodoPhysicalUnion toString() did not contain 'all' value.")
+    set_all = re_res.group(1).lower() == "true"
+    if not set_all:
+        # UNION and UNION DISTINCT are the same and won't have the all flag set
+        # which means they expect the result to not have duplicate rows so add
+        # a distinct to the plan.
+        exprs = make_col_ref_exprs(list(range(len(plan.empty_data.columns))), plan)
+        plan = LogicalDistinct(
+            plan.empty_data,
+            plan,
+            exprs,
+        )
+
+    return plan
+
+
+def java_table_create_to_python(ctx, java_plan):
+    input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
+    return ctx.NewTable(input_plan, java_plan)
 
 
 def java_expr_to_python_expr(ctx, java_expr, input_plan):
@@ -253,7 +298,71 @@ def java_expr_to_python_expr(ctx, java_expr, input_plan):
     if java_class_name == "RexLiteral":
         return java_literal_to_python_literal(ctx, java_expr, input_plan)
 
+    if java_class_name == "RexNamedParam":
+        return java_named_param_to_python_literal(ctx, java_expr, input_plan)
+
+    if java_class_name == "RexDynamicParam":
+        return java_dynamic_param_to_python_literal(ctx, java_expr, input_plan)
+
     raise NotImplementedError(f"Expression {java_class_name} not supported yet")
+
+
+type_str_to_pa = {
+    "UINT8": pa.uint8(),
+    "UINT16": pa.uint16(),
+    "UINT32": pa.uint32(),
+    "UINT64": pa.uint64(),
+    "INT8": pa.int8(),
+    "INT16": pa.int16(),
+    "INT32": pa.int32(),
+    "INT64": pa.int64(),
+    "FLOAT32": pa.float32(),
+    "FLOAT64": pa.float64(),
+    "STRING": pa.string(),
+    "BOOL8": pa.bool_(),
+    "TIMESTAMP_NTZ": pa.timestamp("ns"),
+}
+
+
+def java_dynamic_param_to_python_literal(ctx, dyn_param, input_plan):
+    """Convert a BodoSQL Java dynamic param expression to a DataFrame library constant."""
+    dyn_param = dyn_param.getIndex()
+    if dyn_param >= len(ctx.dynamic_params_list[0]) or dyn_param >= len(
+        ctx.dynamic_params_list[1]
+    ):
+        raise ValueError(f"Dynamic parameter {dyn_param} not found.")
+
+    column = ctx.dynamic_params_list[0][dyn_param]
+    value = ctx.dynamic_params_list[1][dyn_param]
+    if isinstance(value, np.generic):
+        value = value.item()
+    cdtype = column.getDataType().toString()
+    if cdtype in type_str_to_pa:
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
+        return ConstantExpression(dummy_empty_data, input_plan, value)
+    else:
+        raise NotImplementedError(f"DynamicParam type {cdtype} not supported yet")
+
+
+def java_named_param_to_python_literal(ctx, named_param, input_plan):
+    """Convert a BodoSQL Java named param expression to a DataFrame library constant."""
+    named_param = named_param.getParamName()
+    if (
+        named_param not in ctx.named_params_dict[0]
+        or named_param not in ctx.named_params_dict[1]
+    ):
+        raise ValueError(f"Named parameter {named_param} not found.")
+
+    column = ctx.named_params_dict[0][named_param]
+    value = ctx.named_params_dict[1][named_param]
+    if isinstance(value, np.generic):
+        value = value.item()
+    cdtype = column.getDataType().toString()
+    if cdtype in type_str_to_pa:
+        dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(type_str_to_pa[cdtype]))
+        return ConstantExpression(dummy_empty_data, input_plan, value)
+    else:
+        raise NotImplementedError(f"NamedParam type {cdtype} not supported yet")
 
 
 def java_call_to_python_call(ctx, java_call, input_plan):
@@ -264,6 +373,312 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     operator_class_name = op.getClass().getSimpleName()
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+    def timestamp_from_parts(
+        year_expr,
+        month_expr,
+        day_expr,
+        hour_expr=None,
+        minute_expr=None,
+        second_expr=None,
+        nanosecond_expr=None,
+    ):
+        """
+        Create a timestamp expression from the provided part expressions
+        (instances of bodo.pandas.plan.Expression).
+
+        If the inputs are within the normal ranges, the timestamp is constructed
+        as expected. However, the inputs (aside from the year) can also be
+        outside of the usual ranges in which they would appear in a timestamp.
+        At a high level, the resulting timestamp from this function will simply
+        be the sum of the parts.
+
+        More precisely, if month_expr = M, we add M-1 months after January of the
+        given year. Therefore, if M = 0, we subtract a month to get December of the
+        previous year, and if M = -1, we would go back two months.
+        The same rule applies to day_expr. We add day_expr - 1 days to the 1st of
+        the given month.
+        Adding the time components hour_expr, minute_expr, second_expr, and
+        nanosecond_expr is more intuitive because they start at zero.
+
+        Specifying the hour, minute, seconds, and nanosecond are optional,
+        and will default to 0 if not provided.
+
+        Any float inputs will be rounded to integers. Float inputs that cannot
+        fit in int64 will cause a NULL timestamp to be emitted.
+
+        The result will be timestamp[s] unless nanoseconds are provided, where we
+        return timestamp[ns]. In theory we can represent more years in an int64
+        timestamp this way, although the C++ backend may need better support for
+        returning timestamps of lower than ns resolution.
+        """
+
+        """
+        Since Arrow does not have a timestamp_from_parts function,
+        here is an overview of our approach:
+
+        We have a couple options to create a timestamp. One is to
+        calculate epoch time and then cast directly from an integer
+        to a timestamp. This method seems impractical
+        because you have to be conscious about days per month, leap
+        years, etc. The other option is to use Arrow's strptime, to
+        parse a formatted string as a timestamp.
+
+        Unfortunately we can't call strptime right away, because the given
+        timestamp components could be out of range. We could manually
+        accumulate the components one by one using mod arithmetic to
+        calculate the effective timestamp part values, but it would be
+        tedious and potentially inefficient.
+
+        Therefore we only compute the final year and month values beforehand
+        to ensure calendar awareness. Then we use those values with the first
+        day of that month to create a timestamp type via strptime. At this point,
+        we need to add the extra days, hours, minutes, seconds, and nanoseconds
+        we have yet to account for. We convert those to a common unit (seconds
+        or nanoseconds) and cast to a duration type before adding to our
+        year-month timestamp.
+        """
+
+        # Arrow currently lacks a function to make a date or timestamp from parts:
+        # https://github.com/apache/arrow/issues/49514.
+        # There is some possibility of it being added in the future,
+        # so we can revisit this strptime approach then.
+
+        int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+        float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+
+        max_int64 = ConstantExpression(
+            int_empty_data, input_plan, np.iinfo(np.int64).max
+        )
+        min_int64 = ConstantExpression(
+            int_empty_data, input_plan, np.iinfo(np.int64).min
+        )
+
+        # If any of the inputs are floats, we will round to the nearest integer.
+        # This is what the JIT implementation seems to do, even though float input isn't explicitly allowed in Snowflake.
+        # See `construct_timestamp` in BodoSQL/bodosql/kernels/datetime_array_kernels.py.
+        def int_part_expr(part_expr, part_expr_name):
+            ensure_type_of_expr(part_expr, part_expr_name, (int, float))
+            part_expr_dtype = get_expr_dtype(part_expr, part_expr_name)
+            if compare_types(part_expr_dtype, float):
+                part_expr = ArrowScalarFuncExpression(
+                    float_empty_data,
+                    [part_expr],
+                    "round",
+                    (0, "half_towards_infinity"),
+                )
+
+                # The BodoSQL docs say we should return NULL when any input cannot be converted to int64
+                part_too_large = ComparisonOpExpression(
+                    bool_empty_data, part_expr, max_int64, operator.gt
+                )
+                part_too_small = ComparisonOpExpression(
+                    bool_empty_data, part_expr, min_int64, operator.lt
+                )
+                part_out_of_bounds = ConjunctionOpExpression(
+                    bool_empty_data, part_too_large, part_too_small, "__or__"
+                )
+                part_expr = CaseExpression(
+                    float_empty_data,
+                    part_out_of_bounds,
+                    NullExpression(float_empty_data, input_plan, 0),
+                    part_expr,
+                )
+
+                part_expr = CastExpression(int_empty_data, part_expr)
+            return part_expr
+
+        year_expr = int_part_expr(year_expr, "year_expr")
+        month_expr = int_part_expr(month_expr, "month_expr")
+        day_expr = int_part_expr(day_expr, "day_expr")
+
+        if hour_expr:
+            hour_expr = int_part_expr(hour_expr, "hour_expr")
+        if minute_expr:
+            minute_expr = int_part_expr(minute_expr, "minute_expr")
+        if second_expr:
+            second_expr = int_part_expr(second_expr, "second_expr")
+            # Ensure seconds are int64 so the result of the later multiplication doesn't
+            # end up being int32 internally, potentially leading to overflow and the wrong answer.
+            second_expr = CastExpression(int_empty_data, second_expr)
+        if nanosecond_expr:
+            nanosecond_expr = int_part_expr(nanosecond_expr, "nanosecond_expr")
+
+        one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+        zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+        twelve_expr = ConstantExpression(int_empty_data, input_plan, 12)
+
+        # Timestamp components (aside from the year) can be outside the usual ranges
+        # or even negative, so we must account for this and adjust the constructed timestamp.
+
+        # Calculate the year and month manually to ensure calendar awareness.
+
+        # Calculate month component.
+        # If (month-1) % 12 is 0 or positive, month component is (month-1) % 12 + 1.
+        # If (month-1) % 12 is negative, month component is 13 + (month-1) % 12.
+        month_minus_one = ArithOpExpression(
+            int_empty_data, month_expr, one_expr, "__sub__"
+        )
+        # We rely on bodo_mod returning a negative remainder when (month-1) is negative
+        month_remainder = ArithOpExpression(
+            int_empty_data, month_minus_one, twelve_expr, "__mod__"
+        )
+        month_remainder_negative = ComparisonOpExpression(
+            bool_empty_data, month_remainder, zero_expr, operator.lt
+        )
+        month_num_to_add = CaseExpression(
+            int_empty_data,
+            month_remainder_negative,
+            ConstantExpression(int_empty_data, input_plan, 13),
+            one_expr,
+        )
+        month_component = ArithOpExpression(
+            int_empty_data, month_remainder, month_num_to_add, "__add__"
+        )
+
+        # Calculate year component.
+        # If month is positive, year component is year + (month-1) // 12.
+        # If month is 0 or negative, year component is year + (month) // 12 - 1.
+        # Here we rely on DuckDB's integer division to truncate towards zero.
+        month_positive = ComparisonOpExpression(
+            bool_empty_data, month_expr, zero_expr, operator.gt
+        )
+        month_quotient = ArithOpExpression(
+            int_empty_data, month_expr, twelve_expr, "__floordiv__"
+        )
+        month_quotient_minus_one = ArithOpExpression(
+            int_empty_data, month_quotient, one_expr, "__sub__"
+        )
+        month_minus_one_quotient = ArithOpExpression(
+            int_empty_data, month_minus_one, twelve_expr, "__floordiv__"
+        )
+        year_offset = CaseExpression(
+            int_empty_data,
+            month_positive,
+            month_minus_one_quotient,
+            month_quotient_minus_one,
+        )
+        year_component = ArithOpExpression(
+            int_empty_data, year_expr, year_offset, "__add__"
+        )
+
+        # Concatenate date components to get a string that can be parsed by strptime
+        year_string = CastExpression(string_empty_data, year_component)
+        year_string = ArrowScalarFuncExpression(
+            string_empty_data, [year_string], "utf8_lpad", (4, "0")
+        )
+        month_string = CastExpression(string_empty_data, month_component)
+        month_string = ArrowScalarFuncExpression(
+            string_empty_data, [month_string], "utf8_lpad", (2, "0")
+        )
+        day_string = ConstantExpression(string_empty_data, input_plan, "01")
+        separator = ConstantExpression(string_empty_data, input_plan, "-")
+        date_string = ArrowScalarFuncExpression(
+            string_empty_data,
+            [year_string, month_string, day_string, separator],
+            "binary_join_element_wise",
+            (),
+        )
+
+        # Only use nanosecond precision if necessary (nanoseconds provided).
+        # This helps avoid overflow in some cases, and can allow us to represent more years.
+        use_nanosecond_precision = nanosecond_expr is not None
+        precision_str = "ns" if use_nanosecond_precision else "s"
+        timestamp_empty_data = pd.Series(
+            dtype=pd.ArrowDtype(pa.timestamp(precision_str))
+        )
+        duration_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration(precision_str)))
+
+        # Pass date string to strptime to construct a timestamp from the components
+        timestamp_expr = ArrowScalarFuncExpression(
+            timestamp_empty_data,
+            [date_string],
+            "strptime",
+            ("%Y-%m-%d", precision_str),
+        )
+
+        # We passed 1 as the day, so now we need to add the remaining time to the timestamp.
+        # Convert days and time to nanosecond duration if needed or second duration
+
+        # Subtract one from the day since we already have a timestamp on the first day of the month
+        day_minus_one = ArithOpExpression(int_empty_data, day_expr, one_expr, "__sub__")
+        day_scale_factor = ConstantExpression(
+            int_empty_data,
+            input_plan,
+            86400 * (1_000_000_000 if use_nanosecond_precision else 1),
+        )
+        day_scaled = ArithOpExpression(
+            int_empty_data, day_minus_one, day_scale_factor, "__mul__"
+        )
+
+        hour_scaled, minute_scaled, second_scaled = None, None, None
+        if hour_expr:
+            hour_scale_factor = ConstantExpression(
+                int_empty_data,
+                input_plan,
+                3600 * (1_000_000_000 if use_nanosecond_precision else 1),
+            )
+            hour_scaled = ArithOpExpression(
+                int_empty_data, hour_expr, hour_scale_factor, "__mul__"
+            )
+        if minute_expr:
+            minute_scale_factor = ConstantExpression(
+                int_empty_data,
+                input_plan,
+                60 * (1_000_000_000 if use_nanosecond_precision else 1),
+            )
+            minute_scaled = ArithOpExpression(
+                int_empty_data, minute_expr, minute_scale_factor, "__mul__"
+            )
+        if second_expr and use_nanosecond_precision:
+            second_scale_factor = ConstantExpression(
+                int_empty_data, input_plan, 1_000_000_000
+            )
+            second_scaled = ArithOpExpression(
+                int_empty_data, second_expr, second_scale_factor, "__mul__"
+            )
+        else:
+            second_scaled = second_expr
+
+        # Add up the nanoseconds/seconds from each day/time component
+        additional_time = day_scaled
+        for time_component_scaled in [
+            hour_scaled,
+            minute_scaled,
+            second_scaled,
+            nanosecond_expr,
+        ]:
+            if time_component_scaled:
+                additional_time = ArithOpExpression(
+                    int_empty_data,
+                    additional_time,
+                    time_component_scaled,
+                    "__add__",
+                )
+
+        # Convert integer time to duration so it can be added to the timestamp.
+        # CastExpressions are currently broken if the unit is not nanoseconds,
+        # so in the seconds case we workaround by multiplying by a unit duration[s].
+        if use_nanosecond_precision:
+            additional_time_duration = CastExpression(
+                duration_empty_data, additional_time
+            )
+        else:
+            unit_duration = ConstantExpression(duration_empty_data, input_plan, 1)
+            additional_time_duration = ArithOpExpression(
+                duration_empty_data, additional_time, unit_duration, "__mul__"
+            )
+
+        # Add remaining time to timestamp
+        timestamp_expr = ArithOpExpression(
+            timestamp_empty_data,
+            timestamp_expr,
+            additional_time_duration,
+            "__add__",
+        )
+        return timestamp_expr
 
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
@@ -335,6 +750,175 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
             return CastExpression(date_empty_data, timestamp_expr)
 
+        if func_name == "TIMESTAMP_FROM_PARTS":
+            # Redirect to TZ-aware or TZ-naive version depending on whether a timezone is provided
+            if num_operands == 8:
+                func_name = "TIMESTAMP_TZ_FROM_PARTS"
+            elif num_operands in (2, 6, 7):
+                func_name = "TIMESTAMP_NTZ_FROM_PARTS"
+
+        if func_name == "TIMESTAMP_NTZ_FROM_PARTS" and num_operands in (2, 6, 7):
+            if num_operands in (6, 7):
+                # Parts provided individually, with or without nanoseconds
+                op_exprs = [
+                    java_expr_to_python_expr(ctx, o, input_plan)
+                    for o in java_call.getOperands()
+                ]
+                return timestamp_from_parts(*op_exprs)
+            elif num_operands == 2:
+                # Date expression and time expression provided
+                date_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[0], input_plan
+                )
+                time_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+
+                timestamp_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                )
+                date_expr = CastExpression(timestamp_empty_data, date_expr)
+                # time_expr can be a timestamp, in which case we need to cast to time64 to extract the time part
+                time_expr = CastExpression(
+                    pd.Series(dtype=pd.ArrowDtype(pa.time64("ns"))), time_expr
+                )
+
+                # Convert time to duration so it can be added to the date
+                time_expr = CastExpression(
+                    pd.Series(dtype=pd.ArrowDtype(pa.int64())), time_expr
+                )
+                time_expr = CastExpression(
+                    pd.Series(dtype=pd.ArrowDtype(pa.duration("ns"))), time_expr
+                )
+
+                return ArithOpExpression(
+                    timestamp_empty_data, date_expr, time_expr, "__add__"
+                )
+
+        if func_name == "TIMESTAMP_TZ_FROM_PARTS" and num_operands in (6, 7, 8):
+            op_exprs = [
+                java_expr_to_python_expr(ctx, o, input_plan)
+                for o in java_call.getOperands()
+            ]
+            timestamp_expr = timestamp_from_parts(*op_exprs[:7])
+
+            if num_operands == 8:
+                timezone_expr = op_exprs[7]
+                ensure_arg_is_const_expr_of_type(timezone_expr, "timezone_expr", str)
+                timezone = timezone_expr.value
+            else:
+                timezone = ctx.default_tz if ctx.default_tz is not None else "UTC"
+
+            timestamp_empty_data = pd.Series(
+                dtype=pd.ArrowDtype(
+                    pa.timestamp("ns" if num_operands > 6 else "s", tz=timezone)
+                )
+            )
+            return ArrowScalarFuncExpression(
+                timestamp_empty_data, [timestamp_expr], "assume_timezone", (timezone,)
+            )
+
+        if func_name == "TIMESTAMP_LTZ_FROM_PARTS" and num_operands in (6, 7):
+            op_exprs = [
+                java_expr_to_python_expr(ctx, o, input_plan)
+                for o in java_call.getOperands()
+            ]
+            timestamp_expr = timestamp_from_parts(*op_exprs)
+            local_tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            timestamp_empty_data = pd.Series(
+                dtype=pd.ArrowDtype(
+                    pa.timestamp("ns" if num_operands == 7 else "s", tz=local_tz)
+                )
+            )
+            return ArrowScalarFuncExpression(
+                timestamp_empty_data, [timestamp_expr], "assume_timezone", (local_tz,)
+            )
+
+        if func_name == "DATE_FROM_PARTS" and num_operands == 3:
+            year_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            month_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+            day_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[2], input_plan
+            )
+
+            constructed_timestamp = timestamp_from_parts(
+                year_expr, month_expr, day_expr
+            )
+            return CastExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.date32())), constructed_timestamp
+            )
+
+        if func_name == "TIME_FROM_PARTS" and num_operands in (3, 4):
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            # If any of the inputs are floats, we will round to the nearest integer.
+            # This is what the JIT implementation seems to do, even though float input isn't explicitly allowed in Snowflake.
+            # See `time_from_parts` in BodoSQL/bodosql/kernels/time_array_kernels.py.
+            def int_part_expr(op_index, part_expr_name):
+                part_expr = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[op_index], input_plan
+                )
+                ensure_type_of_expr(part_expr, part_expr_name, (int, float))
+                part_expr_dtype = get_expr_dtype(part_expr, part_expr_name)
+                if compare_types(part_expr_dtype, float):
+                    part_expr = ArrowScalarFuncExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.float64())),
+                        [part_expr],
+                        "round",
+                        (0, "half_towards_infinity"),
+                    )
+                    part_expr = CastExpression(int_empty_data, part_expr)
+                return part_expr
+
+            hour_expr = int_part_expr(0, "hour_expr")
+            minute_expr = int_part_expr(1, "minute_expr")
+            second_expr = int_part_expr(2, "second_expr")
+            # Ensure seconds are int64 so the result of the later multiplication doesn't
+            # end up being int32 internally, leading to overflow and the wrong answer.
+            second_expr = CastExpression(int_empty_data, second_expr)
+
+            # Get the nanoseconds for each part
+            nanoseconds_per_hour = ConstantExpression(
+                int_empty_data, input_plan, 3_600_000_000_000
+            )
+            hour_nanos = ArithOpExpression(
+                int_empty_data, hour_expr, nanoseconds_per_hour, "__mul__"
+            )
+            nanoseconds_per_minute = ConstantExpression(
+                int_empty_data, input_plan, 60_000_000_000
+            )
+            minute_nanos = ArithOpExpression(
+                int_empty_data, minute_expr, nanoseconds_per_minute, "__mul__"
+            )
+            nanoseconds_per_second = ConstantExpression(
+                int_empty_data, input_plan, 1_000_000_000
+            )
+            second_nanos = ArithOpExpression(
+                int_empty_data, second_expr, nanoseconds_per_second, "__mul__"
+            )
+
+            total_nanos = ArithOpExpression(
+                int_empty_data, hour_nanos, minute_nanos, "__add__"
+            )
+            total_nanos = ArithOpExpression(
+                int_empty_data, total_nanos, second_nanos, "__add__"
+            )
+
+            if num_operands == 4:
+                nanosecond_expr = int_part_expr(3, "nanosecond_expr")
+                total_nanos = ArithOpExpression(
+                    int_empty_data, total_nanos, nanosecond_expr, "__add__"
+                )
+
+            # If the total nanoseconds are negative or exceed 24 hours in nanoseconds, casting to
+            # time64 will give us the nanoseconds modulo 24 hours, which is what we want.
+            time_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.time64("ns")))
+            return CastExpression(time_empty_data, total_nanos)
+
         if func_name == "MAKEDATE" and num_operands == 2:
             # MAKEDATE(year, dayofyear) → Jan 1 of year + (doy-1) days
             year_expr = java_expr_to_python_expr(
@@ -343,14 +927,28 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             doy_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[1], input_plan
             )
-            assert isinstance(year_expr, ConstantExpression) and isinstance(
-                doy_expr, ConstantExpression
-            ), "MAKEDATE requires constant integer arguments in C++ backend"
-            result_date = datetime(int(year_expr.value), 1, 1).date() + timedelta(
-                days=int(doy_expr.value) - 1
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+
+            # DATE_FROM_PARTS accepts negative days whereas MAKEDATE doesn't,
+            # so first check whether dayofyear is zero or negative.
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            invalid_doy = ComparisonOpExpression(
+                bool_empty_data, doy_expr, one_expr, operator.lt
             )
-            empty_data = pd.Series([result_date], dtype=pd.ArrowDtype(pa.date32()))
-            return ConstantExpression(empty_data, input_plan, result_date)
+
+            # Convert MAKEDATE(year, dayofyear) to DATE_FROM_PARTS(year, 1, dayofyear).
+            result_timestamp = timestamp_from_parts(year_expr, one_expr, doy_expr)
+
+            # If dayofyear is less than one, return NULL, else return the result date
+            date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+            return CaseExpression(
+                date_empty_data,
+                invalid_doy,
+                NullExpression(date_empty_data, input_plan, 0),
+                result_timestamp,
+            )
 
         if func_name == "DATE_TRUNC" and num_operands == 2:
             # DATE_TRUNC(FLAG(DAY), timestamp) → floor_temporal(timestamp, unit)
@@ -454,6 +1052,25 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 ctx, java_call.getOperands()[1], input_plan
             )
             ensure_type_of_expr(dow_string_expr, "dow_string_expr", str)
+
+            # Arrow and DuckDB don't support timezone-aware compute so we fall back
+            # to our JIT kernel.
+            pa_type = date_expr.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            if pa.types.is_timestamp(pa_type) and pa_type.tz is not None:
+                return PythonScalarFuncExpression(
+                    pd.Series(dtype=pd.ArrowDtype(pa.date32())),
+                    [date_expr, dow_string_expr],
+                    (
+                        f"bodosql.kernels.datetime_array_kernels.{func_name.lower()}_wrapper",
+                        False,  # is_series
+                        False,  # is_method
+                        (),  # args
+                        {},  # kwargs
+                        True,  # use_arrow_dtypes
+                    ),
+                    False,  # is_cfunc
+                    False,  # has_state
+                )
 
             int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
@@ -744,39 +1361,64 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         ),
                     ],
                 )
-        if func_name == "DATEDIFF" and num_operands == 3:
-            # TODO: May need TZ-aware support
+        if func_name == "DATEDIFF" and num_operands in (2, 3):
+            if num_operands == 3:
+                # First operand is a FLAG(unit) interval qualifier from the Java
+                # planner (e.g. FLAG(DAY), FLAG(MONTH)).
+                unit_str = get_java_symbol(java_call.getOperands()[0])
+                unit_str = standardize_java_time_unit(func_name, unit_str).upper()
+                assert unit_str in INTERVAL_UNIT_MAP, (
+                    f"Unsupported DATEDIFF unit: {unit_str}"
+                )
 
-            # First operand is a FLAG(unit) interval qualifier from the Java
-            # planner (e.g. FLAG(DAY), FLAG(MONTH)).
-            unit_str = get_java_symbol(java_call.getOperands()[0])
-            unit_str = standardize_java_time_unit(func_name, unit_str).upper()
-            assert unit_str in INTERVAL_UNIT_MAP, (
-                f"Unsupported DATEDIFF unit: {unit_str}"
-            )
-            # date_expr1 will be subtracted from date_expr2
-            date_expr1 = java_expr_to_python_expr(
-                ctx, java_call.getOperands()[1], input_plan
-            )
-            date_expr2 = java_expr_to_python_expr(
-                ctx, java_call.getOperands()[2], input_plan
+                # date_expr1 will be subtracted from date_expr2
+                date_expr1 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+                date_expr2 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[2], input_plan
+                )
+            else:
+                # According to BodoSQL docs:
+                # If only two arguments are provided, the unit should be days.
+                # Also, the order of the dates is reversed compared to the
+                # three argument version (second date is subtracted from first).
+                unit_str = "DAY"
+                date_expr2 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[0], input_plan
+                )
+                date_expr1 = java_expr_to_python_expr(
+                    ctx, java_call.getOperands()[1], input_plan
+                )
+
+            is_time_unit = unit_str in (
+                "HOUR",
+                "MINUTE",
+                "SECOND",
+                "MILLISECOND",
+                "MICROSECOND",
+                "NANOSECOND",
             )
 
             date1_pa_type = date_expr1.empty_data.iloc[:, 0].dtype.pyarrow_dtype
             date2_pa_type = date_expr2.empty_data.iloc[:, 0].dtype.pyarrow_dtype
-
-            if (
+            date1_has_tz = (
                 pa.types.is_timestamp(date1_pa_type) and date1_pa_type.tz is not None
-            ) or (
+            )
+            date2_has_tz = (
                 pa.types.is_timestamp(date2_pa_type) and date2_pa_type.tz is not None
-            ):
-                raise ValueError(
-                    "TZ-aware input not currently supported in DATEDIFF (C++ backend)"
-                )
+            )
+            date1_precision = (
+                date1_pa_type.unit if pa.types.is_timestamp(date1_pa_type) else "s"
+            )
+            date2_precision = (
+                date2_pa_type.unit if pa.types.is_timestamp(date2_pa_type) else "s"
+            )
 
-            # Only mixing DATE and TIMESTAMP is allowed
+            # We can't mix and match times and dates/timestamps.
+            # Also, the requested unit for time input needs to be a time unit.
             if pa.types.is_time(date1_pa_type) or pa.types.is_time(date2_pa_type):
-                if unit_str in ("YEAR", "QUARTER", "MONTH", "WEEK", "DAY"):
+                if not is_time_unit:
                     raise ValueError(
                         "Unsupported unit for DATEDIFF with TIME input: " + unit_str
                     )
@@ -786,33 +1428,89 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     raise ValueError(
                         "If a time type is provided both arguments must be time types."
                     )
-            else:
+            # If only one input has a timezone, cast the other to match.
+            # This follows the JIT implementation at
+            # BodoSQL/bodosql/kernels/datetime_array_kernels.py::create_dt_diff_fn_util_overload
+            elif not date1_has_tz and date2_has_tz:
                 if pa.types.is_date(date1_pa_type):
-                    if unit_str in (
-                        "HOUR",
-                        "MINUTE",
-                        "SECOND",
-                        "MILLISECOND",
-                        "MICROSECOND",
-                        "NANOSECOND",
-                    ) or pa.types.is_timestamp(date2_pa_type):
-                        timestamp_empty_data = pd.Series(
-                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                    date_expr1 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr1
+                    )
+                date_expr1 = ArrowScalarFuncExpression(
+                    pd.Series(
+                        dtype=pd.ArrowDtype(
+                            pa.timestamp(date1_precision, tz=date2_pa_type.tz)
                         )
-                        date_expr1 = CastExpression(timestamp_empty_data, date_expr1)
+                    ),
+                    [date_expr1],
+                    "assume_timezone",
+                    (date2_pa_type.tz,),
+                )
+            elif date1_has_tz and not date2_has_tz:
                 if pa.types.is_date(date2_pa_type):
-                    if unit_str in (
-                        "HOUR",
-                        "MINUTE",
-                        "SECOND",
-                        "MILLISECOND",
-                        "MICROSECOND",
-                        "NANOSECOND",
-                    ) or pa.types.is_timestamp(date1_pa_type):
-                        timestamp_empty_data = pd.Series(
-                            dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                    date_expr2 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr2
+                    )
+                date_expr2 = ArrowScalarFuncExpression(
+                    pd.Series(
+                        dtype=pd.ArrowDtype(
+                            pa.timestamp(date2_precision, tz=date1_pa_type.tz)
                         )
-                        date_expr2 = CastExpression(timestamp_empty_data, date_expr2)
+                    ),
+                    [date_expr2],
+                    "assume_timezone",
+                    (date1_pa_type.tz,),
+                )
+            elif date1_has_tz and date2_has_tz:
+                # Raise an error if timezones don't match, since this is what the JIT side does
+                if date1_pa_type.tz != date2_pa_type.tz:
+                    raise ValueError(
+                        "C++ backend does not currently support DATEDIFF between timestamps with different timezones."
+                    )
+            else:
+                # Only mixing DATE and TIMESTAMP is allowed.
+                # Promote dates to timestamps if needed to unify the types or because a time unit was requested.
+                if pa.types.is_date(date1_pa_type) and (
+                    is_time_unit or pa.types.is_timestamp(date2_pa_type)
+                ):
+                    date_expr1 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr1
+                    )
+                if pa.types.is_date(date2_pa_type) and (
+                    is_time_unit or pa.types.is_timestamp(date1_pa_type)
+                ):
+                    date_expr2 = CastExpression(
+                        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s"))), date_expr2
+                    )
+
+            if date1_has_tz or date2_has_tz:
+                # Due to the above code, both timestamps have timezones here.
+                # Keep in mind that the Arrow datediff functions will internally
+                # call local_timestamp for TZ-aware input.
+                if is_time_unit:
+                    # If we need the difference in terms of time, cast both
+                    # timestamps to UTC, which automatically adjusts for Daylight Savings Time.
+                    # The JIT implementation does this implicitly if a time unit is requested
+                    # by getting the raw timestamp value (stored as UTC) of the TZ-aware input.
+                    date_expr1 = CastExpression(
+                        pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp(date1_precision, tz="UTC"))
+                        ),
+                        date_expr1,
+                    )
+                    date_expr2 = CastExpression(
+                        pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp(date2_precision, tz="UTC"))
+                        ),
+                        date_expr2,
+                    )
+                # Don't convert timezone if we shouldn't get the answer in units of time.
+                # If we do, we could inadvertently cross a day/month/year boundary.
+                # The JIT version directly reads the date parts and thus ignores the timezone
+                # for YEAR/QUARTER/MONTH/WEEK/DAY. However, some test cases like
+                # test_timestamp_tz.py::test_timestamp_tz_datediff[day] appear contradictory
+                # to this rule in that they are intended to test that comparison is always
+                # performed in UTC.
 
             empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
@@ -847,6 +1545,138 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 empty_data, [date_expr1, date_expr2], diff_func_name, ()
             )
             return date_diff
+
+        if func_name == "MONTHS_BETWEEN" and num_operands == 2:
+            # date_expr2 will be subtracted from date_expr1
+            date_expr1 = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+            date_expr2 = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[1], input_plan
+            )
+
+            # date_expr1 > date_expr2 is the normal case yielding a positive result.
+            # The math should still work out for date_expr1 < date_expr2 which equals -months_between(date_expr2, date_expr1).
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+
+            # Extract day parts of dates
+            date1_day = ArrowScalarFuncExpression(
+                int_empty_data, [date_expr1], "day", ()
+            )
+            date2_day = ArrowScalarFuncExpression(
+                int_empty_data, [date_expr2], "day", ()
+            )
+
+            # Get the month interval between the dates.
+            # This is just the number of crossed months, so it is not the correct output of MONTHS_BETWEEN.
+            # We use month_interval_between to get the integer portion.
+            # We adjust later if the day part of the later date is smaller than the day part of the earlier date.
+            month_interval = ArrowScalarFuncExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int32())),
+                [date_expr2, date_expr1],
+                "month_interval_between",
+                (),
+            )
+            month_interval = CastExpression(float_empty_data, month_interval)
+
+            # Get the day component plus the time component of date1 and date2 in nanoseconds.
+            # We do this by subtracting the full date from the date truncated to the month.
+            date1_truncated = ArrowScalarFuncExpression(
+                date_empty_data, [date_expr1], "floor_temporal", (1, "month")
+            )
+            date2_truncated = ArrowScalarFuncExpression(
+                date_empty_data, [date_expr2], "floor_temporal", (1, "month")
+            )
+            date1_day_time = ArrowScalarFuncExpression(
+                int_empty_data, [date1_truncated, date_expr1], "nanoseconds_between", ()
+            )
+            date2_day_time = ArrowScalarFuncExpression(
+                int_empty_data, [date2_truncated, date_expr2], "nanoseconds_between", ()
+            )
+
+            # Get the nanosecond difference between the day and time components of the dates
+            day_time_diff = ArithOpExpression(
+                int_empty_data, date1_day_time, date2_day_time, "__sub__"
+            )
+            # It is okay if the difference is negative.
+            # In this case, month_interval_between would have counted a month that was not a full elapsed month between the dates.
+            # Therefore, adding a negative fraction to the integer month interval would just take away that extra whole month,
+            # which is what we want.
+
+            # Divide by 31 days to get the fraction of a month
+            # 31 days = 2_678_000_000_000_000 nanoseconds
+            month_nanos = ConstantExpression(
+                int_empty_data, input_plan, 2_678_000_000_000_000
+            )
+            month_fraction = ArithOpExpression(
+                float_empty_data, day_time_diff, month_nanos, "__truediv__"
+            )
+
+            # Add the fraction to the month interval (integer part) to get the complete result
+            months_between = ArithOpExpression(
+                float_empty_data, month_interval, month_fraction, "__add__"
+            )
+
+            # Special case: if the days are equal, the time portion is ignored and we can just return the month interval
+            day_parts_equal = ComparisonOpExpression(
+                bool_empty_data, date1_day, date2_day, operator.eq
+            )
+
+            # Special case: if both dates are on the last day of the month, we just return the integer month interval
+
+            one_month_interval = ConstantExpression(
+                date_empty_data,
+                input_plan,
+                ("MonthDayNanoInterval", 1, 0, 0),
+            )
+            one_day_interval = ConstantExpression(
+                date_empty_data,
+                input_plan,
+                ("MonthDayNanoInterval", 0, 1, 0),
+            )
+
+            def get_last_day_of_month(date_truncated):
+                next_month = ArithOpExpression(
+                    date_empty_data,
+                    date_truncated,
+                    one_month_interval,
+                    "__add__",
+                )
+                last_day_date = ArithOpExpression(
+                    date_empty_data,
+                    next_month,
+                    one_day_interval,
+                    "__sub__",
+                )
+                last_day = ArrowScalarFuncExpression(
+                    int_empty_data, [last_day_date], "day", ()
+                )
+                return last_day
+
+            date1_last_day = get_last_day_of_month(date1_truncated)
+            date2_last_day = get_last_day_of_month(date2_truncated)
+            is_date1_on_last_day = ComparisonOpExpression(
+                bool_empty_data, date1_day, date1_last_day, operator.eq
+            )
+            is_date2_on_last_day = ComparisonOpExpression(
+                bool_empty_data, date2_day, date2_last_day, operator.eq
+            )
+            both_dates_on_last_day = ConjunctionOpExpression(
+                bool_empty_data, is_date1_on_last_day, is_date2_on_last_day, "__and__"
+            )
+
+            # Is it a special case where we are supposed to use the raw month interval?
+            use_raw_month_interval = ConjunctionOpExpression(
+                bool_empty_data, day_parts_equal, both_dates_on_last_day, "__or__"
+            )
+
+            return CaseExpression(
+                float_empty_data, use_raw_month_interval, month_interval, months_between
+            )
 
         if func_name == "TIME_SLICE":
             # TIME_SLICE(date, interval) → floor_temporal(date, interval)
@@ -924,6 +1754,121 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             return week_part_appended
 
+        if func_name in ("TIMEZONE_HOUR", "TIMEZONE_MINUTE") and num_operands == 1:
+            timestamp_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+
+            # Subtract the timestamp converted to UTC from the original timestamp
+            # to get the nanoseconds between them.
+
+            utc_timestamp_empty_data = pd.Series(
+                dtype=pd.ArrowDtype(pa.timestamp("ns", tz="UTC"))
+            )
+            utc_timestamp_expr = CastExpression(
+                utc_timestamp_empty_data, timestamp_expr
+            )
+
+            timestamp_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns")))
+            local_timestamp = ArrowScalarFuncExpression(
+                timestamp_empty_data, [timestamp_expr], "local_timestamp", ()
+            )
+            local_utc_timestamp = ArrowScalarFuncExpression(
+                timestamp_empty_data, [utc_timestamp_expr], "local_timestamp", ()
+            )
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            utc_offset_nanos = ArrowScalarFuncExpression(
+                int_empty_data,
+                [local_utc_timestamp, local_timestamp],
+                "nanoseconds_between",
+                (),
+            )
+
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            if func_name == "TIMEZONE_HOUR":
+                # Get the hour part of the UTC offset using floor division
+                nanoseconds_per_hour = ConstantExpression(
+                    int_empty_data, input_plan, 3_600_000_000_000
+                )
+                return ArithOpExpression(
+                    int_empty_data,
+                    utc_offset_nanos,
+                    nanoseconds_per_hour,
+                    "__floordiv__",
+                )
+            else:
+                # Get the minute part of the UTC offset using a modulo operation
+                nanoseconds_per_minute = ConstantExpression(
+                    int_empty_data, input_plan, 60_000_000_000
+                )
+                utc_offset_minutes = ArithOpExpression(
+                    float_empty_data,
+                    utc_offset_nanos,
+                    nanoseconds_per_minute,
+                    "__truediv__",
+                )
+                minutes_per_hour = ConstantExpression(int_empty_data, input_plan, 60)
+                return ArithOpExpression(
+                    float_empty_data, utc_offset_minutes, minutes_per_hour, "__mod__"
+                )
+
+        if func_name in (
+            "EPOCH_SECOND",
+            "EPOCH_MILLISECOND",
+            "EPOCH_MICROSECOND",
+            "EPOCH_NANOSECOND",
+        ):
+            timestamp_expr = java_expr_to_python_expr(
+                ctx, java_call.getOperands()[0], input_plan
+            )
+
+            # Get the scale factor from the current timestamp unit to
+            # the requested timestamp unit. This way we avoid a cast
+            # to timestamp[ns] and eliminate any chance of overflow
+            # during intermediate computation.
+            def calculate_scale_factor(current_unit, target_unit):
+                unit_scale = {"s": 1, "ms": 1_000, "us": 1_000_000, "ns": 1_000_000_000}
+                if unit_scale[target_unit] >= unit_scale[current_unit]:
+                    return "__mul__", unit_scale[target_unit] / unit_scale[current_unit]
+                else:
+                    return "__floordiv__", unit_scale[current_unit] / unit_scale[
+                        target_unit
+                    ]
+
+            if func_name == "EPOCH_SECOND":
+                target_unit = "s"
+            elif func_name == "EPOCH_MILLISECOND":
+                target_unit = "ms"
+            elif func_name == "EPOCH_MICROSECOND":
+                target_unit = "us"
+            elif func_name == "EPOCH_NANOSECOND":
+                target_unit = "ns"
+
+            timestamp_pa_type = timestamp_expr.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            current_unit = timestamp_pa_type.unit
+
+            # Calculate the scale factor and direction to go from the original
+            # timestamp unit to the requested timestamp unit
+            scale_op, scale_factor = calculate_scale_factor(current_unit, target_unit)
+
+            # Convert to int to get epoch time (in the original timestamp units),
+            # since Arrow timestamps are stored relative to the start of the UNIX epoch.
+            # We don't need to cast to UTC to handle TZ-aware timestamps since
+            # the underlying timestamp integer is always in UTC.
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            epoch_time = CastExpression(int_empty_data, timestamp_expr)
+
+            if scale_factor > 1:
+                scale_factor_expr = ConstantExpression(
+                    int_empty_data, input_plan, scale_factor
+                )
+                return ArithOpExpression(
+                    int_empty_data, epoch_time, scale_factor_expr, scale_op
+                )
+            else:
+                return epoch_time
+
     if operator_class_name in (
         "SqlMonotonicBinaryOperator",
         "SqlBinaryOperator",
@@ -974,17 +1919,124 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if operand_type.getSqlTypeName().equals(
             SqlTypeName.VARCHAR
         ) and target_type.getSqlTypeName().equals(SqlTypeName.DATE):
+            string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+
+            # Replace any slashes with dashes since this is the format Arrow expects by default
+            cleaned_input = ArrowScalarFuncExpression(
+                string_empty_data, [in_expr], "replace_substring", ("/", "-")
+            )
+
+            # Add zeroes before the month and day if they are single digits
+            cleaned_input = ArrowScalarFuncExpression(
+                string_empty_data,
+                [cleaned_input],
+                "replace_substring_regex",
+                (r"-(\d)-", r"-0\1-"),
+            )
+            cleaned_input = ArrowScalarFuncExpression(
+                string_empty_data,
+                [cleaned_input],
+                "replace_substring_regex",
+                (r"-(\d)($|[ T])", r"-0\1\2"),
+            )
+
             # Cast to a timestamp first so we can parse string timestamps
             # before truncating to a date at the end.
             in_expr = CastExpression(
                 pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))),
+                cleaned_input,
+            )
+
+        if operand_type.getSqlTypeName().equals(
+            SqlTypeName.VARCHAR
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.TIME):
+            string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            represents_int = ArrowScalarFuncExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.bool_())),
+                [in_expr],
+                "utf8_is_digit",
+                (),
+            )
+
+            # If the input represents simply an integer, interpret it as the number of seconds.
+            # For the strings that were times, replace them with 0 so that we don't get an error trying to cast them to integers
+            safe_int_strings = CaseExpression(
+                string_empty_data,
+                represents_int,
                 in_expr,
+                ConstantExpression(string_empty_data, input_plan, "0"),
+            )
+            seconds = CastExpression(int_empty_data, safe_int_strings)
+            nanoseconds = ArithOpExpression(
+                int_empty_data,
+                seconds,
+                ConstantExpression(int_empty_data, input_plan, 1_000_000_000),
+                "__mul__",
+            )
+            nanoseconds_time = CastExpression(empty_data, nanoseconds)
+
+            # Otherwise, we proceed with the usual parsing if the input string is formatted as a time
+
+            # Add zeroes before the hour, minute, and second if they are single digits
+            cleaned_input = ArrowScalarFuncExpression(
+                string_empty_data,
+                [in_expr],
+                "replace_substring_regex",
+                (r"^(\d):", r"0\1:"),
+            )
+            cleaned_input = ArrowScalarFuncExpression(
+                string_empty_data,
+                [cleaned_input],
+                "replace_substring_regex",
+                (r":(\d):", r":0\1:"),
+            )
+            cleaned_input = ArrowScalarFuncExpression(
+                string_empty_data,
+                [cleaned_input],
+                "replace_substring_regex",
+                (r":(\d)($|\.)", r":0\1\2"),
+            )
+
+            # For the strings that were integers, replace them with 00:00:00 so that we don't get an error trying to parse integers as times
+            safe_time_strings = CaseExpression(
+                string_empty_data,
+                represents_int,
+                ConstantExpression(string_empty_data, input_plan, "00:00:00"),
+                cleaned_input,
+            )
+
+            # Convert to a timestamp string before casting because Arrow has no way to directly parse as a time.
+            dummy_date_string = ConstantExpression(
+                string_empty_data, input_plan, "1970-01-01"
+            )
+            separator = ConstantExpression(string_empty_data, input_plan, " ")
+            timestamp_string = ArrowScalarFuncExpression(
+                string_empty_data,
+                [dummy_date_string, safe_time_strings, separator],
+                "binary_join_element_wise",
+                (),
+            )
+            # Parse as timestamp
+            timestamp_expr = CastExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))), timestamp_string
+            )
+            # Casting to time64 will strip off the dummy date part of the timestamp
+            timestamp_time = CastExpression(empty_data, timestamp_expr)
+
+            # Return the final time64 array, selecting the result based on whether each input was an integer string or time string
+            return CaseExpression(
+                empty_data, represents_int, nanoseconds_time, timestamp_time
             )
 
         # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
         # local_timestamp() function of Arrow (not cast)
-        if operand_type.getSqlTypeName().equals(
-            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+        if (
+            operand_type.getSqlTypeName().equals(
+                SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+            )
+            or operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP_TZ)
         ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
             return ArrowScalarFuncExpression(
                 empty_data,
@@ -1018,6 +2070,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 [in_expr],
                 "assume_timezone",
                 (tz,),
+            )
+
+        if is_float_type(operand_type) and is_int_type(target_type):
+            # CastExpression truncates instead of rounds.
+            in_expr = ArrowScalarFuncExpression(
+                in_expr.empty_data,
+                [in_expr],
+                "round",
+                (0, "half_towards_infinity"),
             )
 
         # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
@@ -1078,6 +2139,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if kind.equals(SqlKind.IS_NOT_TRUE):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             return UnaryOpExpression(bool_empty_data, input, "isnottrue")
+
+        if kind.equals(SqlKind.IS_FALSE):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "isfalse")
+
+        if kind.equals(SqlKind.IS_NOT_FALSE):
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return UnaryOpExpression(bool_empty_data, input, "isnotfalse")
 
     if operator_class_name == "SqlCaseOperator":
         operands = java_call.getOperands()
@@ -1239,6 +2308,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
 
+        def cur_local_timestamp():
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            curr_ts = pd.Timestamp.now(tz=tz)
+            dummy_empty_data = pd.Series(
+                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+            )
+            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+
         if func_name in (
             "CURRENT_TIMESTAMP",
             "GETDATE",
@@ -1246,12 +2323,262 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             "SYSTIMESTAMP",
             "NOW",
         ):
-            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
-            curr_ts = pd.Timestamp.now(tz=tz)
-            dummy_empty_data = pd.Series(
-                [curr_ts], dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+            return cur_local_timestamp()
+
+        if func_name == "UNIX_TIMESTAMP":
+            # This is like EPOCH_SECOND but we retain any fractional seconds.
+            # If 0 arguments are provided, we have to get the current timestamp
+            # before calculating the seconds.
+
+            if len(op_exprs) == 0:
+                # The timezone of the timestamp here doesn't matter as long
+                # as it is TZ-aware.
+                timestamp_expr = cur_local_timestamp()
+            elif len(op_exprs) == 1:
+                timestamp_expr = op_exprs[0]
+                # If input is not TZ-aware, interpret as in local time
+                timestamp_pa_type = timestamp_expr.empty_data.iloc[
+                    :, 0
+                ].dtype.pyarrow_dtype
+                if pa.types.is_date(timestamp_pa_type) or (
+                    pa.types.is_timestamp(timestamp_pa_type)
+                    and timestamp_pa_type.tz is None
+                ):
+                    tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+                    local_timestamp_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+                    )
+                    timestamp_expr = ArrowScalarFuncExpression(
+                        local_timestamp_empty_data,
+                        [timestamp_expr],
+                        "assume_timezone",
+                        (tz,),
+                    )
+
+            # Convert to int to get epoch nanoseconds, since Arrow timestamps are
+            # stored in UTC relative to the start of the UNIX epoch
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            timestamp_nanos = CastExpression(int_empty_data, timestamp_expr)
+
+            # To get seconds since epoch as float, we need to divide by 1 billion.
+            # Using __truediv__ directly will fail because it will attempt to cast
+            # the operands to float without losing precision, and timestamp_nanos
+            # is simply too large.
+
+            # To work around this we need to calculate the integer part and fractional
+            # part separately, and then add them together.
+
+            # Get integer seconds since epoch
+            nanoseconds_per_second = ConstantExpression(
+                int_empty_data, input_plan, 1_000_000_000
             )
-            return ConstantExpression(dummy_empty_data, input_plan, curr_ts)
+            timestamp_seconds_int = ArithOpExpression(
+                int_empty_data, timestamp_nanos, nanoseconds_per_second, "__floordiv__"
+            )
+
+            # Get fraction of a second unaccounted for
+            timestamp_ns_remainder = ArithOpExpression(
+                int_empty_data, timestamp_nanos, nanoseconds_per_second, "__mod__"
+            )
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            timestamp_sec_remainder = ArithOpExpression(
+                float_empty_data,
+                timestamp_ns_remainder,
+                nanoseconds_per_second,
+                "__truediv__",
+            )
+
+            timestamp_seconds = ArithOpExpression(
+                float_empty_data,
+                timestamp_seconds_int,
+                timestamp_sec_remainder,
+                "__add__",
+            )
+
+            # MySQL only accepts timestamps after 1970-01-01 00:00:01, else the function returns 0.
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            one_expr = ConstantExpression(float_empty_data, input_plan, 1.0)
+            under_one_second = ComparisonOpExpression(
+                bool_empty_data, timestamp_seconds, one_expr, operator.lt
+            )
+            zero_expr = ConstantExpression(float_empty_data, input_plan, 0.0)
+            return CaseExpression(
+                float_empty_data, under_one_second, zero_expr, timestamp_seconds
+            )
+
+        if func_name == "FROM_UNIXTIME" and len(op_exprs) == 1:
+            epoch_seconds_expr = op_exprs[0]
+            ensure_type_of_expr(epoch_seconds_expr, "epoch_seconds_expr", (int, float))
+
+            # Return timestamp in local timezone
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            epoch_seconds_type = get_expr_dtype(epoch_seconds_expr)
+            if compare_types(epoch_seconds_type, int):
+                # We need this to be timestamp[s] so that the integer input in seconds
+                # can be interpreted as in the proper unit when casting
+                timestamp_s_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp("s", tz=tz))
+                )
+
+                # Ensure input is int64 so we can cast to timestamp type
+                epoch_seconds_expr = CastExpression(int_empty_data, epoch_seconds_expr)
+                # Convert seconds since epoch to timestamp
+                return CastExpression(timestamp_s_empty_data, epoch_seconds_expr)
+            else:
+                # Input is a float, so we should use nanosecond resolution.
+                timestamp_ns_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+                )
+
+                # Convert input to nanoseconds
+                nanoseconds_per_second = ConstantExpression(
+                    int_empty_data, input_plan, 1_000_000_000
+                )
+                float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+                epoch_nanos = ArithOpExpression(
+                    float_empty_data,
+                    epoch_seconds_expr,
+                    nanoseconds_per_second,
+                    "__mul__",
+                )
+
+                # Need to round in case the input converted to nanoseconds
+                # is still not an integer.
+                epoch_nanos = UnaryOpExpression(int_empty_data, epoch_nanos, "round")
+
+                # Convert nanoseconds since epoch to timestamp
+                return CastExpression(timestamp_ns_empty_data, epoch_nanos)
+
+        if func_name == "FROM_DAYS" and len(op_exprs) == 1:
+            """Get date a number of days after January 1st of year 0"""
+            days_expr = op_exprs[0]
+            ensure_type_of_expr(days_expr, "days_expr", (int, float))
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            # If provided days are a float, we should round to match MySQL
+            days_expr_dtype = get_expr_dtype(days_expr)
+            if compare_types(days_expr_dtype, float):
+                days_expr = UnaryOpExpression(int_empty_data, days_expr, "round")
+
+            # Convert to the number of days of the start of the UNIX epoch, since this is how date32 stores dates
+            year_zero_to_epoch_start_days = ConstantExpression(
+                int_empty_data, input_plan, 719528
+            )
+            days_after_epoch = ArithOpExpression(
+                int_empty_data, days_expr, year_zero_to_epoch_start_days, "__sub__"
+            )
+
+            # Input needs to be int32 to cast to date32.
+            # If the number of days didn't fit in int32, it would be far too large anyway.
+            days_after_epoch = CastExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int32())), days_after_epoch
+            )
+
+            # Cast epoch days to date type
+            date32_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+            date_expr = CastExpression(date32_empty_data, days_after_epoch)
+
+            # If days <= 365, MySQL returns 0000-00-00.
+            # This is not possible for us, so we return NULL instead.
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            invalid_days = ComparisonOpExpression(
+                bool_empty_data,
+                days_expr,
+                ConstantExpression(int_empty_data, input_plan, 365),
+                operator.le,
+            )
+            null_date = NullExpression(date32_empty_data, input_plan, 0)
+            return CaseExpression(date32_empty_data, invalid_days, null_date, date_expr)
+
+        if func_name == "TO_DAYS" and len(op_exprs) == 1:
+            """Get the number of days between January 1st of year 0
+            and the input date"""
+            date_expr = op_exprs[0]
+
+            # date_expr could be a timestamp, so first truncate to a date.
+            # If date_expr is TZ-aware, this will be the local timestamp date.
+            date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
+            date_expr = CastExpression(date_empty_data, date_expr)
+
+            # Cast date32 to int32 to get days since start of epoch
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int32()))
+            days_after_epoch = CastExpression(int_empty_data, date_expr)
+
+            # Convert to days since year 0
+            year_zero_to_epoch_start_days = ConstantExpression(
+                int_empty_data, input_plan, 719528
+            )
+            return ArithOpExpression(
+                int_empty_data,
+                days_after_epoch,
+                year_zero_to_epoch_start_days,
+                "__add__",
+            )
+
+        if func_name == "TO_SECONDS" and len(op_exprs) == 1:
+            """Get the number of seconds between January 1st of year 0
+            and the input timestamp"""
+            timestamp_expr = op_exprs[0]
+
+            timestamp_expr_dtype = timestamp_expr.empty_data.iloc[
+                :, 0
+            ].dtype.pyarrow_dtype
+            if pa.types.is_date(timestamp_expr_dtype):
+                # If the input is a date, convert to a timestamp (in seconds)
+                timestamp_unit = "s"
+                timestamp_s_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit))
+                )
+                timestamp_expr = CastExpression(timestamp_s_empty_data, timestamp_expr)
+            elif pa.types.is_timestamp(timestamp_expr_dtype):
+                timestamp_unit = timestamp_expr_dtype.unit
+                # If the timestamp is TZ-aware, use the local timestamp
+                if timestamp_expr_dtype.tz is not None:
+                    timestamp_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit))
+                    )
+                    timestamp_expr = ArrowScalarFuncExpression(
+                        timestamp_expr.empty_data, timestamp_expr, "local_timestamp", ()
+                    )
+            else:
+                raise ValueError("TO_SECONDS: Unsupported input type")
+
+            # Cast timestamp to int64 to get the timestamp value in the original units
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            timestamp_int = CastExpression(int_empty_data, timestamp_expr)
+
+            if timestamp_unit == "s":
+                # No division needed
+                timestamp_seconds = timestamp_int
+            else:
+                # Determine what to divide by get seconds
+                if timestamp_unit == "ms":
+                    divisor = 1_000
+                elif timestamp_unit == "us":
+                    divisor = 1_000_000
+                elif timestamp_unit == "ns":
+                    divisor = 1_000_000_000
+                # Get seconds since start of epoch using floor division.
+                # (MySQL appears not to round fractional seconds)
+                divisor_expr = ConstantExpression(int_empty_data, input_plan, divisor)
+                timestamp_seconds = ArithOpExpression(
+                    int_empty_data, timestamp_int, divisor_expr, "__floordiv__"
+                )
+
+            # Adjust from seconds since epoch to seconds since year 0
+            year_zero_to_epoch_start_seconds = ConstantExpression(
+                int_empty_data, input_plan, 62167219200
+            )
+            return ArithOpExpression(
+                int_empty_data,
+                timestamp_seconds,
+                year_zero_to_epoch_start_seconds,
+                "__add__",
+            )
 
         # COMBINE_INTERVALS combines multiple interval literals into a single
         # interval constant. Accumulate months (from DateOffset) and nanoseconds
@@ -1291,56 +2618,143 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
             return ConstantExpression(dummy_empty_data, input_plan, combined_val)
 
+        if func_name == "SIGN" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+
+            inp_dtype = get_expr_dtype(inp, func_name + " input")
+            if compare_types(inp_dtype, int):
+                # If input is an int, first use int8 empty data since
+                # we have to match the return type of Arrow's sign().
+                int8_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
+                int8_sign = UnaryOpExpression(int8_empty_data, inp, "sign")
+
+                # Calcite retains the size of the input integer type.
+                # Using inp.empty_data directly could be problematic
+                # if it is unsigned, so cast to the equivalent pyarrow
+                # type of what is in the plan.
+                inp_sql_type = java_call.getOperands()[0].getType()
+                pa_int_type = sql_type_to_pa_type(ctx, inp_sql_type.getSqlTypeName())
+                sql_pa_empty = pd.Series(dtype=pd.ArrowDtype(pa_int_type))
+                return CastExpression(sql_pa_empty, int8_sign)
+            else:
+                # If input is a float, return the original float type
+                return UnaryOpExpression(inp.empty_data, inp, "sign")
+
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
             left = op_exprs[0]
             right = op_exprs[1]
+            ensure_type_of_expr(left, func_name + " left input", (int, float))
+            ensure_type_of_expr(right, func_name + " right input", (int, float))
             out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
             return ArithOpExpression(out_empty, left, right, "__pow__")
 
         # SQRT(x) -> unary sqrt
         if func_name == "SQRT" and len(op_exprs) == 1:
             inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
             out_empty = inp.empty_data.iloc[:, 0] ** 0.5
             return UnaryOpExpression(out_empty, inp, "sqrt")
+
+        # CBRT(x) -> unary cube root
+        if func_name == "CBRT" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+            out_empty = inp.empty_data
+            return UnaryOpExpression(out_empty, inp, "cbrt")
 
         # ABS(x)
         if func_name == "ABS" and len(op_exprs) == 1:
             inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
             out_empty = inp.empty_data.iloc[:, 0].abs()
             return UnaryOpExpression(out_empty, inp, "abs")
 
-        # CEIL(x) / CEILING(x)
-        if func_name in ("CEIL", "CEILING") and len(op_exprs) == 1:
-            inp = op_exprs[0]
-            out_empty = inp.empty_data
-            return UnaryOpExpression(out_empty, inp, "ceil")
+        # CEILING(x)
+        if func_name == "CEILING" and len(op_exprs) == 1:
+            # Redirect to CEIL below.
+            func_name = "CEIL"
 
-        # FLOOR(x)
-        if func_name == "FLOOR" and len(op_exprs) == 1:
+        if func_name in ("FLOOR", "CEIL") and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data
-            return UnaryOpExpression(out_empty, inp, "floor")
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+
+            inp_dtype = get_expr_dtype(inp, func_name + " input")
+            if compare_types(inp_dtype, int):
+                # If input is an integer, FLOOR/CEIL is a no-op
+                return inp
+            else:
+                # If input is a float, return FLOOR(inp) or CEIL(inp) as normal
+                return UnaryOpExpression(inp.empty_data, inp, func_name.lower())
 
         # EXP(x)
         if func_name == "EXP" and len(op_exprs) == 1:
             inp = op_exprs[0]
-            out_empty = inp.empty_data
-            out_empty = out_empty.astype("float64")
+            ensure_type_of_expr(inp, "EXP input", (int, float))
+
+            # Retain current float output type if input is a float,
+            # otherwise use float64.
+            inp_dtype = get_expr_dtype(inp, "EXP input")
+            if compare_types(inp_dtype, int):
+                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            else:
+                out_empty = inp.empty_data
+
             return UnaryOpExpression(out_empty, inp, "exp")
 
-        # LN(x) or LOG(x) -> natural log
-        if func_name in ("LN", "LOG") and len(op_exprs) == 1:
+        # LN(x) -> natural log
+        if func_name == "LN" and len(op_exprs) == 1:
             inp = op_exprs[0]
+            ensure_type_of_expr(inp, "LN input", (int, float))
+
+            # Retain current float output type if input is a float,
+            # otherwise use float64.
+            inp_dtype = get_expr_dtype(inp, "LN input")
+            if compare_types(inp_dtype, int):
+                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            else:
+                out_empty = inp.empty_data
+
+            return UnaryOpExpression(out_empty, inp, "ln")
+
+        elif func_name == "LOG10" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, "LOG10 input", (int, float))
             out_empty = inp.empty_data
-            out_empty = out_empty.astype("float64")
-            return UnaryOpExpression(out_empty, inp, "log")
+            return UnaryOpExpression(out_empty, inp, "log10")
 
         # ROUND(x, d) or ROUND(x) -> map to a unary/binary op if supported
         if func_name == "ROUND" and len(op_exprs) in (1, 2):
             inp = op_exprs[0]
+            ensure_type_of_expr(inp, "ROUND input", (int, float))
             out_empty = inp.empty_data
-            return UnaryOpExpression(out_empty, inp, "round")
+
+            if len(op_exprs) == 1:
+                inp_dtype = get_expr_dtype(inp, "ROUND input")
+                if compare_types(inp_dtype, int):
+                    # If input is an integer, single-argument ROUND is a no-op
+                    return inp
+                else:
+                    return UnaryOpExpression(out_empty, inp, "round")
+            else:
+                precision_digits = op_exprs[1]
+                # Not a traditional arithmetic operation, but this is what
+                # we currently have available to retrieve binary functions
+                # from the DuckDB catalog.
+                return ArithOpExpression(out_empty, inp, precision_digits, "round")
+
+        if func_name == "TRUNCATE" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+
+            inp_dtype = get_expr_dtype(inp, func_name + " input")
+            if compare_types(inp_dtype, int):
+                # If input is an integer, TRUNCATE is a no-op
+                return inp
+            else:
+                # If input is a float, return trunc(inp) as normal
+                return UnaryOpExpression(inp.empty_data, inp, "trunc")
 
         if func_name == "MOD" and len(op_exprs) == 2:
             inp = op_exprs[0]
@@ -1349,6 +2763,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_type_of_expr(modulus_expr, "modulus_expr", int)
 
             return ArithOpExpression(inp.empty_data, inp, modulus_expr, "__mod__")
+
+        if func_name == "RAND" and len(op_exprs) == 0:
+            """Generates random doubles in the range [0, 1)"""
+            # Create a dummy expression from the input plan which will be used on the
+            # C++ side to check the row count (number of random values to generate).
+            row_count_info_expr = ConstantExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int64())), input_plan, 0
+            )
+            # Note that we pass "rand" instead of "random" to distinguish between Arrow's random()
+            # and this, which take different arguments. (Though we do ultimately rely on random())
+            return ArrowScalarFuncExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.float64())),
+                [row_count_info_expr],
+                "rand",
+                (),
+            )
 
         if func_name in ("BOOLAND", "BOOLOR", "BOOLXOR") and len(op_exprs) == 2:
             left_expr = op_exprs[0]
@@ -1876,7 +3306,344 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        if (
+        if func_name in ("FLOOR", "CEIL") and len(op_exprs) in (1, 2):
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, func_name + " input", (int, float))
+
+            inp_dtype = get_expr_dtype(inp, func_name + " input")
+
+            if len(op_exprs) == 1:
+                if compare_types(inp_dtype, int):
+                    # If input is an integer, FLOOR/CEIL is a no-op
+                    return inp
+                else:
+                    # If input is a float, return FLOOR(inp) or CEIL(inp) as normal
+                    return UnaryOpExpression(inp.empty_data, inp, func_name.lower())
+            else:
+                # Snowflake / BodoSQL has a scale option that dictates how many digits
+                # after the decimal point the input should be raised or lowered to.
+                # DuckDB and Arrow have no such option, so we have to emulate it.
+                scale_expr = op_exprs[1]
+                ensure_type_of_expr(scale_expr, "scale_expr", int)
+
+                int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+                ten_expr = ConstantExpression(int_empty_data, input_plan, 10)
+
+                if compare_types(inp_dtype, int):
+                    # If input is an int, we don't need to do anything for scale >= 0.
+                    # If scale < 0, we can use a formula that allows us to retain
+                    # the integer type throughout the calculation.
+                    # Division is not ideal for ints because __floordiv__ truncates
+                    # towards zero, and __truediv__ could result in loss of precision.
+
+                    # For FLOOR, result = inp - (inp % 10^abs(scale)), minus 10^abs(scale)
+                    #   if inp % 10^abs(scale) is negative.
+                    # For CEIL, result = inp - (inp % 10^abs(scale)), plus 10^abs(scale)
+                    #   if inp % 10^abs(scale) is positive.
+
+                    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+                    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+                    scale_negative = ComparisonOpExpression(
+                        bool_empty_data, scale_expr, zero_expr, operator.lt
+                    )
+
+                    # Calculate inp % 10^abs(scale)
+                    scale_magnitude = UnaryOpExpression(
+                        scale_expr.empty_data, scale_expr, "abs"
+                    )
+                    power_of_10 = ArithOpExpression(
+                        int_empty_data, ten_expr, scale_magnitude, "__pow__"
+                    )
+                    inp_remainder = ArithOpExpression(
+                        inp.empty_data, inp, power_of_10, "__mod__"
+                    )
+
+                    # inp - inp % 10^abs(scale)
+                    inp_minus_remainder = ArithOpExpression(
+                        inp.empty_data, inp, inp_remainder, "__sub__"
+                    )
+
+                    if func_name == "FLOOR":
+                        # FLOOR: Subtract power of 10 if remainder is negative (not including 0)
+                        should_add_remainder = ComparisonOpExpression(
+                            bool_empty_data, inp_remainder, zero_expr, operator.lt
+                        )
+                        adjusted_inp_minus_remainder = ArithOpExpression(
+                            inp.empty_data, inp_minus_remainder, power_of_10, "__sub__"
+                        )
+                    else:
+                        # CEIL: Add power of 10 if remainder is positive (not including 0)
+                        should_add_remainder = ComparisonOpExpression(
+                            bool_empty_data, inp_remainder, zero_expr, operator.gt
+                        )
+                        adjusted_inp_minus_remainder = ArithOpExpression(
+                            inp.empty_data, inp_minus_remainder, power_of_10, "__add__"
+                        )
+
+                    # Final result for the scale < 0 case
+                    negative_scale_result = CaseExpression(
+                        inp.empty_data,
+                        should_add_remainder,
+                        adjusted_inp_minus_remainder,
+                        inp_minus_remainder,
+                    )
+
+                    # For 0 or positive scale, we don't have to do anything.
+                    return CaseExpression(
+                        inp.empty_data, scale_negative, negative_scale_result, inp
+                    )
+                else:
+                    # If input is a float, we do:
+                    # result = [FLOOR/CEIL](inp * 10^scale) / 10^scale
+                    power_of_10 = ArithOpExpression(
+                        float_empty_data, ten_expr, scale_expr, "__pow__"
+                    )
+                    scaled_inp = ArithOpExpression(
+                        float_empty_data, inp, power_of_10, "__mul__"
+                    )
+                    scaled_inp_rounded = UnaryOpExpression(
+                        float_empty_data, scaled_inp, func_name.lower()
+                    )
+                    return ArithOpExpression(
+                        inp.empty_data, scaled_inp_rounded, power_of_10, "__truediv__"
+                    )
+        elif func_name == "POW" and len(op_exprs) == 2:
+            left = op_exprs[0]
+            right = op_exprs[1]
+            out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
+            return ArithOpExpression(out_empty, left, right, "__pow__")
+        elif func_name == "SQUARE" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, "SQUARE input", (int, float))
+            out_empty = inp.empty_data.iloc[:, 0] * inp.empty_data.iloc[:, 0]
+            return ArithOpExpression(out_empty, inp, inp, "__mul__")
+        elif func_name == "LOG2" and len(op_exprs) == 1:
+            inp = op_exprs[0]
+            ensure_type_of_expr(inp, "LOG2 input", (int, float))
+
+            # Retain current float output type if input is a float,
+            # otherwise use float64.
+            inp_dtype = get_expr_dtype(inp, "LOG2 input")
+            if compare_types(inp_dtype, int):
+                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            else:
+                out_empty = inp.empty_data
+
+            return UnaryOpExpression(out_empty, inp, "log2")
+        elif func_name == "LOG" and len(op_exprs) == 1:
+            # The SQL function LOG(x) is mapped to Calcite LOG(x),
+            # which in Calcite and most systems means LN(x), but Bodo
+            # defines SQL LOG(x) as LOG10(x). For now, we raise an
+            # informative error while we decide on the best solution.
+            raise ValueError(
+                "LOG with 1 argument is not currently supported in the C++ backend. Consider using the unambiguous LN or LOG10 instead."
+            )
+        elif func_name == "LOG" and len(op_exprs) == 2:
+            # We read the first argument as the operand and
+            # the second argument as the base, which is different
+            # than e.g. Snowflake.
+            inp = op_exprs[0]
+            base_expr = op_exprs[1]
+            ensure_type_of_expr(inp, "LOG input", (int, float))
+            ensure_type_of_expr(base_expr, "LOG base", (int, float))
+
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+            # Retain current float output type if input is a float,
+            # otherwise use float64.
+            inp_dtype = get_expr_dtype(inp, "LOG input")
+            if compare_types(inp_dtype, int):
+                out_empty = float_empty_data
+            else:
+                out_empty = inp.empty_data
+
+            if isinstance(base_expr, ConstantExpression):
+                # If the base is a constant, we can use shortcuts.
+
+                # Use dedicated log functions for special bases (e, 10, 2)
+                if base_expr.value == 10:
+                    return UnaryOpExpression(out_empty, inp, "log10")
+                elif base_expr.value == 2:
+                    return UnaryOpExpression(out_empty, inp, "log2")
+                elif np.isclose(base_expr.value, np.e):
+                    return UnaryOpExpression(out_empty, inp, "ln")
+
+                # If not a special base, calculate scalar ln(base)
+                log_of_base_expr = ConstantExpression(
+                    float_empty_data, input_plan, np.log(base_expr.value)
+                )
+            else:
+                # Calculate ln(base)
+                log_of_base_expr = UnaryOpExpression(float_empty_data, base_expr, "ln")
+
+            # Use change of base formula: log_base_(x) = log(x) / log(base)
+            log_of_inp = UnaryOpExpression(out_empty, inp, "ln")
+            return ArithOpExpression(
+                out_empty, log_of_inp, log_of_base_expr, "__truediv__"
+            )
+
+        elif func_name in ("DIV0", "DIV0NULL") and len(op_exprs) == 2:
+            dividend_expr = op_exprs[0]
+            divisor_expr = op_exprs[1]
+            ensure_type_of_expr(dividend_expr, "dividend_expr", (int, float))
+            ensure_type_of_expr(divisor_expr, "divisor_expr", (int, float))
+
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            quotient_expr = ArithOpExpression(
+                float_empty_data, dividend_expr, divisor_expr, "__truediv__"
+            )
+
+            # Return 0 if divisor is 0 (or NULL, for DIV0NULL);
+            # otherwise, return the standard quotient.
+
+            zero_expr = ConstantExpression(float_empty_data, input_plan, 0.0)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            divisor_is_zero = ComparisonOpExpression(
+                bool_empty_data, divisor_expr, zero_expr, operator.eq
+            )
+
+            if func_name == "DIV0NULL":
+                divisor_is_null = UnaryOpExpression(
+                    bool_empty_data, divisor_expr, "isnull"
+                )
+                invalid_divisor = ConjunctionOpExpression(
+                    bool_empty_data, divisor_is_zero, divisor_is_null, "__or__"
+                )
+            else:
+                invalid_divisor = divisor_is_zero
+
+            div0_quotient = CaseExpression(
+                float_empty_data, invalid_divisor, zero_expr, quotient_expr
+            )
+
+            # Ensure NULL is always returned if the dividend is NULL
+            dividend_is_null = UnaryOpExpression(
+                bool_empty_data, dividend_expr, "isnull"
+            )
+            return CaseExpression(
+                float_empty_data,
+                dividend_is_null,
+                NullExpression(float_empty_data, input_plan, 0),
+                div0_quotient,
+            )
+        elif func_name == "WIDTH_BUCKET" and len(op_exprs) == 4:
+            """Get the bucket the input number would be in if we had a histogram with a certain contiguous value range and number of buckets"""
+            numeric_expr = op_exprs[0]
+            min_val_expr = op_exprs[1]  # inclusive
+            max_val_expr = op_exprs[2]  # exclusive
+            num_buckets_expr = op_exprs[3]
+
+            ensure_type_of_expr(numeric_expr, "numeric_expr", (int, float))
+            ensure_type_of_expr(min_val_expr, "min_val_expr", (int, float))
+            ensure_type_of_expr(max_val_expr, "max_val_expr", (int, float))
+            ensure_type_of_expr(num_buckets_expr, "num_buckets_expr", int)
+
+            # The min value of the range must be strictly less than the max value
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            min_max_valid = ComparisonOpExpression(
+                bool_empty_data, min_val_expr, max_val_expr, operator.lt
+            )
+
+            # The number of buckets must be 1 or more
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            num_buckets_valid = ComparisonOpExpression(
+                bool_empty_data, num_buckets_expr, zero_expr, operator.gt
+            )
+
+            valid_inputs = ConjunctionOpExpression(
+                bool_empty_data, min_max_valid, num_buckets_valid, "__and__"
+            )
+
+            # Custom logic for get_common_int_type to ensure the result is signed after subtraction.
+            # Technically this isn't necessary here since we won't be getting any negative
+            # results, but it's a good example for future situations where this might be needed.
+            def get_common_signed(
+                expr1_width, expr2_width, expr1_is_signed, expr2_is_signed
+            ):
+                return True
+
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            # Calculate the length of the range between min_val_expr and max_value_expr.
+            # Note that we first determine the common integer type so that we can get the
+            # appropriate empty_data for the operation.
+            common_int_type = get_common_int_type(
+                max_val_expr, min_val_expr, get_common_signed=get_common_signed
+            )[0]
+            range_length = ArithOpExpression(
+                pd.Series(dtype=pd.ArrowDtype(common_int_type))
+                if common_int_type is not None
+                else float_empty_data,
+                max_val_expr,
+                min_val_expr,
+                "__sub__",
+            )
+
+            # By doing numeric_expr - min_val_expr, we normalize the input to the range [0, max_val_expr - min_val_expr).
+            # We can assume this since we check earlier for numeric_expr being less than min_val_expr or greater than max_val_expr.
+            common_int_type = get_common_int_type(
+                numeric_expr, min_val_expr, get_common_signed=get_common_signed
+            )[0]
+            normalized_input = ArithOpExpression(
+                pd.Series(dtype=pd.ArrowDtype(common_int_type))
+                if common_int_type is not None
+                else float_empty_data,
+                numeric_expr,
+                min_val_expr,
+                "__sub__",
+            )
+
+            # Get the position of numeric_expr in the range as a float in [0.0, 1.0).
+            range_position = ArithOpExpression(
+                float_empty_data, normalized_input, range_length, "__truediv__"
+            )
+            # Multiply by the number of buckets to scale to the range [0.0, num_buckets)
+            scaled_range_position = ArithOpExpression(
+                float_empty_data, range_position, num_buckets_expr, "__mul__"
+            )
+
+            # Get the 1-based integer bucket number.
+            # We use floor(scaled_range_position) + 1 instead of ceil() so that 0.0 is mapped to a bucket number of 1.
+            # Note that scaled_range_position cannot equal num_buckets_expr.
+            bucket_number = UnaryOpExpression(
+                int_empty_data, scaled_range_position, "floor"
+            )
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            bucket_number = ArithOpExpression(
+                int_empty_data, bucket_number, one_expr, "__add__"
+            )
+
+            # Check if numeric_expr is outside of [min_val_expr, max_val_expr)
+            val_below_range = ComparisonOpExpression(
+                bool_empty_data, numeric_expr, min_val_expr, operator.lt
+            )
+            val_above_range = ComparisonOpExpression(
+                bool_empty_data, numeric_expr, max_val_expr, operator.ge
+            )
+            # If numeric_expr < min_val_expr, return bucket number of 0.
+            # If numeric_expr >= max_val_expr, return bucket number of num_buckets + 1.
+            num_buckets_plus_one = ArithOpExpression(
+                int_empty_data, num_buckets_expr, one_expr, "__add__"
+            )
+            final_bucket_number = CaseExpression(
+                int_empty_data,
+                val_below_range,
+                zero_expr,
+                CaseExpression(
+                    int_empty_data, val_above_range, num_buckets_plus_one, bucket_number
+                ),
+            )
+
+            return CaseExpression(
+                int_empty_data,
+                valid_inputs,
+                final_bucket_number,
+                NullExpression(int_empty_data, input_plan, 0),
+            )
+
+        elif (
             func_name in ("BITAND", "BITOR", "BITXOR", "BITSHIFTLEFT", "BITSHIFTRIGHT")
             and len(op_exprs) == 2
         ):
@@ -2324,6 +4091,21 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return ArrowScalarFuncExpression(
                 int_empty_data, [rtrimmed_expr], "utf8_length", ()
             )
+        elif func_name in ("LTRIM", "RTRIM") and len(op_exprs) in (1, 2):
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            if len(op_exprs) == 2:
+                trim_chars_expr = op_exprs[1]
+                ensure_arg_is_const_expr_of_type(
+                    trim_chars_expr, "trim_chars_expr", (str, pa.binary())
+                )
+                trim_chars = trim_chars_expr.value
+            else:
+                trim_chars = " "
+            return ArrowScalarFuncExpression(
+                src.empty_data, [src], f"utf8_{func_name.lower()}", (trim_chars,)
+            )
         elif func_name == "INSERT" and len(op_exprs) == 4:
             src = op_exprs[0]
             start_expr = op_exprs[1]
@@ -2346,6 +4128,104 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     start_expr.value - 1 + len_expr.value,
                     inserted_str_expr.value,
                 ),
+            )
+        elif func_name == "CONVERT_TIMEZONE" and len(op_exprs) == 2:
+            str_timezone = op_exprs[0]
+            src = op_exprs[1]
+
+            ensure_arg_is_const_expr_of_type(
+                str_timezone, "str_timezone", (str, pa.binary())
+            )
+            ensure_type_of_expr(
+                src,
+                "src",
+                (
+                    pd._libs.tslibs.timestamps.Timestamp,
+                    pd.ArrowDtype(pa.timestamp("ns")),
+                ),
+            )
+            timestamp_pa_type = src.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+            target_res = "ns"
+            # We figure out the right resolution to use.
+            if pa.types.is_date(timestamp_pa_type):
+                target_res = "s"
+            elif pa.types.is_timestamp(timestamp_pa_type):
+                target_res = timestamp_pa_type.unit
+
+            # For now, if the resolution isn't our default, baked-in nanosecond
+            # resolution then don't convert the operation because otherwise
+            # tests will fail.
+            if target_res == "ns":
+                # The definition of this operation is to convert a time from one
+                # timezone to a different one.
+                # The general algorithm is that we get to a timestamp that has a timezone
+                # and then use a cast to a different timezone which will actually perform
+                # the conversion.  However, some input types don't have a timezone to
+                # work with.  The check below find such cases and then uses the
+                # assume_timezone kernel to apply the BodoSQL context's default_timezone
+                # if it has one else use UTC.  One final wrinkle is that assume_timezone
+                # can't operate on all possible input types so we convert the input
+                # date/time type to a format that we know it can handle.
+                if pa.types.is_date(timestamp_pa_type) or (
+                    pa.types.is_timestamp(timestamp_pa_type)
+                    and timestamp_pa_type.tz is None
+                ):
+                    tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+                    local_timestamp_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=tz))
+                    )
+                    timestamp_empty_data_no_tz = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp(target_res))
+                    )
+                    # We first cast to a data type that assume_timezone can work with.
+                    src = CastExpression(timestamp_empty_data_no_tz, src)
+                    # We use the context default_tz to make the timezone explicit.
+                    src = ArrowScalarFuncExpression(
+                        local_timestamp_empty_data,
+                        [src],
+                        "assume_timezone",
+                        (tz,),
+                    )
+
+                target_timestamp_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=str_timezone.value))
+                )
+                # We use cast to convert timezones.
+                target_timestamp_expr = CastExpression(target_timestamp_empty_data, src)
+                return target_timestamp_expr
+
+    if operator_class_name == "SqlTrimFunction":
+        operands = java_call.getOperands()
+        func_name = op.getName().upper()
+
+        if func_name == "TRIM" and len(operands) == 3:
+            # Snowflake's TRIM accepts 1 or 2 arguments but Calcite will convert it to
+            # a 3-arguments form, including using a space character as the default when
+            # trim characters are not specified.
+            trim_chars_expr = java_expr_to_python_expr(ctx, operands[1], input_plan)
+            src = java_expr_to_python_expr(ctx, operands[2], input_plan)
+            ensure_arg_is_const_expr_of_type(
+                trim_chars_expr, "trim_chars_expr", (str, pa.binary())
+            )
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            # Get which side of the string to TRIM.
+            # Snowflake's TRIM always trims from both sides.
+            # LTRIM and RTRIM are instead mapped to SqlNullPolicyFunctions.
+            side_str = get_java_symbol(operands[0])
+            assert side_str in ("BOTH", "LEADING", "TRAILING")
+
+            # We support LEADING and TRAILING for completeness even
+            # though we don't expect them here.
+            if side_str == "BOTH":
+                arrow_trim_func = "utf8_trim"
+            elif side_str == "LEADING":
+                arrow_trim_func = "utf8_ltrim"
+            elif side_str == "TRAILING":
+                arrow_trim_func = "utf8_rtrim"
+
+            return ArrowScalarFuncExpression(
+                src.empty_data, [src], arrow_trim_func, (trim_chars_expr.value,)
             )
 
     if operator_class_name == "SqlSubstringFunction":
@@ -2565,6 +4445,37 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             + java_call.toString()
         )
 
+    if operator_class_name == "SqlRandomOperator":
+        operands = java_call.getOperands()
+        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+        func_name = op.getName().upper()
+
+        # NOTE: Calcite maps SQL RANDOM() to RANDOM() which means a random number
+        # between [0.0, 1.0] in Calcite and does not accept a seed argument. For
+        # completeness, to match Snowflake, we support a seed parameter anyway.
+        if func_name == "RANDOM" and len(op_exprs) in (0, 1):
+            """Generates random 64-bit integers"""
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            # Create a dummy expression from the input plan which will be used on the
+            # C++ side to check the row count (number of random values to generate).
+            row_count_info_expr = ConstantExpression(int_empty_data, input_plan, 0)
+
+            # Get and pass seed if given, else we rely on a system-generated seed
+            # which is set on the C++ side.
+            if len(op_exprs) == 1:
+                seed_expr = op_exprs[0]
+                # Should be a constant
+                ensure_arg_is_const_expr_of_type(seed_expr, "seed_expr", int)
+                seed_options = (seed_expr.value,)
+            else:
+                seed_options = ()
+
+            # Arrow doesn't have any sort of randint function, so call our own that
+            # has the name random_int64.
+            return ArrowScalarFuncExpression(
+                int_empty_data, [row_count_info_expr], "random_int64", seed_options
+            )
+
     if operator_class_name == "SqlLeastGreatestFunction":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
@@ -2694,11 +4605,19 @@ def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
         )
 
 
-def get_expr_dtype(expr, expr_name="Expression"):
+def get_expr_dtype(expr, expr_name="Expression", get_const_val_type=True):
+    """
+    Get the type of the input `bodo.pandas.plan.Expression`.
+
+    If `get_const_val_type` = `True` (the default), this will return the
+    actual type of the constant value if `expr` is a `ConstantExpression`.
+    Pass `get_const_val_type` = `False` to always get the empty_data type.
+    """
+
     if not isinstance(expr, bodo.pandas.plan.Expression):
         return type(expr)
 
-    if isinstance(expr, bodo.pandas.plan.ConstantExpression):
+    if isinstance(expr, bodo.pandas.plan.ConstantExpression) and get_const_val_type:
         return type(expr.value)
     else:
         if isinstance(expr.empty_data, (pd.Series, np.ndarray)):
@@ -2753,8 +4672,24 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
         return expr
 
     if kind.equals(SqlKind.MINUS):
-        out_empty = left.empty_data.iloc[:, 0] - right.empty_data.iloc[:, 0]
-        expr = ArithOpExpression(out_empty, left, right, "__sub__")
+        left_type = left.empty_data.iloc[:, 0]
+        right_type = right.empty_data.iloc[:, 0]
+        left_unsigned = pd.api.types.is_unsigned_integer_dtype(left_type.dtype)
+        right_unsigned = pd.api.types.is_unsigned_integer_dtype(right_type.dtype)
+        left_integer = left_unsigned or pd.api.types.is_signed_integer_dtype(
+            left_type.dtype
+        )
+        right_integer = right_unsigned or pd.api.types.is_signed_integer_dtype(
+            right_type.dtype
+        )
+        if left_integer and right_integer and (left_unsigned or right_unsigned):
+            out_empty = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            left_cast = CastExpression(out_empty, left) if left_unsigned else left
+            right_cast = CastExpression(out_empty, right) if right_unsigned else right
+            expr = ArithOpExpression(out_empty, left_cast, right_cast, "__sub__")
+        else:
+            out_empty = left_type - right_type
+            expr = ArithOpExpression(out_empty, left, right, "__sub__")
         return expr
 
     if kind.equals(SqlKind.TIMES):
@@ -2813,17 +4748,38 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
-def get_common_int_type_list(exprs):
+def get_common_int_type_list(
+    exprs,
+    get_common_width=lambda expr1_width,
+    expr2_width,
+    expr1_is_signed,
+    expr2_is_signed: max(expr1_width, expr2_width),
+    get_common_signed=lambda expr1_width,
+    expr2_width,
+    expr1_is_signed,
+    expr2_is_signed: expr1_is_signed
+    if expr1_is_signed == expr2_is_signed
+    else (expr1_is_signed and expr1_width > expr2_width)
+    or (expr2_is_signed and expr2_width > expr1_width),
+):
     """Find a common integer type for a list of expressions with integer dtypes.
 
-    The bit width of the common type will be the maximum of the bit widths of the input types.
-    If all expressions have the same signedness, the signedness does not change.
-    If expressions have different signedness, the common type will be unsigned unless
-    the unsigned inputs have shorter bit widths than the signed inputs.
+    `get_common_width` and `get_common_signed` are functions accepting the arguments
+    `expr1_width`, `expr2_width`, `expr1_is_signed`, `expr2_is_signed`, and respectively
+    returning what the common bit width and signedness of the expr1 and expr2
+    integers should be.
 
-    Returns a tuple: (common_arrow_type, cast_needed_list) where each element in cast_needed_list
+    For the default `get_common_width()`: The bit width of the common type will be
+    the maximum of the bit widths of the input types.
+
+    For the default `get_common_signed()`: If all expressions have the same signedness,
+    the signedness does not change. If expressions have different signedness, the
+    common type will be unsigned unless the unsigned inputs have shorter bit widths
+    than the signed inputs.
+
+    Returns a tuple: `(common_arrow_type, cast_needed_list)` where each element in cast_needed_list
     is a boolean representing if the corresponding expr needs to be casted to match the common type.
-    (None, [False] * len(exprs)) is returned if any of the input exprs does not have integer dtype.
+    `(None, [False] * len(exprs))` is returned if any of the input exprs does not have integer dtype.
     """
     if not exprs:
         return None, []
@@ -2849,7 +4805,7 @@ def get_common_int_type_list(exprs):
 
     types = []
     for expr in exprs:
-        dtype = get_expr_dtype(expr)
+        dtype = get_expr_dtype(expr, get_const_val_type=False)
         if not compare_types(dtype, int):
             return None, [False] * len(exprs)
         types.append(get_as_pyarrow_dtype(dtype))
@@ -2865,39 +4821,33 @@ def get_common_int_type_list(exprs):
         common_width = common_type.bit_width
         expr_width = dtype.bit_width
 
-        if common_is_signed == expr_is_signed:
-            # Use wider type if inputs have same signedness
-            if expr_width > common_width:
-                common_type = dtype
-        else:
-            # For mixed signedness, use the wider bit width of the two.
-            # The common type is signed only if the max value of the unsigned input can fit in the signed int
-            common_type_width = max(common_width, expr_width)
-            common_type_signed = (common_is_signed and common_width > expr_width) or (
-                expr_is_signed and expr_width > common_width
-            )
-            common_type = eval(
-                f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
-            )
+        common_type_width = get_common_width(
+            common_width, expr_width, common_is_signed, expr_is_signed
+        )
+        common_type_signed = get_common_signed(
+            common_width, expr_width, common_is_signed, expr_is_signed
+        )
+        common_type = eval(
+            f"pa.{'' if common_type_signed else 'u'}int{common_type_width}()"
+        )
 
     cast_needed_list = [not expr_type.equals(common_type) for expr_type in types]
 
     return common_type, cast_needed_list
 
 
-def get_common_int_type(left_expr, right_expr):
+def get_common_int_type(left_expr, right_expr, *args, **kwargs):
     """Find a common integer type for two expressions with integer dtypes.
 
-    The bit width of the common type will be the maximum of the bit widths of the input types.
-    If `left_expr` and `right_expr` have the same signedness, the signedness does not change.
-    If `left_expr` and `right_expr` have different signedness, the common type will be
-    unsigned unless the unsigned input has a shorter bit width than the signed input.
+    See `get_common_int_type_list` for more details.
 
-    Returns a tuple: (common_arrow_type, left_cast_needed, right_cast_needed)
-    (None, False, False) is returned if `left_expr` or `right_expr` does not have integer dtype.
+    Returns a tuple: `(common_arrow_type, left_cast_needed, right_cast_needed)`
+    `(None, False, False)` is returned if `left_expr` or `right_expr` does not have integer dtype.
     """
 
-    common_type, casts_needed = get_common_int_type_list([left_expr, right_expr])
+    common_type, casts_needed = get_common_int_type_list(
+        [left_expr, right_expr], *args, **kwargs
+    )
     return (
         common_type,
         casts_needed[0],
@@ -3344,6 +5294,13 @@ def is_int_type(java_type):
     )
 
 
+def is_float_type(java_type):
+    """Check if a Calcite type is a float type."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    type_name = java_type.getSqlTypeName()
+    return type_name.equals(SqlTypeName.FLOAT) or type_name.equals(SqlTypeName.DOUBLE)
+
+
 def gen_plan_via_bodo_dataframe(func, *args, **kwargs):
     """Generate a Python plan for this module by wrapping input plans with
     dataframes/series and calling a func parameter that is written in
@@ -3389,6 +5346,7 @@ def java_agg_to_python_agg(ctx, java_plan):
         )
         return plan
 
+    convert_na_to_value = {}
     # calcite supports a literal "aggregation" function but Bodo backend doesn't.
     # So capture those functions here and treat them as projections later.
     literal_aggs = []
@@ -3430,6 +5388,15 @@ def java_agg_to_python_agg(ctx, java_plan):
             out_type = _get_agg_output_type(
                 GroupbyAggFunc("dummy", func_name), in_type, "dummy"
             )
+        elif func_name == "first":
+            assert len(arg_cols) == 1, (
+                f"Only single-argument {func_name} aggregations are supported"
+            )
+            in_type = input_plan.pa_schema.field(arg_cols[0]).type
+            assert not isinstance(in_type, pa.lib.LargeListType)
+            out_type = _get_agg_output_type(
+                GroupbyAggFunc("dummy", func_name), in_type, "dummy"
+            )
         elif func_name in ["boolor_agg", "booland_agg", "boolxor_agg"]:
             assert len(arg_cols) == 1, (
                 f"Only single-argument {func_name} aggregations are supported"
@@ -3445,6 +5412,18 @@ def java_agg_to_python_agg(ctx, java_plan):
             # and the value of the literal.
             literal_aggs.append((aggIndex + len(keys), literal_for_literal_agg))
             continue
+        elif func_name == "count_if" and not func.hasFilter():
+            func_name = "sum"
+            out_type = pa.int64()
+            # Calcite seems to prepare count_if by creating a column filled with
+            # 1, 0, or NA.  An entry is 1 if the value in the original column
+            # corresponds with true when cast to bool, 0 if the value corresponds
+            # with false, and NA if the value is NA.  "sum" can then be used to
+            # count the true/1 values.  However, if all values in the group are
+            # NA then arrow gives a NA result but the SQL spec says the result
+            # should be 0 so we have an extra fixup step where we register NA
+            # entries in the output column for this aggregation to be set to 0.
+            convert_na_to_value[len(out_types)] = 0
         else:
             raise NotImplementedError(
                 f"java_agg_to_python_agg: aggregation {func_name} not supported yet"
@@ -3513,6 +5492,21 @@ def java_agg_to_python_agg(ctx, java_plan):
         plan = gen_plan_via_bodo_dataframe(
             select_keys_lits, input_plan, keys, names, literal_aggs
         )
+
+    def fill_na_column(df, col_idx, val):
+        col = df.columns[col_idx]
+        # Convert NA to the default value.
+        df[col] = df[col].fillna(val)
+        return df
+
+    # Use the convert_na_to_value entries created when there
+    # is a count_if aggregation to convert any NA entries to
+    # 0.  We may add other aggregations that need to convert
+    # NA to some default value other than 0 so made this data
+    # structure hold the value to convert to so it could be
+    # used when such cases arise.
+    for index, na_value in convert_na_to_value.items():
+        plan = gen_plan_via_bodo_dataframe(fill_na_column, plan, index, na_value)
     return plan
 
 
@@ -3571,6 +5565,8 @@ def _agg_to_func_name(func):
             return "skew"
         if name == "KURTOSIS":
             return "kurtosis"
+        if name == "COUNT_IF":
+            return "count_if"
 
         details = ""
 
@@ -3621,6 +5617,9 @@ def _agg_to_func_name(func):
         raise NotImplementedError(
             f"Aggregation {agg_name} (class={cls_name}) not supported yet\n{details}"
         )
+
+    if kind.equals(SqlKind.ANY_VALUE) and len(argList) == 1:
+        return "first"
 
     raise NotImplementedError(f"Aggregation {kind.toString()} not supported yet")
 

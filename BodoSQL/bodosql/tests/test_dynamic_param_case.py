@@ -25,6 +25,7 @@ def many_params_fixture():
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_case(basic_df, spark_info, many_params_fixture, memory_leak_check):
     """tests that the params are properly passed as arguments when generate an apply due to a case stmt"""
     query = "select CASE WHEN @a THEN @a WHEN @b THEN @b WHEN @c > 12 THEN FALSE WHEN @d ='hello' THEN FALSE WHEN @e = 'hello' THEN FALSE WHEN @f > TIMESTAMP '2021-10-14' THEN FALSE WHEN @g > TIMESTAMP '2021-10-14' THEN FALSE ELSE A > 1 END from table1"
@@ -46,6 +47,7 @@ def test_named_param_case(basic_df, spark_info, many_params_fixture, memory_leak
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_dynamic_param_case(basic_df, many_params_fixture, memory_leak_check):
     """tests that the params are properly passed as arguments when generate an apply due to a case stmt"""
     query = "select CASE WHEN ? THEN TRUE WHEN ? THEN FALSE WHEN ? > 12 THEN FALSE WHEN ? ='hello' THEN FALSE WHEN ? = 'hello' THEN FALSE WHEN ? > TIMESTAMP '2021-10-14' THEN FALSE WHEN ? > TIMESTAMP '2021-10-14' THEN FALSE ELSE A > 1 END as OUTPUT from table1"
@@ -82,6 +84,7 @@ def test_dynamic_param_case(basic_df, many_params_fixture, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_repeated_param_usage(
     basic_df, spark_info, many_params_fixture, memory_leak_check
 ):
@@ -106,6 +109,7 @@ def test_named_param_repeated_param_usage(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_nested_and_or(
     basic_df, spark_info, many_params_fixture, memory_leak_check
 ):

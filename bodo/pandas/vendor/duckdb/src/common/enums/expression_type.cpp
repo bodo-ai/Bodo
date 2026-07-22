@@ -158,6 +158,10 @@ string ExpressionTypeToString(ExpressionType type) {
 		return "NEG";
 	case ExpressionType::OPERATOR_IS_NOT_TRUE:
 		return "IS_NOT_TRUE";
+	case ExpressionType::OPERATOR_IS_FALSE:
+		return "IS_FALSE";
+	case ExpressionType::OPERATOR_IS_NOT_FALSE:
+		return "IS_NOT_FALSE";
 	case ExpressionType::INVALID:
 		break;
 	}

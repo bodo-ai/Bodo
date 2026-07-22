@@ -443,7 +443,7 @@ def polaris_connection(
         raise ValueError(f"Unknown polaris warehouse: {request.param}")
 
 
-# For cases where we can't used parameterized fixuteres like the ddl test harness
+# For cases where we can't used parameterized fixtures like the ddl test harness
 @pytest.fixture
 def aws_polaris_connection(polaris_server, aws_polaris_warehouse):
     host, port, user, password = polaris_server

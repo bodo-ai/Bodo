@@ -5,11 +5,11 @@ Test correctness of SQL casting
 import pandas as pd
 import pytest
 
+from bodosql.tests.conftest import fixture_value_not_in, mark_bodosql_cpp_if
 from bodosql.tests.utils import check_query
 
-pytestmark = pytest.mark.bodosql_cpp
 
-
+@pytest.mark.bodosql_cpp
 def test_simple_cast(basic_df, memory_leak_check):
     """
     Checks that integer casting of constants behaves as expected
@@ -25,6 +25,7 @@ def test_simple_cast(basic_df, memory_leak_check):
     )
 
 
+@mark_bodosql_cpp_if(fixture_value_not_in("sql_numeric_typestrings", {"DECIMAL"}))
 @pytest.mark.slow
 def test_float_to_int_cast(
     basic_df, numeric_values, sql_numeric_typestrings, memory_leak_check
@@ -47,6 +48,7 @@ def test_float_to_int_cast(
     )
 
 
+@mark_bodosql_cpp_if(fixture_value_not_in("sql_numeric_typestrings", {"DECIMAL"}))
 def test_numeric_column_casting(
     bodosql_numeric_types, sql_numeric_typestrings, memory_leak_check
 ):
@@ -113,6 +115,7 @@ def test_interval_numeric_column_casting(
     )
 
 
+@mark_bodosql_cpp_if(fixture_value_not_in("sql_numeric_typestrings", {"DECIMAL"}))
 @pytest.mark.slow
 def test_varchar_to_numeric_cast(sql_numeric_typestrings, memory_leak_check):
     """
@@ -138,6 +141,7 @@ def test_varchar_to_numeric_cast(sql_numeric_typestrings, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_numeric_to_varchar_nullable(bodosql_nullable_numeric_types, memory_leak_check):
     """
     Checks that casting numeric values to strings behaves as expected
