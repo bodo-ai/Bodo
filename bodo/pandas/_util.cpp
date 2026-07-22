@@ -230,7 +230,7 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
 
             if (precision <= 0 || precision > 38) {
                 throw std::runtime_error(
-                    "duckdbTypeToArrow invalid DECIMAL precision " +
+                    "getDefaultValueForDuckdbValueType invalid DECIMAL precision " +
                     std::to_string(precision));
             }
 
