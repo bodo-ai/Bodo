@@ -2623,23 +2623,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
+            sign_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             if compare_types(inp_dtype, int):
                 # If input is an int, first use int8 empty data since
                 # we have to match the return type of Arrow's sign().
                 int8_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
                 int8_sign = UnaryOpExpression(int8_empty_data, inp, "sign")
-
-                # Calcite retains the size of the input integer type.
-                # Using inp.empty_data directly could be problematic
-                # if it is unsigned, so cast to the equivalent pyarrow
-                # type of what is in the plan.
-                inp_sql_type = java_call.getOperands()[0].getType()
-                pa_int_type = sql_type_to_pa_type(ctx, inp_sql_type)
-                sql_pa_empty = pd.Series(dtype=pd.ArrowDtype(pa_int_type))
-                return CastExpression(sql_pa_empty, int8_sign)
+                return CastExpression(sign_empty_data, int8_sign)
             else:
                 # If input is a float, return the original float type
-                return UnaryOpExpression(inp.empty_data, inp, "sign")
+                return UnaryOpExpression(sign_empty_data, inp, "sign")
 
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
@@ -3403,7 +3396,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         inp.empty_data, scale_negative, negative_scale_result, inp
                     )
                 else:
-                    # If input is a float, we do:
+                    # If input is a float or decimal, we do:
                     # result = [FLOOR/CEIL](inp * 10^scale) / 10^scale
                     power_of_10 = ArithOpExpression(
                         float_empty_data, ten_expr, scale_expr, "__pow__"
@@ -3414,8 +3407,36 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     scaled_inp_rounded = UnaryOpExpression(
                         float_empty_data, scaled_inp, func_name.lower()
                     )
+                    output_empty_data = inp.empty_data
+                    if compare_types(inp_dtype, pa.Decimal128Type):
+                        if isinstance(scale_expr, ConstantExpression) and isinstance(
+                            scale_expr.value, int
+                        ):
+                            new_scale = scale_expr.value
+
+                            # get the pyarrow decimal type for the column
+                            pa_dtype = output_empty_data.dtypes[0].pyarrow_dtype
+
+                            if not pa.types.is_decimal(pa_dtype):
+                                raise TypeError(
+                                    f"column {output_empty_data.columns[0]} is not a decimal Arrow dtype: {pa_dtype!r}"
+                                )
+
+                            precision = pa_dtype.precision
+                            current_scale = pa_dtype.scale
+
+                            if new_scale < current_scale:
+                                output_empty_data = pd.Series(
+                                    dtype=pd.ArrowDtype(
+                                        pa.decimal128(precision, new_scale)
+                                    )
+                                ).to_frame(output_empty_data.columns[0])
+
                     return ArithOpExpression(
-                        inp.empty_data, scaled_inp_rounded, power_of_10, "__truediv__"
+                        output_empty_data,
+                        scaled_inp_rounded,
+                        power_of_10,
+                        "__truediv__",
                     )
         elif func_name == "POW" and len(op_exprs) == 2:
             left = op_exprs[0]
