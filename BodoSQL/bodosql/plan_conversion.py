@@ -4397,36 +4397,48 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
             # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
             src = op_exprs[0]
-            start_expr = op_exprs[1]
-            ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+            ensure_type_of_expr(src, "src", str)
 
-            start = start_expr.value
-            if (
-                start > 0
-            ):  # start_expr.value = 0 is treated the same as start_expr.value = 1
-                start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
-            # Arrow's utf8_slice_codeunits will handle the wraparound for negative start index
+            # utf8_slice_codeunits / bodo_substr_three will handle the wraparound for negative start index
+            start_expr = op_exprs[1]
+            ensure_type_of_expr(start_expr, "start_expr", int)
+
+            # Cast start index to int64 to match the bodo_substr_three kernel definition
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            start_expr = CastExpression(int_empty_data, start_expr)
+
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            # Using gt rather than ge since a start index of 0 is treated the same as start = 1
+            start_is_positive = ComparisonOpExpression(
+                bool_empty_data, start_expr, zero_expr, operator.gt
+            )
+            # Subtract 1 when start index is positive since SQL substring is 1-indexed but Arrow is 0-indexed
+            adjusted_start_expr = ArithOpExpression(
+                int_empty_data, start_expr, one_expr, "__sub__"
+            )
+            start_expr = CaseExpression(
+                int_empty_data, start_is_positive, adjusted_start_expr, start_expr
+            )
+
+            substring_args = [src, start_expr]
 
             if len(op_exprs) == 3:
                 len_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
-                if len_expr.value < 0:
-                    raise ValueError(
-                        "negative length not allowed in SUBSTRING in C++ backend"
-                    )
-                stop = start + len_expr.value
-                # Deal with negative start index and length beyond the end of the string
-                if start < 0 and stop >= 0:
-                    stop = None
-            else:
-                stop = None
+                ensure_type_of_expr(len_expr, "len_expr", int)
+
+                # Cast length to int64 to match the bodo_substr_three kernel definition
+                len_expr = CastExpression(int_empty_data, len_expr)
+
+                substring_args.append(len_expr)
 
             out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
                 out_empty,
-                [src],
-                "utf8_slice_codeunits",
-                (start, stop, 1),
+                substring_args,
+                "bodo_substr_three",
+                (),
             )
 
     if operator_class_name == "SqlLikeOperator":

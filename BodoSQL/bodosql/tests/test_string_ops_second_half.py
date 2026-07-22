@@ -735,15 +735,17 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT SUBSTRING(source FROM start_pos FOR length) from table1",
             id="SUBSTRING_all_vector",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT SUBSTR(source, start_pos, 3) from table1",
             id="SUBSTRING_scalar_int_1A",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT MID(source, -2, length) from table1",
             id="SUBSTRING_scalar_int_1B",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT SUBSTRING(source, -5, 3) from table1",
@@ -753,7 +755,7 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT SUBSTR('alphabet soup is delicious', start_pos, length) from table1",
             id="SUBSTRING_scalar_str",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT MID('alphabet soup is delicious', 9, 4) from table1",
@@ -823,6 +825,7 @@ def test_substring(query, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("func", ["SUBSTR", "SUBSTRING"])
 def test_substring_suffix(func, memory_leak_check):
     """Test SUBSTR/SUBSTRING with 2 arguments only where length is optional"""

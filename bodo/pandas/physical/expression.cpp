@@ -435,6 +435,104 @@ arrow::Datum do_arrow_compute_multi_input_datum(
             }
         }
         func_res = arrow::compute::CallFunction(arrow_func_name, casted_datums);
+    } else if (arrow_func_name == "bodo_substr_three" ||
+               arrow_func_name == "utf8_slice_codeunits") {
+        // If the arrow func name is bodo_substr_three or utf8_slice_codeunits,
+        // we are computing a substring. The main difference between them is
+        // that utf8_slice_codeunits takes an end index whereas
+        // bodo_substr_three takes a length. bodo_substr_three only accepts
+        // arrays whereas utf8_slice_codeunits only accepts scalars, so we call
+        // utf8_slice_codeunits if both the start index and length / end index
+        // are scalars, otherwise we call bodo_substr_three.
+
+        // We only currently support array-based substring with two/three
+        // arguments. If two arguments are provided, we pass the max value of
+        // int64 as the third (end index or length) parameter to slice until the
+        // end of the string. In the future we could add a "step" parameter.
+        if (arg_datums.size() != 2 && arg_datums.size() != 3) {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: " + arrow_func_name +
+                " expects 2 or 3 "
+                "arguments.");
+        }
+
+        if (arg_datums[1].is_scalar() &&
+            (arg_datums.size() == 2 || arg_datums[2].is_scalar())) {
+            // The index arguments are scalars: use utf8_slice_codeunits
+            int64_t arg1_scalar =
+                arg_datums[1].scalar_as<arrow::Int64Scalar>().value;
+
+            arrow::compute::SliceOptions slice_opts;
+            slice_opts.start = arg1_scalar;
+            if (arg_datums.size() == 3) {
+                int64_t arg2_scalar =
+                    arg_datums[2].scalar_as<arrow::Int64Scalar>().value;
+                if (arrow_func_name == "bodo_substr_three") {
+                    // Convert from length argument to end index argument
+                    arg2_scalar = arg1_scalar + arg2_scalar;
+                }
+                slice_opts.stop = arg2_scalar;
+            }
+            // If arg_datums.size() == 2, no need to do anything more since
+            // the `stop` option defaults to the max value of int64.
+
+            func_res = arrow::compute::CallFunction(
+                "utf8_slice_codeunits", {arg_datums[0]}, &slice_opts);
+        } else {
+            // At least one of the second and third arguments are arrays: use
+            // bodo_substr_three
+
+            if (arrow_func_name == "utf8_slice_codeunits" &&
+                arg_datums.size() == 3) {
+                // Convert from end index argument to length argument
+                arg_datums[2] = do_arrow_compute_binary(
+                    arg_datums[2], arg_datums[1], "subtract");
+            }
+
+            // Get the scalar object from a possible scalar datum (start index
+            // or length)
+            int scalar_arg_index = -1;
+            arrow::Int64Scalar arg_scalar;
+            if (arg_datums.size() == 3) {
+                // 0 or 1 of the arguments could be scalars
+                for (int arg_datum_index = 1; arg_datum_index <= 2;
+                     arg_datum_index++) {
+                    if (arg_datums[arg_datum_index].is_scalar()) {
+                        scalar_arg_index = arg_datum_index;
+                        arg_scalar = arg_datums[arg_datum_index]
+                                         .scalar_as<arrow::Int64Scalar>();
+                        break;
+                    }
+                }
+            } else {
+                // If length was not provided, use the max value of int64.
+                // Need to resize arg_datums so we can set the third element.
+                arg_datums.resize(3);
+                scalar_arg_index = 2;
+                arg_scalar =
+                    arrow::Int64Scalar(std::numeric_limits<int64_t>::max());
+            }
+
+            // Broadcast the scalar argument (if there was one) to array since
+            // bodo_substr_three requires arrays
+            if (scalar_arg_index != -1) {
+                auto arg_scalar_array = arrow::MakeArrayFromScalar(
+                    arg_scalar, arg_datums[0].make_array()->length());
+                if (!arg_scalar_array.ok()) {
+                    throw std::runtime_error(
+                        "do_arrow_compute_multi_input: Failed to make array "
+                        "from scalar: " +
+                        arg_scalar_array.status().message());
+                }
+                arg_datums[scalar_arg_index] =
+                    arrow::Datum(arg_scalar_array.ValueOrDie());
+            }
+
+            // Call our custom substring function that can handle array indices
+            EnsureSubstrRegistered();
+            func_res =
+                arrow::compute::CallFunction("bodo_substr_three", arg_datums);
+        }
     } else if (arrow_func_name == "max_element_wise" ||
                arrow_func_name == "min_element_wise") {
         // Avoid skipping nulls to match SQL semantics.
@@ -1168,6 +1266,8 @@ void PhysicalExpression::join_expr_batch(
 
 PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;
 
+// ------------------ Custom Arrow Kernels ------------------
+
 template <typename ArrowType, typename ModOp>
 arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
                       const arrow::compute::ExecSpan& batch,
@@ -1403,6 +1503,209 @@ void EnsureModRegistered() {
         RegisterMod(registry);
     });
 }
+
+// Helper function to count UTF-8 characters in a byte string
+int64_t utf8_char_count(const char* data, int64_t byte_len) {
+    int64_t char_count = 0;
+    for (int64_t i = 0; i < byte_len; i++) {
+        // Count only bytes that are NOT continuation bytes (10xxxxxx)
+        if ((data[i] & 0xC0) != 0x80) {
+            char_count++;
+        }
+    }
+    return char_count;
+}
+
+// Helper to convert character offset to byte offset
+int64_t utf8_char_to_byte_offset(const char* data, int64_t byte_len,
+                                 int64_t char_offset) {
+    int64_t char_count = 0;
+    for (int64_t i = 0; i < byte_len; i++) {
+        if ((data[i] & 0xC0) != 0x80) {
+            if (char_count == char_offset)
+                return i;
+            char_count++;
+        }
+    }
+    return byte_len;  // If offset beyond string
+}
+
+// The execution function for the kernel.
+// Signature: Status Exec(KernelContext*, const ExecBatch&, Datum* out)
+static arrow::Status SubstrThreeImpl(arrow::compute::KernelContext* ctx,
+                                     const arrow::compute::ExecSpan& batch,
+                                     arrow::compute::ExecResult* out) {
+    // Expect exactly 3 inputs
+    if (batch.values.size() != 3) {
+        throw std::runtime_error("bodo_substr_three expected 3 inputs.");
+    }
+
+    const arrow::ArraySpan& src = batch[0].array;
+    const arrow::ArraySpan& start = batch[1].array;
+    const arrow::ArraySpan& len = batch[2].array;
+
+    if (!src.type) {
+        throw std::runtime_error("bodo_substr_three src not valid.");
+    }
+    if (!start.type) {
+        throw std::runtime_error("bodo_substr_three start not valid.");
+    }
+    if (!len.type) {
+        throw std::runtime_error("bodo_substr_three len not valid.");
+    }
+
+    // Number of rows
+    int64_t n = static_cast<int64_t>(batch.length);
+
+    // Pointers to src buffers
+    const uint8_t* src_null_bitmap = src.buffers[0].data;
+    const int64_t* src_offsets =
+        reinterpret_cast<const int64_t*>(src.buffers[1].data);
+    const char* src_data = reinterpret_cast<const char*>(src.buffers[2].data);
+    int64_t src_offset = src.offset;  // element offset into offsets array
+
+    // Pointers to start/len buffers (int64)
+    const uint8_t* start_null_bitmap = start.buffers[0].data;
+    const int64_t* start_values =
+        reinterpret_cast<const int64_t*>(start.buffers[1].data);
+    int64_t start_offset = start.offset;
+
+    const uint8_t* len_null_bitmap = len.buffers[0].data;
+    const int64_t* len_values =
+        reinterpret_cast<const int64_t*>(len.buffers[1].data);
+    int64_t len_offset = len.offset;
+
+    // Prepare builder for output strings
+    arrow::LargeStringBuilder builder(ctx->memory_pool());
+
+    auto is_valid_bit = [](const uint8_t* bits, int64_t offset,
+                           int64_t i) -> bool {
+        return !bits || arrow::bit_util::GetBit(bits, offset + i);
+    };
+
+    for (int64_t i = 0; i < n; ++i) {
+        // Check nulls: bitmaps may be null (no nulls) -> treat as all-valid
+        bool src_is_null = false;
+        if (src_null_bitmap) {
+            src_is_null = !is_valid_bit(src_null_bitmap, src_offset, i);
+        }
+        bool start_is_null = false;
+        if (start_null_bitmap) {
+            start_is_null = !is_valid_bit(start_null_bitmap, start_offset, i);
+        }
+        bool len_is_null = false;
+        if (len_null_bitmap) {
+            len_is_null = !is_valid_bit(len_null_bitmap, len_offset, i);
+        }
+
+        if (src_is_null || start_is_null || len_is_null) {
+            ARROW_RETURN_NOT_OK(builder.AppendNull());
+            continue;
+        }
+
+        // Read start and len values.
+        // These are in units of UTF-8 characters, so we will need
+        // to convert to a raw byte offset.
+        int64_t start_chars_val = start_values[start_offset + i];
+        int64_t len_chars_val = len_values[len_offset + i];
+
+        // Read string offsets: offsets are int64 (common Arrow layout)
+        // offsets array length is n + 1; offsets index = src_offset + i
+        int64_t off0 = src_offsets[src_offset + i];
+        int64_t off1 = src_offsets[src_offset + i + 1];
+        int64_t byte_len = off1 - off0;
+
+        // Get number of UTF-8 characters in string (necessary to handle
+        // multi-byte characters)
+        int64_t char_len = utf8_char_count(src_data + off0, byte_len);
+
+        // Normalize negative length
+        if (len_chars_val < 0) {
+            len_chars_val = 0;
+        }
+
+        // If start index is negative, count backwards from end of string
+        if (start_chars_val < 0) {
+            start_chars_val = char_len + start_chars_val;
+            if (start_chars_val < 0) {
+                // If start index is still negative (meaning the index wrapped
+                // around and still exceeded the string length), set it to 0 and
+                // adjust the length for the number of characters left of the
+                // beginning of the string the start index is.
+                len_chars_val =
+                    std::max<int64_t>(len_chars_val + start_chars_val, 0);
+                start_chars_val = 0;
+            }
+        }
+
+        // Return an empty string if:
+        //   Start index is beyond string length,
+        //   start index is negative and its absolute value is greater than the
+        //   string length plus the requested substring length, or a
+        //   negative/zero substring length was provided.
+        if (start_chars_val >= char_len || len_chars_val == 0) {
+            ARROW_RETURN_NOT_OK(builder.Append(std::string()));
+            continue;
+        }
+
+        // Convert start index and length to byte offsets
+        int64_t start_val = utf8_char_to_byte_offset(src_data + off0, byte_len,
+                                                     start_chars_val);
+        int64_t len_val =
+            utf8_char_to_byte_offset(src_data + off0, byte_len, len_chars_val);
+
+        // Compute take and append substring
+        int64_t take = std::min<int64_t>(len_val, byte_len - start_val);
+        const char* substr_ptr =
+            src_data + off0 + static_cast<size_t>(start_val);
+        ARROW_RETURN_NOT_OK(
+            builder.Append(std::string(substr_ptr, static_cast<size_t>(take))));
+    }
+
+    // Finish builder to produce Array
+    std::shared_ptr<arrow::Array> out_array;
+    ARROW_RETURN_NOT_OK(builder.Finish(&out_array));
+
+    out->value = out_array->data();
+    return arrow::Status::OK();
+}
+
+void RegisterSubstr(arrow::compute::FunctionRegistry* registry) {
+    auto func = std::make_shared<arrow::compute::ScalarFunction>(
+        "bodo_substr_three", arrow::compute::Arity::Ternary(),
+        arrow::compute::FunctionDoc{"substr of source, start, len",
+                                    "Returns substr(src, start, len)",
+                                    {"src", "start", "len"}});
+
+    arrow::compute::ScalarKernel kernel(
+        {arrow::compute::InputType(arrow::large_utf8()),
+         arrow::compute::InputType(arrow::int64()),
+         arrow::compute::InputType(arrow::int64())},
+        arrow::compute::OutputType(arrow::large_utf8()), SubstrThreeImpl);
+
+    arrow::Status status;
+    status = func->AddKernel(kernel);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterSubstr AddKernel failed.");
+    }
+    // Register the function.
+    status = registry->AddFunction(std::move(func));
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterSubstr AddFunction failed.");
+    }
+}
+
+// Register the function in Arrow's global function registry.
+void EnsureSubstrRegistered() {
+    static std::once_flag once_flag_;
+    // Register the Bodo substr arrow compute function only once.
+    std::call_once(once_flag_, [&]() {
+        auto* registry = arrow::compute::GetFunctionRegistry();
+        RegisterSubstr(registry);
+    });
+}
+
+// ----------------------------------------------------------
 
 std::shared_ptr<ExprResult> PhysicalCalendarIntervalExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {
