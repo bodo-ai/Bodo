@@ -1925,6 +1925,21 @@ def groupby_agg_df(request):
             },
             id="func_kwargs",
         ),
+        pytest.param(
+            None,
+            {
+                "count_B": pd.NamedAgg("B", "count"),
+            },
+            id="agg_on_key_col_only",
+        ),
+        pytest.param(
+            None,
+            {
+                "count_B": pd.NamedAgg("B", "count"),
+                "mean_A": pd.NamedAgg("A", "mean"),
+            },
+            id="agg_on_key_col",
+        ),
     ],
 )
 def test_groupby_agg(groupby_agg_df, as_index, dropna, func, kwargs):
@@ -4818,3 +4833,34 @@ def test_join_filter_pushdown_aggregate_split_keys():
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_df_copy(datapath):
+    """Test that dataframe copy on an unexecuted plan behaves as expected."""
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 7], "Int64"),
+            "B": ["A1\t", "B1 ", "C1\n", "Abc\t"],
+            "C": pd.array([4, 5, 6, -1], "Int64"),
+        }
+    )
+    pdf = df.copy()
+    pdf["D"] = pdf["A"] + 13
+
+    bdf = bd.from_pandas(df)
+    bdf["D"] = bdf["A"] + 13
+    assert bdf.is_lazy_plan()
+
+    # New dataframe with the same plan.
+    bdf_copy = bdf.copy()
+    # Make sure they are both still lazy.
+    assert bdf.is_lazy_plan()
+    assert bdf_copy.is_lazy_plan()
+
+    _test_equal(bdf, pdf, check_pandas_types=False)
+    # Make sure first dataframe isn't a lazy plan but the copy is.
+    assert not bdf.is_lazy_plan()
+    assert bdf_copy.is_lazy_plan()
+    # make sure the copy got the same answer.
+    _test_equal(bdf_copy, pdf, check_pandas_types=False)
