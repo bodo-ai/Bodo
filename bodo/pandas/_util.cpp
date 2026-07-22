@@ -1860,7 +1860,7 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
 
             if (precision <= 0 || precision > 38) {
                 throw std::runtime_error(
-                    "duckdbTypeToArrow invalid DECIMAL precision " +
+                    "duckdb_logicaltype_to_cudf: invalid DECIMAL precision " +
                     std::to_string(precision));
             }
 

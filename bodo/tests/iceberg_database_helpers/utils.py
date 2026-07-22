@@ -89,13 +89,18 @@ spark: SparkSession | None = None
 
 
 def get_spark(
-    catalog: SparkIcebergCatalog = SparkFilesystemIcebergCatalog(
-        catalog_name="hadoop_prod", path="."
-    ),
+    catalog: SparkIcebergCatalog | None = None,
+    path: str | None = None,
 ) -> SparkSession:
     global spark
     global spark_catalogs
     import bodo
+
+    if path is None:
+        path = "."
+
+    if catalog is None:
+        catalog = SparkFilesystemIcebergCatalog(catalog_name="hadoop_prod", path=path)
 
     # Only run Spark on one rank to run faster and avoid Spark issues
     if bodo.get_rank() != 0:

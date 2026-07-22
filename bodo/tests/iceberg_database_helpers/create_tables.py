@@ -62,9 +62,9 @@ table_mods = [
 ]
 
 
-def create_tables(tables, spark=None):
+def create_tables(tables, spark=None, path=None):
     if spark is None:
-        spark = get_spark()
+        spark = get_spark(path=path)
 
     create_simple_tables(tables, spark)
     create_partition_tables(tables, spark)
