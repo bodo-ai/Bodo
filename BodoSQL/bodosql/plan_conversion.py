@@ -2804,7 +2804,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     scaled_inp_rounded = UnaryOpExpression(
                         float_empty_data, scaled_inp, "trunc"
                     )
-                    output_empty_data = adjustScale(
+                    output_empty_data = adjust_scale(
                         inp_dtype, scale_expr, inp.empty_data
                     )
 
