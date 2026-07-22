@@ -1760,7 +1760,8 @@ struct DecimalBindData : public duckdb::FunctionData {
 static duckdb::unique_ptr<duckdb::FunctionData> SameReturnDecimalBind(
     duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
     duckdb::vector<bododuckdb::unique_ptr<bododuckdb::Expression>> &arguments) {
-    // Expect exactly one argument for unary abs
+    // This function works for one argument functions that return the same type
+    // as the input.
     if (arguments.size() != 1) {
         throw std::runtime_error(
             "SameReturnDecimalBind: expected one argument");
@@ -1780,7 +1781,8 @@ static duckdb::unique_ptr<duckdb::FunctionData> SameReturnDecimalBind(
         arg_type = expr->return_type;
     }
 
-    // Ensure it's a decimal
+    // Right now we only expect decimal types to come through here so
+    // make sure.
     if (arg_type.id() != duckdb::LogicalTypeId::DECIMAL) {
         throw std::runtime_error(
             "SameReturnDecimalBind: expected DECIMAL argument");
@@ -1812,7 +1814,8 @@ struct IntDecimalBindData : public duckdb::FunctionData {
 static duckdb::unique_ptr<duckdb::FunctionData> IntDecimalBind(
     duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
     duckdb::vector<bododuckdb::unique_ptr<bododuckdb::Expression>> &arguments) {
-    // Expect exactly one argument for unary abs
+    // Same as above binding function but for functions that return
+    // a tiny int.
     if (arguments.size() != 1) {
         throw std::runtime_error("IntDecimalBind: expected one argument");
     }
@@ -1869,9 +1872,8 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
     register_duckdb_scalar_func(
         db, "abs",
         append_signatures(
-            append_signatures(
-                copy_signatures(UNARY_FLOAT_SIGNATURES),
-                UNARY_DECIMAL_SIGNATURES),
+            append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
+                              UNARY_DECIMAL_SIGNATURES),
             UNARY_INT_SIGNATURES));
     register_duckdb_scalar_func(db, "sqrt", UNARY_FLOAT_SIGNATURES);
     register_duckdb_scalar_func(db, "cbrt", UNARY_FLOAT_SIGNATURES);
@@ -1895,12 +1897,11 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
         db, "sign",
         append_signatures(
             {ScalarFunctionSignature({duckdb::LogicalType::BIGINT},
-                                     duckdb::LogicalType::TINYINT)},
-            append_signatures(
-                {ScalarFunctionSignature({duckdb::LogicalType::ANY},
-                                         duckdb::LogicalType::TINYINT,
-                                         IntDecimalBind)},
-                UNARY_FLOAT_SIGNATURES)));
+                                     duckdb::LogicalType::TINYINT),
+             ScalarFunctionSignature({duckdb::LogicalType::ANY},
+                                     duckdb::LogicalType::TINYINT,
+                                     IntDecimalBind)},
+            UNARY_FLOAT_SIGNATURES));
 
     register_duckdb_scalar_func(
         db, "power",
