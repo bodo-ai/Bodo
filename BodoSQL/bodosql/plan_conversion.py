@@ -680,6 +680,38 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         )
         return timestamp_expr
 
+    def clean_regex_params(regex_params_expr, func_name):
+        """Verify the raw regex parameters passed into functions such as REGEXP_SUBSTR
+        or REGEXP_INSTR and turn them into a standard form."""
+        if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
+            # Both case sensitive and case insensitive params provided; find which appears latest in the string
+            latest_index = max(
+                regex_params_expr.value.rfind(char) for char in ("c", "i")
+            )
+            latest_char = regex_params_expr.value[latest_index]
+            # Remove occurrences of the other parameter to make the identification easier on the C++ side
+            regex_params = regex_params_expr.value.replace(
+                "c" if latest_char == "i" else "i", ""
+            )
+        else:
+            if (
+                "c" not in regex_params_expr.value
+                and "i" not in regex_params_expr.value
+            ):
+                regex_params = regex_params_expr.value + "c"
+            else:
+                regex_params = regex_params_expr.value
+        for character in regex_params:
+            if character not in ("c", "i", "m", "e", "s"):
+                raise ValueError(
+                    f"{func_name} regex parameter {character} does not exist"
+                )
+            if character in ("i", "m", "s"):
+                raise ValueError(
+                    f"{func_name} regex parameter {character} is not yet supported in the C++ backend"
+                )
+        return regex_params
+
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
         num_operands = len(java_call.getOperands())
@@ -3063,37 +3095,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
         if func_name == "REGEXP_SUBSTR" and len(op_exprs) in (2, 3, 4, 5, 6):
-
-            def clean_regex_params(regex_params_expr):
-                if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
-                    # Both case sensitive and case insensitive params provided; find which appears latest in the string
-                    latest_index = max(
-                        regex_params_expr.value.rfind(char) for char in ("c", "i")
-                    )
-                    latest_char = regex_params_expr.value[latest_index]
-                    # Remove occurrences of the other parameter to make the identification easier on the C++ side
-                    regex_params = regex_params_expr.value.replace(
-                        "c" if latest_char == "i" else "i", ""
-                    )
-                else:
-                    if (
-                        "c" not in regex_params_expr.value
-                        and "i" not in regex_params_expr.value
-                    ):
-                        regex_params = regex_params_expr.value + "c"
-                    else:
-                        regex_params = regex_params_expr.value
-                for character in regex_params:
-                    if character not in ("c", "i", "m", "e", "s"):
-                        raise ValueError(
-                            f"{func_name} regex parameter {character} does not exist"
-                        )
-                    if character in ("i", "m", "s"):
-                        raise ValueError(
-                            f"{func_name} regex parameter {character} is not yet supported in the C++ backend"
-                        )
-                return regex_params
-
             src = op_exprs[0]
             regexp = op_exprs[1]
 
@@ -3106,8 +3107,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
                 if start_expr.value > 0:
                     start = start_expr.value - 1
+                elif start_expr.value == 0:
+                    start = 0
                 else:
-                    start = start_expr.value
+                    raise ValueError("Start index must be positive for REGEXP_SUBSTR.")
             else:
                 start = 0
 
@@ -3130,7 +3133,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 ensure_arg_is_const_expr_of_type(
                     regex_params_expr, "regex_params_expr", str
                 )
-                regex_params = clean_regex_params(regex_params_expr)
+                regex_params = clean_regex_params(regex_params_expr, func_name)
             else:
                 regex_params = "c"
 
@@ -3144,9 +3147,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 group_num = group_num_expr.value
                 if group_num > 0:
                     group_num -= 1  # Convert from 1-based to 0-based
-                regex_params = (
-                    regex_params + "e"
-                )  # 'e' is implied if group_num is passed
+                # 'e' is implied if group_num is passed
+                regex_params += "e"
             else:
                 group_num = 0
 
@@ -3163,7 +3165,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             # Remove earlier occurrences so that extract_regex can find the correct occurrence/substring matching the regexp
             if occurrence_num > 1:
-                occurences_replaced_expr = ArrowScalarFuncExpression(
+                occurrences_replaced_expr = ArrowScalarFuncExpression(
                     src.empty_data,
                     [without_start_expr],
                     "replace_substring_regex",
@@ -3174,11 +3176,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     ),
                 )
             else:
-                occurences_replaced_expr = without_start_expr
+                occurrences_replaced_expr = without_start_expr
 
             return ArrowScalarFuncExpression(
                 src.empty_data,
-                [occurences_replaced_expr],
+                [occurrences_replaced_expr],
                 "regexp_substr",  # Made up function, will redirect to extract_regex with the right group extracted
                 (regexp.value, regex_params, group_num),
             )
@@ -3947,6 +3949,167 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             one_expr = ConstantExpression(int_empty_data, input_plan, 1)
             return ArithOpExpression(
                 int_empty_data, adjusted_substring_pos_expr, one_expr, "__add__"
+            )
+
+        elif func_name == "REGEXP_INSTR" and len(op_exprs) in (2, 3, 4, 5, 6, 7):
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+            if len(op_exprs) >= 3:
+                start_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                elif start_expr.value == 0:
+                    start = 0
+                else:
+                    raise ValueError("Start index must be positive for REGEXP_INSTR.")
+            else:
+                start = 0
+
+            if len(op_exprs) >= 4:
+                # Need to search for the substring that is the op_exprs[3]-th occurrence / regex match
+                occurrence_expr = op_exprs[3]
+                ensure_arg_is_const_expr_of_type(
+                    occurrence_expr, "occurrence_expr", int
+                )
+                occurrence_num = occurrence_expr.value
+                if occurrence_num < 1:
+                    raise ValueError(
+                        f"{func_name} occurences argument must be 1 or greater"
+                    )
+            else:
+                occurrence_num = 1
+
+            # The "option" parameter specifies whether to return the offset of the first character of the match (0) or the offset of the first character following the end of the match (1).
+            if len(op_exprs) >= 5:
+                start_or_end_index_expr = op_exprs[4]
+                ensure_arg_is_const_expr_of_type(
+                    start_or_end_index_expr, "start_or_end_index_expr", int
+                )
+                start_or_end_index = start_or_end_index_expr.value
+                assert start_or_end_index in (0, 1), (
+                    "The 'option' parameter must be 0 or 1."
+                )
+            else:
+                start_or_end_index = 0
+
+            if len(op_exprs) >= 6:
+                regex_params_expr = op_exprs[5]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                regex_params = clean_regex_params(regex_params_expr, func_name)
+            else:
+                regex_params = "c"
+
+            if len(op_exprs) == 7:
+                group_num_expr = op_exprs[6]
+                ensure_arg_is_const_expr_of_type(group_num_expr, "group_num_expr", int)
+                if group_num_expr.value < 0:
+                    raise ValueError(
+                        f"Negative value for group_num argument of {func_name} is not permitted"
+                    )
+                group_num = group_num_expr.value
+                if group_num > 0:
+                    group_num -= 1  # Convert from 1-based to 0-based
+                # 'e' is implied if group_num is passed
+                regex_params += "e"
+            else:
+                group_num = 0
+
+            # Chop off the start so that searching begins after the provided position
+            if start > 0:
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
+
+            # Remove earlier occurrences so that extract_regex_span can find the correct occurrence/substring matching the regexp
+            if occurrence_num > 1:
+                occurrences_replaced_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [without_start_expr],
+                    "replace_substring_regex",
+                    (
+                        regexp.value,
+                        "",
+                        occurrence_num - 1,
+                    ),
+                )
+            else:
+                occurrences_replaced_expr = without_start_expr
+
+            # 0-based index of the match in the shortened string with earlier occurrences removed.
+            # If index = -1, no match was found.
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            zero_based_index = ArrowScalarFuncExpression(
+                int_empty_data,
+                [occurrences_replaced_expr],
+                "regexp_instr",  # Bodo function implemented using Arrow's extract_regex_span
+                (regexp.value, start_or_end_index == 0, regex_params, group_num),
+            )
+            # Add 1 to convert to 1-based index. -1 also becomes 0 which is what Snowflake returns for the invalid cases
+            index = ArithOpExpression(
+                int_empty_data,
+                zero_based_index,
+                ConstantExpression(int_empty_data, input_plan, 1),
+                "__add__",
+            )
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+
+            # We need to compensate for the lengths of the occurrences that were removed (as well as the start_expr-1 characters that were cut off at the beginning).
+            if start > 0 or occurrence_num > 1:
+                if occurrence_num > 1:
+                    # We can find the total lost length by subtracting the current string length from the original string length.
+                    cur_length = ArrowScalarFuncExpression(
+                        int_empty_data, [occurrences_replaced_expr], "utf8_length", ()
+                    )
+                    original_length = ArrowScalarFuncExpression(
+                        int_empty_data, [src], "utf8_length", ()
+                    )
+                    lost_length = ArithOpExpression(
+                        int_empty_data, original_length, cur_length, "__sub__"
+                    )
+                else:
+                    # If occurrence_num = 1, we know in advance how many characters were removed
+                    lost_length = ConstantExpression(int_empty_data, input_plan, start)
+
+                # Add back the lost length to the index
+                compensated_index = ArithOpExpression(
+                    int_empty_data, index, lost_length, "__add__"
+                )
+
+                # Only return the compensated index if a match was found, because we want to return 0 otherwise
+                match_found = ComparisonOpExpression(
+                    bool_empty_data,
+                    index,
+                    ConstantExpression(int_empty_data, input_plan, 0),
+                    operator.ne,
+                )
+                new_index = CaseExpression(
+                    int_empty_data, match_found, compensated_index, index
+                )
+            else:
+                # Nothing was removed from the string so we can just return the raw index
+                new_index = index
+
+            # Make sure we return NULL for NULL strings instead of 0
+            string_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
+            return CaseExpression(
+                int_empty_data,
+                string_is_null,
+                NullExpression(int_empty_data, input_plan, 0),
+                new_index,
             )
 
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
