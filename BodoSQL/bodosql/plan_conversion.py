@@ -375,7 +375,7 @@ def adjustScale(inp_dtype, scale_expr, output_empty_data):
         elif isinstance(scale_expr, int):
             new_scale = scale_expr
 
-        if new_scale:
+        if new_scale is not None:
             # get the pyarrow decimal type for the column
             pa_dtype = output_empty_data.dtypes.iloc[0].pyarrow_dtype
 
@@ -387,7 +387,7 @@ def adjustScale(inp_dtype, scale_expr, output_empty_data):
             precision = pa_dtype.precision
             current_scale = pa_dtype.scale
 
-            if new_scale < current_scale:
+            if new_scale != current_scale:
                 output_empty_data = pd.Series(
                     dtype=pd.ArrowDtype(pa.decimal128(precision, new_scale))
                 ).to_frame(output_empty_data.columns[0])
@@ -2653,16 +2653,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
-            sign_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            if compare_types(inp_dtype, int):
-                # If input is an int, first use int8 empty data since
-                # we have to match the return type of Arrow's sign().
-                int8_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
-                int8_sign = UnaryOpExpression(int8_empty_data, inp, "sign")
-                return CastExpression(sign_empty_data, int8_sign)
-            else:
-                # If input is a float, return the original float type
-                return UnaryOpExpression(sign_empty_data, inp, "sign")
+            sign_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int8()))
+            return UnaryOpExpression(sign_empty_data, inp, "sign")
 
         # Binary power: POWER(x, y) -> use __pow__ via ArithOpExpression
         if func_name == "POWER" and len(op_exprs) == 2:
@@ -5795,7 +5787,7 @@ def sql_type_to_pa_type(ctx, sql_type):
     if sql_type_name.equals(SqlTypeName.DECIMAL):
         precision = sql_type.getPrecision()
         scale = sql_type.getScale()
-        if scale > 38:
+        if precision > 38:
             raise ValueError("BodoSQL cpp backend does not support decimal256.")
         else:
             return pa.decimal128(precision, scale)
