@@ -1834,7 +1834,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                         [
                             Decimal("648.2935"),
                             Decimal("-152.5826"),
-                            Decimal("-0.15122"),
+                            Decimal("-1.15122"),
                             Decimal("0.5233"),
                             Decimal("0"),
                             None,
@@ -1853,7 +1853,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                         [
                             Decimal("648.2935"),
                             Decimal("-152.5826"),
-                            Decimal("-0.15122"),
+                            Decimal("-1.15122"),
                             Decimal("0.5233"),
                             Decimal("0"),
                             None,
@@ -1864,6 +1864,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
             ),
             "TRUNC(D1) :: VARCHAR",
             id="no_scale",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1872,7 +1873,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                         [
                             Decimal("648.2935"),
                             Decimal("-152.5826"),
-                            Decimal("-0.15122"),
+                            Decimal("-1.15122"),
                             Decimal("0.5233"),
                             Decimal("0"),
                             None,
