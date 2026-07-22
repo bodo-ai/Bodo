@@ -1869,9 +1869,10 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
     register_duckdb_scalar_func(
         db, "abs",
         append_signatures(
-            copy_signatures(UNARY_FLOAT_SIGNATURES),
-            append_signatures(copy_signatures(UNARY_DECIMAL_SIGNATURES),
-                              UNARY_INT_SIGNATURES)));
+            append_signatures(
+                copy_signatures(UNARY_FLOAT_SIGNATURES),
+                UNARY_DECIMAL_SIGNATURES),
+            UNARY_INT_SIGNATURES));
     register_duckdb_scalar_func(db, "sqrt", UNARY_FLOAT_SIGNATURES);
     register_duckdb_scalar_func(db, "cbrt", UNARY_FLOAT_SIGNATURES);
     register_duckdb_scalar_func(db, "exp", UNARY_FLOAT_SIGNATURES);
