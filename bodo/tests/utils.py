@@ -1350,6 +1350,15 @@ def _test_equal(
     except ImportError:
         csr_matrix = type(None)
 
+    if int(os.environ.get("BODO_TESTING_SHOW_OUTPUT", 0)) > 0:
+        print(
+            "bodo/tests/utils.py::_test_equal: bodo_out\n",
+            bodo_out,
+            "\n",
+            bodo_out.dtypes,
+        )
+        print("bodo/tests/utils.py::_test_equal: py_out\n", py_out, "\n", py_out.dtypes)
+
     if is_multi_worker_per_gpu_test():
         # Automatically sort output if we have multiple workers per GPU
         # TODO(BSE-5322): remove after CPU-GPU exchange doesn't change the order of data.

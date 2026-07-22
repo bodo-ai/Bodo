@@ -1308,9 +1308,6 @@ def _check_query_equal(
     n_ranks = bodo.get_size()
     # only rank 0 should check if gatherv() called on output
     if not is_out_distributed or bodo.get_rank() == 0:
-        if int(os.environ.get("BODO_TESTING_SHOW_OUTPUT", 0)) > 0:
-            print("utils.py::_check_query_equal: bodosql_output\n", bodosql_output)
-            print("utils.py::_check_query_equal: expected_output\n", expected_output)
         passed = _test_equal_guard(
             bodosql_output,
             expected_output,
