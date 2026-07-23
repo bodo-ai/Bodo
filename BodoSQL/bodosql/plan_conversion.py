@@ -4240,11 +4240,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 without_start_expr = src
 
-            # Arrow's replace_substring_regex cannot replace a specific occurrence,
-            # so we need to modify the regex pattern to do so.
-            if occurrence_num is not None and occurrence_num > 1:
-                pass
-
             if occurrence_num in (-1, 1):
                 # Replace all occurrences or the first occurrence of a substring matching the regexp.
                 # Arrow has no way to replace the n-th occurrence only, so if occurrence_num > 1
