@@ -128,15 +128,8 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
 }
 
 arrow::Datum do_arrow_compute_multi_input_datum(
-    const std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
+    const std::vector<arrow::Datum>& arg_datums,
     const std::string& arrow_func_name) {
-    std::vector<arrow::Datum> arg_datums;
-    for (auto& expr_res : in_expr_results) {
-        arrow::Datum arg_datum = ConvertExprResultToDatum(
-            expr_res, "do_arrow_compute_multi_input input");
-        arg_datums.push_back(arg_datum);
-    }
-
     arrow::Result<arrow::Datum> func_res;
 
     if (arrow_func_name == "bodo_dateadd") {
@@ -482,11 +475,16 @@ arrow::Datum do_arrow_compute_multi_input_datum(
             // At least one of the second and third arguments are arrays: use
             // bodo_substr_three
 
+            // Copy so we can modify datum args (pre-sized to 3 elements)
+            std::vector<arrow::Datum> array_arg_datums(3);
+            std::copy(arg_datums.begin(), arg_datums.end(),
+                      array_arg_datums.begin());
+
             if (arrow_func_name == "utf8_slice_codeunits" &&
                 arg_datums.size() == 3) {
                 // Convert from end index argument to length argument
-                arg_datums[2] = do_arrow_compute_binary(
-                    arg_datums[2], arg_datums[1], "subtract");
+                array_arg_datums[2] = do_arrow_compute_binary(
+                    array_arg_datums[2], array_arg_datums[1], "subtract");
             }
 
             // Get the scalar object from a possible scalar datum (start index
@@ -497,17 +495,15 @@ arrow::Datum do_arrow_compute_multi_input_datum(
                 // 0 or 1 of the arguments could be scalars
                 for (int arg_datum_index = 1; arg_datum_index <= 2;
                      arg_datum_index++) {
-                    if (arg_datums[arg_datum_index].is_scalar()) {
+                    if (array_arg_datums[arg_datum_index].is_scalar()) {
                         scalar_arg_index = arg_datum_index;
-                        arg_scalar = arg_datums[arg_datum_index]
+                        arg_scalar = array_arg_datums[arg_datum_index]
                                          .scalar_as<arrow::Int64Scalar>();
                         break;
                     }
                 }
             } else {
                 // If length was not provided, use the max value of int64.
-                // Need to resize arg_datums so we can set the third element.
-                arg_datums.resize(3);
                 scalar_arg_index = 2;
                 arg_scalar =
                     arrow::Int64Scalar(std::numeric_limits<int64_t>::max());
@@ -517,21 +513,21 @@ arrow::Datum do_arrow_compute_multi_input_datum(
             // bodo_substr_three requires arrays
             if (scalar_arg_index != -1) {
                 auto arg_scalar_array = arrow::MakeArrayFromScalar(
-                    arg_scalar, arg_datums[0].make_array()->length());
+                    arg_scalar, array_arg_datums[0].make_array()->length());
                 if (!arg_scalar_array.ok()) {
                     throw std::runtime_error(
                         "do_arrow_compute_multi_input: Failed to make array "
                         "from scalar: " +
                         arg_scalar_array.status().message());
                 }
-                arg_datums[scalar_arg_index] =
+                array_arg_datums[scalar_arg_index] =
                     arrow::Datum(arg_scalar_array.ValueOrDie());
             }
 
             // Call our custom substring function that can handle array indices
             EnsureSubstrRegistered();
-            func_res =
-                arrow::compute::CallFunction("bodo_substr_three", arg_datums);
+            func_res = arrow::compute::CallFunction("bodo_substr_three",
+                                                    array_arg_datums);
         }
     } else if (arrow_func_name == "max_element_wise" ||
                arrow_func_name == "min_element_wise") {
@@ -555,8 +551,14 @@ arrow::Datum do_arrow_compute_multi_input_datum(
 std::shared_ptr<array_info> do_arrow_compute_multi_input(
     const std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
     const std::string& arrow_func_name) {
+    std::vector<arrow::Datum> arg_datums;
+    for (auto& expr_res : in_expr_results) {
+        arrow::Datum arg_datum = ConvertExprResultToDatum(
+            expr_res, "do_arrow_compute_multi_input input");
+        arg_datums.push_back(arg_datum);
+    }
     arrow::Datum result_datum =
-        do_arrow_compute_multi_input_datum(in_expr_results, arrow_func_name);
+        do_arrow_compute_multi_input_datum(arg_datums, arrow_func_name);
     return ConvertDatumToArrayInfo(result_datum);
 }
 

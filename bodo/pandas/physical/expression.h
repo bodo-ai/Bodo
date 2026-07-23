@@ -191,15 +191,15 @@ extern std::function<bool(int)> greater_equal_test;
 extern std::function<bool(int)> less_equal_test;
 
 /**
- * @brief Perform an Arrow compute operation with multiple input expressions.
+ * @brief Perform an Arrow compute operation with multiple input datums.
  *
- * @param in_expr_results A vector of input expression results.
+ * @param arg_datums A vector of input datums
  * @param arrow_func_name The name of the Arrow function to call.
  * @return arrow::Datum The result of the Arrow compute
  * operation.
  */
 arrow::Datum do_arrow_compute_multi_input_datum(
-    const std::vector<std::shared_ptr<ExprResult>> &in_expr_results,
+    const std::vector<arrow::Datum> &arg_datums,
     const std::string &arrow_func_name);
 
 /**
@@ -1743,6 +1743,90 @@ class PhysicalArrowExpression : public PhysicalExpression {
     }
 
     template <typename T>
+    arrow::Datum do_arrow_compute_replace_substring_regex_single(
+        T res, std::string pattern_str, std::string replacement_str,
+        int occurrence_num) {
+        if (occurrence_num < 1) {
+            throw std::invalid_argument(
+                "occurrences_num argument to replace_substring_regex_single "
+                "must be one or greater.");
+        }
+
+        // Intermediate results must be Datums only because Bodo doesn't support
+        // the list type.
+        arrow::Datum res_datum = ConvertExprResultToDatum(
+            res, "replace_substring_regex_single string");
+
+        // Use the regexp to split the input string occurrence_num - 1 times.
+        // Thus the occurrence we are looking for will be in the final piece in
+        // the list.
+        arrow::compute::SplitPatternOptions split_opts{pattern_str,
+                                                       occurrence_num - 1};
+        // split_string is a ListArray
+        arrow::Datum split_string = do_arrow_compute_unary(
+            res_datum, "split_pattern_regex", &split_opts);
+
+        // Get the final list element, which would contain the (occurrence_num)
+        // occurrence if it existed. We can't use list_element directly, because
+        // the lists in the ListArray could have different lengths depending on
+        // the number of occurrences in the string, and list_element raises an
+        // error instead of returning NULL in that case. Therefore, we first get
+        // a slice of the (occurrence_num) element with the
+        // return_fixed_size_list option set to true, which substitutes NULL
+        // when the original list has no element corresponding to a particular
+        // index.
+        arrow::compute::ListSliceOptions list_slice_opts{
+            occurrence_num - 1, occurrence_num, 1, true};
+        arrow::Datum string_tail_list = do_arrow_compute_unary(
+            split_string, "list_slice", &list_slice_opts);
+
+        // Get the singular list element from our slice of the last element in
+        // split_string
+        auto zero_scalar = std::make_shared<arrow::Int64Scalar>(0);
+        arrow::Datum string_tail = do_arrow_compute_binary(
+            string_tail_list, zero_scalar, "list_element");
+
+        // Replace the first occurrence in the tail, which is the
+        // (occurrence_num) occurrence in the full string
+        arrow::compute::ReplaceSubstringOptions replace_substring_opts{
+            pattern_str, replacement_str, 1};
+        arrow::Datum replaced_tail = do_arrow_compute_unary(
+            string_tail, "replace_substring_regex", &replace_substring_opts);
+
+        // Calculate the length of the prefix string (unchanged portion with
+        // (occurrence_num - 1) occurrences). prefix length = total length -
+        // tail length
+        arrow::Datum full_length =
+            do_arrow_compute_unary(res_datum, "utf8_length");
+        arrow::Datum tail_length =
+            do_arrow_compute_unary(string_tail, "utf8_length");
+        arrow::Datum prefix_length =
+            do_arrow_compute_binary(full_length, tail_length, "subtract");
+
+        // Take the substring up to the prefix length to get the prefix string
+        arrow::Datum prefix_string = do_arrow_compute_multi_input_datum(
+            {res_datum, zero_scalar, prefix_length}, "bodo_substr_three");
+
+        // Concatenate the prefix string to the modified tail
+        auto empty_string_scalar = std::make_shared<arrow::StringScalar>("");
+        arrow::Datum combined_replaced_string =
+            do_arrow_compute_multi_input_datum(
+                {prefix_string, replaced_tail, empty_string_scalar},
+                "binary_join_element_wise");
+
+        // If the string tail is null, there were fewer than (occurrence_num)
+        // occurrences
+        arrow::Datum string_tail_is_null =
+            do_arrow_compute_unary(string_tail, "is_null");
+        // If occurrence doesn't exist, return original string unchanged
+        arrow::Datum final_replaced_string = do_arrow_compute_multi_input_datum(
+            {string_tail_is_null, res_datum, combined_replaced_string},
+            "if_else");
+
+        return final_replaced_string;
+    }
+
+    template <typename T>
     arrow::Datum do_arrow_compute_dow_num(T res) {
         // We strip off the leading spaces and only look at the first two
         // characters of the input string in accordance with Snowflake (e.g.
@@ -2091,6 +2175,28 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 result = index_datum;
             } else {
                 result = ConvertDatumToArrayInfo(index_datum);
+            }
+        } else if (scalar_func_data.arrow_func_name ==
+                   "replace_substring_regex_single") {
+            // Bodo function since Arrow's replace_substring_regex cannot
+            // replace a specific occurrence
+            auto [pattern, replacement, occurrence_num] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_cstr,
+                get_py_object_as_int64);
+
+            std::string pattern_str(pattern);
+            std::string replacement_str(replacement);
+
+            arrow::Datum replaced_string_datum =
+                do_arrow_compute_replace_substring_regex_single(
+                    res, pattern_str, replacement_str, occurrence_num);
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = replaced_string_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(replaced_string_datum);
             }
         } else if (scalar_func_data.arrow_func_name == "utf8_trim" ||
                    scalar_func_data.arrow_func_name == "utf8_ltrim" ||
