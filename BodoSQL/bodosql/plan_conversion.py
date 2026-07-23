@@ -1975,8 +1975,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 cleaned_input,
             )
 
-        if operand_type.getSqlTypeName().equals(
-            SqlTypeName.DECIMAL
+        if pa.types.is_decimal(
+            in_expr.empty_data.dtypes.iloc[0].pyarrow_dtype
         ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
             dscale = in_expr.empty_data.dtypes.iloc[0].pyarrow_dtype.scale
             if dscale < 0:

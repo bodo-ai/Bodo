@@ -1809,7 +1809,8 @@ struct RoundDecimalBindData : public duckdb::FunctionData {
 };
 
 // Bind callback: inspect concrete argument types and set return type
-static duckdb::unique_ptr<duckdb::FunctionData> SameReturnRoundDecimalBindUnary(
+static duckdb::unique_ptr<duckdb::FunctionData>
+SameReturnRoundDecimalBindBinary(
     duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
     duckdb::vector<bododuckdb::unique_ptr<bododuckdb::Expression>> &arguments) {
     // This is for the 2 argument version of round.
@@ -1898,7 +1899,7 @@ const duckdb::vector<ScalarFunctionSignature> UNARY_DECIMAL_SIGNATURES = {
 const duckdb::vector<ScalarFunctionSignature> ROUND_DECIMAL_SIGNATURES = {
     ScalarFunctionSignature(
         {duckdb::LogicalType::ANY, duckdb::LogicalType::BIGINT},
-        duckdb::LogicalType::ANY, SameReturnRoundDecimalBindUnary)};
+        duckdb::LogicalType::ANY, SameReturnRoundDecimalBindBinary)};
 
 duckdb::vector<ScalarFunctionSignature> &&append_signatures(
     duckdb::vector<ScalarFunctionSignature> &&signatures,
