@@ -14,10 +14,8 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalWindow
 import com.bodosql.calcite.adapter.common.LimitUtils
-import com.bodosql.calcite.adapter.iceberg.IcebergRel
 import com.bodosql.calcite.adapter.iceberg.IcebergRuntimeJoinFilter
 import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
-import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRuntimeJoinFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
@@ -26,8 +24,6 @@ import com.bodosql.calcite.rel.core.CachedPlanInfo
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.cachePlanContainers.CacheNodeTopologicalSortVisitor
 import com.bodosql.calcite.rel.core.cachePlanContainers.CachedResultVisitor
-import com.bodosql.calcite.table.CatalogTable
-import com.bodosql.calcite.table.SnowflakeCatalogTable
 import com.google.common.annotations.VisibleForTesting
 import org.apache.calcite.plan.BodoRelOptCluster
 import org.apache.calcite.plan.RelOptLattice
@@ -369,7 +365,7 @@ object RuntimeJoinFilterProgram : Program {
                 converter
             } else {
                 val filterInfo = liveJoins.flattenToLists()
-                val catalogTable = findCatalogTable(converter.input)
+                val catalogTable = converter.findSnowflakeRel(converter.input).getCatalogTable()
                 val snowflakeRtjf =
                     SnowflakeRuntimeJoinFilter.create(
                         converter.input,
@@ -388,7 +384,7 @@ object RuntimeJoinFilterProgram : Program {
                 converter
             } else {
                 val filterInfo = liveJoins.flattenToLists()
-                val icebergCatalogTable = findIcebergCatalogTable(converter.input)
+                val icebergCatalogTable = converter.findIcebergRel(converter.input).getCatalogTable()
                 val icebergRtjf =
                     IcebergRuntimeJoinFilter.create(
                         converter.input,
@@ -967,50 +963,6 @@ object RuntimeJoinFilterProgram : Program {
                     JoinFilterProgramState()
                 }
             }
-
-        /**
-         * Find the catalog table for a node that may be wrapped by BodoPhysical nodes
-         * inserted by covering expression caching. Traverses the input chain until a
-         * SnowflakeRel is found. If a CachedSubPlanBase is encountered, searches its
-         * cached plan body as well.
-         */
-        private fun findCatalogTable(node: RelNode): SnowflakeCatalogTable =
-            findSnowflakeRel(node)?.getCatalogTable()
-                ?: throw IllegalStateException("Cannot find SnowflakeRel in input chain for catalog table")
-
-        private fun findSnowflakeRel(node: RelNode): SnowflakeRel? {
-            if (node is SnowflakeRel) return node
-            if (node is CachedSubPlanBase) {
-                return findSnowflakeRel(node.cachedPlan.plan)
-            }
-            for (input in node.inputs) {
-                val result = findSnowflakeRel(input)
-                if (result != null) return result
-            }
-            return null
-        }
-
-        /**
-         * Find the catalog table for a node that may be wrapped by BodoPhysical nodes
-         * inserted by covering expression caching. Traverses the input chain until an
-         * IcebergRel is found. If a CachedSubPlanBase is encountered, searches its
-         * cached plan body as well.
-         */
-        private fun findIcebergCatalogTable(node: RelNode): CatalogTable =
-            findIcebergRel(node)?.getCatalogTable()
-                ?: throw IllegalStateException("Cannot find IcebergRel in input chain for catalog table")
-
-        private fun findIcebergRel(node: RelNode): IcebergRel? {
-            if (node is IcebergRel) return node
-            if (node is CachedSubPlanBase) {
-                return findIcebergRel(node.cachedPlan.plan)
-            }
-            for (input in node.inputs) {
-                val result = findIcebergRel(input)
-                if (result != null) return result
-            }
-            return null
-        }
     }
 
     /**

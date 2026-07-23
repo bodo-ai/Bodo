@@ -74,7 +74,7 @@ class SnowflakeToBodoPhysicalConverter(
      * Find the SnowflakeRel in the input chain, traversing through BodoPhysical nodes
      * and CachedSubPlanBase bodies inserted by covering expression caching.
      */
-    private fun findSnowflakeRel(node: RelNode): SnowflakeRel =
+    fun findSnowflakeRel(node: RelNode): SnowflakeRel =
         findSnowflakeRelOrNull(node)
             ?: throw IllegalStateException("Cannot find SnowflakeRel in input chain")
 

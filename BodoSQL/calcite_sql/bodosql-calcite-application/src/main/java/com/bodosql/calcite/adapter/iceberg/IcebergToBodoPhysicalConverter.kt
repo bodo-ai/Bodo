@@ -72,7 +72,7 @@ class IcebergToBodoPhysicalConverter(
      * Find the IcebergRel in the input chain, traversing through BodoPhysical nodes
      * and CachedSubPlanBase bodies inserted by covering expression caching.
      */
-    private fun findIcebergRel(node: RelNode): IcebergRel =
+    fun findIcebergRel(node: RelNode): IcebergRel =
         findIcebergRelOrNull(node)
             ?: throw IllegalStateException("Cannot find IcebergRel in input chain")
 
