@@ -2829,16 +2829,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     return inp
                 else:  # float or decimal
                     output_empty_data = adjust_scale(inp_dtype, 0, inp.empty_data)
-                    trunc_res = UnaryOpExpression(output_empty_data, inp, "trunc")
-                    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-                    # Just to get the change of actual output type which UnaryOp
-                    # doesn't do yet.
-                    return ArithOpExpression(
-                        output_empty_data,
-                        trunc_res,
-                        zero_expr,
-                        "__add__",
-                    )
+                    return UnaryOpExpression(output_empty_data, inp, "trunc")
             else:
                 scale_expr = op_exprs[1]
                 ensure_type_of_expr(scale_expr, "scale_expr", int)

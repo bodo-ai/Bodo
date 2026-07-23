@@ -220,7 +220,8 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
  */
 std::shared_ptr<array_info> do_arrow_compute_unary(
     std::shared_ptr<ExprResult> left_res, const std::string &comparator,
-    const arrow::compute::FunctionOptions *func_options = nullptr);
+    const arrow::compute::FunctionOptions *func_options = nullptr,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Convert two ExprResults to arrow and run compute operation on them.
@@ -277,7 +278,8 @@ std::shared_ptr<array_info> do_arrow_compute_case(
  */
 arrow::Datum do_arrow_compute_unary(
     arrow::Datum left_res, const std::string &comparator,
-    const arrow::compute::FunctionOptions *func_options = nullptr);
+    const arrow::compute::FunctionOptions *func_options = nullptr,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Run arrow compute operation on two Datums.
@@ -880,9 +882,11 @@ class PhysicalCastExpression : public PhysicalExpression {
  */
 class PhysicalUnaryExpression : public PhysicalExpression {
    public:
-    PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
-                            duckdb::ExpressionType etype)
-        : PhysicalExpression(PhysicalExpressionType::UNARY) {
+    PhysicalUnaryExpression(
+        std::shared_ptr<PhysicalExpression> left, duckdb::ExpressionType etype,
+        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
+        : PhysicalExpression(PhysicalExpressionType::UNARY),
+          result_type(_result_type) {
         children.push_back(left);
         switch (etype) {
             case duckdb::ExpressionType::OPERATOR_NOT:
@@ -913,8 +917,11 @@ class PhysicalUnaryExpression : public PhysicalExpression {
                 throw std::runtime_error("Unhandled unary op expression type.");
         }
     }
-    PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
-                            std::string &opstr) {
+    PhysicalUnaryExpression(
+        std::shared_ptr<PhysicalExpression> left, std::string &opstr,
+        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
+        : PhysicalExpression(PhysicalExpressionType::UNARY),
+          result_type(_result_type) {
         children.push_back(left);
         if (opstr == "floor" || opstr == "ceil" || opstr == "abs" ||
             opstr == "sqrt" || opstr == "cbrt" || opstr == "exp" ||
@@ -972,11 +979,12 @@ class PhysicalUnaryExpression : public PhysicalExpression {
             arrow::Datum left_res_sign =
                 do_arrow_compute_unary(left_res_datum, "sign");
             arrow::Datum corrected_power_result = do_arrow_compute_binary(
-                power_result, left_res_sign, "multiply");
+                power_result, left_res_sign, "multiply", nullptr, result_type);
 
             result = ConvertDatumToArrayInfo(corrected_power_result);
         } else {
-            result = do_arrow_compute_unary(left_res, comparator, func_options);
+            result = do_arrow_compute_unary(left_res, comparator, func_options,
+                                            result_type);
         }
 
         auto left_as_scalar =
@@ -1000,6 +1008,7 @@ class PhysicalUnaryExpression : public PhysicalExpression {
 
    protected:
     std::string comparator;
+    const std::shared_ptr<arrow::DataType> result_type;
 };
 
 void EnsureModRegistered();
