@@ -4369,7 +4369,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 int_empty_data,
                 [without_start_expr],
                 "count_substring_regex",
-                (regexp.value, "i" in regex_params),
+                (modified_regexp, "i" in regex_params),
             )
 
         elif func_name == "REGEXP_LIKE" and len(op_exprs) in (2, 3):
@@ -4406,7 +4406,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 bool_empty_data,
                 [src],
                 "match_substring_regex",
-                (anchored_regexp, "i" in regex_params),
+                (modified_regexp, "i" in regex_params),
             )
 
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
