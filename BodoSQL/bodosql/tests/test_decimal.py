@@ -1905,6 +1905,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_trunc(df, expr, memory_leak_check):
     """
     Tests the correctness of decimal TRUNC with different scales.
