@@ -1843,7 +1843,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                     )
                 }
             ),
-            "TRUNC(D1, 2)",
+            "TRUNC(D1, 2) :: VARCHAR",
             id="positive_scale",
         ),
         pytest.param(
@@ -1862,7 +1862,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                     )
                 }
             ),
-            "TRUNC(D1)",
+            "TRUNC(D1) :: VARCHAR",
             id="no_scale",
             marks=pytest.mark.bodosql_cpp,
         ),
@@ -1882,7 +1882,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                     )
                 }
             ),
-            "TRUNC(D1, -2)",
+            "TRUNC(D1, -2) :: VARCHAR",
             id="negative_scale",
         ),
         pytest.param(

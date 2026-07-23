@@ -2822,13 +2822,23 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
             if len(op_exprs) == 1:
                 if compare_types(inp_dtype, int):
                     # If input is an integer, TRUNCATE is a no-op
                     return inp
-                else:
-                    # If input is a float, return trunc(inp) as normal
-                    return UnaryOpExpression(inp.empty_data, inp, "trunc")
+                else:  # float or decimal
+                    output_empty_data = adjust_scale(inp_dtype, 0, inp.empty_data)
+                    trunc_res = UnaryOpExpression(output_empty_data, inp, "trunc")
+                    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+                    # Just to get the change of actual output type which UnaryOp
+                    # doesn't do yet.
+                    return ArithOpExpression(
+                        output_empty_data,
+                        trunc_res,
+                        zero_expr,
+                        "__add__",
+                    )
             else:
                 scale_expr = op_exprs[1]
                 ensure_type_of_expr(scale_expr, "scale_expr", int)
@@ -2837,7 +2847,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                         "TRUNCATE with scale not currently supported for integer types."
                     )
                 else:
-                    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
                     float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
                     ten_expr = ConstantExpression(int_empty_data, input_plan, 10)
                     # If input is a float or decimal, we do:
