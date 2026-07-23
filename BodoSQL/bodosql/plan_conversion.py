@@ -1976,6 +1976,16 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
         if operand_type.getSqlTypeName().equals(
+            SqlTypeName.DECIMAL
+        ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
+            dscale = in_expr.empty_data.dtypes.iloc[0].pyarrow_dtype.scale
+            if dscale < 0:
+                in_expr = CastExpression(
+                    pd.Series(dtype=pd.ArrowDtype(pa.int64())),
+                    in_expr,
+                )
+
+        if operand_type.getSqlTypeName().equals(
             SqlTypeName.VARCHAR
         ) and target_type.getSqlTypeName().equals(SqlTypeName.TIME):
             string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
@@ -2763,6 +2773,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 precision_digits = op_exprs[1]
                 out_empty = adjust_scale(inp_dtype, precision_digits, out_empty)
+                if compare_types(inp_dtype, pa.Decimal128Type):
+                    raise NotImplementedError(
+                        "Arrow round for decimal has a known issue."
+                    )
+
                 # Not a traditional arithmetic operation, but this is what
                 # we currently have available to retrieve binary functions
                 # from the DuckDB catalog.
