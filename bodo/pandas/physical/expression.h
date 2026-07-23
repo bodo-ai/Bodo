@@ -1752,8 +1752,6 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 "must be one or greater.");
         }
 
-        // Intermediate results must be Datums only because Bodo doesn't support
-        // the list type.
         arrow::Datum res_datum = ConvertExprResultToDatum(
             res, "replace_substring_regex_single string");
 

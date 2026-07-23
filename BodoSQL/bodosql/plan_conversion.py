@@ -3123,7 +3123,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 occurrence_num = occurrence_expr.value
                 if occurrence_num < 1:
                     raise ValueError(
-                        f"{func_name} occurences argument must be 1 or greater"
+                        f"{func_name} occurrences argument must be 1 or greater"
                     )
             else:
                 occurrence_num = 1
@@ -4040,7 +4040,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 occurrence_num = occurrence_expr.value
                 if occurrence_num < 1:
                     raise ValueError(
-                        f"{func_name} occurences argument must be 1 or greater"
+                        f"{func_name} occurrences argument must be 1 or greater"
                     )
             else:
                 occurrence_num = 1
@@ -4210,7 +4210,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 occurrence_num = occurrence_expr.value
                 if occurrence_num < 0:
                     raise ValueError(
-                        f"{func_name} occurences argument must be 0 or greater"
+                        f"{func_name} occurrences argument must be 0 or greater"
                     )
                 elif occurrence_num == 0:
                     # If occurrence_num is 0, all occurrences should be replaced.
@@ -4220,11 +4220,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # Default is to replace all occurrences
                 occurrence_num = -1
 
+            # Regex parameters unused at the moment
             if len(op_exprs) >= 6:
                 regex_params_expr = op_exprs[5]
                 ensure_arg_is_const_expr_of_type(
                     regex_params_expr, "regex_params_expr", str
                 )
+                # Throw an error for unsupported regex parameters
                 regex_params = clean_regex_params(regex_params_expr, func_name)
             else:
                 regex_params = "c"
@@ -4247,7 +4249,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 replace_substring_regex_func = "replace_substring_regex"
             else:
                 # If we need to replace a specific occurrence, use our custom function called
-                # replace_substring_regex_simple.
+                # replace_substring_regex_single.
                 replace_substring_regex_func = "replace_substring_regex_single"
 
             # Replace all occurrences or a specific occurrence of a substring matching the regexp.
