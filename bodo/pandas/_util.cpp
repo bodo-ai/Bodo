@@ -222,12 +222,28 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
         case duckdb::LogicalTypeId::SQLNULL: {
             return arrow::MakeNullScalar(arrow::null());
         } break;
+        case duckdb::LogicalTypeId::DECIMAL: {
+            uint8_t precision = 0;
+            uint8_t scale = 0;
+
+            value.type().GetDecimalProperties(precision, scale);
+
+            if (precision <= 0 || precision > 38) {
+                throw std::runtime_error(
+                    "getDefaultValueForDuckdbValueType invalid DECIMAL "
+                    "precision " +
+                    std::to_string(precision));
+            }
+
+            return arrow::MakeNullScalar(arrow::decimal128(precision, scale));
+        } break;
         default:
             throw std::runtime_error(
                 "getDefaultValueForDuckdbValueType unhandled type: " +
                 std::to_string(static_cast<int>(type)));
     }
 }
+
 std::string schemaColumnNamesToString(
     const std::shared_ptr<arrow::Schema> arrow_schema) {
     std::string ret = "";

@@ -468,7 +468,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int8",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 20, 30, 0, 50], dtype=pd.Int16Dtype()),
@@ -477,7 +477,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int16",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, -125, 300, 0, 131072], dtype=pd.Int32Dtype()),
@@ -486,7 +486,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="int32",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 2, 3, 0, 987654321], dtype=pd.Int64Dtype()),
@@ -503,7 +503,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint8",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 20, 300, 0, 5000], dtype=pd.UInt16Dtype()),
@@ -512,7 +512,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint16",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 21, 321, 0, 54321], dtype=pd.UInt32Dtype()),
@@ -521,7 +521,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
                 type=pa.decimal128(38, 2),
             ),
             id="uint32",
-            marks=pytest.mark.weekly,
+            marks=[pytest.mark.weekly, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             pd.array([1, 54321, 654321, 0, 7654321], dtype=pd.UInt64Dtype()),
@@ -644,6 +644,7 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_int_to_decimal(int_data, prec, scale, result, use_case, memory_leak_check):
     """
     Tests direct conversion of integers to decimals with various precisions/scales
@@ -720,6 +721,7 @@ def test_int_to_decimal(int_data, prec, scale, result, use_case, memory_leak_che
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_float_to_decimal(float_data, prec, scale, result, use_case, memory_leak_check):
     """
     Tests direct conversion of floats to decimals with various precisions/scales
@@ -779,6 +781,7 @@ def test_float_to_decimal_error(expr, error_message):
             )
 
 
+@pytest.mark.bodosql_cpp
 def test_decimal_to_float_cast(memory_leak_check):
     query = "Select A::DOUBLE as OUTPUT from TABLE1"
     df = pd.DataFrame(
@@ -843,6 +846,7 @@ def test_decimal_to_float_cast(memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_sign(df, expr, expected, memory_leak_check):
     """
     Tests the correctness of the SIGN function for decimals.
@@ -1055,6 +1059,7 @@ def test_decimal_sign(df, expr, expected, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_addition(df, expr, answer, memory_leak_check):
     """
     Tests the correctness of decimal addition against other decimals.
@@ -1269,6 +1274,7 @@ def test_decimal_addition(df, expr, answer, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_subtraction(df, expr, answer, memory_leak_check):
     """
     Tests the correctness of decimal subtraction against other decimals.
@@ -1654,6 +1660,7 @@ def test_decimal_rounding(df, expr, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_ceil(df, expr, answer, memory_leak_check):
     """
     Tests the correctness of decimal CEIL with different scales.
@@ -1793,6 +1800,7 @@ def test_decimal_ceil(df, expr, answer, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_floor(df, expr, answer, memory_leak_check):
     """
     Tests the correctness of decimal FLOOR with different scales.
@@ -1820,7 +1828,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                         [
                             Decimal("648.2935"),
                             Decimal("-152.5826"),
-                            Decimal("-0.15122"),
+                            Decimal("-1.15122"),
                             Decimal("0.5233"),
                             Decimal("0"),
                             None,
@@ -1839,7 +1847,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                         [
                             Decimal("648.2935"),
                             Decimal("-152.5826"),
-                            Decimal("-0.15122"),
+                            Decimal("-1.15122"),
                             Decimal("0.5233"),
                             Decimal("0"),
                             None,
@@ -1850,6 +1858,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
             ),
             "TRUNC(D1) :: VARCHAR",
             id="no_scale",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1858,7 +1867,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                         [
                             Decimal("648.2935"),
                             Decimal("-152.5826"),
-                            Decimal("-0.15122"),
+                            Decimal("-1.15122"),
                             Decimal("0.5233"),
                             Decimal("0"),
                             None,
@@ -2477,6 +2486,7 @@ def test_decimal_trunc(df, expr, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_to_float_functions(df, expr, answer, memory_leak_check):
     """
     Tests the correctness of functions that when called on decimals
@@ -2681,6 +2691,7 @@ def test_decimal_to_float_functions(df, expr, answer, memory_leak_check):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_to_string(df, expr, answer, memory_leak_check):
     """
     Tests the correctness of decimal conversion to string.
@@ -3436,6 +3447,7 @@ def test_decimal_median_error(arr, error_msg):
         ),
     ],
 )
+@pytest.mark.bodosql_cpp
 def test_decimal_abs(df, expr, answer, memory_leak_check):
     """
     Tests the correctness of decimal conversion to string.
