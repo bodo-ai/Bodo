@@ -4242,13 +4242,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # Default is to replace all occurrences
                 occurrence_num = -1
 
-            # Regex parameters unused at the moment
             if len(op_exprs) >= 6:
                 regex_params_expr = op_exprs[5]
                 ensure_arg_is_const_expr_of_type(
                     regex_params_expr, "regex_params_expr", str
                 )
-                # Throw an error for unsupported regex parameters
                 regex_params = clean_regex_params(regex_params_expr, func_name)
             else:
                 regex_params = "c"
