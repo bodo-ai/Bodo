@@ -1313,7 +1313,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
             ),
             "ROUND(D1, 3)",
             id="array-round",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1332,7 +1331,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
             ),
             "ROUND(D1, 3)",
             id="array-negative-round",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1351,7 +1349,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
             ),
             "ROUND(D1, -1)",
             id="array-round-negative_scale",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1370,7 +1367,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
             ),
             "ROUND(D1, -1)",
             id="array-negative-round-negative_scale",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1389,7 +1385,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
             ),
             "ROUND(D1, 7)",
             id="array-no_change",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             pd.DataFrame(
@@ -1408,7 +1403,6 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
             ),
             "ROUND(D1, 2)",
             id="array-round-propagate",
-            marks=pytest.mark.bodosql_cpp,
         ),
         # Case statements
         pytest.param(
@@ -1503,7 +1497,7 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
             ),
             "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 7)::VARCHAR END",
             id="array-no_change-case",
-            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.DataFrame(
