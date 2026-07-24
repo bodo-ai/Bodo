@@ -1200,11 +1200,18 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
         // Special handling for multi-input Arrow functions with options
         if (scalar_func_data.arrow_func_name == "max_element_wise" ||
             scalar_func_data.arrow_func_name == "min_element_wise") {
-            auto [skip_nulls] = get_py_args_as_types(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                get_py_object_as_bool);
+            arrow::compute::ElementWiseAggregateOptions opts;
 
-            arrow::compute::ElementWiseAggregateOptions opts(skip_nulls);
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            if (PyTuple_Size(scalar_func_data.args) > 1) {
+                auto [skip_nulls] = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_bool);
+                opts.skip_nulls = skip_nulls;
+            }
+
             result = do_arrow_compute_multi_input(
                 in_expr_results, scalar_func_data.arrow_func_name, &opts);
         } else {
