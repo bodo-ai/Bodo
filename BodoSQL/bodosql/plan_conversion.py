@@ -3885,24 +3885,84 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             len_expr = op_exprs[1]
 
             ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+            src_dtype = get_expr_dtype(src, "src")
 
-            out_empty = src.empty_data.iloc[:, 0]
-            return ArrowScalarFuncExpression(
-                out_empty, [src], "utf8_slice_codeunits", (0, len_expr.value, 1)
-            )
+            if compare_types(src_dtype, str):
+                ensure_type_of_expr(len_expr, "len_expr", int)
+
+                # Cast length to int64 to match the bodo_substr_three kernel definition
+                int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+                len_expr = CastExpression(int_empty_data, len_expr)
+
+                zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+                return ArrowScalarFuncExpression(
+                    src.empty_data, [src, zero_expr, len_expr], "bodo_substr_three", ()
+                )
+            else:
+                # bodo_substr_three doesn't support binary for now, so we use Arrow's binary_slice as
+                # a fallback for scalar length input in the binary case.
+                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+                # Note: utf8_slice_codeunits redirects to binary_slice on the C++ side if the input is binary
+                return ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (0, len_expr.value, 1),
+                )
         elif func_name == "RIGHT" and len(op_exprs) == 2:
             # Implement RIGHT as substr(-len,...)
             src = op_exprs[0]
             len_expr = op_exprs[1]
 
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
-            out_empty = src.empty_data.iloc[:, 0]
-            return ArrowScalarFuncExpression(
-                out_empty, [src], "utf8_slice_codeunits", (-len_expr.value, None, 1)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            src_dtype = get_expr_dtype(src, "src")
+
+            if compare_types(src_dtype, str):
+                ensure_type_of_expr(len_expr, "len_expr", int)
+
+                # Cast length to int64 to match the bodo_substr_three kernel definition
+
+                len_expr = CastExpression(int_empty_data, len_expr)
+
+                # Multiply by negative one to get a start index `len_expr` characters from the right
+                negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+                negative_len_expr = ArithOpExpression(
+                    int_empty_data, len_expr, negative_one_expr, "__mul__"
+                )
+
+                # Not passing a third argument means substring stops at end of string
+                right_substring = ArrowScalarFuncExpression(
+                    src.empty_data, [src, negative_len_expr], "bodo_substr_three", ()
+                )
+            else:
+                # bodo_substr_three doesn't support binary for now, so we use Arrow's binary_slice as
+                # a fallback for scalar length input in the binary case.
+                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+                # Note: utf8_slice_codeunits redirects to binary_slice on the C++ side if the input is binary
+                right_substring = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (-len_expr.value, None, 1),
+                )
+
+            # Always return an empty string if the length was 0 or negative to start with
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            len_is_negative = ComparisonOpExpression(
+                bool_empty_data, len_expr, zero_expr, operator.le
             )
+            src_is_not_null = UnaryOpExpression(bool_empty_data, src, "notnull")
+            return_empty_string = ConjunctionOpExpression(
+                bool_empty_data, len_is_negative, src_is_not_null, "__and__"
+            )
+            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+            return CaseExpression(
+                src.empty_data, return_empty_string, empty_string_expr, right_substring
+            )
+
         elif func_name == "STARTSWITH" and len(op_exprs) == 2:
             src = op_exprs[0]
             match_expr = op_exprs[1]
@@ -4483,36 +4543,48 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
             # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
             src = op_exprs[0]
-            start_expr = op_exprs[1]
-            ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+            ensure_type_of_expr(src, "src", str)
 
-            start = start_expr.value
-            if (
-                start > 0
-            ):  # start_expr.value = 0 is treated the same as start_expr.value = 1
-                start -= 1  # SQL substring is 1-indexed but Arrow is 0-indexed
-            # Arrow's utf8_slice_codeunits will handle the wraparound for negative start index
+            # utf8_slice_codeunits / bodo_substr_three will handle the wraparound for negative start index
+            start_expr = op_exprs[1]
+            ensure_type_of_expr(start_expr, "start_expr", int)
+
+            # Cast start index to int64 to match the bodo_substr_three kernel definition
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            start_expr = CastExpression(int_empty_data, start_expr)
+
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            # Using gt rather than ge since a start index of 0 is treated the same as start = 1
+            start_is_positive = ComparisonOpExpression(
+                bool_empty_data, start_expr, zero_expr, operator.gt
+            )
+            # Subtract 1 when start index is positive since SQL substring is 1-indexed but Arrow is 0-indexed
+            adjusted_start_expr = ArithOpExpression(
+                int_empty_data, start_expr, one_expr, "__sub__"
+            )
+            start_expr = CaseExpression(
+                int_empty_data, start_is_positive, adjusted_start_expr, start_expr
+            )
+
+            substring_args = [src, start_expr]
 
             if len(op_exprs) == 3:
                 len_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
-                if len_expr.value < 0:
-                    raise ValueError(
-                        "negative length not allowed in SUBSTRING in C++ backend"
-                    )
-                stop = start + len_expr.value
-                # Deal with negative start index and length beyond the end of the string
-                if start < 0 and stop >= 0:
-                    stop = None
-            else:
-                stop = None
+                ensure_type_of_expr(len_expr, "len_expr", int)
+
+                # Cast length to int64 to match the bodo_substr_three kernel definition
+                len_expr = CastExpression(int_empty_data, len_expr)
+
+                substring_args.append(len_expr)
 
             out_empty = src.empty_data.iloc[:, 0]
             return ArrowScalarFuncExpression(
                 out_empty,
-                [src],
-                "utf8_slice_codeunits",
-                (start, stop, 1),
+                substring_args,
+                "bodo_substr_three",
+                (),
             )
 
     if operator_class_name == "SqlLikeOperator":

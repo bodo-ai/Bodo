@@ -1012,6 +1012,7 @@ class PhysicalUnaryExpression : public PhysicalExpression {
 };
 
 void EnsureModRegistered();
+void EnsureSubstrRegistered();
 
 /**
  * @brief Physical expression tree node type for binary op non-boolean arrays.
