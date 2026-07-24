@@ -1699,6 +1699,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
 struct ScalarFunctionSignature {
     duckdb::vector<duckdb::LogicalType> param_types;
     duckdb::LogicalType return_type;
+    duckdb::bind_scalar_function_t bindmethod = nullptr;
 };
 
 void register_duckdb_scalar_func(
@@ -1708,7 +1709,8 @@ void register_duckdb_scalar_func(
 
     for (const ScalarFunctionSignature &signature : signatures) {
         duckdb::ScalarFunction scalar_func(func_name, signature.param_types,
-                                           signature.return_type, nullptr);
+                                           signature.return_type, nullptr,
+                                           signature.bindmethod);
         func_set.AddFunction(scalar_func);
     }
 
@@ -1735,6 +1737,170 @@ const duckdb::vector<ScalarFunctionSignature> UNARY_INT_SIGNATURES = {
     ScalarFunctionSignature({duckdb::LogicalType::BIGINT},
                             duckdb::LogicalType::BIGINT)};
 
+// helper FunctionData to carry resolved return type
+struct DecimalBindData : public duckdb::FunctionData {
+    duckdb::LogicalType return_type;
+    explicit DecimalBindData(duckdb::LogicalType rt)
+        : return_type(std::move(rt)) {}
+    duckdb::unique_ptr<FunctionData> Copy() const override {
+        return duckdb::make_uniq<DecimalBindData>(return_type);
+    }
+    bool Equals(const duckdb::FunctionData &other) const {
+        const auto *other_decimal =
+            dynamic_cast<const DecimalBindData *>(&other);
+        if (other_decimal) {
+            return return_type == other_decimal->return_type;
+        } else {
+            return false;
+        }
+    }
+};
+
+// Bind callback: inspect concrete argument types and set return type
+static duckdb::unique_ptr<duckdb::FunctionData> SameReturnDecimalBindUnary(
+    duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
+    duckdb::vector<bododuckdb::unique_ptr<bododuckdb::Expression>> &arguments) {
+    // This function works for one argument functions that return the same type
+    // as the input.
+    if (arguments.size() != 1) {
+        return nullptr;
+    }
+
+    // Determine the concrete LogicalType of the first argument
+    duckdb::LogicalType arg_type;
+    duckdb::Expression *expr = arguments[0].get();
+
+    // If it's a constant expression, read the Value's type (handles literal
+    // decimals)
+    if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
+        return nullptr;
+    } else {
+        // Otherwise use the expression's return_type (set by the binder)
+        arg_type = expr->return_type;
+    }
+
+    // Right now we only expect decimal types to come through here so
+    // make sure.
+    if (arg_type.id() != duckdb::LogicalTypeId::DECIMAL) {
+        return nullptr;
+    }
+
+    // Output type will be same as the input type.
+    return duckdb::make_uniq<DecimalBindData>(arg_type);
+}
+
+// helper FunctionData to carry resolved return type
+struct RoundDecimalBindData : public duckdb::FunctionData {
+    duckdb::LogicalType return_type;
+    explicit RoundDecimalBindData(duckdb::LogicalType rt)
+        : return_type(std::move(rt)) {}
+    duckdb::unique_ptr<FunctionData> Copy() const override {
+        return duckdb::make_uniq<RoundDecimalBindData>(return_type);
+    }
+    bool Equals(const duckdb::FunctionData &other) const {
+        const auto *other_decimal =
+            dynamic_cast<const RoundDecimalBindData *>(&other);
+        if (other_decimal) {
+            return return_type == other_decimal->return_type;
+        } else {
+            return false;
+        }
+    }
+};
+
+// Bind callback: inspect concrete argument types and set return type
+static duckdb::unique_ptr<duckdb::FunctionData>
+SameReturnRoundDecimalBindBinary(
+    duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
+    duckdb::vector<bododuckdb::unique_ptr<bododuckdb::Expression>> &arguments) {
+    // This is for the 2 argument version of round.
+    if (arguments.size() != 2) {
+        return nullptr;
+    }
+
+    // Determine the concrete LogicalType of the first argument
+    duckdb::LogicalType arg_type;
+    duckdb::Expression *expr = arguments[0].get();
+
+    // If it's a constant expression, read the Value's type (handles literal
+    // decimals)
+    if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
+        return nullptr;
+    } else {
+        // Otherwise use the expression's return_type (set by the binder)
+        arg_type = expr->return_type;
+    }
+
+    // Right now we only expect decimal types to come through here so
+    // make sure.
+    if (arg_type.id() != duckdb::LogicalTypeId::DECIMAL) {
+        return nullptr;
+    }
+
+    // Output type will be same as the input type.
+    return duckdb::make_uniq<RoundDecimalBindData>(arg_type);
+}
+
+struct GivenReturnDecimalBindUnaryData : public duckdb::FunctionData {
+    duckdb::LogicalType return_type;
+    explicit GivenReturnDecimalBindUnaryData(duckdb::LogicalType rt)
+        : return_type(std::move(rt)) {}
+    duckdb::unique_ptr<FunctionData> Copy() const override {
+        return duckdb::make_uniq<GivenReturnDecimalBindUnaryData>(return_type);
+    }
+    bool Equals(const duckdb::FunctionData &other) const {
+        const auto *other_decimal =
+            dynamic_cast<const GivenReturnDecimalBindUnaryData *>(&other);
+        if (other_decimal) {
+            return return_type == other_decimal->return_type;
+        } else {
+            return false;
+        }
+    }
+};
+
+// Bind callback: inspect concrete argument types and set return type
+template <duckdb::LogicalTypeId RETURN_TYPE>
+static duckdb::unique_ptr<duckdb::FunctionData> GivenReturnDecimalBindUnary(
+    duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
+    duckdb::vector<bododuckdb::unique_ptr<bododuckdb::Expression>> &arguments) {
+    // Same as above binding function but for functions that return
+    // a tiny int.
+    if (arguments.size() != 1) {
+        return nullptr;
+    }
+
+    // Determine the concrete LogicalType of the first argument
+    duckdb::LogicalType arg_type;
+    duckdb::Expression *expr = arguments[0].get();
+
+    // If it's a constant expression, read the Value's type (handles literal
+    // decimals)
+    if (expr->type == duckdb::ExpressionType::VALUE_CONSTANT) {
+        return nullptr;
+    } else {
+        // Otherwise use the expression's return_type (set by the binder)
+        arg_type = expr->return_type;
+    }
+
+    // Ensure it's a decimal
+    if (arg_type.id() != duckdb::LogicalTypeId::DECIMAL) {
+        return nullptr;
+    }
+
+    return duckdb::make_uniq<GivenReturnDecimalBindUnaryData>(RETURN_TYPE);
+}
+
+const duckdb::vector<ScalarFunctionSignature> UNARY_DECIMAL_SIGNATURES = {
+    ScalarFunctionSignature({duckdb::LogicalType::ANY},
+                            duckdb::LogicalType::ANY,
+                            SameReturnDecimalBindUnary)};
+
+const duckdb::vector<ScalarFunctionSignature> ROUND_DECIMAL_SIGNATURES = {
+    ScalarFunctionSignature(
+        {duckdb::LogicalType::ANY, duckdb::LogicalType::BIGINT},
+        duckdb::LogicalType::ANY, SameReturnRoundDecimalBindBinary)};
+
 duckdb::vector<ScalarFunctionSignature> &&append_signatures(
     duckdb::vector<ScalarFunctionSignature> &&signatures,
     const duckdb::vector<ScalarFunctionSignature> &signatures_to_append) {
@@ -1750,12 +1916,20 @@ duckdb::vector<ScalarFunctionSignature> copy_signatures(
 }
 
 void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
-    register_duckdb_scalar_func(db, "floor", UNARY_FLOAT_SIGNATURES);
-    register_duckdb_scalar_func(db, "ceil", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(
+        db, "floor",
+        append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
+                          UNARY_DECIMAL_SIGNATURES));
+    register_duckdb_scalar_func(
+        db, "ceil",
+        append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
+                          UNARY_DECIMAL_SIGNATURES));
     register_duckdb_scalar_func(
         db, "abs",
-        append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
-                          UNARY_INT_SIGNATURES));
+        append_signatures(
+            append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
+                              UNARY_DECIMAL_SIGNATURES),
+            UNARY_INT_SIGNATURES));
     register_duckdb_scalar_func(db, "sqrt", UNARY_FLOAT_SIGNATURES);
     register_duckdb_scalar_func(db, "cbrt", UNARY_FLOAT_SIGNATURES);
     register_duckdb_scalar_func(db, "exp", UNARY_FLOAT_SIGNATURES);
@@ -1766,19 +1940,29 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
     register_duckdb_scalar_func(
         db, "round",
         append_signatures(
-            {ScalarFunctionSignature(
-                 {duckdb::LogicalType::DOUBLE, duckdb::LogicalType::BIGINT},
-                 duckdb::LogicalType::DOUBLE),
-             ScalarFunctionSignature(
-                 {duckdb::LogicalType::FLOAT, duckdb::LogicalType::BIGINT},
-                 duckdb::LogicalType::FLOAT)},
+            append_signatures(
+                append_signatures(
+                    {ScalarFunctionSignature({duckdb::LogicalType::DOUBLE,
+                                              duckdb::LogicalType::BIGINT},
+                                             duckdb::LogicalType::DOUBLE),
+                     ScalarFunctionSignature({duckdb::LogicalType::FLOAT,
+                                              duckdb::LogicalType::BIGINT},
+                                             duckdb::LogicalType::FLOAT)},
+                    UNARY_DECIMAL_SIGNATURES),
+                ROUND_DECIMAL_SIGNATURES),
             UNARY_FLOAT_SIGNATURES));
-    register_duckdb_scalar_func(db, "trunc", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(
+        db, "trunc",
+        append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
+                          UNARY_DECIMAL_SIGNATURES));
     register_duckdb_scalar_func(
         db, "sign",
         append_signatures(
             {ScalarFunctionSignature({duckdb::LogicalType::BIGINT},
-                                     duckdb::LogicalType::TINYINT)},
+                                     duckdb::LogicalType::TINYINT),
+             ScalarFunctionSignature(
+                 {duckdb::LogicalType::ANY}, duckdb::LogicalType::TINYINT,
+                 GivenReturnDecimalBindUnary<duckdb::LogicalType::TINYINT>)},
             UNARY_FLOAT_SIGNATURES));
 
     register_duckdb_scalar_func(
