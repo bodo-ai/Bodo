@@ -525,7 +525,7 @@ void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
                          const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum out_datum = out_res.ValueOrDie();
     std::shared_ptr<arrow::DataType> out_dtype = out_datum.type();
-    if (result_type && out_dtype->Equals(result_type)) {
+    if (result_type && !out_dtype->Equals(result_type)) {
         // Cast to result type if available and different from current type.
         arrow::compute::CastOptions cast_opts;
         cast_opts.allow_int_overflow = true;
