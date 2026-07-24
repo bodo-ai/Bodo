@@ -1509,13 +1509,13 @@ class PhysicalArrowExpression : public PhysicalExpression {
 
     arrow::Datum do_arrow_compute_regexp_substr(arrow::Datum res_datum,
                                                 std::string pattern_str,
-                                                std::string regex_params_str,
+                                                bool extract_submatches,
                                                 int64_t group_to_extract);
 
     arrow::Datum do_arrow_compute_regexp_instr(arrow::Datum res_datum,
                                                std::string pattern_str,
                                                bool get_start_index,
-                                               std::string regex_params_str,
+                                               bool extract_submatches,
                                                int64_t group_to_extract);
 
     arrow::Datum do_arrow_compute_random_int64(arrow::Datum res_datum);
@@ -1647,9 +1647,14 @@ class PhysicalArrowExpression : public PhysicalExpression {
                    scalar_func_data.arrow_func_name ==
                        "match_substring_regex_first" ||
                    scalar_func_data.arrow_func_name == "match_substring" ||
+                   scalar_func_data.arrow_func_name == "match_like" ||
                    scalar_func_data.arrow_func_name == "starts_with" ||
                    scalar_func_data.arrow_func_name == "ends_with" ||
-                   scalar_func_data.arrow_func_name == "find_substring") {
+                   scalar_func_data.arrow_func_name == "find_substring" ||
+                   scalar_func_data.arrow_func_name == "find_substring_regex" ||
+                   scalar_func_data.arrow_func_name == "count_substring" ||
+                   scalar_func_data.arrow_func_name ==
+                       "count_substring_regex") {
             assert_py_args_is_tuple(scalar_func_data.args,
                                     scalar_func_data.arrow_func_name.c_str());
             size_t num_args = PyTuple_Size(scalar_func_data.args);
@@ -1710,19 +1715,18 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::SliceOptions opts(start, stop, step);
             result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "regexp_substr") {
-            auto [pattern, regex_params, group_to_extract] =
+            auto [pattern, extract_submatches, group_to_extract] =
                 get_py_args_as_types(scalar_func_data.args,
                                      scalar_func_data.arrow_func_name.c_str(),
                                      get_py_object_as_cstr,
-                                     get_py_object_as_cstr,
+                                     get_py_object_as_bool,
                                      get_py_object_as_int64);
             std::string pattern_str(pattern);
-            std::string regex_params_str(regex_params);
 
             arrow::Datum res_datum =
                 ConvertExprResultToDatum(res, "regexp_substr string");
             arrow::Datum captured_field_datum = do_arrow_compute_regexp_substr(
-                res_datum, pattern_str, regex_params_str, group_to_extract);
+                res_datum, pattern_str, extract_submatches, group_to_extract);
 
             // Convert field and assign to result based on input type
             if constexpr (std::is_same_v<T, arrow::Datum>) {
@@ -1731,19 +1735,19 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 result = ConvertDatumToArrayInfo(captured_field_datum);
             }
         } else if (scalar_func_data.arrow_func_name == "regexp_instr") {
-            auto [pattern, get_start_index, regex_params, group_to_extract] =
+            auto [pattern, get_start_index, extract_submatches,
+                  group_to_extract] =
                 get_py_args_as_types(
                     scalar_func_data.args,
                     scalar_func_data.arrow_func_name.c_str(),
                     get_py_object_as_cstr, get_py_object_as_bool,
-                    get_py_object_as_cstr, get_py_object_as_int64);
+                    get_py_object_as_bool, get_py_object_as_int64);
             std::string pattern_str(pattern);
-            std::string regex_params_str(regex_params);
 
             arrow::Datum res_datum =
                 ConvertExprResultToDatum(res, "regexp_instr string");
             arrow::Datum index_datum = do_arrow_compute_regexp_instr(
-                res_datum, pattern_str, get_start_index, regex_params_str,
+                res_datum, pattern_str, get_start_index, extract_submatches,
                 group_to_extract);
 
             // Assign to result based on input type

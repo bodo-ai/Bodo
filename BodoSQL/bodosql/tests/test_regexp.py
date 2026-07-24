@@ -32,6 +32,7 @@ def regexp_strings_df():
     }
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -221,6 +222,7 @@ def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_che
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -302,6 +304,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -427,7 +430,6 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
                 ),
             ),
             id="one_group-medium_replace-7-2",
-            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -496,6 +498,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-ignore_case-no_group",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -530,7 +533,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-ignore_case_extract-no_group",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             (
@@ -605,7 +608,7 @@ def test_regexp_substr(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-0-ignore_case-no_group",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             (
@@ -625,6 +628,7 @@ def test_regexp_substr(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-0-ignore_case_extract-no_group",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (

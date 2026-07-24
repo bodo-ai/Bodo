@@ -719,7 +719,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 regex_params_expr.value.rfind(char) for char in ("c", "i")
             )
             latest_char = regex_params_expr.value[latest_index]
-            # Remove occurrences of the other parameter to make the identification easier on the C++ side
+            # Remove occurrences of the other parameter so we can check case-sensitivity using the "in" operator
             regex_params = regex_params_expr.value.replace(
                 "c" if latest_char == "i" else "i", ""
             )
@@ -731,16 +731,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 regex_params = regex_params_expr.value + "c"
             else:
                 regex_params = regex_params_expr.value
-        for character in regex_params:
-            if character not in ("c", "i", "m", "e", "s"):
-                raise ValueError(
-                    f"{func_name} regex parameter {character} does not exist"
-                )
-            if character in ("i", "m", "s"):
-                raise ValueError(
-                    f"{func_name} regex parameter {character} is not yet supported in the C++ backend"
-                )
+        # Get characters in regex_params that are not in the list of valid regex parameters
+        invalid_regex_params = set(regex_params) - {"c", "i", "m", "e", "s"}
+        if invalid_regex_params:
+            raise ValueError(
+                f"{func_name} invalid regex parameters: {invalid_regex_params}"
+            )
         return regex_params
+
+    def regexp_add_mode_modifiers(regexp, regex_params, modes):
+        """
+        Add an inline mode modifer to the start of the input regexp.
+        The activated modes are those that the regex parameters and
+        the passed `modes` have in common.
+        """
+        active_mode_str = "".join(set(regex_params) & set(modes))
+        return f"(?{active_mode_str})" + regexp if active_mode_str else regexp
 
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
@@ -3226,6 +3232,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 group_num = 0
 
+            # Use inline mode modifiers if needed since replace_substring_regex
+            # and extract_regex don't expose those options.
+            # This applies to the 'i', 'm', and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
+            )
+
             # Chop off the start so that searching begins after the provided position
             if start > 0:
                 without_start_expr = ArrowScalarFuncExpression(
@@ -3244,7 +3257,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     [without_start_expr],
                     "replace_substring_regex",
                     (
-                        regexp.value,
+                        modified_regexp,
                         "",
                         occurrence_num - 1,
                     ),
@@ -3256,7 +3269,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 src.empty_data,
                 [occurrences_replaced_expr],
                 "regexp_substr",  # Made up function, will redirect to extract_regex with the right group extracted
-                (regexp.value, regex_params, group_num),
+                (modified_regexp, "e" in regex_params, group_num),
             )
 
         if func_name == "PI" and len(op_exprs) == 0:
@@ -4164,6 +4177,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 group_num = 0
 
+            # Use inline mode modifiers if needed since replace_substring_regex
+            # and extract_regex_span don't expose those options.
+            # This applies to the 'i', 'm', and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
+            )
+
             # Chop off the start so that searching begins after the provided position
             if start > 0:
                 without_start_expr = ArrowScalarFuncExpression(
@@ -4182,7 +4202,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     [without_start_expr],
                     "replace_substring_regex",
                     (
-                        regexp.value,
+                        modified_regexp,
                         "",
                         occurrence_num - 1,
                     ),
@@ -4197,7 +4217,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 int_empty_data,
                 [occurrences_replaced_expr],
                 "regexp_instr",  # Bodo function implemented using Arrow's extract_regex_span
-                (regexp.value, start_or_end_index == 0, regex_params, group_num),
+                (
+                    modified_regexp,
+                    start_or_end_index == 0,
+                    "e" in regex_params,
+                    group_num,
+                ),
             )
             # Add 1 to convert to 1-based index. -1 also becomes 0 which is what Snowflake returns for the invalid cases
             index = ArithOpExpression(
@@ -4302,16 +4327,21 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # Default is to replace all occurrences
                 occurrence_num = -1
 
-            # Regex parameters unused at the moment
             if len(op_exprs) >= 6:
                 regex_params_expr = op_exprs[5]
                 ensure_arg_is_const_expr_of_type(
                     regex_params_expr, "regex_params_expr", str
                 )
-                # Throw an error for unsupported regex parameters
                 regex_params = clean_regex_params(regex_params_expr, func_name)
             else:
                 regex_params = "c"
+
+            # Use inline mode modifiers if needed since replace_substring_regex
+            # and split_pattern_regex don't expose those options.
+            # This applies to the 'i', 'm', and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
+            )
 
             # Chop off the start so that searching begins after the provided position
             if start > 0:
@@ -4340,7 +4370,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 [without_start_expr],
                 replace_substring_regex_func,
                 (
-                    regexp.value,
+                    modified_regexp,
                     replacement_val,
                     occurrence_num,
                 ),
@@ -4363,6 +4393,95 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 )
             else:
                 return occurrences_replaced_expr
+
+        elif func_name == "REGEXP_COUNT" and len(op_exprs) in (2, 3, 4):
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+            if len(op_exprs) >= 3:
+                start_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                elif start_expr.value == 0:
+                    start = 0
+                else:
+                    raise ValueError("Start index must be positive for REGEXP_COUNT.")
+            else:
+                start = 0
+
+            if len(op_exprs) == 4:
+                regex_params_expr = op_exprs[3]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                regex_params = clean_regex_params(regex_params_expr, func_name)
+            else:
+                regex_params = "c"
+
+            # Use inline mode modifiers if needed since count_substring_regex
+            # doesn't expose those options apart from 'i' (ignore case).
+            # This applies to the 'm' and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ms"
+            )
+
+            # Chop off the start so that searching begins after the provided position
+            if start > 0:
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(
+                int_empty_data,
+                [without_start_expr],
+                "count_substring_regex",
+                (modified_regexp, "i" in regex_params),
+            )
+
+        elif func_name == "REGEXP_LIKE" and len(op_exprs) in (2, 3):
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+            if len(op_exprs) == 3:
+                regex_params_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                regex_params = clean_regex_params(regex_params_expr, func_name)
+            else:
+                regex_params = "c"
+
+            # REGEXP_LIKE implicitly anchors the regex pattern at both ends
+            anchored_regexp = f"^({regexp.value})$"
+
+            # Use inline mode modifiers if needed since match_substring_regex
+            # doesn't expose those options apart from 'i' (ignore case).
+            # This applies to the 'm' and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                anchored_regexp, regex_params, "ms"
+            )
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return ArrowScalarFuncExpression(
+                bool_empty_data,
+                [src],
+                "match_substring_regex",
+                (modified_regexp, "i" in regex_params),
+            )
 
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
             raise ValueError("INITCAP currently disabled on C++ backend")

@@ -2017,10 +2017,8 @@ std::tuple<std::string, int> convert_to_named_regexp(std::string pattern_str) {
 }
 
 arrow::Datum PhysicalArrowExpression::do_arrow_compute_regexp_substr(
-    arrow::Datum res_datum, std::string pattern_str,
-    std::string regex_params_str, int64_t group_to_extract) {
-    bool extract_submatches = regex_params_str.find('e') != std::string::npos;
-
+    arrow::Datum res_datum, std::string pattern_str, bool extract_submatches,
+    int64_t group_to_extract) {
     // Ensure all groups are named so that we can pass to extract_regex.
     // Do this once per operator.
     if (!named_regexp) {
@@ -2088,9 +2086,7 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_regexp_substr(
 
 arrow::Datum PhysicalArrowExpression::do_arrow_compute_regexp_instr(
     arrow::Datum res_datum, std::string pattern_str, bool get_start_index,
-    std::string regex_params_str, int64_t group_to_extract) {
-    bool extract_submatches = regex_params_str.find('e') != std::string::npos;
-
+    bool extract_submatches, int64_t group_to_extract) {
     // Ensure all groups are named so that we can pass to
     // extract_regex_span. Do this once per operator.
     if (!named_regexp) {
