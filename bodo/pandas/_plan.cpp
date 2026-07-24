@@ -1745,7 +1745,7 @@ struct DecimalBindData : public duckdb::FunctionData {
     duckdb::unique_ptr<FunctionData> Copy() const override {
         return duckdb::make_uniq<DecimalBindData>(return_type);
     }
-    bool Equals(const duckdb::FunctionData &other) const {
+    bool Equals(const duckdb::FunctionData &other) const override {
         const auto *other_decimal =
             dynamic_cast<const DecimalBindData *>(&other);
         if (other_decimal) {
@@ -1797,7 +1797,7 @@ struct RoundDecimalBindData : public duckdb::FunctionData {
     duckdb::unique_ptr<FunctionData> Copy() const override {
         return duckdb::make_uniq<RoundDecimalBindData>(return_type);
     }
-    bool Equals(const duckdb::FunctionData &other) const {
+    bool Equals(const duckdb::FunctionData &other) const override {
         const auto *other_decimal =
             dynamic_cast<const RoundDecimalBindData *>(&other);
         if (other_decimal) {
@@ -1848,7 +1848,7 @@ struct GivenReturnDecimalBindUnaryData : public duckdb::FunctionData {
     duckdb::unique_ptr<FunctionData> Copy() const override {
         return duckdb::make_uniq<GivenReturnDecimalBindUnaryData>(return_type);
     }
-    bool Equals(const duckdb::FunctionData &other) const {
+    bool Equals(const duckdb::FunctionData &other) const override {
         const auto *other_decimal =
             dynamic_cast<const GivenReturnDecimalBindUnaryData *>(&other);
         if (other_decimal) {
