@@ -1087,6 +1087,7 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
             arrowArrayToDuckdbBasic<arrow::DoubleArray, double>(arr, vec,
                                                                 count);
             break;
+        case arrow::Type::LARGE_STRING:
         case arrow::Type::STRING: {
             ValidityMask &validity = FlatVector::Validity(vec);
             auto str_arr = std::static_pointer_cast<arrow::StringArray>(arr);
@@ -1182,8 +1183,8 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
             break;
         }
         default:
-            std::cout << "arrow type " << static_cast<int>(arrow_type)
-                      << std::endl;
+            std::cout << "arrowArrayToDuckdbVector: unhandled arrow type "
+                      << arr->type()->ToString() << std::endl;
             throw std::runtime_error("Unsupported Arrow type for conversion");
     }
 }

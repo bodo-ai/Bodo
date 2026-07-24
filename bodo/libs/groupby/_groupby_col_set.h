@@ -237,9 +237,12 @@ class BasicColSet {
         bodo_array_type::arr_type_enum arr_typ = bodo_array_type::NUMPY;
         Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT8;
         std::string timezone = "";
+        int8_t precision = -1, scale = -1;
         if (in_schema->column_types.size() > 0) {
             arr_typ = in_schema->column_types[0]->array_type;
             dtype = in_schema->column_types[0]->c_type;
+            precision = in_schema->column_types[0]->precision;
+            scale = in_schema->column_types[0]->scale;
             timezone = in_schema->column_types[0]->timezone;
         }
 
@@ -247,8 +250,8 @@ class BasicColSet {
             out_arr_type = get_groupby_output_dtype(ftype, arr_typ, dtype);
         std::vector<std::unique_ptr<bodo::DataType>> datatypes;
         datatypes.push_back(std::make_unique<bodo::DataType>(
-            std::get<0>(out_arr_type), std::get<1>(out_arr_type), -1, -1,
-            timezone));
+            std::get<0>(out_arr_type), std::get<1>(out_arr_type), precision,
+            scale, timezone));
         return std::make_unique<bodo::Schema>(std::move(datatypes));
     }
     /**
