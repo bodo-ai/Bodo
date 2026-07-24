@@ -995,8 +995,7 @@ def _get_agg_output_type(
         elif pa.types.is_string(pa_type) or pa.types.is_large_string(pa_type):
             new_type = pa_type
         elif pa.types.is_decimal(pa_type):
-            # TODO: Decimal sum
-            fallback = True
+            new_type = pa_type
     elif func_name in (
         "mean",
         "std",
@@ -1010,8 +1009,10 @@ def _get_agg_output_type(
     ):
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa.float64()
-        elif pa.types.is_boolean(pa_type) or pa.types.is_decimal(pa_type):
-            # TODO Support bool/decimal columns
+        elif pa.types.is_decimal(pa_type):
+            new_type = pa_type
+        elif pa.types.is_boolean(pa_type):
+            # TODO Support bool columns
             fallback = True
     elif func_name in ("count", "size", "nunique"):
         new_type = pa.int64()
@@ -1025,10 +1026,9 @@ def _get_agg_output_type(
             or pa.types.is_duration(pa_type)
             or pa.types.is_date(pa_type)
             or pa.types.is_timestamp(pa_type)
+            or pa.types.is_decimal(pa_type)
         ):
             new_type = pa_type
-        elif pa.types.is_decimal(pa_type):
-            fallback = True
     elif func_name == "median":
         if pa.types.is_integer(pa_type) or pa.types.is_floating(pa_type):
             new_type = pa_type
