@@ -502,11 +502,12 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 
 std::shared_ptr<array_info> do_arrow_compute_unary(
     std::shared_ptr<ExprResult> left_res, const std::string& comparator,
-    const arrow::compute::FunctionOptions* func_options) {
+    const arrow::compute::FunctionOptions* func_options,
+    const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
     arrow::Datum cmp_res =
-        do_arrow_compute_unary(src1, comparator, func_options);
+        do_arrow_compute_unary(src1, comparator, func_options, result_type);
     return ConvertDatumToArrayInfo(cmp_res);
 }
 
@@ -518,6 +519,27 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
 
     arrow::Datum casted = do_arrow_compute_cast(src1, return_type);
     return ConvertDatumToArrayInfo(casted);
+}
+
+void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
+                         const std::shared_ptr<arrow::DataType> result_type) {
+    arrow::Datum out_datum = out_res.ValueOrDie();
+    std::shared_ptr<arrow::DataType> out_dtype = out_datum.type();
+    if (result_type && !out_dtype->Equals(result_type)) {
+        // Cast to result type if available and different from current type.
+        arrow::compute::CastOptions cast_opts;
+        cast_opts.allow_int_overflow = true;
+        cast_opts.allow_float_truncate = true;
+        cast_opts.allow_decimal_truncate = true;
+        arrow::Result<arrow::Datum> cast_res =
+            arrow::compute::Cast(out_datum, result_type, cast_opts);
+        if (!cast_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_result_type_cast cast_res: Error in Arrow compute: " +
+                cast_res.status().message());
+        }
+        out_res = cast_res;
+    }
 }
 
 arrow::Datum do_arrow_compute_binary(
@@ -533,29 +555,14 @@ arrow::Datum do_arrow_compute_binary(
             "): " + cmp_res.status().message());
     }
 
-    arrow::Datum cmp_datum = cmp_res.ValueOrDie();
-
-    std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
-    if (result_type && cmp_dtype != result_type) {
-        // Cast to result type if available and different from current type.
-        arrow::compute::CastOptions cast_opts;
-        cast_opts.allow_int_overflow = true;
-        arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(cmp_datum, result_type, cast_opts);
-        if (!cast_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary cast_res: Error in Arrow compute (" +
-                comparator + "): " + cast_res.status().message());
-        }
-        cmp_res = cast_res;
-    }
-
+    do_result_type_cast(cmp_res, result_type);
     return cmp_res.ValueOrDie();
 }
 
 arrow::Datum do_arrow_compute_unary(
     arrow::Datum src1, const std::string& comparator,
-    const arrow::compute::FunctionOptions* func_options) {
+    const arrow::compute::FunctionOptions* func_options,
+    const std::shared_ptr<arrow::DataType> result_type) {
     // Special handling for is_not_null since it is not supported directly
     // by Arrow compute.
     if (comparator == "is_not_null") {
@@ -575,6 +582,7 @@ arrow::Datum do_arrow_compute_unary(
                 "do_arrow_compute_unary: Error in Arrow compute (invert): " +
                 invert_res.status().message());
         }
+        do_result_type_cast(invert_res, result_type);
         return invert_res.ValueOrDie();
     }
 
@@ -609,6 +617,7 @@ arrow::Datum do_arrow_compute_unary(
                     result.status().message());
             }
         }
+        do_result_type_cast(result, result_type);
         return result.ValueOrDie();
     }
 
@@ -620,6 +629,7 @@ arrow::Datum do_arrow_compute_unary(
             "): " + cmp_res.status().message());
     }
 
+    do_result_type_cast(cmp_res, result_type);
     return cmp_res.ValueOrDie();
 }
 
@@ -700,22 +710,7 @@ std::shared_ptr<array_info> do_arrow_compute_case(
             case_res.status().message());
     }
 
-    arrow::Datum case_datum = case_res.ValueOrDie();
-    std::shared_ptr<arrow::DataType> case_dtype = case_datum.type();
-    if (result_type && case_dtype != result_type) {
-        // Cast to result type if available and different from current type.
-        arrow::compute::CastOptions cast_opts;
-        cast_opts.allow_int_overflow = true;
-        arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(case_datum, result_type, cast_opts);
-        if (!cast_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_case cast_res: Error in Arrow compute: " +
-                cast_res.status().message());
-        }
-        case_res = cast_res;
-    }
-
+    do_result_type_cast(case_res, result_type);
     return ConvertDatumToArrayInfo(case_res.ValueOrDie());
 }
 
@@ -891,7 +886,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                             std::make_shared<PhysicalUnaryExpression>(
                                 buildPhysicalExprTree(bfe.children[0],
                                                       col_ref_map, no_scalars),
-                                bfe.function.name));
+                                bfe.function.name, result_type));
                     } break;
                     case 2: {
                         // Check for calendar interval constants that

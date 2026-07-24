@@ -1951,7 +1951,10 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
                     UNARY_DECIMAL_SIGNATURES),
                 ROUND_DECIMAL_SIGNATURES),
             UNARY_FLOAT_SIGNATURES));
-    register_duckdb_scalar_func(db, "trunc", UNARY_FLOAT_SIGNATURES);
+    register_duckdb_scalar_func(
+        db, "trunc",
+        append_signatures(copy_signatures(UNARY_FLOAT_SIGNATURES),
+                          UNARY_DECIMAL_SIGNATURES));
     register_duckdb_scalar_func(
         db, "sign",
         append_signatures(

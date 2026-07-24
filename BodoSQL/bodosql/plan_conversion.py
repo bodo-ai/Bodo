@@ -2815,19 +2815,52 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # from the DuckDB catalog.
                 return ArithOpExpression(out_empty, inp, precision_digits, "round")
 
-        if func_name == "TRUNCATE" and len(op_exprs) == 1:
+        if func_name == "TRUNCATE" and len(op_exprs) in (1, 2):
             inp = op_exprs[0]
             ensure_type_of_expr(
                 inp, func_name + " input", (int, float, pa.Decimal128Type)
             )
 
             inp_dtype = get_expr_dtype(inp, func_name + " input")
-            if compare_types(inp_dtype, int):
-                # If input is an integer, TRUNCATE is a no-op
-                return inp
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            if len(op_exprs) == 1:
+                if compare_types(inp_dtype, int):
+                    # If input is an integer, TRUNCATE is a no-op
+                    return inp
+                else:  # float or decimal
+                    output_empty_data = adjust_scale(inp_dtype, 0, inp.empty_data)
+                    return UnaryOpExpression(output_empty_data, inp, "trunc")
             else:
-                # If input is a float, return trunc(inp) as normal
-                return UnaryOpExpression(inp.empty_data, inp, "trunc")
+                scale_expr = op_exprs[1]
+                ensure_type_of_expr(scale_expr, "scale_expr", int)
+                if compare_types(inp_dtype, int):
+                    raise TypeError(
+                        "TRUNCATE with scale not currently supported for integer types."
+                    )
+                else:
+                    float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+                    ten_expr = ConstantExpression(int_empty_data, input_plan, 10)
+                    # If input is a float or decimal, we do:
+                    # result = TRUNC(inp * 10^scale) / 10^scale
+                    power_of_10 = ArithOpExpression(
+                        float_empty_data, ten_expr, scale_expr, "__pow__"
+                    )
+                    scaled_inp = ArithOpExpression(
+                        float_empty_data, inp, power_of_10, "__mul__"
+                    )
+                    scaled_inp_rounded = UnaryOpExpression(
+                        float_empty_data, scaled_inp, "trunc"
+                    )
+                    output_empty_data = adjust_scale(
+                        inp_dtype, scale_expr, inp.empty_data
+                    )
+
+                    return ArithOpExpression(
+                        output_empty_data,
+                        scaled_inp_rounded,
+                        power_of_10,
+                        "__truediv__",
+                    )
 
         if func_name == "MOD" and len(op_exprs) == 2:
             inp = op_exprs[0]
