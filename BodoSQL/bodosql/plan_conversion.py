@@ -3197,7 +3197,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 occurrence_num = occurrence_expr.value
                 if occurrence_num < 1:
                     raise ValueError(
-                        f"{func_name} occurences argument must be 1 or greater"
+                        f"{func_name} occurrences argument must be 1 or greater"
                     )
             else:
                 occurrence_num = 1
@@ -4122,7 +4122,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 occurrence_num = occurrence_expr.value
                 if occurrence_num < 1:
                     raise ValueError(
-                        f"{func_name} occurences argument must be 1 or greater"
+                        f"{func_name} occurrences argument must be 1 or greater"
                     )
             else:
                 occurrence_num = 1
@@ -4253,6 +4253,116 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 NullExpression(int_empty_data, input_plan, 0),
                 new_index,
             )
+
+        elif func_name == "REGEXP_REPLACE" and len(op_exprs) in (2, 3, 4, 5, 6):
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", str)
+
+            if len(op_exprs) >= 3:
+                replacement_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(
+                    replacement_expr, "replacement_expr", str
+                )
+                replacement_val = replacement_expr.value
+            else:
+                replacement_val = ""
+
+            if len(op_exprs) >= 4:
+                start_expr = op_exprs[3]
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                elif start_expr.value == 0:
+                    start = 0
+                else:
+                    raise ValueError("Start index must be positive for REGEXP_REPLACE.")
+            else:
+                start = 0
+
+            if len(op_exprs) >= 5:
+                # Need to replace the substring that is the op_exprs[4]-th occurrence / regex match
+                occurrence_expr = op_exprs[4]
+                ensure_arg_is_const_expr_of_type(
+                    occurrence_expr, "occurrence_expr", int
+                )
+                occurrence_num = occurrence_expr.value
+                if occurrence_num < 0:
+                    raise ValueError(
+                        f"{func_name} occurrences argument must be 0 or greater"
+                    )
+                elif occurrence_num == 0:
+                    # If occurrence_num is 0, all occurrences should be replaced.
+                    # For replace_substring_regex, this is signified by passing max_replacements = -1.
+                    occurrence_num = -1
+            else:
+                # Default is to replace all occurrences
+                occurrence_num = -1
+
+            # Regex parameters unused at the moment
+            if len(op_exprs) >= 6:
+                regex_params_expr = op_exprs[5]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                # Throw an error for unsupported regex parameters
+                regex_params = clean_regex_params(regex_params_expr, func_name)
+            else:
+                regex_params = "c"
+
+            # Chop off the start so that searching begins after the provided position
+            if start > 0:
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
+
+            if occurrence_num in (-1, 1):
+                # Replace all occurrences or the first occurrence of a substring matching the regexp.
+                # Arrow has no way to replace the n-th occurrence only, so if occurrence_num > 1
+                # we have a custom solution.
+                replace_substring_regex_func = "replace_substring_regex"
+            else:
+                # If we need to replace a specific occurrence, use our custom function called
+                # replace_substring_regex_single.
+                replace_substring_regex_func = "replace_substring_regex_single"
+
+            # Replace all occurrences or a specific occurrence of a substring matching the regexp.
+            occurrences_replaced_expr = ArrowScalarFuncExpression(
+                src.empty_data,
+                [without_start_expr],
+                replace_substring_regex_func,
+                (
+                    regexp.value,
+                    replacement_val,
+                    occurrence_num,
+                ),
+            )
+
+            # Now that the replacing is done, we need to concatenate the start of the string back onto it
+            if start > 0:
+                src_start = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (0, start, 1),
+                )
+                separator = ConstantExpression(src.empty_data, input_plan, "")
+                return ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src_start, occurrences_replaced_expr, separator],
+                    "binary_join_element_wise",
+                    (),
+                )
+            else:
+                return occurrences_replaced_expr
 
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
             raise ValueError("INITCAP currently disabled on C++ backend")
