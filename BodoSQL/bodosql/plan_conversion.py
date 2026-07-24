@@ -3879,6 +3879,201 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return ArrowScalarFuncExpression(
                 uint64_empty_data, [is_bit_set, one_expr, zero_expr], "if_else", ()
             )
+        elif func_name == "FORMAT" and len(op_exprs) == 2:
+            """
+            Returns a formatted string representation of a number.
+            The number is rounded to the specified precision and printed
+            with enough zeros to demonstrate that precision.
+            Commas are also inserted as thousands separators.
+            """
+
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (int, float))
+
+            precision_digits = op_exprs[1]
+            ensure_type_of_expr(precision_digits, "precision_digits", int)
+
+            # MySQL treats any precision digits < 0 as 0
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            precision_digits = ArrowScalarFuncExpression(
+                int_empty_data,
+                [precision_digits, zero_expr],
+                "max_element_wise",
+                (False,),
+            )
+
+            # Round the number to the specified precision
+            rounded = ArithOpExpression(src.empty_data, src, precision_digits, "round")
+
+            # Get the string representation of the number
+            str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            rounded_str = CastExpression(str_empty_data, rounded)
+
+            # Get the character index of the decimal point in the string. Returns -1 if not found.
+            decimal_point_pos = ArrowScalarFuncExpression(
+                int_empty_data, [rounded_str], "find_substring", (".",)
+            )
+            # Get full character length of string
+            rounded_str_length = ArrowScalarFuncExpression(
+                int_empty_data, [rounded_str], "utf8_length", ()
+            )
+
+            # Get whether the number has a nonzero fractional component
+            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            has_no_dot = ComparisonOpExpression(
+                bool_empty_data, decimal_point_pos, negative_one_expr, operator.eq
+            )
+
+            # First, we will deal with inserting commas to separate thousands in the integer part.
+
+            # Slice to obtain the integer part of the number.
+            is_negative = ArrowScalarFuncExpression(
+                bool_empty_data, [rounded_str], "match_substring", ("-",)
+            )
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            start_index = CaseExpression(
+                int_empty_data, is_negative, one_expr, zero_expr
+            )
+            end_index = CaseExpression(
+                int_empty_data, has_no_dot, rounded_str_length, decimal_point_pos
+            )
+            integer_part = ArrowScalarFuncExpression(
+                str_empty_data,
+                [rounded_str, start_index, end_index],
+                "utf8_slice_codeunits",
+                (),
+            )
+
+            # Figure out how many characters (spaces) we should add to the left side to make the length
+            # of the integer part a multiple of 3 (so we can insert commas in the right places).
+            # Note that if the length is already a multiple of 3, we end up adding 3 spaces anyway,
+            # but it doesn't matter since we'll trim them off.
+            integer_part_len = ArrowScalarFuncExpression(
+                int_empty_data, [integer_part], "utf8_length", ()
+            )
+            three_expr = ConstantExpression(int_empty_data, input_plan, 3)
+            len_mod_3 = ArithOpExpression(
+                int_empty_data, integer_part_len, three_expr, "__mod__"
+            )
+            num_to_offset = ArithOpExpression(
+                int_empty_data, three_expr, len_mod_3, "__sub__"
+            )
+
+            # Get space characters of the desired length to offset
+            space_str = ConstantExpression(str_empty_data, input_plan, " ")
+            space_offset_str = ArrowScalarFuncExpression(
+                str_empty_data, [space_str, num_to_offset], "binary_repeat", ()
+            )
+            separator = ConstantExpression(str_empty_data, input_plan, "")
+            offset_integer_part = ArrowScalarFuncExpression(
+                str_empty_data,
+                [space_offset_str, integer_part, separator],
+                "binary_join_element_wise",
+                (),
+            )
+
+            # Use regex to add commas every three digits (or spaces)
+            integer_part_with_commas = ArrowScalarFuncExpression(
+                str_empty_data,
+                [offset_integer_part],
+                "replace_substring_regex",
+                (r"([0-9 ]{3})", r"\1,"),
+            )
+            # Clean up result by trimming off spaces and commas
+            integer_part_with_commas = ArrowScalarFuncExpression(
+                str_empty_data, [integer_part_with_commas], "utf8_trim", (" ,",)
+            )
+
+            # Add back the negative sign if needed
+            negative_sign_expr = ConstantExpression(str_empty_data, input_plan, "-")
+            negative_comma_integer_part = ArrowScalarFuncExpression(
+                str_empty_data,
+                [negative_sign_expr, integer_part_with_commas, separator],
+                "binary_join_element_wise",
+                (),
+            )
+            integer_part_with_commas = CaseExpression(
+                str_empty_data,
+                is_negative,
+                negative_comma_integer_part,
+                integer_part_with_commas,
+            )
+
+            # Combine the integer and fractional part to get the number with proper comma-formatting
+            fractional_part = ArrowScalarFuncExpression(
+                str_empty_data,
+                [rounded_str, decimal_point_pos],
+                "bodo_substr_three",
+                (),
+            )
+            num_with_commas = ArrowScalarFuncExpression(
+                str_empty_data,
+                [integer_part_with_commas, fractional_part, separator],
+                "binary_join_element_wise",
+                (),
+            )
+            num_with_commas = CaseExpression(
+                str_empty_data, has_no_dot, integer_part_with_commas, num_with_commas
+            )
+
+            # Now we need to make sure that the formatted number has enough decimal digits.
+
+            # Calculate length of the fractional part of the number
+            frac_length = ArithOpExpression(
+                int_empty_data, rounded_str_length, decimal_point_pos, "__sub__"
+            )
+            # Subtract 1 to exclude the decimal point itself from the fractional length
+            frac_length = ArithOpExpression(
+                int_empty_data, frac_length, one_expr, "__sub__"
+            )
+            # The fractional length is simply 0 if the string form of the number has no decimal point
+            frac_length = CaseExpression(
+                int_empty_data, has_no_dot, zero_expr, frac_length
+            )
+
+            # Calculate the number of zeros we need to add so there are precision_digits decimal places.
+            # Note that due to the round, it's impossible for the string form of the number to have more than precision_digits decimal places.
+            # It could have fewer than precision_digits decimal places if it had fewer than that many to start with.
+            num_missing_zeros = ArithOpExpression(
+                int_empty_data, precision_digits, frac_length, "__sub__"
+            )
+            zero_str = ConstantExpression(str_empty_data, input_plan, "0")
+            extra_zeros_str = ArrowScalarFuncExpression(
+                str_empty_data, [zero_str, num_missing_zeros], "binary_repeat", ()
+            )
+
+            # Ensure we add a dot before the extra zeros if the number doesn't have a decimal point
+            dot_expr = ConstantExpression(str_empty_data, input_plan, ".")
+            dot_and_extra_zeros = ArrowScalarFuncExpression(
+                str_empty_data,
+                [dot_expr, extra_zeros_str, separator],
+                "binary_join_element_wise",
+                (),
+            )
+            padding = CaseExpression(
+                str_empty_data, has_no_dot, dot_and_extra_zeros, extra_zeros_str
+            )
+
+            # Append extra zeros
+            num_padded = ArrowScalarFuncExpression(
+                str_empty_data,
+                [num_with_commas, padding, separator],
+                "binary_join_element_wise",
+                (),
+            )
+
+            # If precision_digits is 0, the initial round and cast to string removes the decimal point even for float input.
+            # Therefore, we can just use the string form directly in that case, no need to worry about removing decimal
+            # points from the string.
+            zero_precision_digits = ComparisonOpExpression(
+                bool_empty_data, precision_digits, zero_expr, operator.eq
+            )
+            return CaseExpression(
+                str_empty_data, zero_precision_digits, rounded_str, num_padded
+            )
+
         elif func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
             src = op_exprs[0]
@@ -4020,6 +4215,33 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 [src],
                 "utf8_length",
                 (),
+            )
+        elif func_name == "STRCMP" and len(op_exprs) == 2:
+            str1_expr = op_exprs[0]
+            str2_expr = op_exprs[1]
+            ensure_type_of_expr(str1_expr, "str1_expr", (str, pa.binary()))
+            ensure_type_of_expr(str2_expr, "str2_expr", (str, pa.binary()))
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            str1_greater = ComparisonOpExpression(
+                bool_empty_data, str1_expr, str2_expr, operator.gt
+            )
+            strings_equal = ComparisonOpExpression(
+                bool_empty_data, str1_expr, str2_expr, operator.eq
+            )
+
+            # Using lexicographical comparison, return 1 if str1 > str2, -1 if str1 < str2, 0 if str1 == str2.
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+            return CaseExpression(
+                int_empty_data,
+                strings_equal,
+                zero_expr,
+                CaseExpression(
+                    int_empty_data, str1_greater, one_expr, negative_one_expr
+                ),
             )
         elif func_name in ("INSTR", "CHARINDEX") and len(op_exprs) in (2, 3):
             if func_name == "INSTR":
