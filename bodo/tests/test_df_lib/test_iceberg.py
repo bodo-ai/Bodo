@@ -54,7 +54,10 @@ def test_simple_table_read(
     table_name,
     memory_leak_check,
 ):
-    db_schema, warehouse_loc = iceberg_database(table_name)
+    # Make sure file:// protocol works with Iceberg
+    db_schema, warehouse_loc = iceberg_database(
+        table_name, path="file://" + os.path.abspath(os.getcwd())
+    )
     py_out = pyiceberg_reader.read_iceberg_table_single_rank(table_name, db_schema)
     bodo_out = bpd.read_iceberg(f"{db_schema}.{table_name}", location=warehouse_loc)
     _test_equal(

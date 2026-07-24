@@ -9,6 +9,7 @@ from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_int_func(
     bodosql_nullable_numeric_types, spark_info, int_named_params, memory_leak_check
 ):
@@ -27,6 +28,7 @@ def test_named_param_int_func(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_bind_variables_int_func(
     bodosql_nullable_numeric_types, int_named_params, memory_leak_check
 ):
@@ -52,6 +54,7 @@ def test_bind_variables_int_func(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_named_param_float_func(
     bodosql_numeric_types, spark_info, float_named_params, memory_leak_check
 ):
@@ -70,6 +73,7 @@ def test_named_param_float_func(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_bind_variables_float_func(
     bodosql_numeric_types, float_named_params, memory_leak_check
 ):
@@ -91,6 +95,7 @@ def test_bind_variables_float_func(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_named_param_string_func(
     bodosql_string_types, spark_info, string_named_params, memory_leak_check
 ):
@@ -107,6 +112,7 @@ def test_named_param_string_func(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_bind_variables_string_func(
     bodosql_string_types, string_named_params, memory_leak_check
 ):

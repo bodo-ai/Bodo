@@ -10,7 +10,7 @@ from bodo.tests.utils import pytest_slow_unless_codegen, temp_config_override
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
-pytestmark = pytest_slow_unless_codegen
+pytestmark = pytest_slow_unless_codegen + [pytest.mark.bodosql_cpp]
 
 
 @pytest.fixture(
@@ -39,7 +39,6 @@ def col_a_identical_tables(request):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_orderby_numeric_scalar(bodosql_numeric_types, memory_leak_check):
     """tests that orderby works with scalar values in the Select statement"""
     query = "SELECT A, 1, 2, 3, 4 as Y FROM table1 ORDER BY Y, A"
@@ -55,7 +54,6 @@ def test_orderby_numeric_scalar(bodosql_numeric_types, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.bodosql_cpp
 def test_orderby_numeric(bodosql_numeric_types, memory_leak_check):
     """
     Tests orderby works in the simple case for numeric types

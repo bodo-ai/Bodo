@@ -56,6 +56,7 @@ def aggregate_join_transpose_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_aggregate_join_transpose(
     simple_join_fixture, aggregate_join_transpose_queries

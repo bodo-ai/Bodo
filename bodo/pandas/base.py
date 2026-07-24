@@ -179,7 +179,7 @@ def from_pandas(df):
     return wrap_plan(plan=plan, nrows=n_rows, res_id=res_id)
 
 
-@check_args_fallback(supported=["dtype_backend"])
+@check_args_fallback(supported=["dtype_backend", "storage_options"])
 def read_parquet(
     path,
     engine="auto",

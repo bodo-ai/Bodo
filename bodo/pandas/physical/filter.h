@@ -68,6 +68,8 @@ class PhysicalFilter : public PhysicalProcessBatch {
     virtual ~PhysicalFilter() = default;
 
     void FinalizeProcessBatch() override {
+        expression->Finalize();
+
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(

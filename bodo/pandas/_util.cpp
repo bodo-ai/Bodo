@@ -129,6 +129,30 @@ extractValue(const duckdb::Value &value) {
             auto dur_type = arrow::duration(arrow::TimeUnit::NANO);
             return arrow::MakeScalar(dur_type, total_nanos).ValueOrDie();
         } break;
+        case duckdb::LogicalTypeId::DECIMAL: {
+            // Similar to DuckDB's DECIMAL Value creation function here:
+            // https://github.com/bodo-ai/Bodo/blob/b6831ac9551f6cbb7fd6a4a50bb281021d0265e7/bodo/pandas/vendor/duckdb/src/common/types/value.cpp#L606
+            uint8_t width = duckdb::DecimalType::GetWidth(value.type());
+            uint8_t scale = duckdb::DecimalType::GetScale(value.type());
+            switch (value.type().InternalType()) {
+                case duckdb::PhysicalType::INT128: {
+                    duckdb::hugeint_t val =
+                        value.GetValueUnsafe<duckdb::hugeint_t>();
+                    return arrow::MakeScalar(
+                               arrow::decimal128(width, scale),
+                               arrow::Decimal128(val.upper, val.lower))
+                        .ValueOrDie();
+                } break;
+                default: {
+                    // TODO[BSE-5532]: Handle other physical types for DECIMAL
+                    throw std::runtime_error(
+                        "Unhandled DuckDB physical type for DECIMAL Value: " +
+                        std::to_string(
+                            static_cast<int>(value.type().InternalType())));
+                } break;
+            }
+        } break;
+
         default:
             throw std::runtime_error("extractValue unhandled type: " +
                                      std::to_string(static_cast<int>(type)));
@@ -191,15 +215,35 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
                 arrow::timestamp(arrow::TimeUnit::NANO, "UTC");
             return arrow::MakeNullScalar(timestamp_type);
         } break;
+        case duckdb::LogicalTypeId::BLOB: {
+            auto binary_type = arrow::binary();
+            return arrow::MakeNullScalar(binary_type);
+        } break;
         case duckdb::LogicalTypeId::SQLNULL: {
             return arrow::MakeNullScalar(arrow::null());
         } break;
+        case duckdb::LogicalTypeId::DECIMAL: {
+            uint8_t precision = 0;
+            uint8_t scale = 0;
+
+            value.type().GetDecimalProperties(precision, scale);
+
+            if (precision <= 0 || precision > 38) {
+                throw std::runtime_error(
+                    "getDefaultValueForDuckdbValueType invalid DECIMAL "
+                    "precision " +
+                    std::to_string(precision));
+            }
+
+            return arrow::MakeNullScalar(arrow::decimal128(precision, scale));
+        } break;
         default:
             throw std::runtime_error(
-                "getDefaultValueForDuckdbValueType unhandled type." +
+                "getDefaultValueForDuckdbValueType unhandled type: " +
                 std::to_string(static_cast<int>(type)));
     }
 }
+
 std::string schemaColumnNamesToString(
     const std::shared_ptr<arrow::Schema> arrow_schema) {
     std::string ret = "";
@@ -548,7 +592,7 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             return arrow::timestamp(arrow::TimeUnit::MILLI);
         case duckdb::LogicalTypeId::TIMESTAMP:
             // DuckDB TIMESTAMP is microsecond precision, but we use nanosecond
-            // Arrow arrays throughout. Map to NANO so do_array_compute_cast
+            // Arrow arrays throughout. Map to NANO so do_arrow_compute_cast
             // becomes a no-op (prepare_arrow_compute also produces NANO).
             // arrowArrayToDuckdbVector handles the ns→us conversion.
             return arrow::timestamp(arrow::TimeUnit::NANO);
@@ -573,6 +617,20 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
             // NOTE: using ns by default but DuckDB interval type loses
             // precision in Arrow type roundtrips
             return arrow::duration(arrow::TimeUnit::NANO);
+        case duckdb::LogicalTypeId::DECIMAL: {
+            uint8_t precision = 0;
+            uint8_t scale = 0;
+
+            type.GetDecimalProperties(precision, scale);
+
+            if (precision <= 0 || precision > 38) {
+                throw std::runtime_error(
+                    "duckdbTypeToArrow invalid DECIMAL precision " +
+                    std::to_string(precision));
+            }
+
+            return arrow::decimal128(precision, scale);
+        } break;
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +
@@ -653,6 +711,19 @@ duckdb::LogicalType arrowTypeToDuckDB(
                         std::to_string(static_cast<int>(dur_type->unit())));
             }
         } break;
+        case arrow::Type::DECIMAL128: {
+            auto dec_type =
+                std::static_pointer_cast<arrow::Decimal128Type>(type);
+            int32_t precision = dec_type->precision();
+            int32_t scale = dec_type->scale();
+            // DuckDB typically supports up to 38 digits of precision
+            if (precision < 1 || precision > 38) {
+                throw std::runtime_error(
+                    "arrowTypeToDuckDB unsupported Decimal128 precision " +
+                    std::to_string(precision));
+            }
+            return duckdb::LogicalType::DECIMAL(precision, scale);
+        }
         default:
             throw std::runtime_error(
                 "arrowTypeToDuckDB unsupported Arrow type conversion " +
@@ -1039,7 +1110,7 @@ std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum) {
             arrow::MakeArrayFromScalar(*datum.scalar(), 1);
         if (!scalar_array_result.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "ConvertDatumToArrowInfo: Error making Arrow array from "
+                "ConvertDatumToArrayInfo: Error making Arrow array from "
                 "scalar: " +
                 scalar_array_result.status().message());
         }
@@ -1232,6 +1303,18 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
         join_state);
 }
 
+std::pair<std::vector<int>,
+          std::vector<std::vector<JoinFilterColStats::col_min_max_t>>>
+JoinFilterColStats::get_col_stats_for_join_filter_cols() {
+    std::vector<int> filter_cols;
+    std::vector<std::vector<col_min_max_t>> filter_col_stats;
+    for (const auto &[col_idx, min_max_vec] : this->collect_all()) {
+        filter_cols.push_back(col_idx);
+        filter_col_stats.push_back(min_max_vec);
+    }
+    return std::make_pair(filter_cols, filter_col_stats);
+}
+
 std::unordered_map<int, std::vector<JoinFilterColStats::col_min_max_t>>
 JoinFilterColStats::collect_all() {
     // Cache the collection
@@ -1307,6 +1390,85 @@ duckdb::unique_ptr<duckdb::TableFilterSet> JoinFilterColStats::insert_filters(
         }
     }
     return filters;
+}
+
+void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
+                          const std::shared_ptr<arrow::Schema> &schema,
+                          const std::vector<int> column_projection,
+                          std::string header) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (rank != 0) {
+        return;
+    }
+
+    auto [filter_cols, filter_col_stats] =
+        join_filter_col_stats.get_col_stats_for_join_filter_cols();
+
+    std::ostringstream expr_stream;
+    std::string expr_prefix = "Runtime join filter expression: ";
+    bool first_expr = true;
+
+    for (size_t i = 0; i < filter_cols.size(); ++i) {
+        const auto column_index = column_projection[filter_cols[i]];
+        const std::string &column_name = schema->field(column_index)->name();
+
+        for (const auto &[min_value, max_value] : filter_col_stats[i]) {
+            if (!first_expr) {
+                expr_stream << " & ";
+            }
+            first_expr = false;
+
+            expr_stream << "(ds.field('{" << column_name
+                        << "}') >= " << min_value->ToString()
+                        << ") & (ds.field('{" << column_name
+                        << "}') <= " << max_value->ToString() << ")";
+        }
+    }
+
+    const std::string rtjf_str =
+        expr_prefix + (first_expr ? "True" : "(" + expr_stream.str() + ")");
+
+    PyGILState_STATE gil = PyGILState_Ensure();
+
+    try {
+        PyObjectPtr module(PyImport_ImportModule("bodo.user_logging"));
+        if (!module) {
+            throw std::runtime_error("Failed to import bodo.user_logging");
+        }
+
+        PyObjectPtr func(
+            PyObject_GetAttrString(module.get(), "log_if_verbose"));
+        if (!func || !PyCallable_Check(func.get())) {
+            throw std::runtime_error(
+                "bodo.user_logging.log_if_verbose is not callable");
+        }
+
+        PyObjectPtr py_level(PyLong_FromLongLong(2));
+        PyObjectPtr py_header(PyUnicode_FromString(header.c_str()));
+        PyObjectPtr py_message(PyUnicode_FromStringAndSize(
+            rtjf_str.data(), static_cast<Py_ssize_t>(rtjf_str.size())));
+
+        if (!py_level || !py_header || !py_message) {
+            throw std::runtime_error("Failed to create logging arguments");
+        }
+
+        PyObjectPtr result(PyObject_CallFunctionObjArgs(
+            func.get(), py_level.get(), py_header.get(), py_message.get(),
+            nullptr));
+
+        if (!result) {
+            throw std::runtime_error("log_if_verbose() failed");
+        }
+    } catch (...) {
+        if (PyErr_Occurred()) {
+            PyErr_Print();
+        }
+        PyGILState_Release(gil);
+        throw;
+    }
+
+    PyGILState_Release(gil);
 }
 
 void assert_py_args_is_tuple(PyObject *args, const char *err_context) {
@@ -1691,6 +1853,21 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
             // on your convention)
             return cudf::data_type{type_id::INT64};
 
+        case LogicalTypeId::DECIMAL: {
+            uint8_t precision = 0;
+            uint8_t scale = 0;
+
+            dtype.GetDecimalProperties(precision, scale);
+
+            if (precision <= 0 || precision > 38) {
+                throw std::runtime_error(
+                    "duckdb_logicaltype_to_cudf: invalid DECIMAL precision " +
+                    std::to_string(precision));
+            }
+
+            return cudf::data_type{type_id::DECIMAL128, scale};
+        } break;
+
         // Fallback for unknown/unsupported types
         default:
             throw std::runtime_error(
@@ -1700,12 +1877,10 @@ cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype) {
     }
 }
 
-std::unique_ptr<cudf::scalar> make_invalid_like(
-    cudf::scalar const &src, rmm::cuda_stream_view stream,
+std::unique_ptr<cudf::scalar> make_invalid_cudf_scalar(
+    cudf::data_type dtype, rmm::cuda_stream_view stream,
     rmm::device_async_resource_ref mr) {
-    cudf::data_type t = src.type();
-
-    switch (t.id()) {
+    switch (dtype.id()) {
         // **numeric types**
         case cudf::type_id::INT8:
             return std::make_unique<cudf::numeric_scalar<int8_t>>(0, false,
@@ -1777,7 +1952,7 @@ std::unique_ptr<cudf::scalar> make_invalid_like(
 
         default:
             throw std::runtime_error(
-                "Unsupported cudf::type_id in make_invalid_like");
+                "Unsupported cudf::type_id in make_invalid_cudf_scalar");
     }
 }
 

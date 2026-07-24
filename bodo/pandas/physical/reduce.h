@@ -68,6 +68,12 @@ struct ReductionFunctionMax : public ReductionFunction {
                             {ReductionType::COMPARISON}, {nullptr}) {}
 };
 
+struct ReductionFunctionFirst : public ReductionFunction {
+    ReductionFunctionFirst(int input_col_idx)
+        : ReductionFunction(input_col_idx, {"first"}, {"first"},
+                            {ReductionType::COMPARISON}, {nullptr}) {}
+};
+
 struct ReductionFunctionMin : public ReductionFunction {
     ReductionFunctionMin(int input_col_idx)
         : ReductionFunction(input_col_idx, {"min"}, {"less"},

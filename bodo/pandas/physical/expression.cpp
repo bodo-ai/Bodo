@@ -435,6 +435,104 @@ arrow::Datum do_arrow_compute_multi_input_datum(
             }
         }
         func_res = arrow::compute::CallFunction(arrow_func_name, casted_datums);
+    } else if (arrow_func_name == "bodo_substr_three" ||
+               arrow_func_name == "utf8_slice_codeunits") {
+        // If the arrow func name is bodo_substr_three or utf8_slice_codeunits,
+        // we are computing a substring. The main difference between them is
+        // that utf8_slice_codeunits takes an end index whereas
+        // bodo_substr_three takes a length. bodo_substr_three only accepts
+        // arrays whereas utf8_slice_codeunits only accepts scalars, so we call
+        // utf8_slice_codeunits if both the start index and length / end index
+        // are scalars, otherwise we call bodo_substr_three.
+
+        // We only currently support array-based substring with two/three
+        // arguments. If two arguments are provided, we pass the max value of
+        // int64 as the third (end index or length) parameter to slice until the
+        // end of the string. In the future we could add a "step" parameter.
+        if (arg_datums.size() != 2 && arg_datums.size() != 3) {
+            throw std::runtime_error(
+                "do_arrow_compute_multi_input: " + arrow_func_name +
+                " expects 2 or 3 "
+                "arguments.");
+        }
+
+        if (arg_datums[1].is_scalar() &&
+            (arg_datums.size() == 2 || arg_datums[2].is_scalar())) {
+            // The index arguments are scalars: use utf8_slice_codeunits
+            int64_t arg1_scalar =
+                arg_datums[1].scalar_as<arrow::Int64Scalar>().value;
+
+            arrow::compute::SliceOptions slice_opts;
+            slice_opts.start = arg1_scalar;
+            if (arg_datums.size() == 3) {
+                int64_t arg2_scalar =
+                    arg_datums[2].scalar_as<arrow::Int64Scalar>().value;
+                if (arrow_func_name == "bodo_substr_three") {
+                    // Convert from length argument to end index argument
+                    arg2_scalar = arg1_scalar + arg2_scalar;
+                }
+                slice_opts.stop = arg2_scalar;
+            }
+            // If arg_datums.size() == 2, no need to do anything more since
+            // the `stop` option defaults to the max value of int64.
+
+            func_res = arrow::compute::CallFunction(
+                "utf8_slice_codeunits", {arg_datums[0]}, &slice_opts);
+        } else {
+            // At least one of the second and third arguments are arrays: use
+            // bodo_substr_three
+
+            if (arrow_func_name == "utf8_slice_codeunits" &&
+                arg_datums.size() == 3) {
+                // Convert from end index argument to length argument
+                arg_datums[2] = do_arrow_compute_binary(
+                    arg_datums[2], arg_datums[1], "subtract");
+            }
+
+            // Get the scalar object from a possible scalar datum (start index
+            // or length)
+            int scalar_arg_index = -1;
+            arrow::Int64Scalar arg_scalar;
+            if (arg_datums.size() == 3) {
+                // 0 or 1 of the arguments could be scalars
+                for (int arg_datum_index = 1; arg_datum_index <= 2;
+                     arg_datum_index++) {
+                    if (arg_datums[arg_datum_index].is_scalar()) {
+                        scalar_arg_index = arg_datum_index;
+                        arg_scalar = arg_datums[arg_datum_index]
+                                         .scalar_as<arrow::Int64Scalar>();
+                        break;
+                    }
+                }
+            } else {
+                // If length was not provided, use the max value of int64.
+                // Need to resize arg_datums so we can set the third element.
+                arg_datums.resize(3);
+                scalar_arg_index = 2;
+                arg_scalar =
+                    arrow::Int64Scalar(std::numeric_limits<int64_t>::max());
+            }
+
+            // Broadcast the scalar argument (if there was one) to array since
+            // bodo_substr_three requires arrays
+            if (scalar_arg_index != -1) {
+                auto arg_scalar_array = arrow::MakeArrayFromScalar(
+                    arg_scalar, arg_datums[0].make_array()->length());
+                if (!arg_scalar_array.ok()) {
+                    throw std::runtime_error(
+                        "do_arrow_compute_multi_input: Failed to make array "
+                        "from scalar: " +
+                        arg_scalar_array.status().message());
+                }
+                arg_datums[scalar_arg_index] =
+                    arrow::Datum(arg_scalar_array.ValueOrDie());
+            }
+
+            // Call our custom substring function that can handle array indices
+            EnsureSubstrRegistered();
+            func_res =
+                arrow::compute::CallFunction("bodo_substr_three", arg_datums);
+        }
     } else if (arrow_func_name == "max_element_wise" ||
                arrow_func_name == "min_element_wise") {
         // Avoid skipping nulls to match SQL semantics.
@@ -447,8 +545,8 @@ arrow::Datum do_arrow_compute_multi_input_datum(
 
     if (!func_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_arrow_compute_multi_input: Error in Arrow compute: " +
-            func_res.status().message());
+            "do_arrow_compute_multi_input: Error in Arrow compute (" +
+            arrow_func_name + "): " + func_res.status().message());
     }
 
     return func_res.ValueOrDie();
@@ -502,11 +600,12 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
 
 std::shared_ptr<array_info> do_arrow_compute_unary(
     std::shared_ptr<ExprResult> left_res, const std::string& comparator,
-    const arrow::compute::FunctionOptions* func_options) {
+    const arrow::compute::FunctionOptions* func_options,
+    const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
     arrow::Datum cmp_res =
-        do_arrow_compute_unary(src1, comparator, func_options);
+        do_arrow_compute_unary(src1, comparator, func_options, result_type);
     return ConvertDatumToArrayInfo(cmp_res);
 }
 
@@ -520,6 +619,27 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     return ConvertDatumToArrayInfo(casted);
 }
 
+void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
+                         const std::shared_ptr<arrow::DataType> result_type) {
+    arrow::Datum out_datum = out_res.ValueOrDie();
+    std::shared_ptr<arrow::DataType> out_dtype = out_datum.type();
+    if (result_type && !out_dtype->Equals(result_type)) {
+        // Cast to result type if available and different from current type.
+        arrow::compute::CastOptions cast_opts;
+        cast_opts.allow_int_overflow = true;
+        cast_opts.allow_float_truncate = true;
+        cast_opts.allow_decimal_truncate = true;
+        arrow::Result<arrow::Datum> cast_res =
+            arrow::compute::Cast(out_datum, result_type, cast_opts);
+        if (!cast_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "do_result_type_cast cast_res: Error in Arrow compute: " +
+                cast_res.status().message());
+        }
+        out_res = cast_res;
+    }
+}
+
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string& comparator,
@@ -529,33 +649,18 @@ arrow::Datum do_arrow_compute_binary(
         comparator, {left_res, right_res}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_array_compute_binary: Error in Arrow compute: " +
-            cmp_res.status().message());
+            "do_arrow_compute_binary: Error in Arrow compute (" + comparator +
+            "): " + cmp_res.status().message());
     }
 
-    arrow::Datum cmp_datum = cmp_res.ValueOrDie();
-
-    std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
-    if (result_type && cmp_dtype != result_type) {
-        // Cast to result type if available and different from current type.
-        arrow::compute::CastOptions cast_opts;
-        cast_opts.allow_int_overflow = true;
-        arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(cmp_datum, result_type, cast_opts);
-        if (!cast_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_binary cast_res: Error in Arrow compute: " +
-                cast_res.status().message());
-        }
-        cmp_res = cast_res;
-    }
-
+    do_result_type_cast(cmp_res, result_type);
     return cmp_res.ValueOrDie();
 }
 
 arrow::Datum do_arrow_compute_unary(
     arrow::Datum src1, const std::string& comparator,
-    const arrow::compute::FunctionOptions* func_options) {
+    const arrow::compute::FunctionOptions* func_options,
+    const std::shared_ptr<arrow::DataType> result_type) {
     // Special handling for is_not_null since it is not supported directly
     // by Arrow compute.
     if (comparator == "is_not_null") {
@@ -563,7 +668,7 @@ arrow::Datum do_arrow_compute_unary(
             arrow::compute::CallFunction("is_null", {src1}, func_options);
         if (!is_null_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute: " +
+                "do_arrow_compute_unary: Error in Arrow compute (is_null): " +
                 is_null_res.status().message());
         }
 
@@ -572,57 +677,57 @@ arrow::Datum do_arrow_compute_unary(
             arrow::compute::CallFunction("invert", {is_null_res.ValueOrDie()});
         if (!invert_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute Invert: " +
+                "do_arrow_compute_unary: Error in Arrow compute (invert): " +
                 invert_res.status().message());
         }
+        do_result_type_cast(invert_res, result_type);
         return invert_res.ValueOrDie();
     }
 
-    // Special handling for is_true since it is not supported directly
-    // by Arrow compute.
-    if (comparator == "is_true") {
-        auto arrow_false = arrow::MakeScalar(false);
-        arrow::Result<arrow::Datum> is_true_res = arrow::compute::CallFunction(
-            "coalesce", {src1, arrow_false}, func_options);
-        if (!is_true_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute: " +
-                is_true_res.status().message());
-        }
-        return is_true_res.ValueOrDie();
-    }
+    // Special handling for is_true, is_not_true, is_false, is_not_false since
+    // they are not supported directly by Arrow compute.
+    if (comparator == "is_true" || comparator == "is_not_true" ||
+        comparator == "is_false" || comparator == "is_not_false") {
+        const bool test_true =
+            comparator == "is_true" || comparator == "is_not_true";
+        const bool invert =
+            comparator == "is_not_true" || comparator == "is_false";
 
-    // Special handling for is_not_true since it is not supported directly
-    // by Arrow compute.
-    if (comparator == "is_not_true") {
-        auto arrow_false = arrow::MakeScalar(false);
-        arrow::Result<arrow::Datum> coalesce_res = arrow::compute::CallFunction(
-            "coalesce", {src1, arrow_false}, func_options);
-        if (!coalesce_res.ok()) [[unlikely]] {
+        auto na_fill_value = arrow::MakeScalar(test_true ? false : true);
+
+        arrow::Result<arrow::Datum> result = arrow::compute::CallFunction(
+            "coalesce", {src1, na_fill_value}, func_options);
+        if (!result.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute: " +
-                coalesce_res.status().message());
+                "do_arrow_compute_unary: Error in Arrow compute (coalesce): " +
+                result.status().message());
         }
 
-        // Invert so that null/false -> true and true -> false.
-        arrow::Result<arrow::Datum> invert_res =
-            arrow::compute::CallFunction("invert", {coalesce_res.ValueOrDie()});
-        if (!invert_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_unary: Error in Arrow compute Invert: " +
-                invert_res.status().message());
+        // is_not_true: Invert so that null/false -> true and true -> false.
+        // is_false: Invert so that null/true -> false and true -> false.
+        if (invert) {
+            result =
+                arrow::compute::CallFunction("invert", {result.ValueOrDie()});
+            if (!result.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    "do_arrow_compute_unary: Error in Arrow compute "
+                    "(invert): " +
+                    result.status().message());
+            }
         }
-        return invert_res.ValueOrDie();
+        do_result_type_cast(result, result_type);
+        return result.ValueOrDie();
     }
 
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::CallFunction(comparator, {src1}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
-            "do_arrow_compute_unary: Error in Arrow compute: " +
-            cmp_res.status().message());
+            "do_arrow_compute_unary: Error in Arrow compute (" + comparator +
+            "): " + cmp_res.status().message());
     }
 
+    do_result_type_cast(cmp_res, result_type);
     return cmp_res.ValueOrDie();
 }
 
@@ -640,6 +745,7 @@ arrow::Datum do_arrow_compute_cast(
     // CastExpressions should support these options.
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
+    cast_opts.allow_float_truncate = true;
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::Cast(left_res, return_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {
@@ -702,22 +808,7 @@ std::shared_ptr<array_info> do_arrow_compute_case(
             case_res.status().message());
     }
 
-    arrow::Datum case_datum = case_res.ValueOrDie();
-    std::shared_ptr<arrow::DataType> case_dtype = case_datum.type();
-    if (result_type && case_dtype != result_type) {
-        // Cast to result type if available and different from current type.
-        arrow::compute::CastOptions cast_opts;
-        cast_opts.allow_int_overflow = true;
-        arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(case_datum, result_type, cast_opts);
-        if (!cast_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_case cast_res: Error in Arrow compute: " +
-                cast_res.status().message());
-        }
-        case_res = cast_res;
-    }
-
+    do_result_type_cast(case_res, result_type);
     return ConvertDatumToArrayInfo(case_res.ValueOrDie());
 }
 
@@ -893,7 +984,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
                             std::make_shared<PhysicalUnaryExpression>(
                                 buildPhysicalExprTree(bfe.children[0],
                                                       col_ref_map, no_scalars),
-                                bfe.function.name));
+                                bfe.function.name, result_type));
                     } break;
                     case 2: {
                         // Check for calendar interval constants that
@@ -1170,6 +1261,8 @@ void PhysicalExpression::join_expr_batch(
 
 PhysicalExpression* PhysicalExpression::cur_join_expr = nullptr;
 
+// ------------------ Custom Arrow Kernels ------------------
+
 template <typename ArrowType, typename ModOp>
 arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
                       const arrow::compute::ExecSpan& batch,
@@ -1232,6 +1325,9 @@ arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
             for (int64_t i = 0; i < left.length; ++i) {
                 if (!is_valid_bit(left_valid_bits, left.offset, i)) {
                     clear_valid(out_valid_bits, offset + i);
+                } else if (r == 0) {
+                    // Return NULL when modulus is 0
+                    clear_valid(out_valid_bits, offset + i);
                 } else {
                     // Get ith element of left.
                     CType l = left_values[i];
@@ -1259,12 +1355,17 @@ arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
                 // Get corresponding ith elements of left and right arrays.
                 CType l = left_values[i];
                 CType r = right_values[i];
-                // Calculate modulus operator.
-                CType res = ModOp::apply(l, r);
-                // Assign result.
-                out_values[i] = res;
-                // Indicate index has valid data.
-                set_valid(out_valid_bits, offset + i);
+                if (r == 0) {
+                    // Return NULL when modulus is 0
+                    clear_valid(out_valid_bits, offset + i);
+                } else {
+                    // Calculate modulus operator.
+                    CType res = ModOp::apply(l, r);
+                    // Assign result.
+                    out_values[i] = res;
+                    // Indicate index has valid data.
+                    set_valid(out_valid_bits, offset + i);
+                }
             }
         }
     }
@@ -1275,14 +1376,14 @@ arrow::Status ModImpl(arrow::compute::KernelContext* ctx,
 struct NativeMod {
     template <typename T>
     static T apply(T l, T r) {
-        return (r == 0 ? 0 : (l % r));
+        return l % r;
     }
 };
 
 struct AltMod {
     template <typename T>
     static T apply(T l, T r) {
-        return (r == 0 ? 0 : (l - ((int64_t)(l / r) * r)));
+        return l - ((int64_t)(l / r) * r);
     }
 };
 
@@ -1293,48 +1394,94 @@ void RegisterMod(arrow::compute::FunctionRegistry* registry) {
         arrow::compute::FunctionDoc{
             "Modulo of two arrays", "Returns lhs % rhs", {"lhs", "rhs"}});
 
+    // Declare int8,int8->int8 mod kernel.
+    arrow::compute::ScalarKernel kernel8(
+        {arrow::compute::InputType(arrow::int8()),
+         arrow::compute::InputType(arrow::int8())},
+        arrow::compute::OutputType(arrow::int8()),
+        ModImpl<arrow::Int8Type, NativeMod>);
+    kernel8.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
+    // Declare int16,int16->int16 mod kernel.
+    arrow::compute::ScalarKernel kernel16(
+        {arrow::compute::InputType(arrow::int16()),
+         arrow::compute::InputType(arrow::int16())},
+        arrow::compute::OutputType(arrow::int16()),
+        ModImpl<arrow::Int16Type, NativeMod>);
+    kernel16.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
     // Declare int32,int32->int32 mod kernel.
     arrow::compute::ScalarKernel kernel32(
         {arrow::compute::InputType(arrow::int32()),
          arrow::compute::InputType(arrow::int32())},
         arrow::compute::OutputType(arrow::int32()),
         ModImpl<arrow::Int32Type, NativeMod>);
+    kernel32.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
     // Declare int64,int64->int64 mod kernel.
     arrow::compute::ScalarKernel kernel64(
         {arrow::compute::InputType(arrow::int64()),
          arrow::compute::InputType(arrow::int64())},
         arrow::compute::OutputType(arrow::int64()),
         ModImpl<arrow::Int64Type, NativeMod>);
+    kernel64.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
+    // Declare uint64,uint64->uint64 mod kernel.
+    arrow::compute::ScalarKernel kernelu64(
+        {arrow::compute::InputType(arrow::uint64()),
+         arrow::compute::InputType(arrow::uint64())},
+        arrow::compute::OutputType(arrow::uint64()),
+        ModImpl<arrow::UInt64Type, NativeMod>);
+    kernelu64.null_handling =
+        arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
     // Declare float,float->float mod kernel.
     arrow::compute::ScalarKernel floatkernel32(
         {arrow::compute::InputType(arrow::float32()),
          arrow::compute::InputType(arrow::float32())},
         arrow::compute::OutputType(arrow::float32()),
         ModImpl<arrow::FloatType, AltMod>);
+    floatkernel32.null_handling =
+        arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
     // Declare double,double->double mod kernel.
     arrow::compute::ScalarKernel floatkernel64(
         {arrow::compute::InputType(arrow::float64()),
          arrow::compute::InputType(arrow::float64())},
         arrow::compute::OutputType(arrow::float64()),
         ModImpl<arrow::DoubleType, AltMod>);
+    floatkernel64.null_handling =
+        arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
 
     arrow::Status status;
     // Add all the above kernels to the function.
+    status = func->AddKernel(kernel8);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod int8 AddKernel failed.");
+    }
+    status = func->AddKernel(kernel16);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod int16 AddKernel failed.");
+    }
     status = func->AddKernel(kernel32);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterMod 32 AddKernel failed.");
+        throw std::runtime_error("RegisterMod int32 AddKernel failed.");
     }
     status = func->AddKernel(kernel64);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterMod 64 AddKernel failed.");
+        throw std::runtime_error("RegisterMod int64 AddKernel failed.");
+    }
+    status = func->AddKernel(kernelu64);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterMod uint64 AddKernel failed.");
     }
     status = func->AddKernel(floatkernel32);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterMod 32 AddKernel failed.");
+        throw std::runtime_error("RegisterMod float32 AddKernel failed.");
     }
     status = func->AddKernel(floatkernel64);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterMod 64 AddKernel failed.");
+        throw std::runtime_error("RegisterMod float64 AddKernel failed.");
     }
     // Register the function.
     status = registry->AddFunction(std::move(func));
@@ -1351,6 +1498,212 @@ void EnsureModRegistered() {
         RegisterMod(registry);
     });
 }
+
+// Helper to count UTF-8 characters in a byte string
+int64_t utf8_char_count(const char* data, int64_t byte_len) {
+    int64_t char_count = 0;
+    for (int64_t i = 0; i < byte_len; i++) {
+        // Only count bytes that are not continuation bytes (10xxxxxx)
+        if ((data[i] & 0xC0) != 0x80) {
+            char_count++;
+        }
+    }
+    return char_count;
+}
+
+// Helper to convert UTF-8 character number offset to byte offset
+int64_t utf8_char_to_byte_offset(const char* data, int64_t byte_len,
+                                 int64_t char_offset) {
+    int64_t char_count = 0;
+    for (int64_t i = 0; i < byte_len; i++) {
+        // Only count bytes that are not continuation bytes (10xxxxxx)
+        if ((data[i] & 0xC0) != 0x80) {
+            if (char_count == char_offset)
+                return i;
+            char_count++;
+        }
+    }
+    // If the string has less than char_offset characters, just return the
+    // string length in bytes We don't expect to hit this case.
+    return byte_len;
+}
+
+// The execution function for the kernel.
+// Signature: Status Exec(KernelContext*, const ExecBatch&, Datum* out)
+static arrow::Status SubstrThreeImpl(arrow::compute::KernelContext* ctx,
+                                     const arrow::compute::ExecSpan& batch,
+                                     arrow::compute::ExecResult* out) {
+    // Expect exactly 3 inputs
+    if (batch.values.size() != 3) {
+        throw std::runtime_error("bodo_substr_three expected 3 inputs.");
+    }
+
+    const arrow::ArraySpan& src = batch[0].array;
+    const arrow::ArraySpan& start = batch[1].array;
+    const arrow::ArraySpan& len = batch[2].array;
+
+    if (!src.type) {
+        throw std::runtime_error("bodo_substr_three src not valid.");
+    }
+    if (!start.type) {
+        throw std::runtime_error("bodo_substr_three start not valid.");
+    }
+    if (!len.type) {
+        throw std::runtime_error("bodo_substr_three len not valid.");
+    }
+
+    // Number of rows
+    int64_t n = static_cast<int64_t>(batch.length);
+
+    // Pointers to src buffers
+    const uint8_t* src_null_bitmap = src.buffers[0].data;
+    const int64_t* src_offsets =
+        reinterpret_cast<const int64_t*>(src.buffers[1].data);
+    const char* src_data = reinterpret_cast<const char*>(src.buffers[2].data);
+    int64_t src_offset = src.offset;  // element offset into offsets array
+
+    // Pointers to start/len buffers (int64)
+    const uint8_t* start_null_bitmap = start.buffers[0].data;
+    const int64_t* start_values =
+        reinterpret_cast<const int64_t*>(start.buffers[1].data);
+    int64_t start_offset = start.offset;
+
+    const uint8_t* len_null_bitmap = len.buffers[0].data;
+    const int64_t* len_values =
+        reinterpret_cast<const int64_t*>(len.buffers[1].data);
+    int64_t len_offset = len.offset;
+
+    // Prepare builder for output strings
+    arrow::LargeStringBuilder builder(ctx->memory_pool());
+
+    auto is_valid_bit = [](const uint8_t* bits, int64_t offset,
+                           int64_t i) -> bool {
+        return !bits || arrow::bit_util::GetBit(bits, offset + i);
+    };
+
+    for (int64_t i = 0; i < n; ++i) {
+        // Check nulls: bitmaps may be null (no nulls) -> treat as all-valid
+        bool src_is_null = false;
+        if (src_null_bitmap) {
+            src_is_null = !is_valid_bit(src_null_bitmap, src_offset, i);
+        }
+        bool start_is_null = false;
+        if (start_null_bitmap) {
+            start_is_null = !is_valid_bit(start_null_bitmap, start_offset, i);
+        }
+        bool len_is_null = false;
+        if (len_null_bitmap) {
+            len_is_null = !is_valid_bit(len_null_bitmap, len_offset, i);
+        }
+
+        if (src_is_null || start_is_null || len_is_null) {
+            ARROW_RETURN_NOT_OK(builder.AppendNull());
+            continue;
+        }
+
+        // Read start and len values.
+        // These are in units of UTF-8 characters, so we will need
+        // to convert to a raw byte offset.
+        int64_t start_chars_val = start_values[start_offset + i];
+        int64_t len_chars_val = len_values[len_offset + i];
+
+        // Read string offsets: offsets are int64 (common Arrow layout)
+        // offsets array length is n + 1; offsets index = src_offset + i
+        int64_t off0 = src_offsets[src_offset + i];
+        int64_t off1 = src_offsets[src_offset + i + 1];
+        int64_t byte_len = off1 - off0;
+
+        // Get number of UTF-8 characters in string (necessary to handle
+        // multi-byte characters)
+        int64_t char_len = utf8_char_count(src_data + off0, byte_len);
+
+        // Normalize negative length
+        if (len_chars_val < 0) {
+            len_chars_val = 0;
+        }
+
+        // If start index is negative, count backwards from end of string
+        if (start_chars_val < 0) {
+            start_chars_val = char_len + start_chars_val;
+            if (start_chars_val < 0) {
+                // If start index is still negative (meaning the index wrapped
+                // around and still exceeded the string length), set it to 0 and
+                // adjust the length for the number of characters left of the
+                // beginning of the string the start index is.
+                len_chars_val =
+                    std::max<int64_t>(len_chars_val + start_chars_val, 0);
+                start_chars_val = 0;
+            }
+        }
+
+        // Return an empty string if:
+        //   Start index is beyond string length,
+        //   start index is negative and its absolute value is greater than the
+        //   string length plus the requested substring length, or a
+        //   negative/zero substring length was provided.
+        if (start_chars_val >= char_len || len_chars_val == 0) {
+            ARROW_RETURN_NOT_OK(builder.Append(std::string()));
+            continue;
+        }
+
+        // Convert start index and length to byte offsets
+        int64_t start_val = utf8_char_to_byte_offset(src_data + off0, byte_len,
+                                                     start_chars_val);
+        int64_t len_val =
+            utf8_char_to_byte_offset(src_data + off0, byte_len, len_chars_val);
+
+        // Compute take and append substring
+        int64_t take = std::min<int64_t>(len_val, byte_len - start_val);
+        const char* substr_ptr =
+            src_data + off0 + static_cast<size_t>(start_val);
+        ARROW_RETURN_NOT_OK(
+            builder.Append(std::string(substr_ptr, static_cast<size_t>(take))));
+    }
+
+    // Finish builder to produce Array
+    std::shared_ptr<arrow::Array> out_array;
+    ARROW_RETURN_NOT_OK(builder.Finish(&out_array));
+
+    out->value = out_array->data();
+    return arrow::Status::OK();
+}
+
+void RegisterSubstr(arrow::compute::FunctionRegistry* registry) {
+    auto func = std::make_shared<arrow::compute::ScalarFunction>(
+        "bodo_substr_three", arrow::compute::Arity::Ternary(),
+        arrow::compute::FunctionDoc{"substr of source, start, len",
+                                    "Returns substr(src, start, len)",
+                                    {"src", "start", "len"}});
+
+    arrow::compute::ScalarKernel kernel(
+        {arrow::compute::InputType(arrow::large_utf8()),
+         arrow::compute::InputType(arrow::int64()),
+         arrow::compute::InputType(arrow::int64())},
+        arrow::compute::OutputType(arrow::large_utf8()), SubstrThreeImpl);
+
+    arrow::Status status;
+    status = func->AddKernel(kernel);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterSubstr AddKernel failed.");
+    }
+    // Register the function.
+    status = registry->AddFunction(std::move(func));
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterSubstr AddFunction failed.");
+    }
+}
+
+// Register the function in Arrow's global function registry.
+void EnsureSubstrRegistered() {
+    static std::once_flag once_flag_;
+    // Register the Bodo substr arrow compute function only once.
+    std::call_once(once_flag_, [&]() {
+        auto* registry = arrow::compute::GetFunctionRegistry();
+        RegisterSubstr(registry);
+    });
+}
+
+// ----------------------------------------------------------
 
 std::shared_ptr<ExprResult> PhysicalCalendarIntervalExpression::ProcessBatch(
     std::shared_ptr<table_info> input_batch) {

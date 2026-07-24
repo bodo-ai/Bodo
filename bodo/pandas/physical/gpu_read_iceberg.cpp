@@ -1248,6 +1248,10 @@ void PhysicalGPUReadIceberg::init_batch_gen() {
     int batch_size = get_gpu_streaming_batch_size();
     this->filter_exprs = this->join_filter_col_stats.insert_filters(
         std::move(this->filter_exprs), this->selected_columns);
+
+    log_rtjf_expressions(join_filter_col_stats, arrow_schema, selected_columns,
+                         "Iceberg I/O");
+
     batch_gen = std::make_shared<GPUIcebergRankBatchGenerator>(
         catalog, table_id, iceberg_filter, iceberg_schema, arrow_schema,
         snapshot_id, selected_columns, std::move(filter_exprs), batch_size,

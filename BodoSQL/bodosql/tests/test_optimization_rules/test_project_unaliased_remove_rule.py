@@ -37,6 +37,7 @@ def project_unaliased_remove_rule_queries(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 def test_project_unaliased_remove_rule(
     basic_df, project_unaliased_remove_rule_queries, memory_leak_check

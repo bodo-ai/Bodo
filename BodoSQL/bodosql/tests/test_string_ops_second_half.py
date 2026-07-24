@@ -438,6 +438,30 @@ def mk_broadcasted_string_queries():
                     reason=f"Cannot test {name} until next mini release",
                 ),
             )
+        if tag in [
+            "LPAD-scalar_int-2args",
+            "LPAD-all_scalar-2args",
+            "RPAD-scalar_int-2args",
+            "RPAD-all_scalar-2args",
+            "LPAD-all_scalar",
+            "LEFT_all_vector",
+            "LEFT_scalar_int",
+            "LEFT_scalar_str",
+            "LEFT_all_scalar",
+            "RIGHT_all_vector",
+            "RIGHT_scalar_int",
+            "RIGHT_scalar_str",
+            "RIGHT_all_scalar",
+            "REPEAT_scalar_int",
+            "REPEAT_all_scalar",
+            "REVERSE_vector",
+            "REPLACE_scalar_str_2",
+            "REPLACE_all_scalar",
+            "SPACE_scalar",
+            "INSTR_vector_scalar",
+            "INSTR_all_scalar",
+        ]:
+            marks += (pytest.mark.bodosql_cpp,)
         param = pytest.param(query, id=tag, marks=marks)
         result.append(param)
     return result
@@ -715,15 +739,17 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT SUBSTRING(source FROM start_pos FOR length) from table1",
             id="SUBSTRING_all_vector",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT SUBSTR(source, start_pos, 3) from table1",
             id="SUBSTRING_scalar_int_1A",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT MID(source, -2, length) from table1",
             id="SUBSTRING_scalar_int_1B",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT SUBSTRING(source, -5, 3) from table1",
@@ -733,7 +759,7 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT SUBSTR('alphabet soup is delicious', start_pos, length) from table1",
             id="SUBSTRING_scalar_str",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT MID('alphabet soup is delicious', 9, 4) from table1",
@@ -803,6 +829,7 @@ def test_substring(query, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize("func", ["SUBSTR", "SUBSTRING"])
 def test_substring_suffix(func, memory_leak_check):
     """Test SUBSTR/SUBSTRING with 2 arguments only where length is optional"""

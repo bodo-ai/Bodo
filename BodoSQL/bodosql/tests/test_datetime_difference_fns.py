@@ -551,6 +551,7 @@ def timestampdiff_data():
     return fixture_dict
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "has_tz, has_case",
     [

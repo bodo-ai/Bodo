@@ -154,6 +154,8 @@ cdef extern from "duckdb/common/enums/expression_type.hpp" namespace "duckdb" no
         BOUND_EXPANDED "duckdb::ExpressionType::BOUND_EXPANDED"
         OPERATOR_IS_TRUE "duckdb::ExpressionType::OPERATOR_IS_TRUE"
         OPERATOR_IS_NOT_TRUE "duckdb::ExpressionType::OPERATOR_IS_NOT_TRUE"
+        OPERATOR_IS_FALSE "duckdb::ExpressionType::OPERATOR_IS_FALSE"
+        OPERATOR_IS_NOT_FALSE "duckdb::ExpressionType::OPERATOR_IS_NOT_FALSE"
         OPERATOR_NEG "duckdb::ExpressionType::OPERATOR_NEG"
 
 
@@ -186,6 +188,10 @@ def str_to_expr_type(val):
         return CExpressionType.OPERATOR_IS_TRUE
     elif val == "isnottrue":
         return CExpressionType.OPERATOR_IS_NOT_TRUE
+    elif val == "isfalse":
+        return CExpressionType.OPERATOR_IS_FALSE
+    elif val == "isnotfalse":
+        return CExpressionType.OPERATOR_IS_NOT_FALSE
     else:
         raise NotImplementedError(f"Unhandled case {str(val)} in str_to_expr_type")
 
@@ -882,7 +888,7 @@ def unary_func_name_to_duckdb(str opstr):
     the possibility open for special mappings.
     """
     opstr_lowered = opstr.lower()
-    if opstr_lowered in ("floor", "ceil", "sqrt", "abs", "exp", "ln", "round"):
+    if opstr_lowered in ("floor", "ceil", "sqrt", "cbrt", "abs", "exp", "ln", "log10", "log2", "round", "trunc", "sign"):
         return opstr_lowered
     else:
         raise NotImplementedError("Unknown unary function name: " + opstr_lowered)

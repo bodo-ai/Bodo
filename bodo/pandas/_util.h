@@ -446,6 +446,17 @@ class JoinFilterColStats {
           join_filter_program_state(std::move(rtjf_state_map)) {}
     JoinFilterColStats() = default;
 
+    /** @brief Get the column statistics for join filter columns
+     *
+     * @return A tuple containing two vectors:
+     *         - The first vector contains the column indices of the join filter
+     * columns.
+     *         - The second vector contains the corresponding min/max statistics
+     * for each column.
+     */
+    std::pair<std::vector<int>, std::vector<std::vector<col_min_max_t>>>
+    get_col_stats_for_join_filter_cols();
+
     /**
      * @brief Insert collected min/max statistics as table filters into the
      * provided duckdb TableFilterSet for the specified column projection.
@@ -458,6 +469,20 @@ class JoinFilterColStats {
         duckdb::unique_ptr<duckdb::TableFilterSet> filters,
         const std::vector<int> column_projection);
 };
+
+/**
+ * @brief Log runtime join filter expressions on rank 0.
+ *
+ * @param join_filter_col_stats JoinFilterColStats object containing the column
+ * statistics
+ * @param schema Arrow schema associated with the join filter columns
+ * @param column_projection Column projection mapping to align filters with
+ * @param header Header string for the log message
+ */
+void log_rtjf_expressions(JoinFilterColStats &join_filter_col_stats,
+                          const std::shared_ptr<arrow::Schema> &schema,
+                          const std::vector<int> column_projection,
+                          std::string header);
 
 /**
  * @brief Assert that the Python objects arguments is a tuple
@@ -630,13 +655,13 @@ size_t col_ref_map_lookup(
 cudf::data_type duckdb_logicaltype_to_cudf(const duckdb::LogicalType &dtype);
 
 /**
- * @brief Create invalid cudf scalar from a valid one.
+ * @brief Create invalid cudf scalar from a cudf datatype.
  *
- * @param src the valid cudf scalar input
+ * @param dtype the cudf::data_type to make an invalid scalar for
  * @return cudf::scalar the output cudf scalar with valid bit off
  */
-std::unique_ptr<cudf::scalar> make_invalid_like(
-    cudf::scalar const &src,
+std::unique_ptr<cudf::scalar> make_invalid_cudf_scalar(
+    cudf::data_type dtype,
     rmm::cuda_stream_view stream = cudf::get_default_stream(),
     rmm::device_async_resource_ref mr =
         cudf::get_current_device_resource_ref());

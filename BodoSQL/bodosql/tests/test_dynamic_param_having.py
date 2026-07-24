@@ -7,6 +7,8 @@ import pytest
 from bodosql.tests.named_params_common import *  # noqa
 from bodosql.tests.utils import check_query
 
+pytestmark = pytest.mark.bodosql_cpp
+
 
 @pytest.mark.slow
 def test_named_param_int_having(

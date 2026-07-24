@@ -10,8 +10,10 @@
 #include <arrow/status.h>
 #include <arrow/type_fwd.h>
 #include <arrow/type_traits.h>
+#include <mpi.h>
 #include <future>
 #include <mutex>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -133,6 +135,16 @@ class PhysicalExpression {
     virtual std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) = 0;
 
+    virtual void Finalize() {
+        // Base implementation just calls Finalize()
+        // on all the children in case the child happens
+        // to have an override of Finalize(), e.g.
+        // PhysicalArrowExpression.
+        for (const auto &child : children) {
+            child->Finalize();
+        }
+    }
+
     static bool join_expr(array_info **left_table, array_info **right_table,
                           void **left_data, void **right_data,
                           void **left_null_bitmap, void **right_null_bitmap,
@@ -208,7 +220,8 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
  */
 std::shared_ptr<array_info> do_arrow_compute_unary(
     std::shared_ptr<ExprResult> left_res, const std::string &comparator,
-    const arrow::compute::FunctionOptions *func_options = nullptr);
+    const arrow::compute::FunctionOptions *func_options = nullptr,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Convert two ExprResults to arrow and run compute operation on them.
@@ -265,7 +278,8 @@ std::shared_ptr<array_info> do_arrow_compute_case(
  */
 arrow::Datum do_arrow_compute_unary(
     arrow::Datum left_res, const std::string &comparator,
-    const arrow::compute::FunctionOptions *func_options = nullptr);
+    const arrow::compute::FunctionOptions *func_options = nullptr,
+    const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
  * @brief Run arrow compute operation on two Datums.
@@ -868,9 +882,11 @@ class PhysicalCastExpression : public PhysicalExpression {
  */
 class PhysicalUnaryExpression : public PhysicalExpression {
    public:
-    PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
-                            duckdb::ExpressionType etype)
-        : PhysicalExpression(PhysicalExpressionType::UNARY) {
+    PhysicalUnaryExpression(
+        std::shared_ptr<PhysicalExpression> left, duckdb::ExpressionType etype,
+        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
+        : PhysicalExpression(PhysicalExpressionType::UNARY),
+          result_type(_result_type) {
         children.push_back(left);
         switch (etype) {
             case duckdb::ExpressionType::OPERATOR_NOT:
@@ -888,6 +904,12 @@ class PhysicalUnaryExpression : public PhysicalExpression {
             case duckdb::ExpressionType::OPERATOR_IS_NOT_TRUE:
                 comparator = "is_not_true";
                 break;
+            case duckdb::ExpressionType::OPERATOR_IS_FALSE:
+                comparator = "is_false";
+                break;
+            case duckdb::ExpressionType::OPERATOR_IS_NOT_FALSE:
+                comparator = "is_not_false";
+                break;
             case duckdb::ExpressionType::OPERATOR_NEG:
                 comparator = "negate";
                 break;
@@ -895,12 +917,16 @@ class PhysicalUnaryExpression : public PhysicalExpression {
                 throw std::runtime_error("Unhandled unary op expression type.");
         }
     }
-    PhysicalUnaryExpression(std::shared_ptr<PhysicalExpression> left,
-                            std::string &opstr) {
+    PhysicalUnaryExpression(
+        std::shared_ptr<PhysicalExpression> left, std::string &opstr,
+        const std::shared_ptr<arrow::DataType> _result_type = nullptr)
+        : PhysicalExpression(PhysicalExpressionType::UNARY),
+          result_type(_result_type) {
         children.push_back(left);
         if (opstr == "floor" || opstr == "ceil" || opstr == "abs" ||
-            opstr == "sqrt" || opstr == "exp" || opstr == "ln" ||
-            opstr == "round") {
+            opstr == "sqrt" || opstr == "cbrt" || opstr == "exp" ||
+            opstr == "ln" || opstr == "log10" || opstr == "log2" ||
+            opstr == "round" || opstr == "trunc" || opstr == "sign") {
             comparator = opstr;
         } else {
             throw std::runtime_error("Unhandled unary expression opstr: " +
@@ -932,8 +958,34 @@ class PhysicalUnaryExpression : public PhysicalExpression {
         } else {
             func_options = nullptr;
         }
-        auto result =
-            do_arrow_compute_unary(left_res, comparator, func_options);
+
+        std::shared_ptr<array_info> result;
+        if (comparator == "cbrt") {
+            // Arrow doesn't have a cube root function, so we raise to the power
+            // 1/3 instead. However Arrow will return NaN for a negative base in
+            // this case, so we have to first take the absolute value and then
+            // restore the sign afterwards.
+            arrow::Datum left_res_datum =
+                ConvertExprResultToDatum(left_res, "cbrt input");
+
+            arrow::Datum abs_left_res =
+                do_arrow_compute_unary(left_res_datum, "abs");
+
+            arrow::Datum exponent_datum(
+                std::make_shared<arrow::FloatScalar>(1.0 / 3.0));
+            arrow::Datum power_result = do_arrow_compute_binary(
+                abs_left_res, exponent_datum, "power", func_options);
+
+            arrow::Datum left_res_sign =
+                do_arrow_compute_unary(left_res_datum, "sign");
+            arrow::Datum corrected_power_result = do_arrow_compute_binary(
+                power_result, left_res_sign, "multiply", nullptr, result_type);
+
+            result = ConvertDatumToArrayInfo(corrected_power_result);
+        } else {
+            result = do_arrow_compute_unary(left_res, comparator, func_options,
+                                            result_type);
+        }
 
         auto left_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(left_res);
@@ -956,9 +1008,11 @@ class PhysicalUnaryExpression : public PhysicalExpression {
 
    protected:
     std::string comparator;
+    const std::shared_ptr<arrow::DataType> result_type;
 };
 
 void EnsureModRegistered();
+void EnsureSubstrRegistered();
 
 /**
  * @brief Physical expression tree node type for binary op non-boolean arrays.
@@ -1181,7 +1235,7 @@ class PhysicalCaseExpression : public PhysicalExpression {
             "if_else", {when_datum, then_datum, else_datum});
         if (!cmp_res.ok()) [[unlikely]] {
             throw std::runtime_error(
-                "do_array_compute_case if_else: Error in Arrow compute: " +
+                "do_arrow_compute_case if_else: Error in Arrow compute: " +
                 cmp_res.status().message());
         }
         return cmp_res.ValueOrDie();
@@ -1411,6 +1465,15 @@ class PhysicalArrowExpression : public PhysicalExpression {
     std::shared_ptr<ExprResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch) override;
 
+    void Finalize() override {
+        for (const auto &child : children) {
+            child->Finalize();
+        }
+
+        gen = nullptr;  // Reset RNG
+        named_regexp = nullptr;
+    }
+
     arrow::Datum join_expr_internal(array_info **left_table,
                                     array_info **right_table, void **left_data,
                                     void **right_data, void **left_null_bitmap,
@@ -1429,6 +1492,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
     }
 
    protected:
+    // PRNG for random_int64
+    std::shared_ptr<std::mt19937_64> gen;
+    // Named regex pattern for REGEXP_SUBSTR / REGEXP_INSTR
+    std::shared_ptr<std::tuple<std::string, int>> named_regexp;
+
     BodoScalarFunctionData scalar_func_data;
     const std::shared_ptr<arrow::DataType> result_type;
     PhysicalArrowExpressionMetrics metrics;
@@ -1438,12 +1506,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
         std::conditional_t<std::is_same_v<T, std::shared_ptr<ExprResult>>,
                            std::shared_ptr<array_info>, T>;
 
-    template <typename T>
-    arrow::Datum do_arrow_compute_regexp_substr(T res, std::string pattern_str,
-                                                std::string regex_params_str,
-                                                int64_t group_to_extract) {
-        bool extract_submatches =
-            regex_params_str.find('e') != std::string::npos;
+    std::tuple<std::string, int> convert_to_named_regexp(
+        std::string pattern_str) {
+        /* Return a tuple of the input regex pattern with its capturing
+        groups converted to named groups, and the number of groups that were
+        found in the pattern. */
 
         std::string named_pattern;
         // Number of groups found in regex pattern so far
@@ -1491,6 +1558,26 @@ class PhysicalArrowExpression : public PhysicalExpression {
             }
         }
 
+        return std::tuple(named_pattern, num_groups);
+    }
+
+    template <typename T>
+    arrow::Datum do_arrow_compute_regexp_substr(T res, std::string pattern_str,
+                                                std::string regex_params_str,
+                                                int64_t group_to_extract) {
+        bool extract_submatches =
+            regex_params_str.find('e') != std::string::npos;
+
+        // Ensure all groups are named so that we can pass to extract_regex.
+        // Do this once per operator.
+        if (!named_regexp) {
+            named_regexp = std::make_shared<std::tuple<std::string, int>>(
+                convert_to_named_regexp(pattern_str));
+        }
+
+        std::string named_pattern = std::get<0>(*named_regexp);
+        int num_groups = std::get<1>(*named_regexp);
+
         if (!extract_submatches || num_groups == 0) {
             // Wrap the whole pattern in a group
             named_pattern = "(?<_whole>" + named_pattern + ")";
@@ -1513,53 +1600,155 @@ class PhysicalArrowExpression : public PhysicalExpression {
             std::static_pointer_cast<arrow::StructArray>(extract_array);
 
         // Extract the requested field
-        std::shared_ptr<arrow::Array> captured_field = nullptr;
-        if (extract_submatches && group_to_extract < num_groups) {
-            // Valid group number requested
-            captured_field = struct_result->GetFieldByName(
-                "_group" + std::to_string(group_to_extract));
-        } else if (!extract_submatches) {
-            // No group extraction requested, return whole match
-            captured_field = struct_result->GetFieldByName("_whole");
-        }
-
-        arrow::Datum captured_field_datum;
-        if (!captured_field) {
+        std::shared_ptr<arrow::Array> captured_field;
+        if (extract_submatches && group_to_extract >= num_groups) {
             // Return null array if requested group is greater than number
             // of groups in regex
             captured_field =
                 arrow::MakeArrayOfNull(arrow::utf8(), struct_result->length())
                     .ValueOrDie();
-            captured_field_datum = arrow::Datum(captured_field);
-        } else if (captured_field->type_id() == arrow::Type::STRING ||
-                   captured_field->type_id() == arrow::Type::LARGE_STRING) {
-            // Convert empty strings in the extract_regex result to NULL.
-            // Despite what the Arrow documentation says, it appears that an
-            // empty string is returned for the input strings that the
-            // regexp does not match.
-            arrow::Datum empty_string =
-                (captured_field->type_id() == arrow::Type::STRING)
-                    ? arrow::Datum(arrow::StringScalar(""))
-                    : arrow::Datum(arrow::LargeStringScalar(""));
-
-            // do_arrow_compute_multi_input only accepts a vector of
-            // ExprResults (for now)
-            std::shared_ptr<ExprResult> empty_string_expr_result =
-                std::make_shared<ScalarExprResult>(
-                    ConvertDatumToArrayInfo(empty_string));
-            std::shared_ptr<ExprResult> captured_field_expr_result =
-                std::make_shared<ArrayExprResult>(
-                    ConvertDatumToArrayInfo(arrow::Datum(captured_field)),
-                    "regexp_substr_captured_field");
-
-            captured_field_datum = do_arrow_compute_multi_input_datum(
-                {captured_field_expr_result, empty_string_expr_result},
-                "nullif");
         } else {
-            captured_field_datum = arrow::Datum(captured_field);
+            std::string field_name;
+            if (!extract_submatches) {
+                // No group extraction requested, return whole match
+                field_name = "_whole";
+            } else {
+                // extract_submatches && group_to_extract < num_groups:
+                // valid group number requested.
+                field_name = "_group" + std::to_string(group_to_extract);
+            }
+
+            // NOTE: StructArray.GetFieldByName() exists, but does not propagate
+            // the validity bitmap to the child fields. We need to retain the
+            // nulls that are emitted when there is no match for the regexp, so
+            // we use GetFlattenedField() instead.
+            auto struct_type = std::static_pointer_cast<arrow::StructType>(
+                struct_result->type());
+            int field_index = struct_type->GetFieldIndex(field_name);
+            auto captured_field_res =
+                struct_result->GetFlattenedField(field_index);
+            if (!captured_field_res.ok()) {
+                throw std::runtime_error(
+                    "do_arrow_compute_regexp_substr: Error getting flattened "
+                    "field from struct array: " +
+                    captured_field_res.status().message());
+            }
+            captured_field = captured_field_res.ValueOrDie();
         }
 
-        return captured_field_datum;
+        return arrow::Datum(captured_field);
+    }
+
+    template <typename T>
+    arrow::Datum do_arrow_compute_regexp_instr(T res, std::string pattern_str,
+                                               bool get_start_index,
+                                               std::string regex_params_str,
+                                               int64_t group_to_extract) {
+        bool extract_submatches =
+            regex_params_str.find('e') != std::string::npos;
+
+        // Ensure all groups are named so that we can pass to
+        // extract_regex_span. Do this once per operator.
+        if (!named_regexp) {
+            named_regexp = std::make_shared<std::tuple<std::string, int>>(
+                convert_to_named_regexp(pattern_str));
+        }
+
+        std::string named_pattern = std::get<0>(*named_regexp);
+        int num_groups = std::get<1>(*named_regexp);
+
+        if (!extract_submatches || num_groups == 0) {
+            // Wrap the whole pattern in a group
+            named_pattern = "(?<_whole>" + named_pattern + ")";
+            extract_submatches = false;
+        }
+
+        // Intermediate results must be Datums only because Bodo doesn't support
+        // the fixed_size_list type.
+        arrow::Datum res_datum =
+            ConvertExprResultToDatum(res, "regexp_instr string");
+
+        arrow::compute::ExtractRegexSpanOptions opts(named_pattern);
+        auto extract_regex_span_result =
+            do_arrow_compute_unary(res_datum, "extract_regex_span", &opts);
+
+        // Convert to Arrow StructArray so we can extract the
+        // field corresponding to the requested group
+        std::shared_ptr<arrow::StructArray> struct_result =
+            std::static_pointer_cast<arrow::StructArray>(
+                extract_regex_span_result.make_array());
+
+        // Extract the requested field
+        std::shared_ptr<arrow::Array> captured_field_span = nullptr;
+        if (extract_submatches && group_to_extract < num_groups) {
+            // Valid group number requested
+            captured_field_span = struct_result->GetFieldByName(
+                "_group" + std::to_string(group_to_extract));
+        } else if (!extract_submatches) {
+            // No group extraction requested, return whole match
+            captured_field_span = struct_result->GetFieldByName("_whole");
+        }
+
+        arrow::Datum captured_field_index_datum;
+        if (!captured_field_span) {
+            // Return array of -1 if requested group is greater than number
+            // of groups in regex
+            arrow::Int64Scalar negative_one_scalar(-1);
+            captured_field_index_datum =
+                arrow::Datum(arrow::MakeArrayFromScalar(negative_one_scalar,
+                                                        struct_result->length())
+                                 .ValueOrDie());
+        } else {
+            // The values of the each StructArray field are two-element
+            // fixed_size_lists. The first element of the FixedSizeList is the
+            // start index of the substring matched by the group, and the second
+            // element is the length of that substring.
+
+            // Get zero-based start indices
+            auto first_element_index = std::make_shared<arrow::Int64Scalar>(0);
+            arrow::Datum start_indices = do_arrow_compute_binary(
+                arrow::Datum(captured_field_span),
+                arrow::Datum(first_element_index), "list_element");
+
+            if (!get_start_index) {
+                // If get_start_index is False, we should return the index of
+                // the first character after the substring matched by the group.
+                // So we need to add the substring length to the start index.
+
+                // Get lengths
+                auto second_element_index =
+                    std::make_shared<arrow::Int64Scalar>(1);
+                arrow::Datum lengths = do_arrow_compute_binary(
+                    arrow::Datum(captured_field_span),
+                    arrow::Datum(second_element_index), "list_element");
+
+                // Add lengths of to start indices
+                captured_field_index_datum =
+                    do_arrow_compute_binary(start_indices, lengths, "add");
+            } else {
+                captured_field_index_datum = start_indices;
+            }
+
+            // The validity bitmap of the parent StructArray is not propagated
+            // automatically to the child fields (see
+            // https://github.com/apache/arrow/issues/41833), so we have to
+            // check it manually and return -1 if not valid.
+            auto negative_one_scalar = std::make_shared<arrow::Int64Scalar>(-1);
+            arrow::Datum valid_mask =
+                do_arrow_compute_unary(extract_regex_span_result, "is_valid");
+            auto nulled_index_res = arrow::compute::CallFunction(
+                "if_else",
+                {valid_mask, captured_field_index_datum, negative_one_scalar});
+            if (!nulled_index_res.ok()) [[unlikely]] {
+                throw std::runtime_error(
+                    "do_arrow_compute_regexp_instr: Error in Arrow compute "
+                    "(if_else): " +
+                    nulled_index_res.status().message());
+            }
+            captured_field_index_datum = nulled_index_res.ValueOrDie();
+        }
+
+        return captured_field_index_datum;
     }
 
     template <typename T>
@@ -1602,6 +1791,98 @@ class PhysicalArrowExpression : public PhysicalExpression {
     }
 
     template <typename T>
+    arrow::Datum do_arrow_compute_random_int64(T res) {
+        // Get dummy input as an Arrow array.
+        // We need the result to match the length of this array.
+        std::shared_ptr<arrow::Array> res_array =
+            ConvertExprResultToDatum(res, "random_int64 dummy array")
+                .make_array();
+
+        // Only create PRNG once so we keep state across batches
+        // and don't start from the same position for each batch.
+        if (!gen) {
+            int rank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            size_t num_args = PyTuple_Size(scalar_func_data.args);
+
+            if (num_args == 1) {
+                // Seed was explicitly provided, so use it
+                auto [seed] = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_int64);
+
+                if (rank == 0) {
+                    // Create psuedo-random number generator.
+                    // For rank 0 we use the input seed directly
+                    gen = std::make_shared<std::mt19937_64>(
+                        std::mt19937_64(seed));
+                } else {
+                    // seed_seq applies a transformation on the master seed and
+                    // the rank number to scramble and break linear correlation
+                    // between the seeds used by each rank.
+                    // Because of this, the generated sequence will be different
+                    // depending on the number of workers used, but it should
+                    // still be deterministic.
+                    // The Dynamic Creator algorithm might be theoretically
+                    // better here, but seed_seq is probably sufficient in
+                    // practice.
+
+                    // Note that we have to split the 64-bit input seed because
+                    // seed_seq only accepts 32-bit integers
+                    std::seed_seq rank_seed{
+                        static_cast<uint32_t>(seed >> 32),
+                        static_cast<uint32_t>(seed & 0xFFFFFFFF),
+                        static_cast<uint32_t>(rank)};
+
+                    // Create PRNG with a (hopefully) independent seed
+                    gen = std::make_shared<std::mt19937_64>(
+                        std::mt19937_64(rank_seed));
+                }
+            } else if (num_args == 0) {
+                // Generate a seed with 96-bits of entropy from system's
+                // random_device and the current system time. time(NULL) is
+                // mainly a backup in case std::random_device falls back
+                // to a deterministic implementation.
+                // We also integrate the rank number in the seed calculation
+                // to ensure that two ranks do not get the same seed by chance.
+                std::random_device rd;
+                std::seed_seq seed{rd(), static_cast<uint32_t>(time(NULL)),
+                                   rd(), static_cast<uint32_t>(rank)};
+                // Create psuedo-random number generator
+                gen = std::make_shared<std::mt19937_64>(std::mt19937_64(seed));
+            } else {
+                throw std::runtime_error(
+                    "random_int64 only accepts 0 or 1 arguments");
+            }
+        }
+
+        // Full-range uniform int64 distribution
+        std::uniform_int_distribution<int64_t> int64_dist(0x8000000000000000,
+                                                          0x7FFFFFFFFFFFFFFF);
+
+        // Compute array of random integers based on the length of the dummy
+        // input
+        arrow::Int64Builder builder;
+        for (int i = 0; i < res_array->length(); i++) {
+            arrow::Status status = builder.Append(int64_dist(*gen));
+            if (!status.ok()) {
+                throw std::runtime_error(
+                    "do_arrow_compute (random_int64): Failed to append "
+                    "value to "
+                    "Int64Builder");
+            }
+        }
+        std::shared_ptr<arrow::Array> random_int64_array =
+            builder.Finish().ValueOrDie();
+
+        return arrow::Datum(random_int64_array);
+    }
+
+    template <typename T>
     compute_return_t<T> do_arrow_compute(T res) {
         compute_return_t<T> result;
 
@@ -1625,6 +1906,60 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 result = if_else_res.ValueOrDie();
             } else {
                 result = ConvertDatumToArrayInfo(if_else_res.ValueOrDie());
+            }
+        } else if (scalar_func_data.arrow_func_name == "rand") {
+            // Get dummy input as an Arrow array.
+            // We need the result to match the length of this array.
+            std::shared_ptr<arrow::Array> res_array =
+                ConvertExprResultToDatum(res, "rand input").make_array();
+
+            // Retrieve the function object for random()
+            static auto *registry = arrow::compute::GetFunctionRegistry();
+            static std::shared_ptr<arrow::compute::Function> random_func;
+            static std::once_flag once_flag_;
+            std::call_once(once_flag_, [&]() {
+                auto lookup_status =
+                    registry->GetFunction("random").Value(&random_func);
+                if (!lookup_status.ok()) {
+                    throw std::runtime_error(
+                        "Failed to get the 'random' function from the Arrow "
+                        "registry.");
+                }
+            });
+
+            // Use a system-generated seed
+            arrow::compute::RandomOptions options =
+                arrow::compute::RandomOptions::FromSystemRandom();
+
+            // Since random() takes no arguments, we need to manually specify
+            // the desired output length through ExecBatch. CallFunction() has
+            // no overload for this.
+            std::vector<arrow::Datum> empty_args;
+            arrow::compute::ExecBatch batch(empty_args, res_array->length());
+
+            // Compute the array of random values
+            arrow::Result<arrow::Datum> random_result =
+                random_func->Execute(batch, &options, nullptr);
+            if (!random_result.ok()) {
+                throw std::runtime_error("Error in Arrow compute (random): " +
+                                         random_result.status().message());
+            }
+
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = random_result.ValueOrDie();
+            } else {
+                result = ConvertDatumToArrayInfo(random_result.ValueOrDie());
+            }
+        } else if (scalar_func_data.arrow_func_name == "random_int64") {
+            // Not a real Arrow compute function; we use this to implement
+            // Snowflake SQL RANDOM().
+            arrow::Datum random_int64_datum =
+                do_arrow_compute_random_int64(res);
+
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = random_int64_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(random_int64_datum);
             }
         } else if (scalar_func_data.arrow_func_name == "date") {
             // The Arrow compute equivalent of Series.dt.date() is
@@ -1745,6 +2080,26 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 result = captured_field_datum;
             } else {
                 result = ConvertDatumToArrayInfo(captured_field_datum);
+            }
+        } else if (scalar_func_data.arrow_func_name == "regexp_instr") {
+            auto [pattern, get_start_index, regex_params, group_to_extract] =
+                get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_cstr, get_py_object_as_bool,
+                    get_py_object_as_cstr, get_py_object_as_int64);
+            std::string pattern_str(pattern);
+            std::string regex_params_str(regex_params);
+
+            arrow::Datum index_datum = do_arrow_compute_regexp_instr(
+                res, pattern_str, get_start_index, regex_params_str,
+                group_to_extract);
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = index_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(index_datum);
             }
         } else if (scalar_func_data.arrow_func_name == "utf8_trim" ||
                    scalar_func_data.arrow_func_name == "utf8_ltrim" ||

@@ -92,6 +92,13 @@ jobs:
           role-skip-session-tagging: true
           role-duration-seconds: 14400 # Max duration: 4 hours
 
+      - name: Configure GCP Credentials
+        uses: google-github-actions/auth@v3
+        with:
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ secrets.GCP_WIP_PROVIDER }}
+          access_token_lifetime: 14400
+
       - name: Install Oracle Instant Client
         if: runner.os != 'Windows' && !startsWith(inputs.test-type, 'sql')
         run: |
@@ -287,5 +294,5 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: junit-reports-${{ inputs.test-type }}-${{ inputs.runner-id }}-${{ inputs.partition }}
+          name: junit-reports-${{ inputs.test-type }}-${{ inputs.runner-id }}-${{ inputs.partition }}-${{ inputs.num-workers }}
           path: '**/pytest-report*.xml'

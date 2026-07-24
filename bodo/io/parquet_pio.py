@@ -358,6 +358,8 @@ def fpath_without_protocol_prefix(fpath: str) -> str:
         prefix = f"{protocol}://{parsed_url.netloc}"
     elif protocol in {"s3", "s3a", "gcs", "gs"}:
         prefix = f"{protocol}://"
+    elif protocol == "file":
+        prefix = "file:"
 
     return fpath[len(prefix) :]
 

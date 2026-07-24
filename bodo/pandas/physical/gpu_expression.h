@@ -18,6 +18,7 @@
 #include "duckdb/planner/expression.hpp"
 #include "operator.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cudf/types.hpp>
 #include <memory>
@@ -353,7 +354,7 @@ class PhysicalGPUNullExpression : public PhysicalGPUExpression {
             scalar = std::move(make_cudf_res);
         }
         std::unique_ptr<cudf::scalar> invalid =
-            make_invalid_like(*scalar, se->stream);
+            make_invalid_cudf_scalar(scalar->type(), se->stream);
 
         if (generate_array) {
             std::size_t length = input_batch.table->num_rows();
@@ -665,7 +666,8 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
         }
     }
     PhysicalGPUUnaryExpression(std::shared_ptr<PhysicalGPUExpression> left,
-                               std::string &opstr) {
+                               std::string &opstr)
+        : opstr(opstr) {
         children.push_back(left);
         if (opstr == "floor") {
             comparator = cudf::unary_operator::FLOOR;
@@ -675,10 +677,15 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
             comparator = cudf::unary_operator::ABS;
         } else if (opstr == "sqrt") {
             comparator = cudf::unary_operator::SQRT;
+        } else if (opstr == "cbrt") {
+            comparator = cudf::unary_operator::CBRT;
         } else if (opstr == "exp") {
             comparator = cudf::unary_operator::EXP;
         } else if (opstr == "ln") {
             comparator = cudf::unary_operator::LOG;
+        } else if (opstr == "trunc" || opstr == "log10" || opstr == "log2" ||
+                   opstr == "sign") {
+            // Handled as special cases in ProcessBatch
         } else {
             throw std::runtime_error("Unhandled unary expression opstr " +
                                      opstr);
@@ -754,6 +761,95 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
             } else {
                 throw std::runtime_error("Left must be array for is_true.");
             }
+        } else if (opstr == "trunc") {
+            // Special case since libcudf doesn't have a trunc function
+            std::shared_ptr<ArrayExprGPUResult> left_as_array =
+                std::dynamic_pointer_cast<ArrayExprGPUResult>(left_res);
+            if (left_as_array) {
+                cudf::data_type original_type = left_as_array->result->type();
+                // As a workaround, so we cast to int to truncate
+                auto truncated_int64 = cudf::cast(
+                    left_as_array->result->view(),
+                    cudf::data_type(cudf::type_id::INT64), se->stream);
+                // Preserve original type
+                op_res = cudf::cast(truncated_int64->view(), original_type,
+                                    se->stream);
+            } else {
+                throw std::runtime_error("trunc: Input must be array to cast.");
+            }
+        } else if (opstr == "log10" || opstr == "log2") {
+            // Use change of base formula: log10(x) = ln(x)/ln(10)
+            std::shared_ptr<ArrayExprGPUResult> left_as_array =
+                std::dynamic_pointer_cast<ArrayExprGPUResult>(left_res);
+            if (left_as_array) {
+                int log_base;
+                if (opstr == "log10") {
+                    log_base = 10;
+                } else {
+                    log_base = 2;
+                }
+
+                // ln(x)
+                auto ln_of_left_res = cudf::unary_operation(
+                    left_as_array->result->view(), cudf::unary_operator::LOG,
+                    se->stream);
+
+                // Make scalar of ln(10) or ln(2)
+                GPU_SCALAR ln_of_base_scalar =
+                    std::make_unique<cudf::numeric_scalar<float>>(
+                        std::log(log_base), true, se->stream);
+
+                // ln(x)/ln(10) or ln(x)/ln(2)
+                op_res = cudf::binary_operation(
+                    ln_of_left_res->view(), *ln_of_base_scalar,
+                    cudf::binary_operator::TRUE_DIV, ln_of_left_res->type(),
+                    se->stream);
+            } else {
+                throw std::runtime_error("Left must be array for " + opstr);
+            }
+        } else if (opstr == "sign") {
+            // sign(x) returns 1 if x > 0, -1 if x < 0, or 0 if x = 0
+            std::shared_ptr<ArrayExprGPUResult> left_as_array =
+                std::dynamic_pointer_cast<ArrayExprGPUResult>(left_res);
+            if (left_as_array) {
+                // Make scalar of 0 to compare against
+                GPU_SCALAR zero_scalar =
+                    std::make_unique<cudf::numeric_scalar<float>>(0.0, true,
+                                                                  se->stream);
+
+                // Get whether the input is strictly positive or negative
+                auto is_positive = cudf::binary_operation(
+                    left_as_array->result->view(), *zero_scalar,
+                    cudf::binary_operator::GREATER,
+                    cudf::data_type{cudf::type_id::BOOL8});
+                auto is_negative = cudf::binary_operation(
+                    left_as_array->result->view(), *zero_scalar,
+                    cudf::binary_operator::LESS,
+                    cudf::data_type{cudf::type_id::BOOL8});
+
+                // Return int8 for integer input; otherwise, retain the float
+                // input type
+                cudf::data_type left_type = left_as_array->result->type();
+                cudf::data_type return_type;
+                if (cudf::is_floating_point(left_type)) {
+                    return_type = left_type;
+                } else {
+                    return_type = cudf::data_type{cudf::type_id::INT8};
+                }
+
+                // Computes is_positive - is_negative.
+                // True is treated as 1 and False as 0. Hence:
+                // Positive input: 1 - 0 = 1
+                // Negative input: 0 - 1 = -1
+                // Zero input: 0 - 0 = 0
+                op_res = cudf::binary_operation(
+                    is_positive->view(), is_negative->view(),
+                    cudf::binary_operator::SUB,
+                    return_type  // Get output as number in (-1, 0, 1)
+                );
+            } else {
+                throw std::runtime_error("Left must be array for " + opstr);
+            }
         } else {
             op_res = do_cudf_compute_unary(left_res, comparator, se);
         }
@@ -786,6 +882,7 @@ class PhysicalGPUUnaryExpression : public PhysicalGPUExpression {
     }
 
    protected:
+    std::string opstr;  // opstr, if applicable
     cudf::unary_operator comparator;
     GPU_UNARY_MODE mode = GPU_UNARY_MODE::CUDF_UNARY;
 };
@@ -815,7 +912,8 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
     PhysicalGPUBinaryExpression(std::shared_ptr<PhysicalGPUExpression> left,
                                 std::shared_ptr<PhysicalGPUExpression> right,
                                 const std::string &opstr,
-                                duckdb::LogicalType _return_type) {
+                                duckdb::LogicalType _return_type)
+        : opstr(opstr) {
         return_type = duckdb_logicaltype_to_cudf(_return_type);
 
         children.push_back(left);
@@ -853,9 +951,54 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
             children[0]->ProcessBatch(input_batch, se);
         std::shared_ptr<ExprGPUResult> right_res =
             children[1]->ProcessBatch(input_batch, se);
+        std::variant<GPU_COLUMN, GPU_SCALAR> op_res;
 
-        auto result = do_cudf_compute_binary(left_res, right_res, comparator,
-                                             se, return_type);
+        if (opstr == "%") {
+            // Special case since cudf supports MOD, but does not return null
+            // when modulus is 0
+
+            // Compute the regular modulo result
+            auto mod_result = do_cudf_compute_binary(
+                left_res, right_res, comparator, se, return_type);
+            auto &mod_result_col = std::get<GPU_COLUMN>(mod_result);
+
+            // Ensure we handle both the scalar and column case
+            GPU_COLUMN modulus_column;
+            auto right_as_array =
+                std::dynamic_pointer_cast<ArrayExprGPUResult>(right_res);
+            if (right_as_array) {
+                modulus_column = std::move(right_as_array->result);
+            } else {
+                // Modulus is a scalar; broadcast it to a column before
+                // comparison
+                auto right_as_scalar =
+                    std::dynamic_pointer_cast<ScalarExprGPUResult>(right_res);
+                modulus_column = cudf::make_column_from_scalar(
+                    *(right_as_scalar->result), mod_result_col->size());
+            }
+
+            // Create zero scalar for comparison
+            GPU_SCALAR zero_scalar =
+                std::make_unique<cudf::numeric_scalar<float>>(0.0, true,
+                                                              se->stream);
+            // Check if the modulus is nonzero
+            GPU_COLUMN is_modulus_nonzero =
+                cudf::binary_operation(modulus_column->view(), *zero_scalar,
+                                       cudf::binary_operator::NOT_EQUAL,
+                                       cudf::data_type{cudf::type_id::BOOL8});
+
+            // Create a null scalar of the desired return type.
+            auto null_scalar =
+                make_invalid_cudf_scalar(mod_result_col->type(), se->stream);
+
+            // Return NULL if modulus is zero, else return the cudf MOD result
+            op_res = cudf::copy_if_else(mod_result_col->view(), *null_scalar,
+                                        *is_modulus_nonzero);
+        } else {
+            op_res = do_cudf_compute_binary(left_res, right_res, comparator, se,
+                                            return_type);
+        }
+
         std::shared_ptr<ExprGPUResult> ret;
         std::visit(
             [&](auto &vres) {
@@ -873,7 +1016,7 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
                         "Got unknown type in PhysicalGPUCastExpression.");
                 }
             },
-            result);
+            op_res);
         return ret;
     }
 
@@ -886,6 +1029,7 @@ class PhysicalGPUBinaryExpression : public PhysicalGPUExpression {
     }
 
    protected:
+    std::string opstr;  // opstr, if applicable
     cudf::data_type return_type;
     cudf::binary_operator comparator;
 };
@@ -1004,7 +1148,19 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
             // cudf::strings::strip()
             str_scalar_in = std::make_shared<cudf::string_scalar>("", true);
         } else if (scalar_func_data.arrow_func_name == "round") {
-            round_ndigits = get_py_round_arg(scalar_func_data.args);
+            arrow::compute::RoundMode arrow_round_mode;
+            std::tie(round_ndigits, arrow_round_mode) =
+                get_py_round_args(scalar_func_data.args);
+            if (arrow_round_mode == arrow::compute::RoundMode::HALF_TO_EVEN) {
+                round_mode = cudf::rounding_method::HALF_EVEN;
+            } else if (arrow_round_mode ==
+                       arrow::compute::RoundMode::HALF_TOWARDS_INFINITY) {
+                round_mode = cudf::rounding_method::HALF_UP;
+            } else {
+                throw std::invalid_argument(
+                    "Only half-to-even and half-away-from-zero rounding modes "
+                    "supported on GPU.");
+            }
         } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
             extract_slice_arg_from_python();
         } else if (scalar_func_data.arrow_func_name == "is_in") {
@@ -1062,7 +1218,7 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
             result = cudf::round(in_as_array->result->view(), round_ndigits,
-                                 cudf::rounding_method::HALF_EVEN, se->stream);
+                                 round_mode, se->stream);
 #pragma GCC diagnostic pop
         } else if (scalar_func_data.arrow_func_name == "is_null") {
             result = cudf::is_null(in_as_array->result->view(), se->stream);
@@ -1179,6 +1335,7 @@ class PhysicalGPUArrowExpression : public PhysicalGPUExpression {
     std::shared_ptr<cudf::strings::regex_program> regex_prog;
 
     int32_t round_ndigits = 0;
+    cudf::rounding_method round_mode = cudf::rounding_method::HALF_EVEN;
 
     // str.slice() arguments
     int64_t start = 0;
