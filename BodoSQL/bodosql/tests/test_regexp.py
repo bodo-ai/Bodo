@@ -327,6 +327,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
                 ),
             ),
             id="simple_pattern-no_replace-no_pos-no_occur-no_flags",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -449,7 +450,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
                 ),
             ),
             id="CASE-multiple_groups-medium_replace-06-00-no_flags",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
     ],
 )
