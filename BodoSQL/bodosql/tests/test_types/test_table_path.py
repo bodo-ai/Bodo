@@ -393,7 +393,8 @@ def test_table_path_timing_debug_message(datapath, memory_leak_check):
 @pytest.mark.slow
 def test_parquet_row_count_estimation(datapath, memory_leak_check):
     """
-    Tests that loading a parquet table using TablePath produces a row count estimation.
+    Tests that loading a parquet table using TablePath produces a row count
+    estimation.
     """
 
     f1 = datapath("sample-parquet-data/partitioned")

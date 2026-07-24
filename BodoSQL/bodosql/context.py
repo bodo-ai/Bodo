@@ -736,7 +736,10 @@ class BodoSQLContext:
             del self.dynamic_params_list
             if isinstance(plan, self.NewTable):
                 out = bodo.pandas.plan.execute_plan(
-                    plan.internal_plan, optimize=False, use_sql_rules=True
+                    plan.internal_plan,
+                    optimize=False,
+                    use_sql_rules=True,
+                    # plan, optimize="bodosql", use_sql_rules=True
                 )
                 location = self.catalog.connection_string
                 out.to_iceberg(plan.table_create_node.getTableName(), location=location)
