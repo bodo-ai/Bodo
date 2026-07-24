@@ -709,6 +709,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
         return regex_params
 
+    def regexp_add_mode_modifiers(regexp, regex_params, modes):
+        """
+        Add an inline mode modifer to the start of the input regexp.
+        The activated modes are those that the regex parameters and
+        the passed `modes` have in common.
+        """
+        active_mode_str = "".join(set(regex_params) & set(modes))
+        return f"(?{active_mode_str})" + regexp if active_mode_str else regexp
+
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
         num_operands = len(java_call.getOperands())
@@ -3152,11 +3161,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # Use inline mode modifiers if needed since replace_substring_regex
             # and extract_regex don't expose those options.
             # This applies to the 'i', 'm', and 's' options.
-            active_mode_str = "".join(set(regex_params) & set("ims"))
-            modified_regexp = (
-                f"(?{active_mode_str})" + regexp.value
-                if active_mode_str
-                else regexp.value
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
             )
 
             # Chop off the start so that searching begins after the provided position
@@ -4092,11 +4098,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # Use inline mode modifiers if needed since replace_substring_regex
             # and extract_regex_span don't expose those options.
             # This applies to the 'i', 'm', and 's' options.
-            active_mode_str = "".join(set(regex_params) & set("ims"))
-            modified_regexp = (
-                f"(?{active_mode_str})" + regexp.value
-                if active_mode_str
-                else regexp.value
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
             )
 
             # Chop off the start so that searching begins after the provided position
@@ -4254,11 +4257,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # Use inline mode modifiers if needed since replace_substring_regex
             # and split_pattern_regex don't expose those options.
             # This applies to the 'i', 'm', and 's' options.
-            active_mode_str = "".join(set(regex_params) & set("ims"))
-            modified_regexp = (
-                f"(?{active_mode_str})" + regexp.value
-                if active_mode_str
-                else regexp.value
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
             )
 
             # Chop off the start so that searching begins after the provided position
@@ -4343,12 +4343,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             # Use inline mode modifiers if needed since count_substring_regex
             # doesn't expose those options apart from 'i' (ignore case).
-            # This applies to the 'm', and 's' options.
-            active_mode_str = "".join(set(regex_params) & set("ms"))
-            modified_regexp = (
-                f"(?{active_mode_str})" + regexp.value
-                if active_mode_str
-                else regexp.value
+            # This applies to the 'm' and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ms"
             )
 
             # Chop off the start so that searching begins after the provided position
@@ -4391,12 +4388,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             # Use inline mode modifiers if needed since match_substring_regex
             # doesn't expose those options apart from 'i' (ignore case).
-            # This applies to the 'm', and 's' options.
-            active_mode_str = "".join(set(regex_params) & set("ms"))
-            modified_regexp = (
-                f"(?{active_mode_str})" + anchored_regexp
-                if active_mode_str
-                else anchored_regexp
+            # This applies to the 'm' and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                anchored_regexp, regex_params, "ms"
             )
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
