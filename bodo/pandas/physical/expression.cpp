@@ -525,10 +525,12 @@ void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
                          const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum out_datum = out_res.ValueOrDie();
     std::shared_ptr<arrow::DataType> out_dtype = out_datum.type();
-    if (result_type && out_dtype != result_type) {
+    if (result_type && out_dtype->Equals(result_type)) {
         // Cast to result type if available and different from current type.
         arrow::compute::CastOptions cast_opts;
         cast_opts.allow_int_overflow = true;
+        cast_opts.allow_float_truncate = true;
+        cast_opts.allow_decimal_truncate = true;
         arrow::Result<arrow::Datum> cast_res =
             arrow::compute::Cast(out_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
@@ -708,22 +710,7 @@ std::shared_ptr<array_info> do_arrow_compute_case(
             case_res.status().message());
     }
 
-    arrow::Datum case_datum = case_res.ValueOrDie();
-    std::shared_ptr<arrow::DataType> case_dtype = case_datum.type();
-    if (result_type && case_dtype != result_type) {
-        // Cast to result type if available and different from current type.
-        arrow::compute::CastOptions cast_opts;
-        cast_opts.allow_int_overflow = true;
-        arrow::Result<arrow::Datum> cast_res =
-            arrow::compute::Cast(case_datum, result_type, cast_opts);
-        if (!cast_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "do_arrow_compute_case cast_res: Error in Arrow compute: " +
-                cast_res.status().message());
-        }
-        case_res = cast_res;
-    }
-
+    do_result_type_cast(case_res, result_type);
     return ConvertDatumToArrayInfo(case_res.ValueOrDie());
 }
 
