@@ -536,6 +536,7 @@ def test_string_fns_scalar_vector_case(
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -643,6 +644,7 @@ def test_rtrimmed_length(query, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -687,6 +689,7 @@ def test_strcmp_nonascii(args, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [

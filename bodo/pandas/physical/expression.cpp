@@ -129,7 +129,8 @@ std::shared_ptr<arrow::Array> NullArrowArray(bool value, size_t num_elements) {
 
 arrow::Datum do_arrow_compute_multi_input_datum(
     const std::vector<arrow::Datum>& arg_datums,
-    const std::string& arrow_func_name) {
+    const std::string& arrow_func_name,
+    const arrow::compute::FunctionOptions* func_options) {
     arrow::Result<arrow::Datum> func_res;
 
     if (arrow_func_name == "bodo_dateadd") {
@@ -550,7 +551,8 @@ arrow::Datum do_arrow_compute_multi_input_datum(
 
 std::shared_ptr<array_info> do_arrow_compute_multi_input(
     const std::vector<std::shared_ptr<ExprResult>>& in_expr_results,
-    const std::string& arrow_func_name) {
+    const std::string& arrow_func_name,
+    const arrow::compute::FunctionOptions* func_options) {
     std::vector<arrow::Datum> arg_datums;
     for (auto& expr_res : in_expr_results) {
         arrow::Datum arg_datum = ConvertExprResultToDatum(
@@ -1194,9 +1196,31 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
         for (const auto& child : children) {
             in_expr_results.emplace_back(child->ProcessBatch(input_batch));
         }
+
         time_pt start_init_time = start_timer();
-        result = do_arrow_compute_multi_input(in_expr_results,
-                                              scalar_func_data.arrow_func_name);
+
+        // Special handling for multi-input Arrow functions with options
+        if (scalar_func_data.arrow_func_name == "max_element_wise" ||
+            scalar_func_data.arrow_func_name == "min_element_wise") {
+            arrow::compute::ElementWiseAggregateOptions opts;
+
+            assert_py_args_is_tuple(scalar_func_data.args,
+                                    scalar_func_data.arrow_func_name.c_str());
+            if (PyTuple_Size(scalar_func_data.args) > 1) {
+                auto [skip_nulls] = get_py_args_as_types(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_bool);
+                opts.skip_nulls = skip_nulls;
+            }
+
+            result = do_arrow_compute_multi_input(
+                in_expr_results, scalar_func_data.arrow_func_name, &opts);
+        } else {
+            result = do_arrow_compute_multi_input(
+                in_expr_results, scalar_func_data.arrow_func_name);
+        }
+
         this->metrics.arrow_compute_time += end_timer(start_init_time);
     } else {
         std::shared_ptr<ExprResult> res =

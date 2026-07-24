@@ -200,7 +200,8 @@ extern std::function<bool(int)> less_equal_test;
  */
 arrow::Datum do_arrow_compute_multi_input_datum(
     const std::vector<arrow::Datum> &arg_datums,
-    const std::string &arrow_func_name);
+    const std::string &arrow_func_name,
+    const arrow::compute::FunctionOptions *func_options = nullptr);
 
 /**
  * @brief Perform an Arrow compute operation with multiple input expressions.
@@ -212,7 +213,8 @@ arrow::Datum do_arrow_compute_multi_input_datum(
  */
 std::shared_ptr<array_info> do_arrow_compute_multi_input(
     const std::vector<std::shared_ptr<ExprResult>> &in_expr_results,
-    const std::string &arrow_func_name);
+    const std::string &arrow_func_name,
+    const arrow::compute::FunctionOptions *func_options = nullptr);
 
 /**
  * @brief Convert ExprResult to arrow and run compute operation on it.
