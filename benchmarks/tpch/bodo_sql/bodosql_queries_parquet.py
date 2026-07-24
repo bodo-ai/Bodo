@@ -11,7 +11,55 @@ import pandas as pd
 
 import bodo.pandas
 import bodo.spawn.spawner as spawner
-from bodosql import BodoSQLContext, FileSystemCatalog  # noqa
+from bodosql import BodoSQLContext, TablePath  # noqa
+
+
+def get_tpch_data(datapath, use_stats=False):
+    print("Using stats:", use_stats)
+    dataframe_dict = {
+        k.upper(): TablePath(
+            datapath + f"/{k}.pq",
+            file_type="parquet",
+            statistics_file=None if not use_stats else (datapath + f"/{k}.json"),
+        )
+        for k in [
+            "customer",
+            "orders",
+            "lineitem",
+            "nation",
+            "region",
+            "supplier",
+            "part",
+            "partsupp",
+        ]
+    }
+    return dataframe_dict
+
+
+required_tables = {
+    1: ["LINEITEM"],
+    2: ["PART", "PARTSUPP", "SUPPLIER", "NATION", "REGION"],
+    3: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    4: ["LINEITEM", "ORDERS"],
+    5: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION", "REGION", "SUPPLIER"],
+    6: ["LINEITEM"],
+    7: ["LINEITEM", "SUPPLIER", "ORDERS", "CUSTOMER", "NATION"],
+    8: ["PART", "LINEITEM", "SUPPLIER", "ORDERS", "CUSTOMER", "NATION", "REGION"],
+    9: ["LINEITEM", "ORDERS", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
+    10: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION"],
+    11: ["PARTSUPP", "SUPPLIER", "NATION"],
+    12: ["LINEITEM", "ORDERS"],
+    13: ["CUSTOMER", "ORDERS"],
+    14: ["LINEITEM", "PART"],
+    15: ["LINEITEM", "SUPPLIER"],
+    16: ["PART", "PARTSUPP", "SUPPLIER"],
+    17: ["LINEITEM", "PART"],
+    18: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    19: ["LINEITEM", "PART"],
+    20: ["LINEITEM", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
+    21: ["LINEITEM", "ORDERS", "SUPPLIER", "NATION"],
+    22: ["CUSTOMER", "ORDERS"],
+}
 
 
 def timethis(
@@ -74,13 +122,13 @@ def run_queries(
     total_start = time.time()
     n_passed = 0
     failed_queries = []
-    tpch_data = FileSystemCatalog(root)
+    tpch_data = get_tpch_data(root, use_stats)
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
 
         def query_func():
-            return q(tpch_data)
+            return q({k: tpch_data[k] for k in required_tables[query]})
 
         query_func = timethis(
             query_func,
@@ -143,7 +191,7 @@ def {func_name}(tpch_data):
             + sql_text
             + "\\\n'''\n"
             + """
-    bc = BodoSQLContext(catalog=tpch_data, default_tz=None)
+    bc = BodoSQLContext(tpch_data, default_tz=None)
     bodosql_output = bc.sql(tpch_query, None, None, {})
     return bodosql_output
 """
