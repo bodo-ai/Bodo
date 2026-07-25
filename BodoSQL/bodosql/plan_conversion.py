@@ -4501,6 +4501,25 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 new_index,
             )
 
+        elif func_name == "SUBSTRING_INDEX" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            delim_expr = op_exprs[1]
+            count_expr = op_exprs[2]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                delim_expr, "delim_expr", (str, pa.binary())
+            )
+            ensure_arg_is_const_expr_of_type(count_expr, "count_expr", int)
+
+            # Implementation involves splitting, so easiest to do it on the C++ side
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "substring_index",
+                (delim_expr.value, count_expr.value),
+            )
+
         elif func_name == "REGEXP_REPLACE" and len(op_exprs) in (2, 3, 4, 5, 6):
             src = op_exprs[0]
             regexp = op_exprs[1]
