@@ -4520,6 +4520,29 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (delim_expr.value, count_expr.value),
             )
 
+        elif func_name == "SPLIT_PART" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            delim_expr = op_exprs[1]
+            part_num_expr = op_exprs[2]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                delim_expr, "delim_expr", (str, pa.binary())
+            )
+            ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
+
+            # Snowflake treats a part number of 0 the same as 1.
+            # part_num is 1-based.
+            part_num = part_num_expr.value if part_num_expr.value != 0 else 1
+
+            # Implementation involves splitting, so easiest to do it on the C++ side
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "split_part",
+                (delim_expr.value, part_num),
+            )
+
         elif func_name == "REGEXP_REPLACE" and len(op_exprs) in (2, 3, 4, 5, 6):
             src = op_exprs[0]
             regexp = op_exprs[1]
