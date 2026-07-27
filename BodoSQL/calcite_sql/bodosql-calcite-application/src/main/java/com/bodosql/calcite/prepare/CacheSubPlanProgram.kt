@@ -1209,7 +1209,7 @@ class CacheSubPlanProgram : Program {
                 FilterRulesCommon.updateConditionsExtractCommon(
                     relBuilder,
                     baseFilter,
-                    HashSet(),
+                    LinkedHashSet(),
                 )
             val combinedFilter = simplify.simplifyUnknownAsFalse(reorderedFilter)
             // Generate the new root.
@@ -1259,7 +1259,7 @@ class CacheSubPlanProgram : Program {
                                 FilterRulesCommon.updateConditionsExtractCommon(
                                     relBuilder,
                                     mergedFilter,
-                                    HashSet(),
+                                    LinkedHashSet(),
                                 )
                             filterSimplifier.simplifyUnknownAsFalse(reorderedFilter)
                         }
