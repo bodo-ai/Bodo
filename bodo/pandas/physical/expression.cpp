@@ -1501,40 +1501,69 @@ void EnsureModRegistered() {
     });
 }
 
-// Helper to count UTF-8 characters in a byte string
-int64_t utf8_char_count(const char* data, int64_t byte_len) {
-    int64_t char_count = 0;
-    for (int64_t i = 0; i < byte_len; i++) {
-        // Only count bytes that are not continuation bytes (10xxxxxx)
-        if ((data[i] & 0xC0) != 0x80) {
-            char_count++;
-        }
-    }
-    return char_count;
-}
+template <typename StringType>
+struct SubstrTraits;
 
-// Helper to convert UTF-8 character number offset to byte offset
-int64_t utf8_char_to_byte_offset(const char* data, int64_t byte_len,
-                                 int64_t char_offset) {
-    int64_t char_count = 0;
-    for (int64_t i = 0; i < byte_len; i++) {
-        // Only count bytes that are not continuation bytes (10xxxxxx)
-        if ((data[i] & 0xC0) != 0x80) {
-            if (char_count == char_offset)
-                return i;
-            char_count++;
+template <>
+struct SubstrTraits<arrow::LargeStringType> {
+    using Builder = arrow::LargeStringBuilder;
+
+    // Helper to count UTF-8 characters in a byte string
+    static int64_t GetLogicalLength(const char* data, int64_t byte_len) {
+        int64_t char_count = 0;
+        for (int64_t i = 0; i < byte_len; i++) {
+            // Only count bytes that are not continuation bytes (10xxxxxx)
+            if ((data[i] & 0xC0) != 0x80) {
+                char_count++;
+            }
         }
+        return char_count;
     }
-    // If the string has less than char_offset characters, just return the
-    // string length in bytes We don't expect to hit this case.
-    return byte_len;
-}
+
+    // Helper to convert UTF-8 character number offset to byte offset
+    static int64_t LogicalToByteOffset(const char* data, int64_t byte_len,
+                                       int64_t char_offset) {
+        int64_t char_count = 0;
+        for (int64_t i = 0; i < byte_len; i++) {
+            // Only count bytes that are not continuation bytes (10xxxxxx)
+            if ((data[i] & 0xC0) != 0x80) {
+                if (char_count == char_offset)
+                    return i;
+                char_count++;
+            }
+        }
+        // If the string has less than char_offset characters, just return the
+        // string length in bytes. We don't expect to hit this case.
+        return byte_len;
+    }
+};
+
+template <>
+struct SubstrTraits<arrow::LargeBinaryType> {
+    using Builder = arrow::LargeBinaryBuilder;
+
+    // For binary input, logical length is the same as byte length
+    static int64_t GetLogicalLength(const char* data, int64_t byte_len) {
+        return byte_len;
+    }
+
+    // For binary input, logical offset is the same as byte offset
+    static int64_t LogicalToByteOffset(const char* data, int64_t byte_len,
+                                       int64_t logical_offset) {
+        // Assume that logical_offset < byte_len, since we check that
+        // 0 <= logical_offset < byte_len before calling this function
+        return logical_offset;
+    }
+};
 
 // The execution function for the kernel.
 // Signature: Status Exec(KernelContext*, const ExecBatch&, Datum* out)
+template <typename StringType>
 static arrow::Status SubstrThreeImpl(arrow::compute::KernelContext* ctx,
                                      const arrow::compute::ExecSpan& batch,
                                      arrow::compute::ExecResult* out) {
+    using Traits = SubstrTraits<StringType>;
+
     // Expect exactly 3 inputs
     if (batch.values.size() != 3) {
         throw std::runtime_error("bodo_substr_three expected 3 inputs.");
@@ -1576,7 +1605,7 @@ static arrow::Status SubstrThreeImpl(arrow::compute::KernelContext* ctx,
     int64_t len_offset = len.offset;
 
     // Prepare builder for output strings
-    arrow::LargeStringBuilder builder(ctx->memory_pool());
+    typename Traits::Builder builder(ctx->memory_pool());
 
     auto is_valid_bit = [](const uint8_t* bits, int64_t offset,
                            int64_t i) -> bool {
@@ -1615,9 +1644,10 @@ static arrow::Status SubstrThreeImpl(arrow::compute::KernelContext* ctx,
         int64_t off1 = src_offsets[src_offset + i + 1];
         int64_t byte_len = off1 - off0;
 
-        // Get number of UTF-8 characters in string (necessary to handle
-        // multi-byte characters)
-        int64_t char_len = utf8_char_count(src_data + off0, byte_len);
+        // If input type is large_string, get number of UTF-8 characters in
+        // string (necessary to handle multi-byte characters). Else (input type
+        // is large_binary), we use the raw byte length.
+        int64_t char_len = Traits::GetLogicalLength(src_data + off0, byte_len);
 
         // Normalize negative length
         if (len_chars_val < 0) {
@@ -1648,11 +1678,12 @@ static arrow::Status SubstrThreeImpl(arrow::compute::KernelContext* ctx,
             continue;
         }
 
-        // Convert start index and length to byte offsets
-        int64_t start_val = utf8_char_to_byte_offset(src_data + off0, byte_len,
-                                                     start_chars_val);
-        int64_t len_val =
-            utf8_char_to_byte_offset(src_data + off0, byte_len, len_chars_val);
+        // Convert start index and length to byte offsets depending on input
+        // type
+        int64_t start_val = Traits::LogicalToByteOffset(
+            src_data + off0, byte_len, start_chars_val);
+        int64_t len_val = Traits::LogicalToByteOffset(src_data + off0, byte_len,
+                                                      len_chars_val);
 
         // Compute take and append substring
         int64_t take = std::min<int64_t>(len_val, byte_len - start_val);
@@ -1677,17 +1708,31 @@ void RegisterSubstr(arrow::compute::FunctionRegistry* registry) {
                                     "Returns substr(src, start, len)",
                                     {"src", "start", "len"}});
 
-    arrow::compute::ScalarKernel kernel(
+    arrow::compute::ScalarKernel kernel_utf8(
         {arrow::compute::InputType(arrow::large_utf8()),
          arrow::compute::InputType(arrow::int64()),
          arrow::compute::InputType(arrow::int64())},
-        arrow::compute::OutputType(arrow::large_utf8()), SubstrThreeImpl);
+        arrow::compute::OutputType(arrow::large_utf8()),
+        SubstrThreeImpl<arrow::LargeStringType>);
 
     arrow::Status status;
-    status = func->AddKernel(kernel);
+    status = func->AddKernel(kernel_utf8);
     if (!status.ok()) {
-        throw std::runtime_error("RegisterSubstr AddKernel failed.");
+        throw std::runtime_error("RegisterSubstr utf8 AddKernel failed.");
     }
+
+    arrow::compute::ScalarKernel kernel_binary(
+        {arrow::compute::InputType(arrow::large_binary()),
+         arrow::compute::InputType(arrow::int64()),
+         arrow::compute::InputType(arrow::int64())},
+        arrow::compute::OutputType(arrow::large_binary()),
+        SubstrThreeImpl<arrow::LargeBinaryType>);
+
+    status = func->AddKernel(kernel_binary);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterSubstr binary AddKernel failed.");
+    }
+
     // Register the function.
     status = registry->AddFunction(std::move(func));
     if (!status.ok()) {
