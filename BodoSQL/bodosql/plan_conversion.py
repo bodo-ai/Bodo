@@ -3913,7 +3913,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 int_empty_data,
                 [precision_digits, zero_expr],
                 "max_element_wise",
-                (False,),
+                (),
             )
 
             # Round the number to the specified precision

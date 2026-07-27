@@ -428,7 +428,8 @@ arrow::Datum do_arrow_compute_multi_input_datum(
                 casted_datums.push_back(cast_res.ValueOrDie());
             }
         }
-        func_res = arrow::compute::CallFunction(arrow_func_name, casted_datums);
+        func_res = arrow::compute::CallFunction(arrow_func_name, casted_datums,
+                                                func_options);
     } else if (arrow_func_name == "bodo_substr_three" ||
                arrow_func_name == "utf8_slice_codeunits") {
         // If the arrow func name is bodo_substr_three or utf8_slice_codeunits,
@@ -530,14 +531,9 @@ arrow::Datum do_arrow_compute_multi_input_datum(
             func_res = arrow::compute::CallFunction("bodo_substr_three",
                                                     array_arg_datums);
         }
-    } else if (arrow_func_name == "max_element_wise" ||
-               arrow_func_name == "min_element_wise") {
-        // Avoid skipping nulls to match SQL semantics.
-        arrow::compute::ElementWiseAggregateOptions agg_opts(false);
-        func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums,
-                                                &agg_opts);
     } else {
-        func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums);
+        func_res = arrow::compute::CallFunction(arrow_func_name, arg_datums,
+                                                func_options);
     }
 
     if (!func_res.ok()) [[unlikely]] {
@@ -559,8 +555,8 @@ std::shared_ptr<array_info> do_arrow_compute_multi_input(
             expr_res, "do_arrow_compute_multi_input input");
         arg_datums.push_back(arg_datum);
     }
-    arrow::Datum result_datum =
-        do_arrow_compute_multi_input_datum(arg_datums, arrow_func_name);
+    arrow::Datum result_datum = do_arrow_compute_multi_input_datum(
+        arg_datums, arrow_func_name, func_options);
     return ConvertDatumToArrayInfo(result_datum);
 }
 
@@ -1206,12 +1202,16 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
 
             assert_py_args_is_tuple(scalar_func_data.args,
                                     scalar_func_data.arrow_func_name.c_str());
-            if (PyTuple_Size(scalar_func_data.args) > 1) {
+            if (PyTuple_Size(scalar_func_data.args) > 0) {
                 auto [skip_nulls] = get_py_args_as_types(
                     scalar_func_data.args,
                     scalar_func_data.arrow_func_name.c_str(),
                     get_py_object_as_bool);
                 opts.skip_nulls = skip_nulls;
+            } else {
+                // Avoid skipping nulls to match SQL semantics.
+                // This is True by default in Arrow.
+                opts.skip_nulls = false;
             }
 
             result = do_arrow_compute_multi_input(
