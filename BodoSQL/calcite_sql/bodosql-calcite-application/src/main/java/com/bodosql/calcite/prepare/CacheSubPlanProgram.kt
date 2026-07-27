@@ -463,8 +463,8 @@ class CacheSubPlanProgram : Program {
                 // However, if the cache root is not in the converter's source convention (e.g. a BodoPhysicalFilter
                 // was inserted by earlier filter processing), we cannot create a converter on top of it and must
                 // materialize the cache here instead.
-                val converterSourceConvention = (parents[0].second as SingleRel).input.convention
-                if (cacheRoot.convention == converterSourceConvention) {
+                val converterSourceConvention = (parents[0].second as? SingleRel)?.input?.convention
+                if (converterSourceConvention != null && cacheRoot.convention == converterSourceConvention) {
                     val newRoot = parents[0].second.copy(parents[0].second.traitSet, listOf(cacheRoot))
                     processCaching(
                         newRoot,
@@ -748,11 +748,8 @@ class CacheSubPlanProgram : Program {
                             val newKeyIdx = indices[keyIdx]
                             newIndices[colIdx] = newKeysIndices[newKeyIdx]!!
                         }
-                        // Push the input again for field generation
-                        relBuilder.push(input)
                         agg.aggCallList.withIndex().forEach { callInfo ->
                             val (colIdx, aggCall) = callInfo
-                            val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
                             val newCollation =
                                 RelCollations.of(
                                     aggCall.collation.fieldCollations.map { fieldCollation ->
@@ -772,7 +769,6 @@ class CacheSubPlanProgram : Program {
                             newIndices[colIdx + agg.groupSet.cardinality()] =
                                 groupKeys.cardinality() + newAggIdx
                         }
-                        relBuilder.build()
                     } else {
                         // Here we are taking the "partial aggregation" path. That means we still need to
                         // execute the aggregate. As a result, columns need to be place relative to their
@@ -787,8 +783,6 @@ class CacheSubPlanProgram : Program {
                             val oldIndex = indices[keyIdx]
                             newIndices[keyIdx] = newKeysIndices[oldIndex]!!
                         }
-                        // Push the input again for field generation
-                        relBuilder.push(input)
                         // For the aggregate call(s) we currently require that every function can compute
                         // the partial aggregation directly from its result without any necessary remapping.
                         // For example, max, min, sum. As a result, we need to remap every function location
@@ -809,7 +803,6 @@ class CacheSubPlanProgram : Program {
                             if (!supportedAggCalls.contains(aggCall.aggregation)) {
                                 throw IllegalStateException("Internal Error: Unsupported aggregate function for partial aggregation")
                             }
-                            val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
                             val newCollation =
                                 RelCollations.of(
                                     aggCall.collation.fieldCollations.map { fieldCollation ->
@@ -840,7 +833,6 @@ class CacheSubPlanProgram : Program {
                             requiredIndices.add(oldIndex)
                             newIndices[arg] = newAggIdx + groupKeys.cardinality()
                         }
-                        relBuilder.build()
                     }
                     newIndices
                 }
@@ -1293,6 +1285,18 @@ class CacheSubPlanProgram : Program {
      * collation, avoiding reliance on [RelBuilder.AggCall.toString] which
      * omits fields like ignoreNulls and approximate and may produce
      * non-canonical RexNode string representations.
+     *
+     * Note: This key intentionally excludes the aggregate call's return type
+     * ([AggregateCall.type]). Two calls with the same aggregation function,
+     * arguments, and flags but different inferred return types would collide
+     * in the dedup map. In practice this is safe because a given aggregation
+     * applied to the same input column always infers the same return type
+     * (the return type is a deterministic function of the aggregation and
+     * its argument types, which are themselves part of the key via the
+     * remapped argList). If a future aggregate function violates this
+     * invariant, [buildEquivalentAggCall] still preserves the original
+     * return type per-call, so only the dedup grouping — not correctness of
+     * the built call — could be affected.
      */
     private data class AggCallKey(
         val aggregation: SqlAggFunction,

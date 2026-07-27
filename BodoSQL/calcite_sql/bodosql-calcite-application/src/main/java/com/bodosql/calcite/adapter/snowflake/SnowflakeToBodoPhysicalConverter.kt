@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.adapter.common.RelUtils.findRelOfType
 import com.bodosql.calcite.application.PythonLoggers
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
@@ -13,7 +14,6 @@ import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
-import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
@@ -74,21 +74,7 @@ class SnowflakeToBodoPhysicalConverter(
      * Find the SnowflakeRel in the input chain, traversing through BodoPhysical nodes
      * and CachedSubPlanBase bodies inserted by covering expression caching.
      */
-    fun findSnowflakeRel(node: RelNode): SnowflakeRel =
-        findSnowflakeRelOrNull(node)
-            ?: throw IllegalStateException("Cannot find SnowflakeRel in input chain")
-
-    private fun findSnowflakeRelOrNull(node: RelNode): SnowflakeRel? {
-        if (node is SnowflakeRel) return node
-        if (node is CachedSubPlanBase) {
-            return findSnowflakeRelOrNull(node.cachedPlan.plan)
-        }
-        for (input in node.inputs) {
-            val result = findSnowflakeRelOrNull(input)
-            if (result != null) return result
-        }
-        return null
-    }
+    fun findSnowflakeRel(node: RelNode): SnowflakeRel = findRelOfType(node)
 
     override fun nodeDetails() =
         (

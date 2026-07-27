@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.adapter.common.RelUtils.findRelOfType
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.catalog.SnowflakeCatalog
@@ -13,7 +14,6 @@ import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
-import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataQuery
 import com.bodosql.calcite.traits.BatchingProperty
@@ -72,21 +72,7 @@ class IcebergToBodoPhysicalConverter(
      * Find the IcebergRel in the input chain, traversing through BodoPhysical nodes
      * and CachedSubPlanBase bodies inserted by covering expression caching.
      */
-    fun findIcebergRel(node: RelNode): IcebergRel =
-        findIcebergRelOrNull(node)
-            ?: throw IllegalStateException("Cannot find IcebergRel in input chain")
-
-    private fun findIcebergRelOrNull(node: RelNode): IcebergRel? {
-        if (node is IcebergRel) return node
-        if (node is CachedSubPlanBase) {
-            return findIcebergRelOrNull(node.cachedPlan.plan)
-        }
-        for (input in node.inputs) {
-            val result = findIcebergRelOrNull(input)
-            if (result != null) return result
-        }
-        return null
-    }
+    fun findIcebergRel(node: RelNode): IcebergRel = findRelOfType(node)
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         // TODO: Can simplify now?
