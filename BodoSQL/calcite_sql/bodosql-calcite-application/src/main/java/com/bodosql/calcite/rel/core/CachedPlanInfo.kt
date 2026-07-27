@@ -24,6 +24,10 @@ class CachedPlanInfo private constructor(
 
     fun getNumConsumers(): Int = numConsumers
 
+    fun setNumConsumers(value: Int) {
+        numConsumers = value
+    }
+
     companion object {
         fun create(
             plan: RelNode,

@@ -838,7 +838,7 @@ class CacheSubPlanProgram : Program {
                                 )
                             }
                             requiredIndices.add(oldIndex)
-                            newIndices[oldIndex] = newAggIdx + groupKeys.cardinality()
+                            newIndices[arg] = newAggIdx + groupKeys.cardinality()
                         }
                         relBuilder.build()
                     }
@@ -1436,5 +1436,62 @@ class CacheSubPlanProgram : Program {
     companion object {
         @JvmStatic
         fun canCacheNode(rel: RelNode): Boolean = rel is BodoPhysicalRel && rel !is BodoPhysicalCachedSubPlan
+
+        /**
+         * Reconcile the numConsumers of every cache node in the plan to match the
+         * actual number of times codegen will call emit() on it. This must be called
+         * after all programs that insert/move cache node copies (CacheSubPlanProgram
+         * and RuntimeJoinFilterProgram) have finished.
+         *
+         * The count mirrors how BodoCodeGenVisitor traverses the tree: each
+         * BodoPhysicalCachedSubPlan at the top level is counted once, and the body
+         * of each cache node (cachedPlan.plan) is visited exactly once — regardless
+         * of how many top-level copies share that body — because codegen only
+         * generates the body on the first (write) visit.
+         */
+        @JvmStatic
+        fun reconcileNumConsumers(root: RelNode) {
+            val counts = HashMap<Int, Int>()
+            val visitedBodies = HashSet<Int>()
+            val visitor =
+                object : RelVisitor() {
+                    override fun visit(
+                        node: RelNode,
+                        ordinal: Int,
+                        parent: RelNode?,
+                    ) {
+                        if (node is CachedSubPlanBase) {
+                            counts.merge(node.cacheID, 1) { a, b -> a + b }
+                            if (visitedBodies.add(node.cacheID)) {
+                                this.visit(node.cachedPlan.plan, 0, null)
+                            }
+                        }
+                        node.childrenAccept(this)
+                    }
+                }
+            visitor.go(root)
+            val seen = HashSet<Int>()
+            val setterVisitedBodies = HashSet<Int>()
+            val setter =
+                object : RelVisitor() {
+                    override fun visit(
+                        node: RelNode,
+                        ordinal: Int,
+                        parent: RelNode?,
+                    ) {
+                        if (node is CachedSubPlanBase) {
+                            if (seen.add(node.cacheID)) {
+                                val count = counts[node.cacheID] ?: 0
+                                node.cachedPlan.setNumConsumers(count)
+                            }
+                            if (setterVisitedBodies.add(node.cacheID)) {
+                                this.visit(node.cachedPlan.plan, 0, null)
+                            }
+                        }
+                        node.childrenAccept(this)
+                    }
+                }
+            setter.go(root)
+        }
     }
 }

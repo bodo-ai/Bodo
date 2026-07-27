@@ -63,7 +63,14 @@ object RuntimeJoinFilterProgram : Program {
                 filterShuttle.keptCacheConsumerUpdates,
                 filterShuttle.inlinedCacheConsumerUpdates,
             )
-        return result.accept(cacheReplaceShuttle)
+        val finalResult = result.accept(cacheReplaceShuttle)
+        // Reconcile numConsumers to match the actual number of cache node copies in
+        // the final tree. This fixes mismatches introduced by covering-expression
+        // caching (where result.copy() in CoveringExpressionCacheReplacement can
+        // create extra copies not accounted for by numConsumers) and by the
+        // inlining/keep logic above.
+        CacheSubPlanProgram.reconcileNumConsumers(finalResult)
+        return finalResult
     }
 
     /**
