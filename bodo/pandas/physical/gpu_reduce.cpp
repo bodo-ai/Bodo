@@ -81,9 +81,7 @@ void GPUReductionFunction::CombineResults(
     assert(other.size() == this->results.size());
 
     for (size_t i = 0; i < this->function_names.size(); i++) {
-        const std::string& function_name = this->function_names[i];
         const std::string& combine_reduce_name = this->reduction_names[i];
-        const GPUReductionType& reduction_type = this->reduction_types[i];
         // Current reduction result
         std::unique_ptr<cudf::scalar>& result = this->results[i];
         std::unique_ptr<cudf::scalar>& other_result = other[i];
@@ -115,13 +113,7 @@ void GPUReductionFunction::CombineResults(
         std::unique_ptr<cudf::scalar> cmp_scalar =
             cudf::reduce(combined->view(), *agg, out_dtype, output_stream);
 
-        if (reduction_type == GPUReductionType::COMPARISON ||
-            reduction_type == GPUReductionType::AGGREGATION) {
-            result = std::move(cmp_scalar);
-        } else {
-            throw std::runtime_error("Unsupported reduction function: " +
-                                     function_name);
-        }
+        result = std::move(cmp_scalar);
     }
 }
 
