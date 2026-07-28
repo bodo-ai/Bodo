@@ -38,6 +38,27 @@ def is_s3_path(path: str) -> bool:
     return urlparse(path).scheme == "s3"
 
 
+def export_table_uppercase(con: duckdb.DuckDBPyConnection, table: str, out_path: str):
+    # PRAGMA table_info returns rows: (cid, name, type, notnull, dflt_value, pk)
+    rows = con.execute(f"PRAGMA table_info('{table}')").fetchall()
+    cols = [r[1] for r in rows]  # use index 1 for the column name
+
+    # detect collisions when uppercasing (e.g., 'a' and 'A' -> 'A')
+    upper_names = [c.upper() for c in cols]
+    dupes = {name for name in upper_names if upper_names.count(name) > 1}
+    if dupes:
+        raise RuntimeError(
+            f"Uppercase collision for columns: {sorted(dupes)} in table {table}"
+        )
+
+    # build SELECT with quoted identifiers and uppercase aliases
+    select_cols = ", ".join([f'"{col}" AS "{col.upper()}"' for col in cols])
+    sql = (
+        f"COPY (SELECT {select_cols} FROM \"{table}\") TO '{out_path}' (FORMAT PARQUET)"
+    )
+    con.execute(sql)
+
+
 def generate_duckdb_parquet(sf: int, parquet_path: str):
     """
     Generate TPC-H data using DuckDB and export it as Parquet files.
@@ -75,22 +96,19 @@ def generate_duckdb_parquet(sf: int, parquet_path: str):
 
                 # Export every variable-sized table
                 for table in variable_tables:
-                    os.makedirs(f"{parquet_path}/{table}", exist_ok=True)
-                    con.execute(f"""
-                        COPY {table}
-                        TO '{parquet_path}/{table}/part-{child:03d}.parquet'
-                        (FORMAT PARQUET)
-                    """)
+                    out_dir = f"{parquet_path}/{table.upper()}"
+                    os.makedirs(out_dir, exist_ok=True)
+                    out_file = f"{out_dir}/part-{child:03d}.parquet"
+
+                    export_table_uppercase(con, table, out_file)
 
                     con.execute(f"DELETE FROM {table}")
 
             for table in small_tables:
-                os.makedirs(f"{parquet_path}/{table}", exist_ok=True)
-                con.execute(f"""
-                    COPY {table}
-                    TO '{parquet_path}/{table}/part-000.parquet'
-                    (FORMAT PARQUET)
-                """)
+                out_dir = f"{parquet_path}/{table.upper()}"
+                os.makedirs(out_dir, exist_ok=True)
+                out_file = f"{out_dir}/part-000.parquet"
+                export_table_uppercase(con, table, out_file)
 
 
 def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
@@ -113,14 +131,14 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
     catalog = DirCatalog(f"TPCH_SF{sf}", **{WAREHOUSE_LOCATION: warehouse})
 
     for table in TPCH_TABLES:
-        table_dir = Path(parquet_path) / table
+        table_dir = Path(parquet_path) / table.upper()
 
         dataset = ds.dataset(table_dir, format="parquet")
         schema = dataset.schema
 
         # Uses large write threshold so number of files matches parquet dataset
         iceberg_table = catalog.create_table(
-            table,
+            table.upper(),
             schema,
             properties={
                 "write.target-file-size-bytes": str(100 * 1024**3),  # 100 GiB
@@ -128,7 +146,8 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
         )
 
         for pq_file in tqdm(
-            sorted(table_dir.glob("*.parquet")), desc=f"Copying {table} to Iceberg: "
+            sorted(table_dir.glob("*.parquet")),
+            desc=f"Copying {table.upper()} to Iceberg: ",
         ):
             table_fragment = pq.read_table(pq_file)
             iceberg_table.append(table_fragment)
