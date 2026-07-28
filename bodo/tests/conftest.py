@@ -29,7 +29,12 @@ from numba.core.runtime import rtsys  # noqa TID253
 import bodo
 import bodo.user_logging
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
-from bodo.tests.utils import get_gpu_0_process_count, get_num_gpus, temp_env_override
+from bodo.tests.utils import (
+    get_gpu_0_process_count,
+    get_num_gpus,
+    set_broadcast_join,
+    temp_env_override,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
@@ -980,6 +985,18 @@ def gpu_disable_cpu_fallback(request, monkeypatch):
         allow_fallback = kws.get("allow_fallback", False)
         if not allow_fallback:
             monkeypatch.setenv("BODO_GPU_DISABLE_CPU_FALLBACK", "1")
+
+
+@pytest.fixture(params=["no_broadcast", "broadcast"])
+def join_strategy(request):
+    """
+    Fixture for join strategy, allowing tests to run with both broadcast and non-broadcast joins.
+    """
+    strategy = request.param
+    do_broadcast = strategy == "broadcast"
+
+    with set_broadcast_join(do_broadcast):
+        yield strategy
 
 
 def pytest_runtest_teardown(item, nextitem):
