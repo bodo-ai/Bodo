@@ -98,7 +98,7 @@ def test_decimal_moment_functions_overflow(expr):
     "query, answer",
     [
         pytest.param(
-            "SELECT K, SUM(D) :: VARCHAR as RES FROM TABLE1 GROUP BY K",
+            "SELECT K, SUM(D) as RES FROM TABLE1 GROUP BY K",
             pd.DataFrame(
                 {
                     "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
@@ -119,7 +119,7 @@ def test_decimal_moment_functions_overflow(expr):
             id="sum",
         ),
         pytest.param(
-            "SELECT K, AVG(D) :: VARCHAR as RES FROM TABLE1 GROUP BY K",
+            "SELECT K, AVG(D) as RES FROM TABLE1 GROUP BY K",
             pd.DataFrame(
                 {
                     "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
@@ -140,7 +140,7 @@ def test_decimal_moment_functions_overflow(expr):
             id="avg",
         ),
         pytest.param(
-            "SELECT K, VAR_POP(D) :: VARCHAR as RES FROM TABLE1 GROUP BY K",
+            "SELECT K, VAR_POP(D) as RES FROM TABLE1 GROUP BY K",
             pd.DataFrame(
                 {
                     "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
@@ -163,7 +163,7 @@ def test_decimal_moment_functions_overflow(expr):
         pytest.param(
             # NOTE: trimming the last decimal place due to instability in the
             # last digit when division is capped by scale-level truncation.
-            "SELECT K, REGEXP_REPLACE(VAR_SAMP(D) :: VARCHAR, '.$', '') as RES FROM TABLE1 GROUP BY K",
+            "SELECT K, VAR_SAMP(D) as RES FROM TABLE1 GROUP BY K",
             pd.DataFrame(
                 {
                     "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],

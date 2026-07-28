@@ -18,6 +18,7 @@
 #include "_executor.h"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/enums/cte_materialize.hpp"
+#include "duckdb/common/extra_type_info.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/unique_ptr.hpp"
@@ -25,6 +26,7 @@
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
@@ -349,6 +351,16 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     }
     duckdb::ScalarFunctionCatalogEntry &func =
         entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
+
+#if 0
+    for(auto &ff : func.functions.functions) {
+        std::cout << "----- start set -----" << std::endl;
+        for(auto &arg : ff.arguments) {
+            std::cout << arg.ToString() << std::endl;
+        }
+        std::cout << "----- start set -----" << std::endl;
+    }
+#endif
 
     duckdb::FunctionBinder function_binder(*binder);
     duckdb::unique_ptr<duckdb::Expression> result =
@@ -1087,7 +1099,22 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
             arrowArrayToDuckdbBasic<arrow::DoubleArray, double>(arr, vec,
                                                                 count);
             break;
-        case arrow::Type::LARGE_STRING:
+        case arrow::Type::LARGE_STRING: {
+            ValidityMask &validity = FlatVector::Validity(vec);
+            auto str_arr =
+                std::static_pointer_cast<arrow::LargeStringArray>(arr);
+            auto data = FlatVector::GetData<string_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (str_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    auto view = str_arr->GetView(i);
+                    data[i] =
+                        StringVector::AddString(vec, view.data(), view.size());
+                }
+            }
+            break;
+        }
         case arrow::Type::STRING: {
             ValidityMask &validity = FlatVector::Validity(vec);
             auto str_arr = std::static_pointer_cast<arrow::StringArray>(arr);
@@ -1443,6 +1470,7 @@ std::pair<int64_t, PyObject *> execute_plan(
         return {0, nullptr};
     }
 
+    std::cout << "todd0 " << output_table->schema()->ToString() << std::endl;
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 
@@ -1757,6 +1785,24 @@ struct DecimalBindData : public duckdb::FunctionData {
     }
 };
 
+struct BinaryDecimalBindData : public duckdb::FunctionData {
+    duckdb::LogicalType return_type;
+    explicit BinaryDecimalBindData(duckdb::LogicalType rt)
+        : return_type(std::move(rt)) {}
+    duckdb::unique_ptr<FunctionData> Copy() const override {
+        return duckdb::make_uniq<BinaryDecimalBindData>(return_type);
+    }
+    bool Equals(const duckdb::FunctionData &other) const {
+        const auto *other_decimal =
+            dynamic_cast<const BinaryDecimalBindData *>(&other);
+        if (other_decimal) {
+            return return_type == other_decimal->return_type;
+        } else {
+            return false;
+        }
+    }
+};
+
 // Bind callback: inspect concrete argument types and set return type
 static duckdb::unique_ptr<duckdb::FunctionData> SameReturnDecimalBindUnary(
     duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
@@ -1892,6 +1938,84 @@ static duckdb::unique_ptr<duckdb::FunctionData> GivenReturnDecimalBindUnary(
     return duckdb::make_uniq<GivenReturnDecimalBindUnaryData>(RETURN_TYPE);
 }
 
+static void getPrecisionScale(
+    duckdb::optional_ptr<duckdb::ExtraTypeInfo> &argaux, int &precision,
+    int &scale) {
+    if (!argaux) {
+        // no auxiliary info present
+        throw std::runtime_error("AuxInfo missing for arg1");
+    }
+
+    // get raw pointer
+    duckdb::ExtraTypeInfo *base_ptr = argaux.get();
+
+    // dynamic_cast requires a polymorphic base (has virtual destructor/methods)
+    duckdb::DecimalTypeInfo *dec_info =
+        dynamic_cast<duckdb::DecimalTypeInfo *>(base_ptr);
+    if (!dec_info) {
+        // AuxInfo exists but is not DecimalTypeInfo
+        throw std::runtime_error("AuxInfo is not DecimalTypeInfo");
+    }
+
+    precision = dec_info->width;
+    scale = dec_info->scale;
+}
+
+// Bind callback: inspect concrete argument types and set return type
+static duckdb::unique_ptr<duckdb::FunctionData> SameReturnDecimalBindBinary(
+    duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
+    duckdb::vector<bododuckdb::unique_ptr<bododuckdb::Expression>> &arguments) {
+    // This function works for one argument functions that return the same type
+    // as the input.
+    if (arguments.size() != 2) {
+        return nullptr;
+    }
+
+    // Determine the concrete LogicalType of the first argument
+    duckdb::LogicalType arg_type1, arg_type2;
+    duckdb::Expression *expr1 = arguments[0].get();
+    duckdb::Expression *expr2 = arguments[0].get();
+
+    // If it's a constant expression, read the Value's type (handles literal
+    // decimals)
+    if (expr1->type == duckdb::ExpressionType::VALUE_CONSTANT) {
+        return nullptr;
+    } else {
+        // Otherwise use the expression's return_type (set by the binder)
+        arg_type1 = expr1->return_type;
+    }
+    // If it's a constant expression, read the Value's type (handles literal
+    // decimals)
+    if (expr2->type == duckdb::ExpressionType::VALUE_CONSTANT) {
+        return nullptr;
+    } else {
+        // Otherwise use the expression's return_type (set by the binder)
+        arg_type2 = expr2->return_type;
+    }
+
+    // Right now we only expect decimal types to come through here so
+    // make sure.
+    if (arg_type1.id() != duckdb::LogicalTypeId::DECIMAL) {
+        return nullptr;
+    }
+    // Right now we only expect decimal types to come through here so
+    // make sure.
+    if (arg_type2.id() != duckdb::LogicalTypeId::DECIMAL) {
+        return nullptr;
+    }
+    duckdb::optional_ptr<duckdb::ExtraTypeInfo> argaux1 = arg_type1.AuxInfo();
+    duckdb::optional_ptr<duckdb::ExtraTypeInfo> argaux2 = arg_type2.AuxInfo();
+
+    int precision1, precision2, scale1, scale2;
+    getPrecisionScale(argaux1, precision1, scale1);
+    getPrecisionScale(argaux2, precision2, scale2);
+
+    // Output type will be same as the input type.
+    return duckdb::make_uniq<BinaryDecimalBindData>(
+        duckdb::LogicalType::DECIMAL(std::max(precision1, precision2),
+                                     std::max(scale1, scale2)));
+}
+
 const duckdb::vector<ScalarFunctionSignature> UNARY_DECIMAL_SIGNATURES = {
     ScalarFunctionSignature({duckdb::LogicalType::ANY},
                             duckdb::LogicalType::ANY,
@@ -1901,6 +2025,11 @@ const duckdb::vector<ScalarFunctionSignature> ROUND_DECIMAL_SIGNATURES = {
     ScalarFunctionSignature(
         {duckdb::LogicalType::ANY, duckdb::LogicalType::BIGINT},
         duckdb::LogicalType::ANY, SameReturnRoundDecimalBindBinary)};
+
+const duckdb::vector<ScalarFunctionSignature> BINARY_DECIMAL_SIGNATURES = {
+    ScalarFunctionSignature(
+        {duckdb::LogicalType::ANY, duckdb::LogicalType::ANY},
+        duckdb::LogicalType::ANY, SameReturnDecimalBindBinary)};
 
 duckdb::vector<ScalarFunctionSignature> &&append_signatures(
     duckdb::vector<ScalarFunctionSignature> &&signatures,
@@ -1914,6 +2043,73 @@ duckdb::vector<ScalarFunctionSignature> &&append_signatures(
 duckdb::vector<ScalarFunctionSignature> copy_signatures(
     const duckdb::vector<ScalarFunctionSignature> &signatures) {
     return signatures;
+}
+
+duckdb::shared_ptr<duckdb::ClientContext> get_duckdb_context(
+    duckdb::shared_ptr<duckdb::DuckDB> db) {
+    static duckdb::shared_ptr<duckdb::ClientContext> context =
+        duckdb::make_shared_ptr<duckdb::ClientContext>(db->instance);
+    return context;
+}
+
+duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder(
+    duckdb::shared_ptr<duckdb::ClientContext> cc) {
+    static duckdb::shared_ptr<duckdb::Binder> binder =
+        duckdb::Binder::CreateBinder(*cc);
+    return binder;
+}
+
+void register_extra_arithop(
+    duckdb::shared_ptr<duckdb::DuckDB> db, const std::string &opstr,
+    const duckdb::vector<ScalarFunctionSignature> &signatures) {
+    duckdb::ErrorData error;
+    duckdb::QueryErrorContext error_context;
+
+    duckdb::shared_ptr<duckdb::ClientContext> client_context =
+        get_duckdb_context(db);
+    bool started_transaction = false;
+    if (!client_context->transaction.HasActiveTransaction()) {
+        client_context->transaction.BeginTransaction();
+        started_transaction = true;
+    }
+    duckdb::EntryLookupInfo function_lookup(
+        duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
+    duckdb::shared_ptr<duckdb::Binder> binder =
+        get_duckdb_binder(client_context);
+    duckdb::optional_ptr<duckdb::CatalogEntry> entry = binder->GetCatalogEntry(
+        "system", "", function_lookup, duckdb::OnEntryNotFound::RETURN_NULL);
+    if (!entry) {
+        throw std::runtime_error("make_arithop_expr GetCatalogEntry failed: " +
+                                 opstr);
+    }
+    duckdb::ScalarFunctionCatalogEntry &func =
+        entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
+
+    for (const ScalarFunctionSignature &signature : signatures) {
+        duckdb::ScalarFunction scalar_func(opstr, signature.param_types,
+                                           signature.return_type, nullptr,
+                                           signature.bindmethod);
+        func.functions.AddFunction(scalar_func);
+    }
+
+    duckdb::CreateScalarFunctionInfo func_info(func.functions);
+    auto &system_catalog = duckdb::Catalog::GetSystemCatalog(*(db->instance));
+
+    duckdb::DropInfo di;
+    di.type = duckdb::CatalogType::SCALAR_FUNCTION_ENTRY;
+    di.catalog = "system";
+    di.name = opstr;
+    di.allow_drop_internal = true;
+    system_catalog.DropEntry(*client_context, di);
+
+    // auto data =
+    //     duckdb::CatalogTransaction::GetSystemTransaction(*(db->instance));
+    // system_catalog.CreateFunction(data, func_info);
+    system_catalog.CreateFunction(*client_context, func_info);
+
+    if (started_transaction) {
+        client_context->transaction.Commit();
+    }
 }
 
 void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
@@ -1974,6 +2170,8 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
          ScalarFunctionSignature(
              {duckdb::LogicalType::FLOAT, duckdb::LogicalType::FLOAT},
              duckdb::LogicalType::FLOAT)});
+
+    register_extra_arithop(db, "/", BINARY_DECIMAL_SIGNATURES);
 }
 
 duckdb::shared_ptr<duckdb::DuckDB> get_duckdb() {

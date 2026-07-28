@@ -1,5 +1,6 @@
 #include "expression.h"
 #include <arrow/type_fwd.h>
+#include <cmath>
 #include "_util.h"
 #include "duckdb/common/types/interval.hpp"
 
@@ -642,6 +643,33 @@ void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
     }
 }
 
+void PrintDatum(const arrow::Datum& d) {
+    using arrow::Datum;
+
+    switch (d.kind()) {
+        case Datum::NONE:
+            std::cout << "Datum: NONE\n";
+            break;
+
+        case Datum::SCALAR:
+            std::cout << "Datum: SCALAR = " << d.scalar()->ToString()
+                      << "  (type=" << d.scalar()->type->ToString() << ")\n";
+            break;
+
+        case Datum::ARRAY:
+            std::cout << "Datum: ARRAY\n" << d.make_array()->ToString() << "\n";
+            break;
+
+        case Datum::CHUNKED_ARRAY:
+            std::cout << "Datum: CHUNKED_ARRAY\n"
+                      << d.chunked_array()->ToString() << "\n";
+            break;
+
+        default:
+            std::cout << "Datum: UNKNOWN KIND\n";
+    }
+}
+
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string& comparator,
@@ -655,8 +683,15 @@ arrow::Datum do_arrow_compute_binary(
             "): " + cmp_res.status().message());
     }
 
-    do_result_type_cast(cmp_res, result_type);
-    return cmp_res.ValueOrDie();
+    arrow::Datum cmp_datum = cmp_res.ValueOrDie();
+    PrintDatum(cmp_datum);
+
+    std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
+    if (result_type && cmp_dtype != result_type) {
+        cmp_datum = do_arrow_compute_cast(cmp_datum, result_type);
+    }
+
+    return cmp_datum;
 }
 
 arrow::Datum do_arrow_compute_unary(
