@@ -32,6 +32,7 @@ def regexp_strings_df():
     }
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -221,6 +222,7 @@ def test_regexp_like_non_scalar_pattern(regexp_strings_df, args, memory_leak_che
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -302,6 +304,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -324,6 +327,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
                 ),
             ),
             id="simple_pattern-no_replace-no_pos-no_occur-no_flags",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -409,6 +413,26 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
         ),
         pytest.param(
             (
+                r"SELECT REGEXP_REPLACE(A, '\w+e\s+(\w+)', '\\1 \\1', 7, 2, '') FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "She opened up her third bottle of of of the night.",
+                                "The teens wondered what was kept in the red shed on far far edge of the school grounds.",
+                                "I like to leave work after my eight-hour tea-break.",
+                                "He played the game as if his depended depended on it and the truth was that it did.",
+                                "The snow-covered path was no help in finding his way out of the back-country.",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="one_group-medium_replace-7-2",
+        ),
+        pytest.param(
+            (
                 r"SELECT CASE WHEN INSTR(A, '-') > 0 THEN REGEXP_REPLACE(A, '\W+([[:alpha:]]+)-([[:alpha:]]+)', ' \\2-\\1') ELSE REGEXP_REPLACE(A, '(\W+)(\w+) (\w+) (\w+)', '\\1[\\4,\\3,\\2]', 6) END FROM table1",
                 pd.DataFrame(
                     {
@@ -426,7 +450,7 @@ def test_regexp_count_non_scalar_pattern(regexp_strings_df, args, memory_leak_ch
                 ),
             ),
             id="CASE-multiple_groups-medium_replace-06-00-no_flags",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
     ],
 )
@@ -474,6 +498,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-ignore_case-no_group",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (
@@ -508,7 +533,7 @@ def test_regexp_replace(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-ignore_case_extract-no_group",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             (
@@ -583,7 +608,7 @@ def test_regexp_substr(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-0-ignore_case-no_group",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             (
@@ -603,6 +628,7 @@ def test_regexp_substr(regexp_strings_df, args, memory_leak_check):
                 ),
             ),
             id="simple_pattern-1-1-0-ignore_case_extract-no_group",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             (

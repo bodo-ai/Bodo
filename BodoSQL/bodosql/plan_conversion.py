@@ -719,7 +719,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 regex_params_expr.value.rfind(char) for char in ("c", "i")
             )
             latest_char = regex_params_expr.value[latest_index]
-            # Remove occurrences of the other parameter to make the identification easier on the C++ side
+            # Remove occurrences of the other parameter so we can check case-sensitivity using the "in" operator
             regex_params = regex_params_expr.value.replace(
                 "c" if latest_char == "i" else "i", ""
             )
@@ -731,16 +731,22 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 regex_params = regex_params_expr.value + "c"
             else:
                 regex_params = regex_params_expr.value
-        for character in regex_params:
-            if character not in ("c", "i", "m", "e", "s"):
-                raise ValueError(
-                    f"{func_name} regex parameter {character} does not exist"
-                )
-            if character in ("i", "m", "s"):
-                raise ValueError(
-                    f"{func_name} regex parameter {character} is not yet supported in the C++ backend"
-                )
+        # Get characters in regex_params that are not in the list of valid regex parameters
+        invalid_regex_params = set(regex_params) - {"c", "i", "m", "e", "s"}
+        if invalid_regex_params:
+            raise ValueError(
+                f"{func_name} invalid regex parameters: {invalid_regex_params}"
+            )
         return regex_params
+
+    def regexp_add_mode_modifiers(regexp, regex_params, modes):
+        """
+        Add an inline mode modifer to the start of the input regexp.
+        The activated modes are those that the regex parameters and
+        the passed `modes` have in common.
+        """
+        active_mode_str = "".join(set(regex_params) & set(modes))
+        return f"(?{active_mode_str})" + regexp if active_mode_str else regexp
 
     if operator_class_name == "SqlNullPolicyFunction":
         func_name = op.getName().upper()
@@ -3197,7 +3203,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 occurrence_num = occurrence_expr.value
                 if occurrence_num < 1:
                     raise ValueError(
-                        f"{func_name} occurences argument must be 1 or greater"
+                        f"{func_name} occurrences argument must be 1 or greater"
                     )
             else:
                 occurrence_num = 1
@@ -3226,6 +3232,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 group_num = 0
 
+            # Use inline mode modifiers if needed since replace_substring_regex
+            # and extract_regex don't expose those options.
+            # This applies to the 'i', 'm', and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
+            )
+
             # Chop off the start so that searching begins after the provided position
             if start > 0:
                 without_start_expr = ArrowScalarFuncExpression(
@@ -3244,7 +3257,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     [without_start_expr],
                     "replace_substring_regex",
                     (
-                        regexp.value,
+                        modified_regexp,
                         "",
                         occurrence_num - 1,
                     ),
@@ -3256,7 +3269,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 src.empty_data,
                 [occurrences_replaced_expr],
                 "regexp_substr",  # Made up function, will redirect to extract_regex with the right group extracted
-                (regexp.value, regex_params, group_num),
+                (modified_regexp, "e" in regex_params, group_num),
             )
 
         if func_name == "PI" and len(op_exprs) == 0:
@@ -3879,6 +3892,201 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return ArrowScalarFuncExpression(
                 uint64_empty_data, [is_bit_set, one_expr, zero_expr], "if_else", ()
             )
+        elif func_name == "FORMAT" and len(op_exprs) == 2:
+            """
+            Returns a formatted string representation of a number.
+            The number is rounded to the specified precision and printed
+            with enough zeros to demonstrate that precision.
+            Commas are also inserted as thousands separators.
+            """
+
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (int, float))
+
+            precision_digits = op_exprs[1]
+            ensure_type_of_expr(precision_digits, "precision_digits", int)
+
+            # MySQL treats any precision digits < 0 as 0
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            precision_digits = ArrowScalarFuncExpression(
+                int_empty_data,
+                [precision_digits, zero_expr],
+                "max_element_wise",
+                (),
+            )
+
+            # Round the number to the specified precision
+            rounded = ArithOpExpression(src.empty_data, src, precision_digits, "round")
+
+            # Get the string representation of the number
+            str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+            rounded_str = CastExpression(str_empty_data, rounded)
+
+            # Get the character index of the decimal point in the string. Returns -1 if not found.
+            decimal_point_pos = ArrowScalarFuncExpression(
+                int_empty_data, [rounded_str], "find_substring", (".",)
+            )
+            # Get full character length of string
+            rounded_str_length = ArrowScalarFuncExpression(
+                int_empty_data, [rounded_str], "utf8_length", ()
+            )
+
+            # Get whether the number has a nonzero fractional component
+            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            has_no_dot = ComparisonOpExpression(
+                bool_empty_data, decimal_point_pos, negative_one_expr, operator.eq
+            )
+
+            # First, we will deal with inserting commas to separate thousands in the integer part.
+
+            # Slice to obtain the integer part of the number.
+            is_negative = ArrowScalarFuncExpression(
+                bool_empty_data, [rounded_str], "match_substring", ("-",)
+            )
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            start_index = CaseExpression(
+                int_empty_data, is_negative, one_expr, zero_expr
+            )
+            end_index = CaseExpression(
+                int_empty_data, has_no_dot, rounded_str_length, decimal_point_pos
+            )
+            integer_part = ArrowScalarFuncExpression(
+                str_empty_data,
+                [rounded_str, start_index, end_index],
+                "utf8_slice_codeunits",
+                (),
+            )
+
+            # Figure out how many characters (spaces) we should add to the left side to make the length
+            # of the integer part a multiple of 3 (so we can insert commas in the right places).
+            # Note that if the length is already a multiple of 3, we end up adding 3 spaces anyway,
+            # but it doesn't matter since we'll trim them off.
+            integer_part_len = ArrowScalarFuncExpression(
+                int_empty_data, [integer_part], "utf8_length", ()
+            )
+            three_expr = ConstantExpression(int_empty_data, input_plan, 3)
+            len_mod_3 = ArithOpExpression(
+                int_empty_data, integer_part_len, three_expr, "__mod__"
+            )
+            num_to_offset = ArithOpExpression(
+                int_empty_data, three_expr, len_mod_3, "__sub__"
+            )
+
+            # Get space characters of the desired length to offset
+            space_str = ConstantExpression(str_empty_data, input_plan, " ")
+            space_offset_str = ArrowScalarFuncExpression(
+                str_empty_data, [space_str, num_to_offset], "binary_repeat", ()
+            )
+            separator = ConstantExpression(str_empty_data, input_plan, "")
+            offset_integer_part = ArrowScalarFuncExpression(
+                str_empty_data,
+                [space_offset_str, integer_part, separator],
+                "binary_join_element_wise",
+                (),
+            )
+
+            # Use regex to add commas every three digits (or spaces)
+            integer_part_with_commas = ArrowScalarFuncExpression(
+                str_empty_data,
+                [offset_integer_part],
+                "replace_substring_regex",
+                (r"([0-9 ]{3})", r"\1,"),
+            )
+            # Clean up result by trimming off spaces and commas
+            integer_part_with_commas = ArrowScalarFuncExpression(
+                str_empty_data, [integer_part_with_commas], "utf8_trim", (" ,",)
+            )
+
+            # Add back the negative sign if needed
+            negative_sign_expr = ConstantExpression(str_empty_data, input_plan, "-")
+            negative_comma_integer_part = ArrowScalarFuncExpression(
+                str_empty_data,
+                [negative_sign_expr, integer_part_with_commas, separator],
+                "binary_join_element_wise",
+                (),
+            )
+            integer_part_with_commas = CaseExpression(
+                str_empty_data,
+                is_negative,
+                negative_comma_integer_part,
+                integer_part_with_commas,
+            )
+
+            # Combine the integer and fractional part to get the number with proper comma-formatting
+            fractional_part = ArrowScalarFuncExpression(
+                str_empty_data,
+                [rounded_str, decimal_point_pos],
+                "bodo_substr_three",
+                (),
+            )
+            num_with_commas = ArrowScalarFuncExpression(
+                str_empty_data,
+                [integer_part_with_commas, fractional_part, separator],
+                "binary_join_element_wise",
+                (),
+            )
+            num_with_commas = CaseExpression(
+                str_empty_data, has_no_dot, integer_part_with_commas, num_with_commas
+            )
+
+            # Now we need to make sure that the formatted number has enough decimal digits.
+
+            # Calculate length of the fractional part of the number
+            frac_length = ArithOpExpression(
+                int_empty_data, rounded_str_length, decimal_point_pos, "__sub__"
+            )
+            # Subtract 1 to exclude the decimal point itself from the fractional length
+            frac_length = ArithOpExpression(
+                int_empty_data, frac_length, one_expr, "__sub__"
+            )
+            # The fractional length is simply 0 if the string form of the number has no decimal point
+            frac_length = CaseExpression(
+                int_empty_data, has_no_dot, zero_expr, frac_length
+            )
+
+            # Calculate the number of zeros we need to add so there are precision_digits decimal places.
+            # Note that due to the round, it's impossible for the string form of the number to have more than precision_digits decimal places.
+            # It could have fewer than precision_digits decimal places if it had fewer than that many to start with.
+            num_missing_zeros = ArithOpExpression(
+                int_empty_data, precision_digits, frac_length, "__sub__"
+            )
+            zero_str = ConstantExpression(str_empty_data, input_plan, "0")
+            extra_zeros_str = ArrowScalarFuncExpression(
+                str_empty_data, [zero_str, num_missing_zeros], "binary_repeat", ()
+            )
+
+            # Ensure we add a dot before the extra zeros if the number doesn't have a decimal point
+            dot_expr = ConstantExpression(str_empty_data, input_plan, ".")
+            dot_and_extra_zeros = ArrowScalarFuncExpression(
+                str_empty_data,
+                [dot_expr, extra_zeros_str, separator],
+                "binary_join_element_wise",
+                (),
+            )
+            padding = CaseExpression(
+                str_empty_data, has_no_dot, dot_and_extra_zeros, extra_zeros_str
+            )
+
+            # Append extra zeros
+            num_padded = ArrowScalarFuncExpression(
+                str_empty_data,
+                [num_with_commas, padding, separator],
+                "binary_join_element_wise",
+                (),
+            )
+
+            # If precision_digits is 0, the initial round and cast to string removes the decimal point even for float input.
+            # Therefore, we can just use the string form directly in that case, no need to worry about removing decimal
+            # points from the string.
+            zero_precision_digits = ComparisonOpExpression(
+                bool_empty_data, precision_digits, zero_expr, operator.eq
+            )
+            return CaseExpression(
+                str_empty_data, zero_precision_digits, rounded_str, num_padded
+            )
+
         elif func_name == "LEFT" and len(op_exprs) == 2:
             # Implement LEFT as substr(0,...)
             src = op_exprs[0]
@@ -4021,6 +4229,33 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "utf8_length",
                 (),
             )
+        elif func_name == "STRCMP" and len(op_exprs) == 2:
+            str1_expr = op_exprs[0]
+            str2_expr = op_exprs[1]
+            ensure_type_of_expr(str1_expr, "str1_expr", (str, pa.binary()))
+            ensure_type_of_expr(str2_expr, "str2_expr", (str, pa.binary()))
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            str1_greater = ComparisonOpExpression(
+                bool_empty_data, str1_expr, str2_expr, operator.gt
+            )
+            strings_equal = ComparisonOpExpression(
+                bool_empty_data, str1_expr, str2_expr, operator.eq
+            )
+
+            # Using lexicographical comparison, return 1 if str1 > str2, -1 if str1 < str2, 0 if str1 == str2.
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+            return CaseExpression(
+                int_empty_data,
+                strings_equal,
+                zero_expr,
+                CaseExpression(
+                    int_empty_data, str1_greater, one_expr, negative_one_expr
+                ),
+            )
         elif func_name in ("INSTR", "CHARINDEX") and len(op_exprs) in (2, 3):
             if func_name == "INSTR":
                 src = op_exprs[0]
@@ -4122,7 +4357,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 occurrence_num = occurrence_expr.value
                 if occurrence_num < 1:
                     raise ValueError(
-                        f"{func_name} occurences argument must be 1 or greater"
+                        f"{func_name} occurrences argument must be 1 or greater"
                     )
             else:
                 occurrence_num = 1
@@ -4164,6 +4399,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             else:
                 group_num = 0
 
+            # Use inline mode modifiers if needed since replace_substring_regex
+            # and extract_regex_span don't expose those options.
+            # This applies to the 'i', 'm', and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
+            )
+
             # Chop off the start so that searching begins after the provided position
             if start > 0:
                 without_start_expr = ArrowScalarFuncExpression(
@@ -4182,7 +4424,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     [without_start_expr],
                     "replace_substring_regex",
                     (
-                        regexp.value,
+                        modified_regexp,
                         "",
                         occurrence_num - 1,
                     ),
@@ -4197,7 +4439,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 int_empty_data,
                 [occurrences_replaced_expr],
                 "regexp_instr",  # Bodo function implemented using Arrow's extract_regex_span
-                (regexp.value, start_or_end_index == 0, regex_params, group_num),
+                (
+                    modified_regexp,
+                    start_or_end_index == 0,
+                    "e" in regex_params,
+                    group_num,
+                ),
             )
             # Add 1 to convert to 1-based index. -1 also becomes 0 which is what Snowflake returns for the invalid cases
             index = ArithOpExpression(
@@ -4252,6 +4499,210 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 string_is_null,
                 NullExpression(int_empty_data, input_plan, 0),
                 new_index,
+            )
+
+        elif func_name == "REGEXP_REPLACE" and len(op_exprs) in (2, 3, 4, 5, 6):
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", str)
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", str)
+
+            if len(op_exprs) >= 3:
+                replacement_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(
+                    replacement_expr, "replacement_expr", str
+                )
+                replacement_val = replacement_expr.value
+            else:
+                replacement_val = ""
+
+            if len(op_exprs) >= 4:
+                start_expr = op_exprs[3]
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                elif start_expr.value == 0:
+                    start = 0
+                else:
+                    raise ValueError("Start index must be positive for REGEXP_REPLACE.")
+            else:
+                start = 0
+
+            if len(op_exprs) >= 5:
+                # Need to replace the substring that is the op_exprs[4]-th occurrence / regex match
+                occurrence_expr = op_exprs[4]
+                ensure_arg_is_const_expr_of_type(
+                    occurrence_expr, "occurrence_expr", int
+                )
+                occurrence_num = occurrence_expr.value
+                if occurrence_num < 0:
+                    raise ValueError(
+                        f"{func_name} occurrences argument must be 0 or greater"
+                    )
+                elif occurrence_num == 0:
+                    # If occurrence_num is 0, all occurrences should be replaced.
+                    # For replace_substring_regex, this is signified by passing max_replacements = -1.
+                    occurrence_num = -1
+            else:
+                # Default is to replace all occurrences
+                occurrence_num = -1
+
+            if len(op_exprs) >= 6:
+                regex_params_expr = op_exprs[5]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                regex_params = clean_regex_params(regex_params_expr, func_name)
+            else:
+                regex_params = "c"
+
+            # Use inline mode modifiers if needed since replace_substring_regex
+            # and split_pattern_regex don't expose those options.
+            # This applies to the 'i', 'm', and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ims"
+            )
+
+            # Chop off the start so that searching begins after the provided position
+            if start > 0:
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
+
+            if occurrence_num in (-1, 1):
+                # Replace all occurrences or the first occurrence of a substring matching the regexp.
+                # Arrow has no way to replace the n-th occurrence only, so if occurrence_num > 1
+                # we have a custom solution.
+                replace_substring_regex_func = "replace_substring_regex"
+            else:
+                # If we need to replace a specific occurrence, use our custom function called
+                # replace_substring_regex_single.
+                replace_substring_regex_func = "replace_substring_regex_single"
+
+            # Replace all occurrences or a specific occurrence of a substring matching the regexp.
+            occurrences_replaced_expr = ArrowScalarFuncExpression(
+                src.empty_data,
+                [without_start_expr],
+                replace_substring_regex_func,
+                (
+                    modified_regexp,
+                    replacement_val,
+                    occurrence_num,
+                ),
+            )
+
+            # Now that the replacing is done, we need to concatenate the start of the string back onto it
+            if start > 0:
+                src_start = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (0, start, 1),
+                )
+                separator = ConstantExpression(src.empty_data, input_plan, "")
+                return ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src_start, occurrences_replaced_expr, separator],
+                    "binary_join_element_wise",
+                    (),
+                )
+            else:
+                return occurrences_replaced_expr
+
+        elif func_name == "REGEXP_COUNT" and len(op_exprs) in (2, 3, 4):
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+            if len(op_exprs) >= 3:
+                start_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+                if start_expr.value > 0:
+                    start = start_expr.value - 1
+                elif start_expr.value == 0:
+                    start = 0
+                else:
+                    raise ValueError("Start index must be positive for REGEXP_COUNT.")
+            else:
+                start = 0
+
+            if len(op_exprs) == 4:
+                regex_params_expr = op_exprs[3]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                regex_params = clean_regex_params(regex_params_expr, func_name)
+            else:
+                regex_params = "c"
+
+            # Use inline mode modifiers if needed since count_substring_regex
+            # doesn't expose those options apart from 'i' (ignore case).
+            # This applies to the 'm' and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                regexp.value, regex_params, "ms"
+            )
+
+            # Chop off the start so that searching begins after the provided position
+            if start > 0:
+                without_start_expr = ArrowScalarFuncExpression(
+                    src.empty_data,
+                    [src],
+                    "utf8_slice_codeunits",
+                    (start, None, 1),
+                )
+            else:
+                without_start_expr = src
+
+            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            return ArrowScalarFuncExpression(
+                int_empty_data,
+                [without_start_expr],
+                "count_substring_regex",
+                (modified_regexp, "i" in regex_params),
+            )
+
+        elif func_name == "REGEXP_LIKE" and len(op_exprs) in (2, 3):
+            src = op_exprs[0]
+            regexp = op_exprs[1]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+            if len(op_exprs) == 3:
+                regex_params_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(
+                    regex_params_expr, "regex_params_expr", str
+                )
+                regex_params = clean_regex_params(regex_params_expr, func_name)
+            else:
+                regex_params = "c"
+
+            # REGEXP_LIKE implicitly anchors the regex pattern at both ends
+            anchored_regexp = f"^({regexp.value})$"
+
+            # Use inline mode modifiers if needed since match_substring_regex
+            # doesn't expose those options apart from 'i' (ignore case).
+            # This applies to the 'm' and 's' options.
+            modified_regexp = regexp_add_mode_modifiers(
+                anchored_regexp, regex_params, "ms"
+            )
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            return ArrowScalarFuncExpression(
+                bool_empty_data,
+                [src],
+                "match_substring_regex",
+                (modified_regexp, "i" in regex_params),
             )
 
         elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
@@ -4543,7 +4994,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
             # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
 
             # utf8_slice_codeunits / bodo_substr_three will handle the wraparound for negative start index
             start_expr = op_exprs[1]
