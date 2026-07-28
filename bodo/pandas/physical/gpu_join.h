@@ -95,7 +95,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
         size_t total_bytes = get_smallest_gpu_mem_size();
         this->metrics.init_time += end_timer(start_init);
-        // Do broadcast join if probe table is order of magnitude smaller than
+        // Do broadcast join if build table is order of magnitude smaller than
         // probe and it fits on GPU with room for the hash table.
         return (build_total < (probe_total * 0.1)) &&
                ((build_total * 4) < total_bytes);
