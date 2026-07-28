@@ -16,15 +16,7 @@ object RelUtils {
      *
      * Structural assumption: each source-convention converter (Snowflake,
      * Iceberg) sits above a subtree containing exactly one source rel of that
-     * convention. The old code (`input as SnowflakeRel`) relied on the same
-     * assumption but required the source rel to be the direct child. This
-     * traversal only relaxes the "direct child" constraint by skipping through
-     * intermediate nodes (filters, projects, cache bodies) inserted after the
-     * converter was created. If a join of two same-source scans were ever
-     * placed under a single converter, the old cast would have thrown a
-     * [ClassCastException] and [findRelOfType] will throw an
-     * [IllegalStateException] — both surfaces the problem rather than
-     * silently returning the wrong source.
+     * convention.
      */
     inline fun <reified T : RelNode> findRelOfTypeOrNull(node: RelNode): T? = findRelOfTypeOrNull(node, T::class.java)
 
@@ -32,8 +24,6 @@ object RelUtils {
      * Depth-first search for the first descendant (or the node itself) of
      * type [T]. Throws [IllegalStateException] if none is found.
      *
-     * See [findRelOfTypeOrNull] for the structural assumption and caveats
-     * about multi-source plans.
      */
     inline fun <reified T : RelNode> findRelOfType(node: RelNode): T =
         findRelOfTypeOrNull<T>(node)
