@@ -17,8 +17,6 @@ class PhysicalResultCollector : public PhysicalSink {
         : in_schema(in_schema), out_schema(out_schema) {
         // TODO: check that the input schema is compatible with the output
         // schema
-        std::cout << "PRC in  " << in_schema->ToString(true) << std::endl;
-        std::cout << "PRC out " << out_schema->ToString(true) << std::endl;
         if (in_schema->ncols() != out_schema->ncols()) {
             throw std::runtime_error(
                 "Input and output schemas must have the same number of "
