@@ -46,8 +46,9 @@ std::shared_ptr<arrow::Scalar> make_numeric_reduction_identity(
     } else if (op_name == "greater") {
         value = std::numeric_limits<CType>::min();
     } else if (op_name == "first") {
-        return arrow::MakeNullScalar(
-            arrow::TypeTraits<ArrowType>::type_singleton());
+        // For first/any_value, the identity value is not used in practice,
+        // but we still need to provide a valid value.
+        value = CType{0};
     } else {
         throw std::runtime_error("Unsupported reduction function: " + op_name);
     }
@@ -66,6 +67,8 @@ std::shared_ptr<arrow::Scalar> make_numeric_reduction_identity(
  */
 std::shared_ptr<arrow::Scalar> make_reduction_identity(
     std::string op_name, const std::shared_ptr<arrow::DataType>& type) {
+    // Complete list of types currently supported by GPU reductions (see
+    // cudf_dtype_to_mpi)
     switch (type->id()) {
         case arrow::Type::INT8:
             return make_numeric_reduction_identity<arrow::Int8Type>(op_name);
@@ -313,7 +316,6 @@ OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
                         input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
-
             } else if (func_name == "min") {
                 reduction_functions.push_back(
                     std::make_unique<GPUReductionFunctionMin>(
@@ -345,6 +347,12 @@ OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
 
+            } else if (func_name == "first") {
+                reduction_functions.push_back(
+                    std::make_unique<GPUReductionFunctionFirst>(
+                        input_col_idx,
+                        this->out_schema->column_types[i]->ToArrowDataType(),
+                        se->stream));
             } else {
                 throw std::runtime_error("Unsupported reduction function: " +
                                          func_name);
