@@ -352,24 +352,52 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     duckdb::ScalarFunctionCatalogEntry &func =
         entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
 
-    duckdb::FunctionBinder function_binder(*binder);
-    duckdb::unique_ptr<duckdb::Expression> result =
-        function_binder.BindScalarFunction(
+    duckdb::LogicalType arg_type1, arg_type2;
+    arg_type1 = children[0]->return_type;
+    arg_type2 = children[1]->return_type;
+    duckdb::vector<duckdb::LogicalType> arg_types;
+    arg_types.push_back(arg_type1);
+    arg_types.push_back(arg_type2);
+
+    duckdb::unique_ptr<duckdb::Expression> result;
+    bool handled = false;
+    if (arg_type1.id() == duckdb::LogicalTypeId::DECIMAL ||
+        arg_type2.id() == duckdb::LogicalTypeId::DECIMAL) {
+        duckdb::LogicalType return_type;
+        if (arg_type1.id() == duckdb::LogicalTypeId::DECIMAL) {
+            return_type = arg_type1;
+        } else {
+            return_type = arg_type2;
+        }
+        result = duckdb::make_uniq<duckdb::BoundFunctionExpression>(
+            return_type,
+            duckdb::ScalarFunction(opstr, arg_types, return_type, nullptr),
+            std::move(children),
+            duckdb::make_uniq<BodoScalarFunctionData>(out_schema), true);
+        handled = true;
+    }
+
+    if (!handled) {
+        duckdb::FunctionBinder function_binder(*binder);
+        result = function_binder.BindScalarFunction(
             func, std::move(children), error,
             true,  // function is an operator
             duckdb::optional_ptr<duckdb::Binder>(*binder));
-    if (!result) {
-        throw std::runtime_error("make_arithop_expr BindScalarFunction failed");
-    }
-    if (result->GetExpressionType() != duckdb::ExpressionType::BOUND_FUNCTION) {
-        throw std::runtime_error(
-            "make_arithop_expr BindScalarFunction did not return a "
-            "BOUND_FUNCTION");
-    }
+        if (!result) {
+            throw std::runtime_error(
+                "make_arithop_expr BindScalarFunction failed");
+        }
+        if (result->GetExpressionType() !=
+            duckdb::ExpressionType::BOUND_FUNCTION) {
+            throw std::runtime_error(
+                "make_arithop_expr BindScalarFunction did not return a "
+                "BOUND_FUNCTION");
+        }
 
-    auto &bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
-    bound_func_expr.bind_info =
-        duckdb::make_uniq<BodoScalarFunctionData>(out_schema);
+        auto &bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
+        bound_func_expr.bind_info =
+            duckdb::make_uniq<BodoScalarFunctionData>(out_schema);
+    }
 
     if (started_transaction) {
         client_context->transaction.Rollback({});
@@ -1927,84 +1955,6 @@ static duckdb::unique_ptr<duckdb::FunctionData> GivenReturnDecimalBindUnary(
     return duckdb::make_uniq<GivenReturnDecimalBindUnaryData>(RETURN_TYPE);
 }
 
-static void getPrecisionScale(
-    duckdb::optional_ptr<duckdb::ExtraTypeInfo> &argaux, int &precision,
-    int &scale) {
-    if (!argaux) {
-        // no auxiliary info present
-        throw std::runtime_error("AuxInfo missing for arg1");
-    }
-
-    // get raw pointer
-    duckdb::ExtraTypeInfo *base_ptr = argaux.get();
-
-    // dynamic_cast requires a polymorphic base (has virtual destructor/methods)
-    duckdb::DecimalTypeInfo *dec_info =
-        dynamic_cast<duckdb::DecimalTypeInfo *>(base_ptr);
-    if (!dec_info) {
-        // AuxInfo exists but is not DecimalTypeInfo
-        throw std::runtime_error("AuxInfo is not DecimalTypeInfo");
-    }
-
-    precision = dec_info->width;
-    scale = dec_info->scale;
-}
-
-// Bind callback: inspect concrete argument types and set return type
-static duckdb::unique_ptr<duckdb::FunctionData> SameReturnDecimalBindBinary(
-    duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
-    duckdb::vector<bododuckdb::unique_ptr<bododuckdb::Expression>> &arguments) {
-    // This function works for one argument functions that return the same type
-    // as the input.
-    if (arguments.size() != 2) {
-        return nullptr;
-    }
-
-    // Determine the concrete LogicalType of the first argument
-    duckdb::LogicalType arg_type1, arg_type2;
-    duckdb::Expression *expr1 = arguments[0].get();
-    duckdb::Expression *expr2 = arguments[0].get();
-
-    // If it's a constant expression, read the Value's type (handles literal
-    // decimals)
-    if (expr1->type == duckdb::ExpressionType::VALUE_CONSTANT) {
-        return nullptr;
-    } else {
-        // Otherwise use the expression's return_type (set by the binder)
-        arg_type1 = expr1->return_type;
-    }
-    // If it's a constant expression, read the Value's type (handles literal
-    // decimals)
-    if (expr2->type == duckdb::ExpressionType::VALUE_CONSTANT) {
-        return nullptr;
-    } else {
-        // Otherwise use the expression's return_type (set by the binder)
-        arg_type2 = expr2->return_type;
-    }
-
-    // Right now we only expect decimal types to come through here so
-    // make sure.
-    if (arg_type1.id() != duckdb::LogicalTypeId::DECIMAL) {
-        return nullptr;
-    }
-    // Right now we only expect decimal types to come through here so
-    // make sure.
-    if (arg_type2.id() != duckdb::LogicalTypeId::DECIMAL) {
-        return nullptr;
-    }
-    duckdb::optional_ptr<duckdb::ExtraTypeInfo> argaux1 = arg_type1.AuxInfo();
-    duckdb::optional_ptr<duckdb::ExtraTypeInfo> argaux2 = arg_type2.AuxInfo();
-
-    int precision1, precision2, scale1, scale2;
-    getPrecisionScale(argaux1, precision1, scale1);
-    getPrecisionScale(argaux2, precision2, scale2);
-
-    // Output type will be same as the input type.
-    return duckdb::make_uniq<BinaryDecimalBindData>(
-        duckdb::LogicalType::DECIMAL(std::max(precision1, precision2),
-                                     std::max(scale1, scale2)));
-}
-
 const duckdb::vector<ScalarFunctionSignature> UNARY_DECIMAL_SIGNATURES = {
     ScalarFunctionSignature({duckdb::LogicalType::ANY},
                             duckdb::LogicalType::ANY,
@@ -2014,11 +1964,6 @@ const duckdb::vector<ScalarFunctionSignature> ROUND_DECIMAL_SIGNATURES = {
     ScalarFunctionSignature(
         {duckdb::LogicalType::ANY, duckdb::LogicalType::BIGINT},
         duckdb::LogicalType::ANY, SameReturnRoundDecimalBindBinary)};
-
-const duckdb::vector<ScalarFunctionSignature> BINARY_DECIMAL_SIGNATURES = {
-    ScalarFunctionSignature(
-        {duckdb::LogicalType::ANY, duckdb::LogicalType::ANY},
-        duckdb::LogicalType::ANY, SameReturnDecimalBindBinary)};
 
 duckdb::vector<ScalarFunctionSignature> &&append_signatures(
     duckdb::vector<ScalarFunctionSignature> &&signatures,
@@ -2046,56 +1991,6 @@ duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder(
     static duckdb::shared_ptr<duckdb::Binder> binder =
         duckdb::Binder::CreateBinder(*cc);
     return binder;
-}
-
-void register_extra_arithop(
-    duckdb::shared_ptr<duckdb::DuckDB> db, const std::string &opstr,
-    const duckdb::vector<ScalarFunctionSignature> &signatures) {
-    duckdb::ErrorData error;
-    duckdb::QueryErrorContext error_context;
-
-    duckdb::shared_ptr<duckdb::ClientContext> client_context =
-        get_duckdb_context(db);
-    bool started_transaction = false;
-    if (!client_context->transaction.HasActiveTransaction()) {
-        client_context->transaction.BeginTransaction();
-        started_transaction = true;
-    }
-    duckdb::EntryLookupInfo function_lookup(
-        duckdb::CatalogType::SCALAR_FUNCTION_ENTRY, opstr, error_context);
-    duckdb::shared_ptr<duckdb::Binder> binder =
-        get_duckdb_binder(client_context);
-    duckdb::optional_ptr<duckdb::CatalogEntry> entry = binder->GetCatalogEntry(
-        "system", "", function_lookup, duckdb::OnEntryNotFound::RETURN_NULL);
-    if (!entry) {
-        throw std::runtime_error("make_arithop_expr GetCatalogEntry failed: " +
-                                 opstr);
-    }
-    duckdb::ScalarFunctionCatalogEntry &func =
-        entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
-
-    for (const ScalarFunctionSignature &signature : signatures) {
-        duckdb::ScalarFunction scalar_func(opstr, signature.param_types,
-                                           signature.return_type, nullptr,
-                                           signature.bindmethod);
-        func.functions.AddFunction(scalar_func);
-    }
-
-    duckdb::CreateScalarFunctionInfo func_info(func.functions);
-    auto &system_catalog = duckdb::Catalog::GetSystemCatalog(*(db->instance));
-
-    duckdb::DropInfo di;
-    di.type = duckdb::CatalogType::SCALAR_FUNCTION_ENTRY;
-    di.catalog = "system";
-    di.name = opstr;
-    di.allow_drop_internal = true;
-    system_catalog.DropEntry(*client_context, di);
-
-    system_catalog.CreateFunction(*client_context, func_info);
-
-    if (started_transaction) {
-        client_context->transaction.Commit();
-    }
 }
 
 void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
@@ -2156,8 +2051,6 @@ void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {
          ScalarFunctionSignature(
              {duckdb::LogicalType::FLOAT, duckdb::LogicalType::FLOAT},
              duckdb::LogicalType::FLOAT)});
-
-    register_extra_arithop(db, "/", BINARY_DECIMAL_SIGNATURES);
 }
 
 duckdb::shared_ptr<duckdb::DuckDB> get_duckdb() {

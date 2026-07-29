@@ -631,7 +631,6 @@ void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
         arrow::compute::CastOptions cast_opts;
         cast_opts.allow_int_overflow = true;
         cast_opts.allow_float_truncate = true;
-        cast_opts.allow_decimal_truncate = true;
         arrow::Result<arrow::Datum> cast_res =
             arrow::compute::Cast(out_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
@@ -749,7 +748,6 @@ arrow::Datum do_arrow_compute_cast(
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
     cast_opts.allow_float_truncate = true;
-    cast_opts.allow_decimal_truncate = true;
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::Cast(left_res, return_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {
