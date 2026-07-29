@@ -5206,6 +5206,14 @@ def get_decimal_type(atype):
         return pa.decimal128(5, 0)
     elif pa.types.is_int8(atype):
         return pa.decimal128(3, 0)
+    elif pa.types.is_uint64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_uint32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_uint16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_uint8(atype):
+        return pa.decimal128(3, 0)
     else:
         raise TypeError(f"Not decimal conversion from {atype} yet")
 
