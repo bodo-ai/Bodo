@@ -740,7 +740,7 @@ arrow::Datum do_arrow_compute_cast(
     // No need to cast if type is already the target type.
     // Note that arrow::DataType.Equals() also compares type parameters such
     // as time units and timezones.
-    if (left_res.type()->Equals(return_type)) {
+    if (!return_type || left_res.type()->Equals(return_type)) {
         return left_res;
     }
 
