@@ -4,6 +4,7 @@
 #include "../_dict_builder.h"
 #include "_groupby.h"
 #include "_groupby_common.h"
+#include "_groupby_ftypes.h"
 #include "_groupby_udf.h"
 
 /**
@@ -244,6 +245,9 @@ class BasicColSet {
             precision = in_schema->column_types[0]->precision;
             scale = in_schema->column_types[0]->scale;
             timezone = in_schema->column_types[0]->timezone;
+            if (ftype == Bodo_FTypes::sum) {
+                precision = 38;
+            }
         }
 
         std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
