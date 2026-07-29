@@ -4851,6 +4851,20 @@ def test_merge_empty_build(join_strategy):
     )
 
 
+@pytest.mark.gpu
+def test_some_null_reduce():
+    """Test that rank 0 having all null values returns the correct answer"""
+
+    pass
+
+
+@pytest.mark.gpu
+def test_all_null_reduce():
+    """Test that all ranks having all null values returns the correct answer"""
+
+    pass
+
+
 def test_df_copy(datapath):
     """Test that dataframe copy on an unexecuted plan behaves as expected."""
 

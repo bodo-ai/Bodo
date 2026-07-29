@@ -113,7 +113,6 @@ struct GPUReductionFunctionFirst : public GPUReductionFunction {
                               std::shared_ptr<arrow::DataType> dt,
                               rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(input_col_idx, {"first"}, {"first"},
-                               {GPUReductionType::COMPARISON},
                                make_vector_of_one_nullptr(), dt,
                                MPI_OP_NULL /* handled specially in Finalize*/) {
     }
