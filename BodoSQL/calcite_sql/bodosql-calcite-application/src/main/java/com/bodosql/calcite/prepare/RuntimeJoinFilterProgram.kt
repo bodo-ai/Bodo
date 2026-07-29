@@ -14,10 +14,8 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalWindow
 import com.bodosql.calcite.adapter.common.LimitUtils
-import com.bodosql.calcite.adapter.iceberg.IcebergRel
 import com.bodosql.calcite.adapter.iceberg.IcebergRuntimeJoinFilter
 import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
-import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRuntimeJoinFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
@@ -65,7 +63,14 @@ object RuntimeJoinFilterProgram : Program {
                 filterShuttle.keptCacheConsumerUpdates,
                 filterShuttle.inlinedCacheConsumerUpdates,
             )
-        return result.accept(cacheReplaceShuttle)
+        val finalResult = result.accept(cacheReplaceShuttle)
+        // Reconcile numConsumers to match the actual number of cache node copies in
+        // the final tree. This fixes mismatches introduced by covering-expression
+        // caching (where result.copy() in CoveringExpressionCacheReplacement can
+        // create extra copies not accounted for by numConsumers) and by the
+        // inlining/keep logic above.
+        CacheSubPlanProgram.reconcileNumConsumers(finalResult)
+        return finalResult
     }
 
     /**
@@ -367,6 +372,7 @@ object RuntimeJoinFilterProgram : Program {
                 converter
             } else {
                 val filterInfo = liveJoins.flattenToLists()
+                val catalogTable = converter.findSnowflakeRel(converter.input).getCatalogTable()
                 val snowflakeRtjf =
                     SnowflakeRuntimeJoinFilter.create(
                         converter.input,
@@ -374,7 +380,7 @@ object RuntimeJoinFilterProgram : Program {
                         filterInfo.equalityFilterColumns,
                         filterInfo.equalityFilterIsFirstLocations,
                         filterInfo.nonEqualityFilterColumns,
-                        (converter.input as SnowflakeRel).getCatalogTable(),
+                        catalogTable,
                     )
                 liveJoins = JoinFilterProgramState()
                 converter.copy(converter.traitSet, listOf(snowflakeRtjf))
@@ -385,6 +391,7 @@ object RuntimeJoinFilterProgram : Program {
                 converter
             } else {
                 val filterInfo = liveJoins.flattenToLists()
+                val icebergCatalogTable = converter.findIcebergRel(converter.input).getCatalogTable()
                 val icebergRtjf =
                     IcebergRuntimeJoinFilter.create(
                         converter.input,
@@ -392,7 +399,7 @@ object RuntimeJoinFilterProgram : Program {
                         filterInfo.equalityFilterColumns,
                         filterInfo.equalityFilterIsFirstLocations,
                         filterInfo.nonEqualityFilterColumns,
-                        (converter.input as IcebergRel).getCatalogTable(),
+                        icebergCatalogTable,
                     )
                 liveJoins = JoinFilterProgramState()
                 converter.copy(converter.traitSet, listOf(icebergRtjf))

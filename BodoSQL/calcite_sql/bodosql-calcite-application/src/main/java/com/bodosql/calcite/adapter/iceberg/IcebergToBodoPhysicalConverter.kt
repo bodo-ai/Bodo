@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.adapter.common.RelUtils.findRelOfType
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
 import com.bodosql.calcite.catalog.SnowflakeCatalog
@@ -65,7 +66,13 @@ class IcebergToBodoPhysicalConverter(
     override fun loggingTitle() = "ICEBERG TIMING"
 
     // TODO: What to do with this function?
-    override fun nodeDetails(): String = getTableName(input as IcebergRel)
+    override fun nodeDetails(): String = getTableName(findIcebergRel(input))
+
+    /**
+     * Find the IcebergRel in the input chain, traversing through BodoPhysical nodes
+     * and CachedSubPlanBase bodies inserted by covering expression caching.
+     */
+    fun findIcebergRel(node: RelNode): IcebergRel = findRelOfType(node)
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         // TODO: Can simplify now?
@@ -158,7 +165,7 @@ class IcebergToBodoPhysicalConverter(
      * Generate the code required to read from Iceberg.
      */
     private fun generateReadExpr(ctx: BodoPhysicalRel.BuildContext): Expr.Call {
-        val relInput = input as IcebergRel
+        val relInput = findIcebergRel(input)
         val flattenedInfo = flattenIcebergTree()
         val cols = flattenedInfo.colNames
         val filters = flattenedInfo.filters
@@ -259,7 +266,7 @@ class IcebergToBodoPhysicalConverter(
 
     private fun flattenIcebergTree(): FlattenedIcebergInfo {
         if (cachedIcebergFlattenedInfo == null) {
-            val node = input as IcebergRel
+            val node = findIcebergRel(input)
             val visitor =
                 object : RelVisitor() {
                     // Initialize all columns to be in the original location.
