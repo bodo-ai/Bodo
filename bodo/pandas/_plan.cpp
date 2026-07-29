@@ -352,16 +352,6 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     duckdb::ScalarFunctionCatalogEntry &func =
         entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
 
-#if 0
-    for(auto &ff : func.functions.functions) {
-        std::cout << "----- start set -----" << std::endl;
-        for(auto &arg : ff.arguments) {
-            std::cout << arg.ToString() << std::endl;
-        }
-        std::cout << "----- start set -----" << std::endl;
-    }
-#endif
-
     duckdb::FunctionBinder function_binder(*binder);
     duckdb::unique_ptr<duckdb::Expression> result =
         function_binder.BindScalarFunction(
@@ -2101,9 +2091,6 @@ void register_extra_arithop(
     di.allow_drop_internal = true;
     system_catalog.DropEntry(*client_context, di);
 
-    // auto data =
-    //     duckdb::CatalogTransaction::GetSystemTransaction(*(db->instance));
-    // system_catalog.CreateFunction(data, func_info);
     system_catalog.CreateFunction(*client_context, func_info);
 
     if (started_transaction) {

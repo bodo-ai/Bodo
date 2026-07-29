@@ -38,13 +38,8 @@ class PhysicalResultCollector : public PhysicalSink {
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
-        // std::cout << "todd0 " << input_batch->schema()->ToString(true) <<
-        // std::endl; std::cout << "todd1 " <<
-        // buffer->data_table->schema()->ToString(true) << std::endl;
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
 
-        // std::cout << "todd2 " << buffer->data_table->schema()->ToString(true)
-        // << std::endl;
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;

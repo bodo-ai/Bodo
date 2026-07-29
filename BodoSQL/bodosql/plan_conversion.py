@@ -5262,7 +5262,6 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             lambda l, r: l + r,
             lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
         )
-        # out_empty = left.empty_data.iloc[:, 0] + right.empty_data.iloc[:, 0]
         expr = ArithOpExpression(out_empty, left, right, "__add__")
         return expr
 
@@ -5289,7 +5288,6 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
                 lambda l, r: l - r,
                 lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
             )
-            # out_empty = left_type - right_type
             expr = ArithOpExpression(out_empty, left, right, "__sub__")
         return expr
 
@@ -5300,7 +5298,6 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             lambda l, r: l * r,
             lambda ll, ls, rl, rs: (ll + rl, ls + rs),
         )
-        # out_empty = left.empty_data.iloc[:, 0] * right.empty_data.iloc[:, 0]
         expr = ArithOpExpression(out_empty, left, right, "__mul__")
         return expr
 
@@ -5311,7 +5308,6 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             lambda l, r: l / r,
             lambda ll, ls, rl, rs: (ll + rs, max(ls, rs + 4)),
         )
-        # out_empty = left.empty_data.iloc[:, 0] / right.empty_data.iloc[:, 0]
         expr = ArithOpExpression(out_empty, left, right, "__truediv__")
         return expr
 

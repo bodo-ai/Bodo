@@ -643,33 +643,6 @@ void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
     }
 }
 
-void PrintDatum(const arrow::Datum& d) {
-    using arrow::Datum;
-
-    switch (d.kind()) {
-        case Datum::NONE:
-            std::cout << "Datum: NONE\n";
-            break;
-
-        case Datum::SCALAR:
-            std::cout << "Datum: SCALAR = " << d.scalar()->ToString()
-                      << "  (type=" << d.scalar()->type->ToString() << ")\n";
-            break;
-
-        case Datum::ARRAY:
-            std::cout << "Datum: ARRAY\n" << d.make_array()->ToString() << "\n";
-            break;
-
-        case Datum::CHUNKED_ARRAY:
-            std::cout << "Datum: CHUNKED_ARRAY\n"
-                      << d.chunked_array()->ToString() << "\n";
-            break;
-
-        default:
-            std::cout << "Datum: UNKNOWN KIND\n";
-    }
-}
-
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string& comparator,
@@ -684,13 +657,7 @@ arrow::Datum do_arrow_compute_binary(
     }
 
     arrow::Datum cmp_datum = cmp_res.ValueOrDie();
-
-    std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
-    if (result_type && cmp_dtype != result_type) {
-        cmp_datum = do_arrow_compute_cast(cmp_datum, result_type);
-    }
-
-    return cmp_datum;
+    return do_arrow_compute_cast(cmp_datum, result_type);
 }
 
 arrow::Datum do_arrow_compute_unary(
@@ -782,6 +749,7 @@ arrow::Datum do_arrow_compute_cast(
     arrow::compute::CastOptions cast_opts;
     cast_opts.allow_int_overflow = true;
     cast_opts.allow_float_truncate = true;
+    cast_opts.allow_decimal_truncate = true;
     arrow::Result<arrow::Datum> cmp_res =
         arrow::compute::Cast(left_res, return_type, cast_opts);
     if (!cmp_res.ok()) [[unlikely]] {

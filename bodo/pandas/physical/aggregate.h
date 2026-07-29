@@ -280,95 +280,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                              : OperatorResult::HAVE_MORE_OUTPUT;
     }
 
-    int digits_unscaled_from_value(uint64_t abs_value, int scale) {
-        if (abs_value == 0) {
-            return 1 + scale;
-        }
-
-        int digits_value;
-        double v = static_cast<double>(abs_value);
-        // floor(log10(v)) + 1 gives number of digits in abs_value
-        digits_value = static_cast<int>(std::floor(std::log10(v))) + 1 + scale;
-
-        if (digits_value < 1)
-            digits_value = 1;
-        return digits_value;
-    }
-
-    void fix_decimal_precisions(std::shared_ptr<table_info> table) {
-        for (auto& column : table->columns) {
-            if (column->dtype != Bodo_CTypes::CTypeEnum::DECIMAL) {
-                continue;
-            }
-
-            std::cout << "Found decimal col to fix " << column->precision << " "
-                      << column->scale << std::endl;
-            auto er = std::make_shared<ArrayExprResult>(column, "fake");
-            arrow::Datum cdatum =
-                ConvertExprResultToDatum(er, "fix_decimal_precisions");
-            arrow::compute::ScalarAggregateOptions options;
-            options.skip_nulls = true;
-
-            arrow::Result<arrow::Datum> result_res =
-                arrow::compute::CallFunction("min_max", {cdatum}, &options);
-            if (!result_res.ok()) [[unlikely]] {
-                throw std::runtime_error("min_max error: " +
-                                         result_res.status().message());
-            }
-            arrow::Datum result = result_res.ValueOrDie();
-
-            auto struct_scalar = result.scalar_as<arrow::StructScalar>();
-            std::shared_ptr<arrow::Scalar> min_scalar =
-                struct_scalar.value[0];  // Index 0 is min, Index 1 is max
-            std::shared_ptr<arrow::Scalar> max_scalar =
-                struct_scalar.value[1];  // Index 0 is min, Index 1 is max
-
-            // Extract scalar values; handle nulls
-            int64_t min_val = 0;
-            int64_t max_val = 0;
-            bool min_valid = false;
-            bool max_valid = false;
-
-            if (min_scalar && min_scalar->is_valid) {
-                const auto& min_int64_ref =
-                    arrow::internal::checked_cast<const arrow::Int64Scalar&>(
-                        *min_scalar);
-                min_val = min_int64_ref.value;
-                min_valid = true;
-                std::cout << "fex_decimal min_val " << min_val << std::endl;
-            }
-            if (max_scalar && max_scalar->is_valid) {
-                const auto& max_int64_ref =
-                    arrow::internal::checked_cast<const arrow::Int64Scalar&>(
-                        *max_scalar);
-                max_val = max_int64_ref.value;
-                max_valid = true;
-                std::cout << "fex_decimal max_val " << max_val << std::endl;
-            }
-            // If both are invalid (all nulls), choose precision 1
-            if (!min_valid && !max_valid) {
-                continue;
-            }
-
-            // Compute largest absolute value among valid min/max
-            uint64_t max_abs = 0;
-            if (min_valid) {
-                max_abs = std::max<uint64_t>(
-                    max_abs, static_cast<uint64_t>(std::llabs(min_val)));
-            }
-            if (max_valid) {
-                max_abs = std::max<uint64_t>(
-                    max_abs, static_cast<uint64_t>(std::llabs(max_val)));
-            }
-
-            int digits = digits_unscaled_from_value(max_abs, column->scale);
-            std::cout << "Needed digits " << digits << std::endl;
-            if (digits > column->precision) {
-                column->precision = digits;
-            }
-        }
-    }
-
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
         time_pt start_produce = start_timer();
@@ -377,7 +288,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         next_batch = groupby_produce_output_batch_wrapper(
             this->groupby_state.get(), &out_is_last, true);
 
-        // fix_decimal_precisions(next_batch);
         this->metrics.produce_time += end_timer(start_produce);
         next_batch->column_names = this->output_schema->column_names;
         return {next_batch, out_is_last ? OperatorResult::FINISHED
