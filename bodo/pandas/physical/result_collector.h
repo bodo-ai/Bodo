@@ -17,6 +17,8 @@ class PhysicalResultCollector : public PhysicalSink {
         : in_schema(in_schema), out_schema(out_schema) {
         // TODO: check that the input schema is compatible with the output
         // schema
+        std::cout << "PRC in  " << in_schema->ToString(true) << std::endl;
+        std::cout << "PRC out " << out_schema->ToString(true) << std::endl;
         if (in_schema->ncols() != out_schema->ncols()) {
             throw std::runtime_error(
                 "Input and output schemas must have the same number of "
@@ -38,8 +40,13 @@ class PhysicalResultCollector : public PhysicalSink {
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
+        // std::cout << "todd0 " << input_batch->schema()->ToString(true) <<
+        // std::endl; std::cout << "todd1 " <<
+        // buffer->data_table->schema()->ToString(true) << std::endl;
         buffer->UnifyTablesAndAppend(input_batch, dict_builders);
 
+        // std::cout << "todd2 " << buffer->data_table->schema()->ToString(true)
+        // << std::endl;
         return prev_op_result == OperatorResult::FINISHED
                    ? OperatorResult::FINISHED
                    : OperatorResult::NEED_MORE_INPUT;

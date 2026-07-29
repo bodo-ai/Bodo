@@ -157,9 +157,20 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                         in_table_schema->column_types[col_idx]->c_type);
                 std::string timezone =
                     in_table_schema->column_types[col_idx]->timezone;
+                int precision = -1;
+                int scale = -1;
+                if (in_table_schema->column_types[col_idx]->c_type ==
+                    Bodo_CTypes::CTypeEnum::DECIMAL) {
+                    precision =
+                        in_table_schema->column_types[col_idx]->precision;
+                    scale = in_table_schema->column_types[col_idx]->scale;
+                    if (agg_expr.function.name == "sum") {
+                        precision = 38;
+                    }
+                }
                 out_arr_type = std::make_unique<bodo::DataType>(
-                    std::get<0>(output_dtype), std::get<1>(output_dtype), -1,
-                    -1, timezone);
+                    std::get<0>(output_dtype), std::get<1>(output_dtype),
+                    precision, scale, timezone);
             }
 
             this->output_schema->append_column(std::move(out_arr_type));
@@ -366,7 +377,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         next_batch = groupby_produce_output_batch_wrapper(
             this->groupby_state.get(), &out_is_last, true);
 
-        fix_decimal_precisions(next_batch);
+        // fix_decimal_precisions(next_batch);
         this->metrics.produce_time += end_timer(start_produce);
         next_batch->column_names = this->output_schema->column_names;
         return {next_batch, out_is_last ? OperatorResult::FINISHED

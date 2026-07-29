@@ -1470,7 +1470,6 @@ std::pair<int64_t, PyObject *> execute_plan(
         return {0, nullptr};
     }
 
-    std::cout << "todd0 " << output_table->schema()->ToString() << std::endl;
     PyObject *pyarrow_schema =
         arrow::py::wrap_schema(output_table->schema()->ToArrowSchema());
 

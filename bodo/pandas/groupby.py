@@ -995,7 +995,7 @@ def _get_agg_output_type(
         elif pa.types.is_string(pa_type) or pa.types.is_large_string(pa_type):
             new_type = pa_type
         elif pa.types.is_decimal(pa_type):
-            new_type = pa_type
+            new_type = pa.decimal128(38, pa_type.scale)
     elif func_name in (
         "mean",
         "std",
