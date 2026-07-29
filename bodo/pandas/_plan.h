@@ -302,11 +302,21 @@ duckdb::unique_ptr<duckdb::Expression> make_scalar_func_expr(
 /**
  * @brief Create an expression for a NULL value of given type.
  *
- * @param val - the type to create the NULL value of
+ * @param out_schema_py - Arrow schema for output data type
+ * @param field_idx - Index of schema field containing the output type
  * @return duckdb::unique_ptr<duckdb::Expression> - the const null expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
                                                        int64_t field_idx);
+
+/**
+ * @brief Create an expression from a constant Arrow ListScalar.
+ *
+ * @param list_scalar_py The Arrow list scalar for the expression
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const list expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_list_expr(
+    PyObject *list_scalar_py);
 
 /**
  * @brief Create an expression from a constant number.
