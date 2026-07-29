@@ -228,8 +228,9 @@ void GPUReductionFunction::Finalize(MPI_Comm comm) {
         std::shared_ptr<arrow::Table> arrow_table;
 
         bool has_data = (result != nullptr && result->is_valid());
-        // Check that at least one rank has non-empty, non-null data. We need to
-        // get a rank with non-empty data for first/any_value.
+        // Check that at least one rank has non-empty, non-null data. We acquire
+        // a rank with non-empty data for first/any_value to avoid returning
+        // null when rank 0 is empty and other ranks have non-null data.
         int rank, first_non_null_rank;
         MPI_Comm_rank(comm, &rank);
         int null_rank = std::numeric_limits<int>::max();
