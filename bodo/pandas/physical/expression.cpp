@@ -684,7 +684,6 @@ arrow::Datum do_arrow_compute_binary(
     }
 
     arrow::Datum cmp_datum = cmp_res.ValueOrDie();
-    PrintDatum(cmp_datum);
 
     std::shared_ptr<arrow::DataType> cmp_dtype = cmp_datum.type();
     if (result_type && cmp_dtype != result_type) {
