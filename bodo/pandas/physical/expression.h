@@ -1806,7 +1806,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 result = ConvertDatumToArrayInfo(substring_datum);
             }
         } else if (scalar_func_data.arrow_func_name == "split_part") {
-            auto [delimiter, count] = get_py_args_as_types(
+            auto [delimiter, part_num] = get_py_args_as_types(
                 scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
                 get_py_object_as_cstr, get_py_object_as_int64);
             std::string delim_str(delimiter);
@@ -1814,7 +1814,7 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::Datum res_datum =
                 ConvertExprResultToDatum(res, "split_part string");
             arrow::Datum part_datum =
-                do_arrow_compute_split_part(res_datum, delim_str, count);
+                do_arrow_compute_split_part(res_datum, delim_str, part_num);
 
             // Assign to result based on input type
             if constexpr (std::is_same_v<T, arrow::Datum>) {

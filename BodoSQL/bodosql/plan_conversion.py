@@ -4512,7 +4512,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
             ensure_arg_is_const_expr_of_type(count_expr, "count_expr", int)
 
-            # Implementation involves splitting, so easiest to do it on the C++ side
+            # Implementation involves fixed_size_list results, so easier
+            # to do it on the C++ side.
             return ArrowScalarFuncExpression(
                 src.empty_data,
                 [src],
@@ -4535,7 +4536,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # part_num is 1-based.
             part_num = part_num_expr.value if part_num_expr.value != 0 else 1
 
-            # Implementation involves splitting, so easiest to do it on the C++ side
+            # Implementation involves fixed_size_list results, so easier
+            # to do it on the C++ side.
             return ArrowScalarFuncExpression(
                 src.empty_data,
                 [src],
