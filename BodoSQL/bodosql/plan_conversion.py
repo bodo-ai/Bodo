@@ -3913,7 +3913,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 int_empty_data,
                 [precision_digits, zero_expr],
                 "max_element_wise",
-                (False,),
+                (),
             )
 
             # Round the number to the specified precision
@@ -5038,7 +5038,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
             # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
             src = op_exprs[0]
-            ensure_type_of_expr(src, "src", str)
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
 
             # utf8_slice_codeunits / bodo_substr_three will handle the wraparound for negative start index
             start_expr = op_exprs[1]

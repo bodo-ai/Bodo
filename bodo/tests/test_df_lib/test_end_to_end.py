@@ -26,7 +26,6 @@ from bodo.pandas.utils import (
 from bodo.tests.utils import (
     _test_equal,
     is_multi_worker_per_gpu_test,
-    set_broadcast_join,
     temp_config_override,
 )
 
@@ -1448,12 +1447,11 @@ def test_project_after_filter(datapath):
 
 @pytest.mark.gpu
 @pytest.mark.parametrize("how", ["inner", "left", "right", "outer"])
-@pytest.mark.parametrize("broadcast", [True, False])
-def test_merge(how, broadcast):
+def test_merge(how, join_strategy):
     """Simple test for DataFrame merge."""
 
     # Make sure bdf3 is unevaluated in the process.
-    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
+    with assert_executed_plan_count(0):
         df1 = pd.DataFrame(
             {
                 "B": ["a1", "b11", "c111"],
@@ -1550,11 +1548,10 @@ def test_merge_switch_side():
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize("broadcast", [True, False])
-def test_merge_non_equi_cond(broadcast):
+def test_merge_non_equi_cond(join_strategy):
     """Simple test for non-equi join conditions."""
     # Make sure bdf3 is unevaluated in the process.
-    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
+    with assert_executed_plan_count(0):
         df1 = pd.DataFrame(
             {
                 "B": pd.array([4, 5, 6], "Int64"),
@@ -1594,7 +1591,7 @@ def test_merge_non_equi_cond(broadcast):
     )
 
     # Make sure bdf3 is unevaluated at this point.
-    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
+    with assert_executed_plan_count(0):
         df1.loc[0, "B"] = np.nan
         bdf1 = bd.from_pandas(df1)
 
@@ -1621,11 +1618,10 @@ def test_merge_non_equi_cond(broadcast):
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize("broadcast", [True, False])
-def test_merge_mixed_join_conds(broadcast):
+def test_merge_mixed_join_conds(join_strategy):
     """Test merge with both equi and non-equi join conditions."""
     # Make sure bdf3 is unevaluated at this point.
-    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
+    with assert_executed_plan_count(0):
         df1 = pd.DataFrame(
             {
                 "B": pd.array([4, 5, 6], "Int64"),
@@ -2697,10 +2693,9 @@ def test_filter_source_matching():
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize("broadcast", [True, False])
-def test_filter_series_isin(broadcast):
+def test_filter_series_isin(join_strategy):
     """Test dataframe filter with isin case"""
-    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
+    with assert_executed_plan_count(0):
         df1 = pd.DataFrame(
             {
                 "A": [1.4, 2.1, 3.3],
@@ -2727,10 +2722,9 @@ def test_filter_series_isin(broadcast):
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize("broadcast", [True, False])
-def test_filter_series_not_isin(index_val, broadcast):
+def test_filter_series_not_isin(index_val, join_strategy):
     """Test dataframe filter with not isin case"""
-    with assert_executed_plan_count(0), set_broadcast_join(broadcast):
+    with assert_executed_plan_count(0):
         df1 = pd.DataFrame(
             {
                 "A": [1.4, 2.1, 3.3],
@@ -4829,6 +4823,28 @@ def test_join_filter_pushdown_aggregate_split_keys():
     _test_equal(
         bdf4,
         df4,
+        check_pandas_types=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.gpu
+def test_merge_empty_build(join_strategy):
+    """Test join behavior when the build table is empty."""
+    df1 = pd.DataFrame({"A": range(100)})
+    df2 = pd.DataFrame({"A": pd.array([], "Int32")})
+
+    with assert_executed_plan_count(0):
+        bdf2 = bd.from_pandas(df2)
+        bdf1 = bd.from_pandas(df1)
+        bdf3 = bdf1.merge(bdf2, left_on="A", right_on="A", how="left")
+
+    df3 = df1.merge(df2, left_on="A", right_on="A", how="left")
+
+    _test_equal(
+        bdf3,
+        df3,
         check_pandas_types=False,
         sort_output=True,
         reset_index=True,
