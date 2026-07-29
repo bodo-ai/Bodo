@@ -4852,17 +4852,28 @@ def test_merge_empty_build(join_strategy):
 
 
 @pytest.mark.gpu
-def test_some_null_reduce():
-    """Test that rank 0 having all null values returns the correct answer"""
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param([None, None, None, None, 1], id="some_null"),
+        pytest.param(pd.array([pd.NA] * 5, dtype="Int32"), id="all_null"),
+    ],
+)
+def test_null_reduce(data):
+    """Test reduction with all null values on some or all ranks"""
 
-    pass
+    df1 = pd.DataFrame({"A": data})
+    df2 = df1.A.min()
 
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.from_pandas(df1)
+        bodo_df2 = bodo_df1.A.min()
 
-@pytest.mark.gpu
-def test_all_null_reduce():
-    """Test that all ranks having all null values returns the correct answer"""
-
-    pass
+    _test_equal(
+        bodo_df2,
+        df2,
+        check_pandas_types=False,
+    )
 
 
 def test_df_copy(datapath):

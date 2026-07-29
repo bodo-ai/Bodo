@@ -223,25 +223,28 @@ void GPUReductionFunction::Finalize(MPI_Comm comm) {
         std::unique_ptr<cudf::scalar>& result = this->results[i];
 
         std::shared_ptr<arrow::Table> arrow_table;
-        cudf::data_type result_dtype = result->type();
+
         bool has_data = (result != nullptr && result->is_valid());
-
-        bool global_has_data = false;
-
+        // Check that at least one rank has non-empty, non-null data. We need to
+        // get a rank with non-empty data for first/any_value.
+        int rank, first_non_null_rank;
+        MPI_Comm_rank(comm, &rank);
+        int null_rank = std::numeric_limits<int>::max();
+        int candidate = has_data ? rank : null_rank;
         CHECK_MPI(
-            MPI_Allreduce(&has_data, &global_has_data, 1, MPI_C_BOOL, MPI_LOR,
+            MPI_Allreduce(&candidate, &first_non_null_rank, 1, MPI_INT, MPI_MIN,
                           comm),
             "GPUReductionFunction::Finalize: MPI error on MPI_Allreduce:");
-        if (!global_has_data) {
+        if (first_non_null_rank == null_rank) {
+            // All ranks either have null data or are empty, emit null.
             continue;
         }
 
         if (has_data) {
             arrow_table = cudf_scalar_to_arrow_table(result);
         } else {
-            auto arrow_dtype = cudf_to_arrow_type(result_dtype);
-            std::shared_ptr<arrow::Scalar> scalar =
-                make_reduction_identity(reduction_names[i], arrow_dtype);
+            std::shared_ptr<arrow::Scalar> scalar = make_reduction_identity(
+                reduction_names[i], cudf_to_arrow_type(out_dtype));
             auto array = arrow::MakeArrayFromScalar(*scalar, 1).ValueOrDie();
             arrow_table =
                 arrow::Table::FromRecordBatches(
@@ -256,11 +259,11 @@ void GPUReductionFunction::Finalize(MPI_Comm comm) {
         void* result_ptr = reinterpret_cast<void*>(
             arrow_table->column(0)->chunk(0)->data()->buffers[1]->address());
 
-        MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(result_dtype);
+        MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(out_dtype);
         // NOTE: OpenMPI collectives are not CUDA-aware
         if (function_names[i] == "first") {
             CHECK_MPI(
-                MPI_Bcast(result_ptr, 1, mpi_dtype, 0, comm),
+                MPI_Bcast(result_ptr, 1, mpi_dtype, first_non_null_rank, comm),
                 "GPUReductionFunction::Finalize: MPI error on MPI_Bcast:");
         } else {
             CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
