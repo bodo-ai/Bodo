@@ -2455,7 +2455,7 @@ arrow::Datum do_arrow_compute_substring_index(arrow::Datum res_datum,
  * @brief Occurrences of `delim_str` divide the input string `res_datum`
  * into parts. SPLIT_PART returns the substring corresponding to a part
  * number, where 1 is the first part. If the part number is negative,
- * the counting happens frome left to right. If `delim_str` is empty,
+ * the counting happens from the right. If `delim_str` is empty,
  * `res_datum` is returned as is. If there are fewer than abs(part_num)
  * parts in the string, an empty string is emitted.
  */
