@@ -45,7 +45,7 @@ abstract class GenTestFixture {
                 // Disable Streaming Sort Limit Offset
                 // Maintain case sensitivity in the Snowflake style by default
                 "SNOWFLAKE",
-                false,
+                true, // Enable covering expression caching for testing
                 true,
                 null,
             )
