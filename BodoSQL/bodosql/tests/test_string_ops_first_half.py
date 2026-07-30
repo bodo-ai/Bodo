@@ -788,6 +788,7 @@ def test_split_part(query, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "args",
     [
@@ -867,6 +868,7 @@ def test_strtok(args, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query, expected",
     [
@@ -898,6 +900,7 @@ def test_strtok(args, memory_leak_check):
                 }
             ),
             id="vector_default",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT STRTOK_TO_ARRAY(A, ' .,-') FROM table1",
@@ -940,6 +943,7 @@ def test_strtok(args, memory_leak_check):
                 }
             ),
             id="vector_symbols",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT STRTOK_TO_ARRAY(A, B) FROM table1",
@@ -1007,6 +1011,7 @@ def test_strtok(args, memory_leak_check):
                 }
             ),
             id="vector_aspace",
+            marks=pytest.mark.bodosql_cpp,
         ),
     ],
 )
@@ -1045,10 +1050,12 @@ def test_strtok_to_array(query, expected, memory_leak_check):
         pytest.param(
             "SELECT SPLIT('www.bodo.ai', '.')",
             id="all_scalar",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT SPLIT(A, ' ') FROM table1",
             id="vector_scalar",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT SPLIT(A, B) FROM table1",
@@ -1083,6 +1090,12 @@ def test_split(query, memory_leak_check):
             }
         )
     }
+    # NOTE: We are comparing against DuckDB here, but DuckDB has slightly different
+    # semantics than Snowflake in some edge cases that are not represented in
+    # this test. For example, when the separator is empty, DuckDB splits the string
+    # into a list of its characters, whereas Snowflake just wraps the string in a
+    # list. DuckDB does wrap the original string in a list when the separator is
+    # NULL, but Snowflake returns NULL in that case.
     check_query(
         query,
         ctx,
