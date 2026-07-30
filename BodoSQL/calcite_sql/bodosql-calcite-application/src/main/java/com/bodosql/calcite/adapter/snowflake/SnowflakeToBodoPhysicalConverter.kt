@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.snowflake
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.adapter.common.RelUtils.findRelOfType
 import com.bodosql.calcite.application.PythonLoggers
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
@@ -69,10 +70,16 @@ class SnowflakeToBodoPhysicalConverter(
 
     override fun loggingTitle() = "IO TIMING"
 
+    /**
+     * Find the SnowflakeRel in the input chain, traversing through BodoPhysical nodes
+     * and CachedSubPlanBase bodies inserted by covering expression caching.
+     */
+    fun findSnowflakeRel(node: RelNode): SnowflakeRel = findRelOfType(node)
+
     override fun nodeDetails() =
         (
             if (isSimpleWholeTableRead()) {
-                getTableName(input as SnowflakeRel)
+                getTableName(findSnowflakeRel(input))
             } else {
                 getSnowflakeSQL()
             }
@@ -186,7 +193,7 @@ class SnowflakeToBodoPhysicalConverter(
         val tableName = getTableName(tableScan)
         val schemaName = getSchemaName(tableScan)
         val databaseName = getDatabaseName(tableScan)
-        val relInput = input as SnowflakeRel
+        val relInput = findSnowflakeRel(input)
         val args =
             listOf(
                 StringLiteral(tableName),
@@ -327,7 +334,7 @@ class SnowflakeToBodoPhysicalConverter(
         // node and run them after the read. Will deal with pushing
         // them into the IO node later.
         val sql = getSnowflakeSQL()
-        val relInput = (skipRuntimeJoinFilters()) as SnowflakeRel
+        val relInput = findSnowflakeRel(skipRuntimeJoinFilters())
 
         val passTableInfo = canUseOptimizedReadSqlPath(relInput)
 

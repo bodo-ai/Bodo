@@ -2397,8 +2397,7 @@ void DEBUG_PrintSetOfColumn(
     for (int iCol = 0; iCol < nCol; iCol++) {
         os << "Column " << iCol << " : "
            << "arr_type=" << GetArrType_as_string(ListArr[iCol]->arr_type)
-           << " dtype=" << GetDtype_as_string(ListArr[iCol]->dtype)
-           << std::endl;
+           << " dtype=" << ListArr[iCol]->data_type()->ToString() << std::endl;
     }
     if (print_only_types) {
         return;

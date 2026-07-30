@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 from setuptools import setup
 from setuptools.command.build_py import build_py
@@ -25,7 +26,7 @@ def build_libs(obj):
         ]
         if "BODO_FORCE_COLORED_BUILD" in os.environ:
             cmd_list.append("-Dstyle.color=always")
-        obj.spawn(cmd_list)
+        subprocess.run(cmd_list, check=True)
 
         executable_jar_path = os.path.join(
             "calcite_sql",
@@ -42,8 +43,8 @@ def build_libs(obj):
         except OSError:
             pass
         os.rename(executable_jar_path, dst_jar_path)
-    except ExecError as e:
-        obj.error("maven build failed with error:", e)
+    except subprocess.CalledProcessError as e:
+        raise ExecError(f"maven build failed with error: {e}") from e
 
 
 class CustomBuildPyCommand(build_py):

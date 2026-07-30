@@ -4501,6 +4501,50 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 new_index,
             )
 
+        elif func_name == "SUBSTRING_INDEX" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            delim_expr = op_exprs[1]
+            count_expr = op_exprs[2]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                delim_expr, "delim_expr", (str, pa.binary())
+            )
+            ensure_arg_is_const_expr_of_type(count_expr, "count_expr", int)
+
+            # Implementation involves fixed_size_list results, so easier
+            # to do it on the C++ side.
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "substring_index",
+                (delim_expr.value, count_expr.value),
+            )
+
+        elif func_name == "SPLIT_PART" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            delim_expr = op_exprs[1]
+            part_num_expr = op_exprs[2]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                delim_expr, "delim_expr", (str, pa.binary())
+            )
+            ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
+
+            # Snowflake treats a part number of 0 the same as 1.
+            # part_num is 1-based.
+            part_num = part_num_expr.value if part_num_expr.value != 0 else 1
+
+            # Implementation involves fixed_size_list results, so easier
+            # to do it on the C++ side.
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "split_part",
+                (delim_expr.value, part_num),
+            )
+
         elif func_name == "REGEXP_REPLACE" and len(op_exprs) in (2, 3, 4, 5, 6):
             src = op_exprs[0]
             regexp = op_exprs[1]
@@ -5419,6 +5463,49 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         )
 
 
+def get_decimal_type(atype):
+    if pa.types.is_int64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_int32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_int16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_int8(atype):
+        return pa.decimal128(3, 0)
+    elif pa.types.is_uint64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_uint32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_uint16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_uint8(atype):
+        return pa.decimal128(3, 0)
+    else:
+        raise TypeError(f"Not decimal conversion from {atype} yet")
+
+
+def get_output_type(left_empty, right_empty, non_decimal_func, decimal_func):
+    left_atype = left_empty.dtypes.iloc[0].pyarrow_dtype
+    right_atype = right_empty.dtypes.iloc[0].pyarrow_dtype
+    if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
+        if not pa.types.is_decimal(left_atype):
+            left_atype = get_decimal_type(left_atype)
+        if not pa.types.is_decimal(right_atype):
+            right_atype = get_decimal_type(right_atype)
+        output_leading, output_scale = decimal_func(
+            left_atype.precision - left_atype.scale,
+            left_atype.scale,
+            right_atype.precision - right_atype.scale,
+            right_atype.scale,
+        )
+        precision = output_leading + output_scale
+        return pd.Series(
+            dtype=pd.ArrowDtype(pa.decimal128(min(38, precision), output_scale))
+        )
+    else:
+        return non_decimal_func(left_empty.iloc[:, 0], right_empty.iloc[:, 0])
+
+
 def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
 
@@ -5435,7 +5522,12 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.PLUS):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
         # TODO: upcast output to avoid overflow?
-        out_empty = left.empty_data.iloc[:, 0] + right.empty_data.iloc[:, 0]
+        out_empty = get_output_type(
+            left.empty_data,
+            right.empty_data,
+            lambda l, r: l + r,
+            lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
+        )
         expr = ArithOpExpression(out_empty, left, right, "__add__")
         return expr
 
@@ -5456,17 +5548,32 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             right_cast = CastExpression(out_empty, right) if right_unsigned else right
             expr = ArithOpExpression(out_empty, left_cast, right_cast, "__sub__")
         else:
-            out_empty = left_type - right_type
+            out_empty = get_output_type(
+                left.empty_data,
+                right.empty_data,
+                lambda l, r: l - r,
+                lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
+            )
             expr = ArithOpExpression(out_empty, left, right, "__sub__")
         return expr
 
     if kind.equals(SqlKind.TIMES):
-        out_empty = left.empty_data.iloc[:, 0] * right.empty_data.iloc[:, 0]
+        out_empty = get_output_type(
+            left.empty_data,
+            right.empty_data,
+            lambda l, r: l * r,
+            lambda ll, ls, rl, rs: (ll + rl, ls + rs),
+        )
         expr = ArithOpExpression(out_empty, left, right, "__mul__")
         return expr
 
     if kind.equals(SqlKind.DIVIDE):
-        out_empty = left.empty_data.iloc[:, 0] / right.empty_data.iloc[:, 0]
+        out_empty = get_output_type(
+            left.empty_data,
+            right.empty_data,
+            lambda l, r: l / r,
+            lambda ll, ls, rl, rs: (ll + rs, max(ls, rs + 4)),
+        )
         expr = ArithOpExpression(out_empty, left, right, "__truediv__")
         return expr
 

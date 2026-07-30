@@ -105,7 +105,7 @@ std::string getGPUStats() {
     } while (0)
 #endif
 
-#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+#if defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1) && defined(USE_CUDF)
 #define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out, batch) \
     do {                                                                       \
         out << "Rank " << rank << " Pipeline::Execute after ProduceBatch "     \
@@ -114,6 +114,42 @@ std::string getGPUStats() {
             << " " << getGPUStats() << std::endl;                              \
         if (DEBUG_PIPELINE >= 2) {                                             \
             printBatchTypes(out, batch);                                       \
+        }                                                                      \
+        if (DEBUG_PIPELINE >= 3) {                                             \
+            std::visit(                                                        \
+                [&](auto &x) {                                                 \
+                    using T = std::decay_t<decltype(x.first)>;                 \
+                    if constexpr (std::is_same_v<                              \
+                                      T, std::shared_ptr<table_info>>) {       \
+                        DEBUG_PrintTable(out, x.first, true);                  \
+                    } else {                                                   \
+                        auto ctable = convertGPUToTable(x.first);              \
+                        DEBUG_PrintTable(out, ctable, true);                   \
+                    }                                                          \
+                },                                                             \
+                batch);                                                        \
+        }                                                                      \
+    } while (0)
+#elif defined(DEBUG_PIPELINE) && (DEBUG_PIPELINE >= 1)
+#define DEBUG_PIPELINE_AFTER_PRODUCE(rank, source, produce_result, out, batch) \
+    do {                                                                       \
+        out << "Rank " << rank << " Pipeline::Execute after ProduceBatch "     \
+            << getNodeString(source) << " " << toString(produce_result)        \
+            << " NumRows=>" << getBatchRows(batch) << " " << getGPUStats()     \
+            << std::endl;                                                      \
+        if (DEBUG_PIPELINE >= 2) {                                             \
+            printBatchTypes(out, batch);                                       \
+        }                                                                      \
+        if (DEBUG_PIPELINE >= 3) {                                             \
+            std::visit(                                                        \
+                [&](auto &x) {                                                 \
+                    using T = std::decay_t<decltype(x.first)>;                 \
+                    if constexpr (std::is_same_v<                              \
+                                      T, std::shared_ptr<table_info>>) {       \
+                        DEBUG_PrintTable(out, x.first, true);                  \
+                    }                                                          \
+                },                                                             \
+                batch);                                                        \
         }                                                                      \
     } while (0)
 #else

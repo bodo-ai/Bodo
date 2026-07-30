@@ -93,7 +93,7 @@ object BodoGenTest {
                 true, // Enable Streaming Sort for Testing
                 false, // Disable Streaming Sort Limit Offset for Testing
                 "SNOWFLAKE", // Maintain case sensitivity in the Snowflake style by default
-                false, // Only cache identical nodes
+                true, // Enable covering expression caching for testing
                 true, // Generate a prefetch call at the beginning of SQL queries
                 null,
             )

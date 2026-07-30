@@ -4,7 +4,7 @@ import static com.bodosql.calcite.application.logicalRules.FilterRulesCommon.fil
 import static com.bodosql.calcite.application.logicalRules.FilterRulesCommon.updateConditionsExtractCommon;
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.core.Filter;
@@ -52,7 +52,7 @@ public class LogicalFilterReorderConditionRule
     // a common condition.
     Filter filter = call.rel(0);
     RelBuilder builder = call.builder();
-    HashSet<RexNode> commonExprs = new HashSet<RexNode>();
+    LinkedHashSet<RexNode> commonExprs = new LinkedHashSet<RexNode>();
     Pair<RexNode, Boolean> updatedOR =
         updateConditionsExtractCommon(builder, filter.getCondition(), commonExprs);
     boolean changed = updatedOR.getValue();

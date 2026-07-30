@@ -1,5 +1,6 @@
 #include "expression.h"
 #include <arrow/type_fwd.h>
+#include <cmath>
 #include "_util.h"
 #include "duckdb/common/types/interval.hpp"
 
@@ -628,7 +629,6 @@ void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
         arrow::compute::CastOptions cast_opts;
         cast_opts.allow_int_overflow = true;
         cast_opts.allow_float_truncate = true;
-        cast_opts.allow_decimal_truncate = true;
         arrow::Result<arrow::Datum> cast_res =
             arrow::compute::Cast(out_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
@@ -653,8 +653,8 @@ arrow::Datum do_arrow_compute_binary(
             "): " + cmp_res.status().message());
     }
 
-    do_result_type_cast(cmp_res, result_type);
-    return cmp_res.ValueOrDie();
+    arrow::Datum cmp_datum = cmp_res.ValueOrDie();
+    return do_arrow_compute_cast(cmp_datum, result_type);
 }
 
 arrow::Datum do_arrow_compute_unary(
@@ -737,7 +737,7 @@ arrow::Datum do_arrow_compute_cast(
     // No need to cast if type is already the target type.
     // Note that arrow::DataType.Equals() also compares type parameters such
     // as time units and timezones.
-    if (left_res.type()->Equals(return_type)) {
+    if (!return_type || left_res.type()->Equals(return_type)) {
         return left_res;
     }
 
@@ -2327,6 +2327,222 @@ arrow::Datum do_arrow_compute_replace_substring_regex_single(
         {string_tail_is_null, res_datum, combined_replaced_string}, "if_else");
 
     return final_replaced_string;
+}
+
+/**
+ * @brief If `count` == 0, returns empty string. If `count` > 0, returns the
+ * substring that is left of the `count`-th occurrence of `delim_str` in
+ * `res_datum`. If `count` < 0, returns the substring that is right of the
+ * abs(count)-th ocurrence of `delim_str` in `res_datum`. If abs(count) is
+ * higher than the number of occurrences of `delim_str`, returns the original
+ * string (`res_datum`).
+ */
+arrow::Datum do_arrow_compute_substring_index(arrow::Datum res_datum,
+                                              std::string delim_str,
+                                              int count) {
+    // Return empty string if count is 0 or delimiter is empty
+    if (count == 0 || delim_str == "") {
+        auto empty_string_scalar =
+            (res_datum.type()->id() == arrow::Type::LARGE_STRING)
+                ? std::static_pointer_cast<arrow::Scalar>(
+                      std::make_shared<arrow::LargeStringScalar>(""))
+                : std::static_pointer_cast<arrow::Scalar>(
+                      std::make_shared<arrow::StringScalar>(""));
+        auto empty_string_arr = ScalarToArrowArray(
+            empty_string_scalar, res_datum.make_array()->length());
+        return arrow::Datum(empty_string_arr);
+    }
+
+    int count_abs = std::abs(count);
+
+    // Split the string on the delimiter count_abs times. The sign of `count`
+    // controls the direction we search for `count_abs` delimiter occurrences.
+    arrow::compute::SplitPatternOptions split_opts{delim_str, count_abs,
+                                                   count < 0};
+    // split_string is a ListArray. If `count` is positive, the last element of
+    // each list is the part of the string we DON'T want to return. If `count`
+    // is negative, it is the first element of each list we don't want to
+    // return. Of course, if the string has more than `count_abs` occurrences of
+    // the delimiter, we should return the full string.
+    arrow::Datum split_string =
+        do_arrow_compute_unary(res_datum, "split_pattern", &split_opts);
+
+    // Our approach here is to extract the part of the string we DON'T want to
+    // keep and determine its length and start position so we can use
+    // bodo_substr_three to slice it off, leaving us with the substring to the
+    // left of the (count_abs)-th delimiter occurrence from the left or the
+    // substring to the right of the (count_abs)-th delimiter occurrence from
+    // the right.
+
+    // Get the first or the (count_abs + 1)-th list element from the
+    // split_string. We can't use list_element directly, because the lists in
+    // the ListArray could have different lengths depending on the number of
+    // delimiter occurrences in the string, and list_element raises an error
+    // instead of returning NULL in that case. Therefore, we first get a slice
+    // containing only the first or the (count_abs + 1)-th element with the
+    // return_fixed_size_list option set to true, which substitutes NULL when
+    // the original list has no element corresponding to a particular index.
+    arrow::compute::ListSliceOptions list_slice_opts;
+    if (count > 0) {
+        // Get the part of the string we would want to throw away if the string
+        // has at least count_abs delimiters. (In this case, the last element,
+        // since we want the substring to the left)
+        list_slice_opts.start = count_abs;
+        list_slice_opts.stop = count_abs + 1;
+    } else {
+        // Get the part of the string we would want to throw away if the string
+        // has at least count_abs delimiters. (In this case, the first element,
+        // since we want the substring to the right)
+        list_slice_opts.start = 0;
+        list_slice_opts.stop = 1;
+    }
+    list_slice_opts.return_fixed_size_list = true;
+    arrow::Datum element_to_remove_list =
+        do_arrow_compute_unary(split_string, "list_slice", &list_slice_opts);
+
+    // Get the singular list element from our list slice.
+    // If there are fewer than `count_abs` occurrences of the delimiter,
+    // this will be NULL if count > 0 but not if count < 0.
+    auto zero_scalar = std::make_shared<arrow::Int64Scalar>(0);
+    arrow::Datum element_to_remove = do_arrow_compute_binary(
+        element_to_remove_list, zero_scalar, "list_element");
+
+    arrow::Datum to_remove_length =
+        do_arrow_compute_unary(element_to_remove, "utf8_length");
+    auto delim_len_scalar =
+        std::make_shared<arrow::Int64Scalar>(delim_str.length());
+
+    // Get the substring result (assuming there were enough delimiter
+    // occurrences)
+    arrow::Datum substring;
+    if (count > 0) {
+        // Substring left of the (count_abs)-th occurrence of delimiter from the
+        // left res_datum[0: len(res_datum) - len(to_remove_part) - len(delim)]
+        arrow::Datum full_length =
+            do_arrow_compute_unary(res_datum, "utf8_length");
+        arrow::Datum to_keep_length =
+            do_arrow_compute_binary(full_length, to_remove_length, "subtract");
+        to_keep_length = do_arrow_compute_binary(to_keep_length,
+                                                 delim_len_scalar, "subtract");
+        substring = do_arrow_compute_multi_input_datum(
+            {res_datum, zero_scalar, to_keep_length}, "bodo_substr_three");
+    } else {
+        // Substring right of the (count_abs)-th occurrence of delimiter from
+        // the right res_datum[len(to_remove_part) + len(delim): ]
+        arrow::Datum start_index =
+            do_arrow_compute_binary(to_remove_length, delim_len_scalar, "add");
+        substring = do_arrow_compute_multi_input_datum({res_datum, start_index},
+                                                       "bodo_substr_three");
+    }
+
+    // To be able to tell whether we should return the full string or not,
+    // we need to get the actual length of the split_string list.
+    // The length of each list is the minimum of `count_abs` + 1 and
+    // number of delimiter occurrences + 1.
+    arrow::Datum list_length =
+        do_arrow_compute_unary(split_string, "list_value_length");
+
+    // Make sure the full string is returned if there are fewer than `count_abs`
+    // occurrences of the delimiter.
+    auto count_abs_scalar = std::make_shared<arrow::Int32Scalar>(count_abs + 1);
+    arrow::Datum return_full_string =
+        do_arrow_compute_binary(list_length, count_abs_scalar, "less");
+    return do_arrow_compute_multi_input_datum(
+        {return_full_string, res_datum, substring}, "if_else");
+}
+
+/**
+ * @brief Occurrences of `delim_str` divide the input string `res_datum`
+ * into parts. SPLIT_PART returns the substring corresponding to a part
+ * number, where 1 is the first part. If the part number is negative,
+ * the counting happens from the right. If `delim_str` is empty,
+ * `res_datum` is returned as is. If there are fewer than abs(part_num)
+ * parts in the string, an empty string is emitted.
+ */
+arrow::Datum do_arrow_compute_split_part(arrow::Datum res_datum,
+                                         std::string delim_str, int part_num) {
+    // Snowflake returns the original string when the delimiter is empty
+    if (delim_str == "") {
+        return res_datum;
+    }
+
+    int part_num_abs = std::abs(part_num);
+
+    // Split the string on the delimiter (part_num_abs) times. The sign of
+    // `part_num` controls the direction we search for (part_num_abs) delimiter
+    // occurrences. It's important than we don't split on all the occurrences of
+    // the delimiter in the string. If we did, a slew of Arrow limitations would
+    // make it much harder to pick the right list element when part_num is
+    // negative. This way, we know the second element is the one we are looking
+    // for.
+    arrow::compute::SplitPatternOptions split_opts{delim_str, part_num_abs,
+                                                   part_num < 0};
+    // split_string is a ListArray
+    arrow::Datum split_string =
+        do_arrow_compute_unary(res_datum, "split_pattern", &split_opts);
+
+    // Get a single-element list of the part we want, with
+    // return_fixed_size_list = true. We need to do this since calling
+    // list_element directly will throw an error if there are fewer than
+    // `part_num` parts in the split string (for positive `part_num`).
+    arrow::compute::ListSliceOptions list_slice_opts;
+    if (part_num > 0) {
+        // part_num is one-based, so part_num - 1 is the index corresponding to
+        // the part
+        list_slice_opts.start = part_num - 1;
+        list_slice_opts.stop = part_num;
+    } else {
+        // When the part number is negative, we count right to left.
+        // We split the string into (at most) part_num_abs + 1 parts, so the
+        // leftmost part is the remaining non-split segment, and the second
+        // part is the requested part.
+        list_slice_opts.start = 1;
+        list_slice_opts.stop = 2;
+    }
+    list_slice_opts.return_fixed_size_list = true;
+    arrow::Datum part_list =
+        do_arrow_compute_unary(split_string, "list_slice", &list_slice_opts);
+
+    // Get the actual string part. May or may not be NULL.
+    // The reliable test for whether the requested part exists
+    // is the length of split_string.
+    auto zero_scalar = std::make_shared<arrow::Int64Scalar>(0);
+    arrow::Datum part =
+        do_arrow_compute_binary(part_list, zero_scalar, "list_element");
+
+    // To be able to tell whether we should return an empty string or not,
+    // we need to get the actual length of the split_string list.
+    // The length of each list is the minimum of `part_num_abs` + 1 and
+    // number of delimiter occurrences + 1.
+    arrow::Datum list_length =
+        do_arrow_compute_unary(split_string, "list_value_length");
+
+    // If there's only one element / part, just use that.
+    // The above code for part_num < 0 assumes two or more parts
+    // (at least one delimiter occurrence).
+    arrow::Datum first_part =
+        do_arrow_compute_binary(split_string, zero_scalar, "list_element");
+    auto one_scalar = std::make_shared<arrow::Int32Scalar>(1);
+    arrow::Datum more_than_one_part =
+        do_arrow_compute_binary(list_length, one_scalar, "greater");
+    part = do_arrow_compute_multi_input_datum(
+        {more_than_one_part, part, first_part}, "if_else");
+
+    // Make sure an empty string is returned if there are fewer than
+    // `part_num_abs` parts.
+    auto part_num_abs_scalar =
+        std::make_shared<arrow::Int32Scalar>(part_num_abs);
+    arrow::Datum return_empty_string =
+        do_arrow_compute_binary(list_length, part_num_abs_scalar, "less");
+
+    auto empty_string_scalar =
+        (res_datum.type()->id() == arrow::Type::LARGE_STRING)
+            ? std::static_pointer_cast<arrow::Scalar>(
+                  std::make_shared<arrow::LargeStringScalar>(""))
+            : std::static_pointer_cast<arrow::Scalar>(
+                  std::make_shared<arrow::StringScalar>(""));
+    return do_arrow_compute_multi_input_datum(
+        {return_empty_string, empty_string_scalar, part}, "if_else");
 }
 
 arrow::Datum do_arrow_compute_dow_num(arrow::Datum res_datum) {

@@ -66,6 +66,14 @@ std::string decimal_to_string_no_scientific(
     const auto len = static_cast<int32_t>(str.size());
     const int32_t num_digits = len - is_negative_offset;
 
+    if (scale < 0) {
+        // Example: arrow_decimal = 12345, scale = -2
+        // str = "12345" → append 2 zeros → "1234500"
+        int32_t zeros_to_add = -scale;  // number of trailing zeros
+        str.append(static_cast<size_t>(zeros_to_add), '0');
+        return str;
+    }
+
     if (num_digits > scale) {
         const auto n = static_cast<size_t>(len - scale);
         str.insert(str.begin() + n, '.');

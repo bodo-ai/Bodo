@@ -739,16 +739,17 @@ def test_editdistance(query, memory_leak_check):
         pytest.param(
             "SELECT SPLIT_PART(A, ' ', 1) FROM table1",
             id="vector_space_1",
+            marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT SPLIT_PART(A, 'a', 2) FROM table1",
             id="vector_a_2",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT SPLIT_PART(A, '  ', -1) FROM table1",
             id="vector_doublespace_-1",
-            marks=pytest.mark.slow,
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT SPLIT_PART(A, RIGHT(A, 1), 1 + (LENGTH(A) % 6)) FROM table1",
@@ -758,6 +759,7 @@ def test_editdistance(query, memory_leak_check):
         pytest.param(
             "SELECT CASE WHEN INSTR(A, '  ') > 0 THEN SPLIT_PART(A, '  ', 3) ELSE SPLIT_PART(A, 'e', -2) END FROM table1",
             id="case",
+            marks=pytest.mark.bodosql_cpp,
         ),
     ],
 )

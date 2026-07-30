@@ -1448,6 +1448,12 @@ arrow::Datum do_arrow_compute_replace_substring_regex_single(
 
 arrow::Datum do_arrow_compute_dow_num(arrow::Datum res_datum);
 
+arrow::Datum do_arrow_compute_substring_index(arrow::Datum res_datum,
+                                              std::string delim_str, int count);
+
+arrow::Datum do_arrow_compute_split_part(arrow::Datum res_datum,
+                                         std::string delim_str, int part_num);
+
 struct PhysicalArrowExpressionMetrics {
     using timer_t = MetricBase::TimerValue;
     timer_t arrow_compute_time = 0;
@@ -1781,6 +1787,40 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 result = replaced_string_datum;
             } else {
                 result = ConvertDatumToArrayInfo(replaced_string_datum);
+            }
+        } else if (scalar_func_data.arrow_func_name == "substring_index") {
+            auto [delimiter, count] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_int64);
+            std::string delim_str(delimiter);
+
+            arrow::Datum res_datum =
+                ConvertExprResultToDatum(res, "substring_index string");
+            arrow::Datum substring_datum =
+                do_arrow_compute_substring_index(res_datum, delim_str, count);
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = substring_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(substring_datum);
+            }
+        } else if (scalar_func_data.arrow_func_name == "split_part") {
+            auto [delimiter, part_num] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_int64);
+            std::string delim_str(delimiter);
+
+            arrow::Datum res_datum =
+                ConvertExprResultToDatum(res, "split_part string");
+            arrow::Datum part_datum =
+                do_arrow_compute_split_part(res_datum, delim_str, part_num);
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = part_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(part_datum);
             }
         } else if (scalar_func_data.arrow_func_name == "utf8_trim" ||
                    scalar_func_data.arrow_func_name == "utf8_ltrim" ||

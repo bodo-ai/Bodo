@@ -776,12 +776,12 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT SUBSTRING_INDEX(source, 'a', occur) from table1",
             id="SUBSTRING_INDEX_scalar_str",
-            marks=(pytest.mark.slow,),
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT SUBSTRING_INDEX(source, ' ', 2) from table1",
             id="SUBSTRING_INDEX_scalar_str_scalar_int",
-            marks=(pytest.mark.slow,),
+            marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
         pytest.param(
             "SELECT SUBSTRING_INDEX(source, delim, 3) from table1",
@@ -790,6 +790,7 @@ def test_format(args, bodosql_string_fn_testing_df, memory_leak_check):
         pytest.param(
             "SELECT SUBSTRING_INDEX('alpha,beta,gamma,delta,epsilon', ',', 3) from table1",
             id="SUBSTRING_INDEX_all_scalar",
+            marks=pytest.mark.bodosql_cpp,
         ),
     ],
 )
