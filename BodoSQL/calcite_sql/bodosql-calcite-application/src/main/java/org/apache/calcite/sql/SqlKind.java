@@ -155,6 +155,9 @@ public enum SqlKind {
   /** {@code CONVERT} function. */
   CONVERT,
 
+  /** Oracle's {@code CONVERT} function. */
+  CONVERT_ORACLE,
+
   /** {@code TRANSLATE} function. */
   TRANSLATE,
 
@@ -332,6 +335,21 @@ public enum SqlKind {
    * @see #MINUS_PREFIX
    */
   MINUS,
+
+  /** Checked arithmetic plus operator, produces runtime error on overflow. */
+  CHECKED_PLUS,
+
+  /** Checked arithmetic minus operator, produces runtime error on overflow. */
+  CHECKED_MINUS,
+
+  /** Checked arithmetic multiplication operator, produces runtime error on overflow. */
+  CHECKED_TIMES,
+
+  /** Checked arithmetic division operator, produces runtime error on overflow. */
+  CHECKED_DIVIDE,
+
+  /** Checked arithmetic unary minus operator, produces runtime error on overflow. */
+  CHECKED_MINUS_PREFIX,
 
   /**
    * Alternation operator in a pattern expression within a
@@ -840,6 +858,9 @@ public enum SqlKind {
 
   /** {@code ARRAYS_ZIP} function (Spark semantics). */
   ARRAYS_ZIP,
+
+  /** {@code ARRAY_SLICE} function (Hive semantics). */
+  ARRAY_SLICE,
 
   /** {@code SORT_ARRAY} function (Spark semantics). */
   SORT_ARRAY,
@@ -1472,7 +1493,7 @@ public enum SqlKind {
   public static final Set<SqlKind> EXPRESSION =
       EnumSet.complementOf(
           concat(
-              EnumSet.of(AS, ARGUMENT_ASSIGNMENT, CONVERT, TRANSLATE, DEFAULT,
+              EnumSet.of(AS, ARGUMENT_ASSIGNMENT, CONVERT, CONVERT_ORACLE, TRANSLATE, DEFAULT,
                   RUNNING, FINAL, LAST, FIRST, PREV, NEXT,
                   FILTER, WITHIN_GROUP, IGNORE_NULLS, RESPECT_NULLS, SEPARATOR,
                   DESCENDING, CUBE, ROLLUP, GROUPING_SETS, EXTEND, LATERAL,
@@ -1502,7 +1523,7 @@ public enum SqlKind {
    */
   public static final Set<SqlKind> FUNCTION =
       EnumSet.of(OTHER_FUNCTION, ROW, TRIM, LTRIM, RTRIM, CAST, REVERSE,
-          JDBC_FN, POSITION, CONVERT);
+          JDBC_FN, POSITION, CONVERT, CONVERT_ORACLE);
 
   /**
    * Category of SqlAvgAggFunction.
@@ -1566,7 +1587,22 @@ public enum SqlKind {
    * {@link #MOD}.
    */
   public static final Set<SqlKind> BINARY_ARITHMETIC =
-      EnumSet.of(PLUS, MINUS, TIMES, DIVIDE, MOD);
+      EnumSet.of(PLUS, MINUS, TIMES, DIVIDE, MOD,
+          CHECKED_PLUS, CHECKED_MINUS, CHECKED_TIMES, CHECKED_DIVIDE);
+
+  /**
+   * Category of checked arithmetic operators.
+   *
+   * <p>Consists of:
+   * {@link #CHECKED_PLUS}
+   * {@link #CHECKED_MINUS}
+   * {@link #CHECKED_TIMES}
+   * {@link #CHECKED_DIVIDE}
+   * {@link #CHECKED_MINUS_PREFIX}
+   */
+  public static final Set<SqlKind> CHECKED_ARITHMETIC =
+      EnumSet.of(CHECKED_PLUS, CHECKED_MINUS, CHECKED_TIMES, CHECKED_DIVIDE,
+          CHECKED_MINUS_PREFIX);
 
   /**
    * Category of binary equality.
@@ -1622,7 +1658,7 @@ public enum SqlKind {
    */
   @API(since = "1.22", status = API.Status.EXPERIMENTAL)
   public static final Set<SqlKind> SYMMETRICAL_SAME_ARG_TYPE =
-      EnumSet.of(PLUS, TIMES);
+      EnumSet.of(PLUS, TIMES, CHECKED_PLUS, CHECKED_TIMES);
 
   /**
    * Simple binary operators are those operators which expects operands from the same Domain.
@@ -1785,6 +1821,7 @@ public enum SqlKind {
   public SqlKind getFunctionKind() {
     switch (this) {
       case CONVERT:
+      case CONVERT_ORACLE:
       case TRANSLATE:
       case POSITION:
       case DECODE:
