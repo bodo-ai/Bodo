@@ -5219,8 +5219,8 @@ def get_decimal_type(atype):
 
 
 def get_output_type(left_empty, right_empty, non_decimal_func, decimal_func):
-    left_atype = left_empty.dtypes[0].pyarrow_dtype
-    right_atype = right_empty.dtypes[0].pyarrow_dtype
+    left_atype = left_empty.dtypes.iloc[0].pyarrow_dtype
+    right_atype = right_empty.dtypes.iloc[0].pyarrow_dtype
     if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
         if not pa.types.is_decimal(left_atype):
             left_atype = get_decimal_type(left_atype)
