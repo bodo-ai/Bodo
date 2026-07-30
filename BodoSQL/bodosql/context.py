@@ -739,7 +739,6 @@ class BodoSQLContext:
                     plan.internal_plan,
                     optimize=False,
                     use_sql_rules=True,
-                    # plan, optimize="bodosql", use_sql_rules=True
                 )
                 location = self.catalog.connection_string
                 out.to_iceberg(plan.table_create_node.getTableName(), location=location)
