@@ -1,5 +1,6 @@
 #include "expression.h"
 #include <arrow/type_fwd.h>
+#include <cmath>
 #include "_util.h"
 #include "duckdb/common/types/interval.hpp"
 
@@ -628,7 +629,6 @@ void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
         arrow::compute::CastOptions cast_opts;
         cast_opts.allow_int_overflow = true;
         cast_opts.allow_float_truncate = true;
-        cast_opts.allow_decimal_truncate = true;
         arrow::Result<arrow::Datum> cast_res =
             arrow::compute::Cast(out_datum, result_type, cast_opts);
         if (!cast_res.ok()) [[unlikely]] {
@@ -653,8 +653,8 @@ arrow::Datum do_arrow_compute_binary(
             "): " + cmp_res.status().message());
     }
 
-    do_result_type_cast(cmp_res, result_type);
-    return cmp_res.ValueOrDie();
+    arrow::Datum cmp_datum = cmp_res.ValueOrDie();
+    return do_arrow_compute_cast(cmp_datum, result_type);
 }
 
 arrow::Datum do_arrow_compute_unary(
@@ -737,7 +737,7 @@ arrow::Datum do_arrow_compute_cast(
     // No need to cast if type is already the target type.
     // Note that arrow::DataType.Equals() also compares type parameters such
     // as time units and timezones.
-    if (left_res.type()->Equals(return_type)) {
+    if (!return_type || left_res.type()->Equals(return_type)) {
         return left_res;
     }
 
