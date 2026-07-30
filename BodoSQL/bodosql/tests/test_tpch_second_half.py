@@ -434,6 +434,7 @@ def test_tpch_q18(tpch_data, memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
+@pytest.mark.gpu
 def test_tpch_q19(tpch_data, memory_leak_check):
     QUANTITY1 = 1
     QUANTITY2 = 10
