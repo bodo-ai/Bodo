@@ -348,9 +348,6 @@ public enum SqlKind {
   /** Checked arithmetic division operator, produces runtime error on overflow. */
   CHECKED_DIVIDE,
 
-  /** Checked arithmetic unary minus operator, produces runtime error on overflow. */
-  CHECKED_MINUS_PREFIX,
-
   /**
    * Alternation operator in a pattern expression within a
    * {@code MATCH_RECOGNIZE} clause.
@@ -579,6 +576,9 @@ public enum SqlKind {
    * @see #MINUS
    */
   MINUS_PREFIX,
+
+  /** Checked arithmetic unary minus operator, produces runtime error on overflow. */
+  CHECKED_MINUS_PREFIX,
 
   /** {@code EXISTS} operator. */
   EXISTS,
