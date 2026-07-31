@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import decimal
+import math
 import operator
 import re
 import zoneinfo
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -4772,7 +4774,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # Nothing to concatenate, just return the input string
                 return src
 
-            separator = bodo.pandas.plan.ConstantExpression(
+            separator = bd.plan.ConstantExpression(
                 src.empty_data,
                 src.source,
                 "",  # empty separator to concat without anything in between
@@ -4833,9 +4835,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
 
-            space_expr = bodo.pandas.plan.ConstantExpression(
-                str_empty_data, input_plan, " "
-            )
+            space_expr = bd.plan.ConstantExpression(str_empty_data, input_plan, " ")
 
             return ArrowScalarFuncExpression(
                 str_empty_data, [space_expr], "binary_repeat", (num_repeats_expr.value,)
@@ -5098,6 +5098,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_arg_is_const_expr_of_type(like_expr, "like_expr", str)
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            import bodo.decorators  # isort:skip # noqa
+
             converted_like, needs_regex, start_match, end_match, match_anything = (
                 bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
                     like_expr.value, escape_val, False
@@ -5463,7 +5465,55 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         )
 
 
-def get_decimal_type(atype):
+def precision_scale_from_float(value):
+    """
+    Return (precision, scale) suitable for a DECIMAL(precision, scale)
+    that can store `value` without truncation of its current decimal digits.
+
+    - Uses Decimal(str(value)) to avoid binary-float artifacts.
+    - precision = integer_digits + scale, where integer_digits >= 1 (zero counts as 1).
+    - scale = number of digits after the decimal point in the decimal string form.
+    """
+    if value is None:
+        raise ValueError("value must not be None")
+
+    # Handle special floats
+    if isinstance(value, float):
+        if math.isnan(value):
+            raise ValueError("NaN has no decimal precision/scale")
+        if math.isinf(value):
+            raise ValueError("Infinity has no decimal precision/scale")
+
+    # Convert via str to avoid binary representation artifacts
+    try:
+        d = Decimal(str(value))
+    except Exception as e:
+        raise ValueError(f"Cannot convert value to Decimal: {e}")
+
+    # Use fixed-point string form (no exponent)
+    s = format(d, "f")  # e.g., "123.4500", "0.00123", "1000"
+    if s[0] == "-":
+        s = s[1:]
+
+    if "." in s:
+        int_part, frac_part = s.split(".", 1)
+    else:
+        int_part, frac_part = s, ""
+
+    # scale is number of fractional digits
+    scale = len(frac_part)
+
+    # integer digits: count digits in integer part, but treat "0" as 1 digit
+    int_digits = len(int_part.lstrip("0"))
+    if int_digits == 0:
+        int_digits = 1
+
+    precision = int_digits + scale
+
+    return precision, scale
+
+
+def get_decimal_type(atype, expr):
     if pa.types.is_int64(atype):
         return pa.decimal128(19, 0)
     elif pa.types.is_int32(atype):
@@ -5480,18 +5530,24 @@ def get_decimal_type(atype):
         return pa.decimal128(5, 0)
     elif pa.types.is_uint8(atype):
         return pa.decimal128(3, 0)
+    elif (pa.types.is_float32(atype) or pa.types.is_float64(atype)) and isinstance(
+        expr, ConstantExpression
+    ):
+        return pa.decimal128(*precision_scale_from_float(expr.value))
     else:
         raise TypeError(f"Not decimal conversion from {atype} yet")
 
 
-def get_output_type(left_empty, right_empty, non_decimal_func, decimal_func):
+def get_output_type(left, right, non_decimal_func, decimal_func):
+    left_empty = left.empty_data
+    right_empty = right.empty_data
     left_atype = left_empty.dtypes.iloc[0].pyarrow_dtype
     right_atype = right_empty.dtypes.iloc[0].pyarrow_dtype
     if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
         if not pa.types.is_decimal(left_atype):
-            left_atype = get_decimal_type(left_atype)
+            left_atype = get_decimal_type(left_atype, left)
         if not pa.types.is_decimal(right_atype):
-            right_atype = get_decimal_type(right_atype)
+            right_atype = get_decimal_type(right_atype, right)
         output_leading, output_scale = decimal_func(
             left_atype.precision - left_atype.scale,
             left_atype.scale,
@@ -5523,8 +5579,8 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
         # TODO: upcast output to avoid overflow?
         out_empty = get_output_type(
-            left.empty_data,
-            right.empty_data,
+            left,
+            right,
             lambda l, r: l + r,
             lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
         )
@@ -5549,8 +5605,8 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             expr = ArithOpExpression(out_empty, left_cast, right_cast, "__sub__")
         else:
             out_empty = get_output_type(
-                left.empty_data,
-                right.empty_data,
+                left,
+                right,
                 lambda l, r: l - r,
                 lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
             )
@@ -5559,8 +5615,8 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
 
     if kind.equals(SqlKind.TIMES):
         out_empty = get_output_type(
-            left.empty_data,
-            right.empty_data,
+            left,
+            right,
             lambda l, r: l * r,
             lambda ll, ls, rl, rs: (ll + rl, ls + rs),
         )
@@ -5569,8 +5625,8 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
 
     if kind.equals(SqlKind.DIVIDE):
         out_empty = get_output_type(
-            left.empty_data,
-            right.empty_data,
+            left,
+            right,
             lambda l, r: l / r,
             lambda ll, ls, rl, rs: (ll + rs, max(ls, rs + 4)),
         )
@@ -7009,7 +7065,7 @@ def _sarg_range_to_pyiceberg_expr(ref, lower, lower_inclusive, upper, upper_incl
 
 
 def java_binop_to_pyiceberg_expr(kind, op_exprs):
-    """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
+    """Convert a BodoSQL Java binary operator call to a PyIceberg expression."""
     import pyiceberg.expressions as pie
 
     left = op_exprs[0]
