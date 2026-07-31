@@ -43,6 +43,22 @@ inline arrow::TimeUnit::type getTimeUnit(
     }
 }
 
+inline int getPrecision(const std::shared_ptr<arrow::DataType>& type) {
+    if (arrow::is_decimal(type->id())) {
+        auto dec = std::static_pointer_cast<arrow::DecimalType>(type);
+        return dec->precision();
+    }
+    return 0;
+}
+
+inline int getScale(const std::shared_ptr<arrow::DataType>& type) {
+    if (arrow::is_decimal(type->id())) {
+        auto dec = std::static_pointer_cast<arrow::DecimalType>(type);
+        return dec->scale();
+    }
+    return 0;
+}
+
 // similar to arrow/python/arrow_to_pandas.cc ConvertDatetimeNanos except with
 // just buffer
 // TODO: reuse from arrow
@@ -345,10 +361,13 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
      */
     PrimitiveBuilder(Bodo_CTypes::CTypeEnum dtype, int64_t length,
                      bool is_nullable, bool is_categorical,
-                     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO)
+                     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
+                     int precision_ = 0, int scale_ = 0)
         : is_nullable(is_nullable),
           is_categorical(is_categorical),
-          dtype(dtype) {
+          dtype(dtype),
+          precision(precision_),
+          scale(scale_) {
         if (is_nullable && !is_categorical) {
             switch (dtype) {
                 case Bodo_CTypes::FLOAT64:
@@ -382,14 +401,17 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         bodo_array_type::arr_type_enum out_array_type =
             is_nullable ? bodo_array_type::NULLABLE_INT_BOOL
                         : bodo_array_type::NUMPY;
-        out_array =
-            alloc_array_top_level(length, -1, -1, out_array_type, dtype);
+        out_array = alloc_array_top_level(
+            length, -1, -1, out_array_type, dtype, -1, 0, 0, false, false,
+            false, bodo::BufferPool::DefaultPtr(),
+            bodo::default_buffer_memory_manager(), "", precision, scale);
     }
 
     PrimitiveBuilder(std::shared_ptr<arrow::DataType> type, int64_t length,
                      bool is_nullable, bool is_categorical)
         : PrimitiveBuilder(arrow_to_bodo_type(type->id()), length, is_nullable,
-                           is_categorical, getTimeUnit(type)) {}
+                           is_categorical, getTimeUnit(type),
+                           getPrecision(type), getScale(type)) {}
 
     void append(std::shared_ptr<arrow::ChunkedArray> chunked_arr) override {
         if (!temp_zero_copy_fallback) {
@@ -454,8 +476,13 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         if (out_array == nullptr && !temp_zero_copy_fallback) {
             if (arrays.empty()) {
                 // Avoid empty call to concatenate
-                out_array = is_nullable ? alloc_nullable_array(0, dtype)
-                                        : alloc_numpy(0, dtype);
+                out_array =
+                    is_nullable
+                        ? alloc_nullable_array(
+                              0, dtype, 0, bodo::BufferPool::DefaultPtr(),
+                              bodo::default_buffer_memory_manager(), "",
+                              precision, scale)
+                        : alloc_numpy(0, dtype);
                 return out_array;
             }
             auto* pool = bodo::BufferPool::DefaultPtr();
@@ -476,6 +503,8 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
     // TODO remove fallback once zero-copy is supported everywhere
     bool temp_zero_copy_fallback = false;
     arrow::ArrayVector arrays;
+    int precision;
+    int scale;
 };
 
 /// Column builder for string arrays
