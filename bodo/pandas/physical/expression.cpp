@@ -2686,21 +2686,38 @@ arrow::Datum do_arrow_compute_zip(const std::vector<arrow::Datum>& datums) {
             "do_arrow_compute_zip does not accept an empty vector of datums.");
     }
 
-    // First, loop over the datums to get the number of rows. We stop after
-    // finding the first array datum since we assume all have
-    // the same length. Should we bother supporting the case where
-    // they don't have the same length by padding with nulls?
+    // First, loop over the datums to get the number of rows and
+    // verify that all array datums have the same length.
+    // Another option would be to pad with nulls when the lengths
+    // are not equal.
     int64_t num_rows = 1;
     for (const arrow::Datum& datum : datums) {
         if (!datum.is_scalar()) {
-            num_rows = datum.length();
-            break;
+            int64_t datum_length = datum.length();
+            if (datum_length == -1) {
+                throw std::runtime_error(
+                    "do_arrow_compute_zip: Failed to get length of input "
+                    "datum.");
+            }
+            if (datum_length != num_rows && num_rows != 1) {
+                throw std::runtime_error(
+                    "do_arrow_compute_zip: Input array datums must have the "
+                    "same length.");
+            }
+            num_rows = datum_length;
         }
     }
 
-    // All datums should have the same type, so just get the type of the first.
-    // Should we bother validating that the types are identical?
+    // Ensure all datums have the same datatype
     std::shared_ptr<arrow::DataType> value_type = datums[0].type();
+    for (size_t i = 1; i < datums.size(); i++) {
+        if (!value_type->Equals(datums[i].type())) {
+            throw std::runtime_error(
+                "do_arrow_compute_zip: Input datums must have the same "
+                "datatype.");
+        }
+    }
+
     std::shared_ptr<arrow::Array> values_array;
 
     // The interleaving step is only necessary if more than one datum is passed.
@@ -2776,7 +2793,7 @@ arrow::Datum do_arrow_compute_zip(const std::vector<arrow::Datum>& datums) {
         // handles variable-width datatypes.
         for (int64_t i = 0; i < num_rows; i++) {
             for (const InputView& input : inputs) {
-                // Append element at index i (or 0, for scalars)from the array.
+                // Append element at index i (or 0, for scalars) from the array.
                 // AppendArraySlice should be faster than getting the scalar at
                 // position i and then appending that.
                 arrow::Status append_status =
