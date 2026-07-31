@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.logicalRules;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.SqlKind;
@@ -53,7 +53,7 @@ public class FilterRulesCommon {
    * @return The RexNode after pruning common expressions.
    */
   private static RexNode pruneConditionExtractCommon(
-      RelBuilder builder, RexNode cond, HashSet<RexNode> commonOps) {
+      RelBuilder builder, RexNode cond, LinkedHashSet<RexNode> commonOps) {
     if (cond.getKind() == SqlKind.AND) {
       List<RexNode> operands = new ArrayList<>();
       RexCall callCond = (RexCall) cond;
@@ -99,7 +99,7 @@ public class FilterRulesCommon {
    * @return A pair of values containing the new condition RexNode and if it was changed.
    */
   public static Pair<RexNode, Boolean> updateConditionsExtractCommon(
-      RelBuilder builder, RexNode cond, HashSet<RexNode> commonOps) {
+      RelBuilder builder, RexNode cond, LinkedHashSet<RexNode> commonOps) {
     List<RexNode> nodes = new ArrayList<>();
     if (cond.getKind() == SqlKind.AND) {
       // If we have an AND we UNION together any of
@@ -126,12 +126,12 @@ public class FilterRulesCommon {
       // removed from the OR and we can rewrite the whole RexNode
       // as AND(saved, PRUNE_OR).
       RexCall orCond = (RexCall) cond;
-      HashSet<RexNode> sharedOps = new HashSet<>();
+      LinkedHashSet<RexNode> sharedOps = new LinkedHashSet<>();
       Pair<RexNode, Boolean> nodePair =
           updateConditionsExtractCommon(builder, orCond.operands.get(0), sharedOps);
       nodes.add(nodePair.getKey());
       for (int i = 1; i < orCond.operands.size(); i++) {
-        HashSet<RexNode> otherOps = new HashSet<>();
+        LinkedHashSet<RexNode> otherOps = new LinkedHashSet<>();
         nodePair = updateConditionsExtractCommon(builder, orCond.operands.get(i), otherOps);
         nodes.add(nodePair.getKey());
         sharedOps.retainAll(otherOps);

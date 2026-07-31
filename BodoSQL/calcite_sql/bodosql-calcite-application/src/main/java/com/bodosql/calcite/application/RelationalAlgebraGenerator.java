@@ -138,7 +138,7 @@ public class RelationalAlgebraGenerator {
   public static String sqlStyle = "SNOWFLAKE";
 
   /** Should we use the covering expression approach to cache or only exact matches. */
-  public static boolean coveringExpressionCaching = false;
+  public static boolean coveringExpressionCaching = true;
 
   /** Should we prefetch metadata location for Snowflake-managed Iceberg tables. */
   public static boolean prefetchSFIceberg = false;

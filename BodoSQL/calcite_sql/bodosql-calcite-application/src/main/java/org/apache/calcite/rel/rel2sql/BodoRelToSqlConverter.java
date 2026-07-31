@@ -3,6 +3,7 @@ package org.apache.calcite.rel.rel2sql;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter;
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable;
+import com.bodosql.calcite.rel.core.CachedSubPlanBase;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.adapter.jdbc.JdbcTable;
 import org.apache.calcite.plan.RelOptTable;
@@ -45,6 +46,10 @@ public class BodoRelToSqlConverter extends RelToSqlConverter {
 
     public Result visit(RelSubset e) {
         return dispatch(e.getBestOrOriginal());
+    }
+
+    public Result visit(CachedSubPlanBase e) {
+        return dispatch(e.getCachedPlan().getPlan());
     }
 
     private SqlNode castTimestampTZColumnsToVariant(RelDataType rowType, SqlNode sqlTable) {
