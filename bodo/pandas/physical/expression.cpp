@@ -2736,7 +2736,7 @@ arrow::Datum do_arrow_compute_zip(const std::vector<arrow::Datum>& datums) {
                     "datum.");
             }
             if (datum_length != num_rows && num_rows != 1) {
-                throw std::runtime_error(
+                throw std::invalid_argument(
                     "do_arrow_compute_zip: Input array datums must have the "
                     "same length.");
             }
@@ -2748,7 +2748,7 @@ arrow::Datum do_arrow_compute_zip(const std::vector<arrow::Datum>& datums) {
     std::shared_ptr<arrow::DataType> value_type = datums[0].type();
     for (size_t i = 1; i < datums.size(); i++) {
         if (!value_type->Equals(datums[i].type())) {
-            throw std::runtime_error(
+            throw std::invalid_argument(
                 "do_arrow_compute_zip: Input datums must have the same "
                 "datatype.");
         }
