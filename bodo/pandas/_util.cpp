@@ -135,6 +135,8 @@ extractValue(const duckdb::Value &value) {
             uint8_t width = duckdb::DecimalType::GetWidth(value.type());
             uint8_t scale = duckdb::DecimalType::GetScale(value.type());
             switch (value.type().InternalType()) {
+                case duckdb::PhysicalType::INT32:
+                case duckdb::PhysicalType::INT64:
                 case duckdb::PhysicalType::INT128: {
                     duckdb::hugeint_t val =
                         value.GetValueUnsafe<duckdb::hugeint_t>();
