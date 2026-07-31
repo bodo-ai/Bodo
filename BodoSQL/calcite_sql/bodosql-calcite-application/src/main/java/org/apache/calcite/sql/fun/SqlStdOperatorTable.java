@@ -80,8 +80,7 @@ import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.apache.calcite.sql.validate.SqlModality;
 import org.apache.calcite.sql2rel.AuxiliaryConverter;
 import org.apache.calcite.util.Litmus;
-import org.apache.calcite.util.Optionality;
-import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.Optionality;import org.apache.calcite.util.Pair;
 
 import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
@@ -2918,6 +2917,17 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
             return floor ? SqlLibraryOperators.FLOOR_BIG_QUERY : SqlLibraryOperators.CEIL_BIG_QUERY;
         } else {
             return floor ? SqlStdOperatorTable.FLOOR : SqlStdOperatorTable.CEIL;
+        }
+    }
+
+    /** Returns the operator for standard {@code CONVERT} and Oracle's {@code CONVERT}
+     * with the given library. */
+    public static SqlOperator getConvertFuncByConformance(SqlConformance conformance) {
+        if (SqlConformanceEnum.ORACLE_10 == conformance
+            || SqlConformanceEnum.ORACLE_12 == conformance) {
+            return SqlLibraryOperators.CONVERT_ORACLE;
+        } else {
+            return SqlStdOperatorTable.CONVERT;
         }
     }
 }

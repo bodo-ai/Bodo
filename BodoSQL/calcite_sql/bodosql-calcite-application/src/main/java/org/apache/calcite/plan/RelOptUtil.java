@@ -1762,18 +1762,23 @@ public abstract class RelOptUtil {
    *         return a IS NOT DISTINCT FROM function call. Otherwise return the input
    *         function call as it is.
    */
-  public static RexCall collapseExpandedIsNotDistinctFromExpr(final RexCall call,
+  public static RexCall collapseExpandedIsNotDistinctFromExpr(final RexCall rexCall,
       final RexBuilder rexBuilder) {
-    switch (call.getKind()) {
-    case OR:
-      return doCollapseExpandedIsNotDistinctFromOrExpr(call, rexBuilder);
+    final RexShuttle shuttle = new RexShuttle() {
+      @Override public RexNode visitCall(RexCall call) {
+        RexCall recursivelyExpanded = (RexCall) super.visitCall(call);
 
-    case CASE:
-      return doCollapseExpandedIsNotDistinctFromCaseExpr(call, rexBuilder);
-
-    default:
-      return call;
-    }
+        switch (recursivelyExpanded.getKind()) {
+        case OR:
+          return doCollapseExpandedIsNotDistinctFromOrExpr(recursivelyExpanded, rexBuilder);
+        case CASE:
+          return doCollapseExpandedIsNotDistinctFromCaseExpr(recursivelyExpanded, rexBuilder);
+        default:
+          return recursivelyExpanded;
+        }
+      }
+    };
+    return (RexCall) rexCall.accept(shuttle);
   }
 
   private static RexCall doCollapseExpandedIsNotDistinctFromOrExpr(final RexCall call,
@@ -2145,7 +2150,7 @@ public abstract class RelOptUtil {
       planWriter = new RelDotWriter(pw, detailLevel, false);
       break;
     default:
-      planWriter = new RelWriterImpl(pw, detailLevel, false);
+      planWriter = new RelWriterImpl(pw, detailLevel, false, false);
     }
     rel.explain(planWriter);
     pw.flush();
@@ -2440,19 +2445,25 @@ public abstract class RelOptUtil {
   }
 
   /**
-   * Converts a relational expression to a string;
-   * returns null if and only if {@code rel} is null.
+   * Converts a relational expression to a string, showing just basic
+   * attributes, and doesn't expand detail info for {@code rel}.
    */
   public static @PolyNull String toString(
       final @PolyNull RelNode rel,
       SqlExplainLevel detailLevel) {
+    return toString(rel, detailLevel, false);
+  }
+  public static @PolyNull String toString(
+      final @PolyNull RelNode rel,
+      SqlExplainLevel detailLevel,
+      boolean expand) {
     if (rel == null) {
       return null;
     }
     final StringWriter sw = new StringWriter();
     final RelWriter planWriter =
         new RelWriterImpl(
-            new PrintWriter(sw), detailLevel, false);
+            new PrintWriter(sw), detailLevel, false, expand);
     rel.explain(planWriter);
     return sw.toString();
   }

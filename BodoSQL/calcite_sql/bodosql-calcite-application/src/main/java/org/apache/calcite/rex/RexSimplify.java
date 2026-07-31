@@ -322,6 +322,7 @@ public class RexSimplify {
             case LIKE:
                 return simplifyLike((RexCall) e, unknownAs);
             case MINUS_PREFIX:
+            case CHECKED_MINUS_PREFIX:
                 return simplifyUnaryMinus((RexCall) e, unknownAs);
             case PLUS_PREFIX:
                 return simplifyUnaryPlus((RexCall) e, unknownAs);
@@ -329,6 +330,10 @@ public class RexSimplify {
             case MINUS:
             case TIMES:
             case DIVIDE:
+            case CHECKED_PLUS:
+            case CHECKED_MINUS:
+            case CHECKED_TIMES:
+            case CHECKED_DIVIDE:
                 return simplifyArithmetic((RexCall) e);
             case M2V:
                 return simplifyM2v((RexCall) e);
@@ -440,12 +445,16 @@ public class RexSimplify {
 
         switch (e.getKind()) {
             case PLUS:
+            case CHECKED_PLUS:
                 return simplifyPlus(e);
             case MINUS:
+            case CHECKED_MINUS:
                 return simplifyMinus(e);
             case TIMES:
+            case CHECKED_TIMES:
                 return simplifyMultiply(e);
             case DIVIDE:
+            case CHECKED_DIVIDE:
                 return simplifyDivide(e);
             default:
                 throw new IllegalArgumentException("Unsupported arithmeitc operation " + e.getKind());
@@ -1365,9 +1374,13 @@ public class RexSimplify {
             safeOps.addAll(SqlKind.COMPARISON);
             safeOps.add(SqlKind.PLUS_PREFIX);
             safeOps.add(SqlKind.MINUS_PREFIX);
+            safeOps.add(SqlKind.CHECKED_MINUS_PREFIX);
             safeOps.add(SqlKind.PLUS);
             safeOps.add(SqlKind.MINUS);
             safeOps.add(SqlKind.TIMES);
+            safeOps.add(SqlKind.CHECKED_PLUS);
+            safeOps.add(SqlKind.CHECKED_MINUS);
+            safeOps.add(SqlKind.CHECKED_TIMES);
             safeOps.add(SqlKind.IS_FALSE);
             safeOps.add(SqlKind.IS_NOT_FALSE);
             safeOps.add(SqlKind.IS_TRUE);

@@ -4482,6 +4482,10 @@ public class SqlToRelConverter {
     return ViewExpanders.toRelContext(viewExpander, cluster, hints);
   }
 
+  public RelNode toRel(final RelOptTable table, final List<RelHint> hints) {
+    return toRel(table, hints, false);
+  }
+
   public RelNode toRel(final RelOptTable table, final List<RelHint> hints, boolean isTargetTable) {
     final RelNode scan;
     if (isTargetTable) {
