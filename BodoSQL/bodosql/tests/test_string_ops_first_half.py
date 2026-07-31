@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_codegen
+from bodosql import use_cpp_backend
 from bodosql.tests.string_ops_common import *  # noqa
 from bodosql.tests.utils import check_query
 
@@ -868,7 +869,6 @@ def test_strtok(args, memory_leak_check):
     )
 
 
-@pytest.mark.bodosql_cpp
 @pytest.mark.parametrize(
     "query, expected",
     [
@@ -1045,29 +1045,68 @@ def test_strtok_to_array(query, expected, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "query",
+    "query, expected",
     [
         pytest.param(
             "SELECT SPLIT('www.bodo.ai', '.')",
+            None,
             id="all_scalar",
             marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT SPLIT(A, ' ') FROM table1",
+            None,
             id="vector_scalar",
             marks=pytest.mark.bodosql_cpp,
         ),
         pytest.param(
             "SELECT SPLIT(A, B) FROM table1",
+            None,
             id="all_vector",
         ),
         pytest.param(
             "SELECT CASE WHEN A IS NULL THEN NULL ELSE SPLIT(A, B) END FROM table1",
+            None,
             id="all_vector_with_case",
+        ),
+        # Using expected output since DuckDB splits the string
+        # into a list of its characters when the separator is empty,
+        # whereas Snowflake just wraps the string in a list.
+        pytest.param(
+            "SELECT SPLIT(A, '') FROM table1",
+            pd.DataFrame(
+                {
+                    "A": [
+                        ["alphabet soup is delicious"],
+                        ["aaeaaeieaaeioiea"],
+                        ["A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ"],
+                        ["415-555-1234, 412-555-2345, 937-555-3456"],
+                        ["a  b    c  d e     f g     h  i     j "],
+                        None,
+                    ]
+                }
+            ),
+            id="vector_empty_separator",
+            marks=pytest.mark.bodosql_cpp,
+        ),
+        # Using expected output since DuckDB wraps the original
+        # string in a list when the separator is NULL, but
+        # Snowflake returns NULL in that case.
+        pytest.param(
+            "SELECT SPLIT(A, NULL) FROM table1",
+            pd.DataFrame({"A": [None, None, None, None, None, None]}),
+            id="vector_null_separator",
+            marks=[
+                pytest.mark.bodosql_cpp,
+                pytest.mark.skipif(
+                    not use_cpp_backend,
+                    reason="The JIT backend can't infer the separator argument type when it is NULL",
+                ),
+            ],
         ),
     ],
 )
-def test_split(query, memory_leak_check):
+def test_split(query, expected, memory_leak_check):
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -1090,12 +1129,6 @@ def test_split(query, memory_leak_check):
             }
         )
     }
-    # NOTE: We are comparing against DuckDB here, but DuckDB has slightly different
-    # semantics than Snowflake in some edge cases that are not represented in
-    # this test. For example, when the separator is empty, DuckDB splits the string
-    # into a list of its characters, whereas Snowflake just wraps the string in a
-    # list. DuckDB does wrap the original string in a list when the separator is
-    # NULL, but Snowflake returns NULL in that case.
     check_query(
         query,
         ctx,
@@ -1107,5 +1140,7 @@ def test_split(query, memory_leak_check):
         # and is not needed since the output of the actual test is regular string array
         # (see https://bodo.atlassian.net/browse/BSE-1256)
         use_dict_encoded_strings=False,
+        # Note that expected_output takes precedence over use_duckdb
+        expected_output=expected,
         use_duckdb=True,
     )

@@ -1624,9 +1624,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
             // of Pandas, we Cast to Date32 instead.
             result = do_arrow_compute_cast(res, arrow::date32());
         } else if (scalar_func_data.arrow_func_name == "day_of_week") {
-            auto [count_from_zero, week_start] = get_var_py_args_as_types<0>(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                {0, 1, 2}, get_py_object_as_bool, get_py_object_as_int64);
+            auto [count_from_zero, week_start] =
+                get_var_py_args_as_types<0, std::array{0, 1, 2}>(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_bool, get_py_object_as_int64);
 
             arrow::compute::DayOfWeekOptions opts;
             if (count_from_zero.has_value()) {
@@ -1665,9 +1667,11 @@ class PhysicalArrowExpression : public PhysicalExpression {
                    scalar_func_data.arrow_func_name == "count_substring" ||
                    scalar_func_data.arrow_func_name ==
                        "count_substring_regex") {
-            auto [pattern, ignore_case] = get_var_py_args_as_types<1>(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                {1, 2}, get_py_object_as_cstr, get_py_object_as_bool);
+            auto [pattern, ignore_case] =
+                get_var_py_args_as_types<1, std::array{1, 2}>(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_cstr, get_py_object_as_bool);
 
             std::string func_name = scalar_func_data.arrow_func_name;
             std::string pattern_str(pattern);
@@ -1834,10 +1838,12 @@ class PhysicalArrowExpression : public PhysicalExpression {
             }
         } else if (scalar_func_data.arrow_func_name == "split_pattern" ||
                    scalar_func_data.arrow_func_name == "split_pattern_regex") {
-            auto [delimiter, max_splits, reverse] = get_var_py_args_as_types<1>(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                {1, 2, 3}, get_py_object_as_cstr, get_py_object_as_int64,
-                get_py_object_as_bool);
+            auto [delimiter, max_splits, reverse] =
+                get_var_py_args_as_types<1, std::array{1, 2, 3}>(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_cstr, get_py_object_as_int64,
+                    get_py_object_as_bool);
 
             arrow::compute::SplitPatternOptions opts;
             opts.pattern = std::string(delimiter);
@@ -1866,9 +1872,9 @@ class PhysicalArrowExpression : public PhysicalExpression {
         } else if (scalar_func_data.arrow_func_name == "utf8_lpad" ||
                    scalar_func_data.arrow_func_name == "utf8_rpad") {
             auto [width, padding, lean_left_on_odd_padding] =
-                get_var_py_args_as_types<1>(
+                get_var_py_args_as_types<1, std::array{1, 2, 3}>(
                     scalar_func_data.args,
-                    scalar_func_data.arrow_func_name.c_str(), {1, 2, 3},
+                    scalar_func_data.arrow_func_name.c_str(),
                     get_py_object_as_int64, get_py_object_as_cstr,
                     get_py_object_as_bool);
 
@@ -1895,9 +1901,9 @@ class PhysicalArrowExpression : public PhysicalExpression {
                    scalar_func_data.arrow_func_name ==
                        "replace_substring_regex") {
             auto [pattern, replacement, max_replacements] =
-                get_var_py_args_as_types<2>(
+                get_var_py_args_as_types<2, std::array{2, 3}>(
                     scalar_func_data.args,
-                    scalar_func_data.arrow_func_name.c_str(), {2, 3},
+                    scalar_func_data.arrow_func_name.c_str(),
                     get_py_object_as_cstr, get_py_object_as_cstr,
                     get_py_object_as_int64);
 

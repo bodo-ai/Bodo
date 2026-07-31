@@ -1200,9 +1200,9 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
         // Special handling for multi-input Arrow functions with options
         if (scalar_func_data.arrow_func_name == "max_element_wise" ||
             scalar_func_data.arrow_func_name == "min_element_wise") {
-            auto [skip_nulls] = get_var_py_args_as_types<0>(
+            auto [skip_nulls] = get_var_py_args_as_types<0, std::array{0, 1}>(
                 scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                {0, 1}, get_py_object_as_bool);
+                get_py_object_as_bool);
 
             arrow::compute::ElementWiseAggregateOptions opts;
             if (skip_nulls.has_value()) {
@@ -2635,9 +2635,9 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        auto [seed_arg] = get_var_py_args_as_types<0>(
+        auto [seed_arg] = get_var_py_args_as_types<0, std::array{0, 1}>(
             scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-            {0, 1}, get_py_object_as_int64);
+            get_py_object_as_int64);
 
         if (seed_arg.has_value()) {
             // Seed was explicitly provided, so use it
