@@ -30,6 +30,79 @@ std::vector<std::unique_ptr<cudf::scalar>> make_vector_of_two_cudf_scalars(
     return out;
 }
 
+template <typename ArrowType>
+std::shared_ptr<arrow::Scalar> make_numeric_reduction_identity(
+    std::string op_name) {
+    using CType = ArrowType::c_type;
+
+    CType value;
+
+    if (op_name == "add") {
+        value = CType{0};
+    } else if (op_name == "multiply") {
+        value = CType{1};
+    } else if (op_name == "less") {
+        value = std::numeric_limits<CType>::max();
+    } else if (op_name == "greater") {
+        value = std::numeric_limits<CType>::min();
+    } else if (op_name == "first") {
+        // For first/any_value, the identity value is not used in practice,
+        // but we still need to provide a valid value.
+        value = CType{0};
+    } else {
+        throw std::runtime_error("Unsupported reduction function: " + op_name);
+    }
+
+    return arrow::MakeScalar(value);
+}
+
+/**
+ * @brief Create the identity scalar for a reduction operation based on the
+ * operation name and Arrow data type.
+ *
+ * @param op_name Reduction operation i.e. "add", "multiply", "less", "greater",
+ * "first"
+ * @param type Arrow data type of the scalar
+ * @return std::shared_ptr<arrow::Scalar>
+ */
+std::shared_ptr<arrow::Scalar> make_reduction_identity(
+    std::string op_name, const std::shared_ptr<arrow::DataType>& type) {
+    // Complete list of types currently supported by GPU reductions (see
+    // cudf_dtype_to_mpi)
+    switch (type->id()) {
+        case arrow::Type::INT8:
+            return make_numeric_reduction_identity<arrow::Int8Type>(op_name);
+        case arrow::Type::INT16:
+            return make_numeric_reduction_identity<arrow::Int16Type>(op_name);
+        case arrow::Type::INT32:
+            return make_numeric_reduction_identity<arrow::Int32Type>(op_name);
+        case arrow::Type::INT64:
+            return make_numeric_reduction_identity<arrow::Int64Type>(op_name);
+
+        case arrow::Type::UINT8:
+            return make_numeric_reduction_identity<arrow::UInt8Type>(op_name);
+        case arrow::Type::UINT16:
+            return make_numeric_reduction_identity<arrow::UInt16Type>(op_name);
+        case arrow::Type::UINT32:
+            return make_numeric_reduction_identity<arrow::UInt32Type>(op_name);
+        case arrow::Type::UINT64:
+            return make_numeric_reduction_identity<arrow::UInt64Type>(op_name);
+
+        case arrow::Type::FLOAT:
+            return make_numeric_reduction_identity<arrow::FloatType>(op_name);
+        case arrow::Type::DOUBLE:
+            return make_numeric_reduction_identity<arrow::DoubleType>(op_name);
+
+        case arrow::Type::BOOL:
+            return make_numeric_reduction_identity<arrow::BooleanType>(op_name);
+
+        default:
+            throw std::runtime_error(
+                "GPUReductionFunction: No reduction identity for Arrow type " +
+                type->ToString());
+    }
+}
+
 /**
  * @brief Get cudf reduce_aggregation object corresponding to the given
  * reduction function name.
@@ -81,9 +154,7 @@ void GPUReductionFunction::CombineResults(
     assert(other.size() == this->results.size());
 
     for (size_t i = 0; i < this->function_names.size(); i++) {
-        const std::string& function_name = this->function_names[i];
         const std::string& combine_reduce_name = this->reduction_names[i];
-        const GPUReductionType& reduction_type = this->reduction_types[i];
         // Current reduction result
         std::unique_ptr<cudf::scalar>& result = this->results[i];
         std::unique_ptr<cudf::scalar>& other_result = other[i];
@@ -115,13 +186,7 @@ void GPUReductionFunction::CombineResults(
         std::unique_ptr<cudf::scalar> cmp_scalar =
             cudf::reduce(combined->view(), *agg, out_dtype, output_stream);
 
-        if (reduction_type == GPUReductionType::COMPARISON ||
-            reduction_type == GPUReductionType::AGGREGATION) {
-            result = std::move(cmp_scalar);
-        } else {
-            throw std::runtime_error("Unsupported reduction function: " +
-                                     function_name);
-        }
+        result = std::move(cmp_scalar);
     }
 }
 
@@ -160,42 +225,61 @@ void GPUReductionFunction::Finalize(MPI_Comm comm) {
     for (size_t i = 0; i < this->function_names.size(); i++) {
         std::unique_ptr<cudf::scalar>& result = this->results[i];
 
-        MPI_Comm has_data_comm;
+        std::shared_ptr<arrow::Table> arrow_table;
+
+        bool has_data = (result != nullptr && result->is_valid());
+        // Check that at least one rank has non-empty, non-null data. We acquire
+        // a rank with non-empty data for first/any_value to avoid returning
+        // null when rank 0 is empty and other ranks have non-null data.
+        int rank, first_non_null_rank;
+        MPI_Comm_rank(comm, &rank);
+        int null_rank = std::numeric_limits<int>::max();
+        int candidate = has_data ? rank : null_rank;
         CHECK_MPI(
-            MPI_Comm_split(comm, result != nullptr ? 1 : MPI_UNDEFINED, 0,
-                           &has_data_comm),
-            "GPUReductionFunction::Finalize: MPI error on MPI_Comm_split:");
-        if (result != nullptr) {
-            cudf::data_type result_dtype = result->type();
-            std::shared_ptr<arrow::Table> arrow_table =
-                cudf_scalar_to_arrow_table(result);
-
-            // Extract the pointer to the scalar value from the Arrow table
-            // All Arrow primitive types store data in the second buffer
-            void* result_ptr = reinterpret_cast<void*>(arrow_table->column(0)
-                                                           ->chunk(0)
-                                                           ->data()
-                                                           ->buffers[1]
-                                                           ->address());
-
-            MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(result_dtype);
-            // NOTE: OpenMPI collectives are not CUDA-aware
-            if (function_names[i] == "first") {
-                CHECK_MPI(
-                    MPI_Bcast(result_ptr, 1, mpi_dtype, 0, has_data_comm),
-                    "GPUReductionFunction::Finalize: MPI error on MPI_Bcast:");
-            } else {
-                CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
-                                        this->mpi_reduce_op, has_data_comm),
-                          "GPUReductionFunction::Finalize: MPI error on "
-                          "MPI_Allreduce:");
-            }
-
-            // Copy the reduced CPU result back to cudf scalar
-            std::shared_ptr<arrow::Scalar> arrow_scalar =
-                arrow_table->column(0)->GetScalar(0).ValueOrDie();
-            this->results[i] = arrow_scalar_to_cudf(arrow_scalar);
+            MPI_Allreduce(&candidate, &first_non_null_rank, 1, MPI_INT, MPI_MIN,
+                          comm),
+            "GPUReductionFunction::Finalize: MPI error on MPI_Allreduce:");
+        if (first_non_null_rank == null_rank) {
+            // All ranks either have null data or are empty, emit null.
+            continue;
         }
+
+        if (has_data) {
+            arrow_table = cudf_scalar_to_arrow_table(result);
+        } else {
+            std::shared_ptr<arrow::Scalar> scalar = make_reduction_identity(
+                reduction_names[i], cudf_to_arrow_type(out_dtype));
+            auto array = arrow::MakeArrayFromScalar(*scalar, 1).ValueOrDie();
+            arrow_table =
+                arrow::Table::FromRecordBatches(
+                    {arrow::RecordBatch::Make(
+                        arrow::schema({arrow::field("value", scalar->type)}), 1,
+                        {array})})
+                    .ValueOrDie();
+        }
+
+        // Extract the pointer to the scalar value from the Arrow table
+        // All Arrow primitive types store data in the second buffer
+        void* result_ptr = reinterpret_cast<void*>(
+            arrow_table->column(0)->chunk(0)->data()->buffers[1]->address());
+
+        MPI_Datatype mpi_dtype = cudf_dtype_to_mpi(out_dtype);
+        // NOTE: OpenMPI collectives are not CUDA-aware
+        if (function_names[i] == "first") {
+            CHECK_MPI(
+                MPI_Bcast(result_ptr, 1, mpi_dtype, first_non_null_rank, comm),
+                "GPUReductionFunction::Finalize: MPI error on MPI_Bcast:");
+        } else {
+            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, result_ptr, 1, mpi_dtype,
+                                    this->mpi_reduce_op, comm),
+                      "GPUReductionFunction::Finalize: MPI error on "
+                      "MPI_Allreduce:");
+        }
+
+        // Copy the reduced CPU result back to cudf scalar
+        std::shared_ptr<arrow::Scalar> arrow_scalar =
+            arrow_table->column(0)->GetScalar(0).ValueOrDie();
+        this->results[i] = arrow_scalar_to_cudf(arrow_scalar);
     }
 }
 
@@ -233,7 +317,6 @@ OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
                         input_col_idx,
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
-
             } else if (func_name == "min") {
                 reduction_functions.push_back(
                     std::make_unique<GPUReductionFunctionMin>(
@@ -265,6 +348,12 @@ OperatorResult PhysicalGPUReduce::ConsumeBatchGPU(
                         this->out_schema->column_types[i]->ToArrowDataType(),
                         se->stream));
 
+            } else if (func_name == "first") {
+                reduction_functions.push_back(
+                    std::make_unique<GPUReductionFunctionFirst>(
+                        input_col_idx,
+                        this->out_schema->column_types[i]->ToArrowDataType(),
+                        se->stream));
             } else {
                 throw std::runtime_error("Unsupported reduction function: " +
                                          func_name);
