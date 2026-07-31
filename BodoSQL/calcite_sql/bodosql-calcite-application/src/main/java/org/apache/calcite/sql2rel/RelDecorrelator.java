@@ -2143,8 +2143,6 @@ public class RelDecorrelator implements ReflectiveVisitor {
     public static final class RemoveCorrelationForScalarProjectRule
             extends RelRule<RemoveCorrelationForScalarProjectRule
             .RemoveCorrelationForScalarProjectRuleConfig> {
-        private final RelDecorrelator d;
-
         // BODO CHANGE: made public
         public static RemoveCorrelationForScalarProjectRuleConfig config(RelDecorrelator decorrelator,
                                                                   RelBuilderFactory relBuilderFactory) {
@@ -2174,7 +2172,6 @@ public class RelDecorrelator implements ReflectiveVisitor {
         /** Creates a RemoveCorrelationForScalarProjectRule. */
         RemoveCorrelationForScalarProjectRule(RemoveCorrelationForScalarProjectRuleConfig config) {
             super(config);
-            this.d = requireNonNull(config.decorrelator());
         }
 
         @Override public void onMatch(RelOptRuleCall call) {
@@ -2405,8 +2402,6 @@ public class RelDecorrelator implements ReflectiveVisitor {
     public static final class RemoveCorrelationForScalarAggregateRule
             extends RelRule<RemoveCorrelationForScalarAggregateRule
             .RemoveCorrelationForScalarAggregateRuleConfig> {
-        private final RelDecorrelator d;
-
         // BODO CHANGE: made public
         public static RemoveCorrelationForScalarAggregateRuleConfig config(RelDecorrelator d,
                                                                     RelBuilderFactory relBuilderFactory) {
@@ -2441,7 +2436,6 @@ public class RelDecorrelator implements ReflectiveVisitor {
         /** Creates a RemoveCorrelationForScalarAggregateRule. */
         RemoveCorrelationForScalarAggregateRule(RemoveCorrelationForScalarAggregateRuleConfig config) {
             super(config);
-            d = requireNonNull(config.decorrelator());
         }
 
         @Override public void onMatch(RelOptRuleCall call) {
@@ -2851,8 +2845,6 @@ public class RelDecorrelator implements ReflectiveVisitor {
     /** Planner rule that adjusts projects when counts are added. */
     public static final class AdjustProjectForCountAggregateRule
             extends RelRule<AdjustProjectForCountAggregateRule.AdjustProjectForCountAggregateRuleConfig> {
-        final RelDecorrelator d;
-
         // BODO CHANGE: made public
         public static AdjustProjectForCountAggregateRuleConfig config(
                 boolean flavor, RelDecorrelator decorrelator, RelBuilderFactory relBuilderFactory) {
@@ -2893,7 +2885,6 @@ public class RelDecorrelator implements ReflectiveVisitor {
         /** Creates an AdjustProjectForCountAggregateRule. */
         AdjustProjectForCountAggregateRule(AdjustProjectForCountAggregateRuleConfig config) {
             super(config);
-            this.d = requireNonNull(config.decorrelator());
         }
 
         @Override public void onMatch(RelOptRuleCall call) {
@@ -2920,10 +2911,11 @@ public class RelDecorrelator implements ReflectiveVisitor {
                     .projectNamed(projects.leftList(), projects.rightList(), true);
                 aggOutputProject = (Project) relBuilder.build();
             }
-            onMatch2(call, correlate, left, aggOutputProject, aggregate);
+            onMatch2(d, call, correlate, left, aggOutputProject, aggregate);
         }
 
         private void onMatch2(
+                RelDecorrelator d,
                 RelOptRuleCall call,
                 Correlate correlate,
                 RelNode leftInput,
@@ -3350,7 +3342,13 @@ public class RelDecorrelator implements ReflectiveVisitor {
     public interface Config extends RelRule.Config {
         /** Returns the RelDecorrelator that will be context for the created
          * rule instance. */
-        RelDecorrelator decorrelator();
+        // Bodo Change: @Value.Default so the static DEFAULT rule configs can be
+        // built without an explicit decorrelator; the org.apache.calcite rules
+        // retrieve it from the planner in onMatch. Bodo rules always set it.
+        @Value.Default
+        default @Nullable RelDecorrelator decorrelator() {
+            return null;
+        }
 
         /** Sets {@link #decorrelator}. */
         Config withDecorrelator(RelDecorrelator decorrelator);
