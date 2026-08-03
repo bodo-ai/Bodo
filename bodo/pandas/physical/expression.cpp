@@ -1,5 +1,6 @@
 #include "expression.h"
 #include <arrow/type_fwd.h>
+#include <arrow/util/value_parsing.h>
 #include <cmath>
 #include "_util.h"
 #include "duckdb/common/types/interval.hpp"
@@ -1770,6 +1771,256 @@ void EnsureSubstrRegistered() {
     std::call_once(once_flag_, [&]() {
         auto* registry = arrow::compute::GetFunctionRegistry();
         RegisterSubstr(registry);
+    });
+}
+
+struct BodoStringCastState : public arrow::compute::KernelState {
+    std::shared_ptr<arrow::DataType> target_type;
+    // Later, Arrow's CastOptions will be replaced with a specialized options
+    // class for this kernel
+    arrow::compute::CastOptions options;
+    // Placeholder until we have a dedicated options class
+    bool emit_null_on_failure = true;
+
+    BodoStringCastState(std::shared_ptr<arrow::DataType> type,
+                        arrow::compute::CastOptions opts)
+        : target_type(std::move(type)), options(std::move(opts)) {}
+};
+
+arrow::Result<std::unique_ptr<arrow::compute::KernelState>> InitTryCast(
+    arrow::compute::KernelContext* ctx,
+    const arrow::compute::KernelInitArgs& args) {
+    // Safely cast the generic FunctionOptions to CastOptions
+    const auto* cast_options =
+        dynamic_cast<const arrow::compute::CastOptions*>(args.options);
+    if (!cast_options) {
+        return arrow::Status::Invalid("CastOptions are required.");
+    }
+
+    // TODO: Throw an error if other cast options are provided
+
+    // Extract the target type from CastOptions
+    std::shared_ptr<arrow::DataType> target_type =
+        cast_options->to_type.GetSharedPtr();
+    if (!target_type) {
+        return arrow::Status::Invalid(
+            "target type (CastOptions.to_type) must be specified.");
+    }
+
+    // Return our custom state wrapping the options
+    return std::make_unique<BodoStringCastState>(target_type, *cast_options);
+}
+
+struct BodoStringCastVisitor {
+    const arrow::ArraySpan& input;
+    arrow::ArraySpan* output;
+    arrow::compute::KernelContext* ctx;
+
+    template <typename CType, typename ParseFunc>
+    arrow::Status ParseValues(ParseFunc parse_func) {
+        auto* state = static_cast<BodoStringCastState*>(ctx->state());
+        bool emit_null_on_failure = state->emit_null_on_failure;
+
+        const int64_t* input_offsets =
+            reinterpret_cast<const int64_t*>(input.buffers[1].data);
+        const char* input_data =
+            reinterpret_cast<const char*>(input.buffers[2].data);
+
+        auto out_validity_buffer =
+            reinterpret_cast<uint8_t*>(output->buffers[0].data);
+        // Accounts for the ArraySpan offset, so we don't need to account for it
+        // when indexing
+        auto out_data_buffer = output->GetValues<CType>(1);
+
+        for (int64_t i = 0; i < input.length; i++) {
+            if (input.IsValid(i)) {
+                // Get the start and end positions for the current element
+                const int64_t adjusted_index = input.offset + i;
+                int64_t start = input_offsets[adjusted_index];
+                int64_t end = input_offsets[adjusted_index + 1];
+
+                // Attempt to parse the string element
+                auto parsed_value = parse_func(input_data + start, end - start);
+                if (parsed_value.has_value()) {
+                    out_data_buffer[i] = *parsed_value;
+                    arrow::bit_util::SetBit(out_validity_buffer,
+                                            output->offset + i);
+                } else {
+                    // If we failed to parse the string, either emit null or
+                    // throw an error depending on the user's chosen option.
+                    if (emit_null_on_failure) {
+                        arrow::bit_util::ClearBit(out_validity_buffer,
+                                                  output->offset + i);
+                        output->null_count++;
+                    } else {
+                        std::string_view invalid_str(input_data + start,
+                                                     end - start);
+                        return arrow::Status::Invalid(
+                            "Failed to parse '" + std::string(invalid_str) +
+                            "' as type " + state->target_type->ToString());
+                    }
+                }
+            } else {
+                arrow::bit_util::ClearBit(out_validity_buffer,
+                                          output->offset + i);
+                output->null_count++;
+            }
+        }
+        return arrow::Status::OK();
+    }
+
+    template <typename T>
+    typename arrow::enable_if_t<arrow::is_fixed_width_type<T>::value &&
+                                    arrow::has_c_type<T>::value &&
+                                    !arrow::is_half_float_type<T>::value &&
+                                    !arrow::is_decimal_type<T>::value &&
+                                    !arrow::is_interval_type<T>::value,
+                                arrow::Status>
+    Visit(const T& type) {
+        using CType = typename T::c_type;
+        return ParseValues<CType>([&type](const char* data,
+                                          int64_t len) -> std::optional<CType> {
+            CType parsed_value;
+            if (arrow::internal::ParseValue(type, data, len, &parsed_value)) {
+                return parsed_value;
+            }
+            return std::nullopt;
+        });
+    }
+
+    template <typename T>
+    typename arrow::enable_if_decimal<T, arrow::Status> Visit(const T& type) {
+        using DecimalType = typename arrow::TypeTraits<T>::CType;
+        return ParseValues<DecimalType>(
+            [&type](const char* data,
+                    int64_t len) -> std::optional<DecimalType> {
+                std::string_view view(data, len);
+                DecimalType parsed_decimal;
+                int32_t precision;
+                int32_t scale;
+                if (DecimalType::FromString(view, &parsed_decimal, &precision,
+                                            &scale)
+                        .ok()) {
+                    // The parsed scale may be different than the target scale,
+                    // so we need to rescale to the target scale so the value is
+                    // interpreted correctly.
+                    int32_t target_scale = type.scale();
+                    // First, check that the scaled number can fit within the
+                    // limits of the type, since Arrow's own overflow checking
+                    // is poor.
+                    int32_t needed_precision = precision + target_scale - scale;
+                    if (0 < needed_precision &&
+                        needed_precision <= T::kMaxPrecision) {
+                        // When reducing scale we want to round, so we should
+                        // call ReduceScaleBy() in that case instead of
+                        // Rescale() which always returns a failed status when
+                        // there is data loss.
+                        if (target_scale <= scale) {
+                            return parsed_decimal.ReduceScaleBy(scale -
+                                                                target_scale);
+                        }
+                        if (target_scale > scale) {
+                            return parsed_decimal.IncreaseScaleBy(target_scale -
+                                                                  scale);
+                        }
+                    }
+                }
+                return std::nullopt;
+            });
+    }
+
+    // Fallback for unsupported types
+    template <typename T>
+    typename arrow::enable_if_t<!((arrow::is_decimal_type<T>::value) ||
+                                  (arrow::is_fixed_width_type<T>::value &&
+                                   arrow::has_c_type<T>::value &&
+                                   !arrow::is_half_float_type<T>::value &&
+                                   !arrow::is_decimal_type<T>::value &&
+                                   !arrow::is_interval_type<T>::value)),
+                                arrow::Status>
+    Visit(const T& type) {
+        return arrow::Status::NotImplemented(
+            "bodo_string_cast doesn't support the given target type " +
+            type.ToString());
+    }
+};
+
+arrow::Status BodoStringCastGeneric(arrow::compute::KernelContext* ctx,
+                                    const arrow::compute::ExecSpan& batch,
+                                    arrow::compute::ExecResult* out) {
+    // Get input and output ArraySpans.
+    // The output validity and data buffers are preallocated due to the
+    // kernel's mem_allocation and null_handling options.
+    const arrow::ArraySpan& input = batch[0].array;
+    arrow::ArraySpan* output = out->array_span_mutable();
+
+    // Call our string cast visitor which specializes the implementation
+    // according to the target type.
+    BodoStringCastVisitor visitor{input, output, ctx};
+    arrow::Status result_status =
+        arrow::VisitTypeInline(*out->type(), &visitor);
+
+    return result_status;
+}
+
+arrow::Result<arrow::TypeHolder> ResolveCastTargetType(
+    arrow::compute::KernelContext* ctx,
+    const std::vector<arrow::TypeHolder>& args) {
+    // Extract our state from the context so we can retrieve the target type.
+    auto* state = static_cast<BodoStringCastState*>(ctx->state());
+    if (!state) {
+        return arrow::Status::Invalid(
+            "Kernel state missing during type resolution.");
+    }
+
+    // Return the target type in the BodoStringCastState which comes from
+    // CastOptions
+    return arrow::TypeHolder(state->target_type);
+}
+
+void RegisterBodoStringCast(arrow::compute::FunctionRegistry* registry) {
+    auto func = std::make_shared<arrow::compute::ScalarFunction>(
+        "bodo_string_cast", arrow::compute::Arity::Unary(),
+        arrow::compute::FunctionDoc{
+            "Cast string arrays to most fixed-width types, optionally emitting "
+            "NULL on failure.",
+            "Returns an array of the requested type. Malformed string inputs "
+            "are coerced to NULL if the `emit_null_on_failure` option is set "
+            "to true.",
+            {"str_array"},
+            "CastOptions"});
+
+    // Use arrow::compute::OutputType(ResolveCastTargetType) for dynamic mapping
+    arrow::compute::ScalarKernel kernel(
+        {arrow::compute::InputType(arrow::large_utf8())},
+        arrow::compute::OutputType(ResolveCastTargetType),
+        BodoStringCastGeneric);
+    kernel.mem_allocation = arrow::compute::MemAllocation::PREALLOCATE;
+    kernel.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
+    // Attach the Initialization function to populate the custom
+    // BodoStringCastState
+    kernel.init = InitTryCast;
+
+    arrow::Status status = func->AddKernel(kernel);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterBodoStringCast AddKernel failed.");
+    }
+
+    // Register the function.
+    status = registry->AddFunction(std::move(func));
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterBodoStringCast AddFunction failed.");
+    }
+}
+
+// Register the function in Arrow's global function registry.
+void EnsureBodoStringCastRegistered() {
+    static std::once_flag once_flag_;
+    // Register the bodo_string_cast arrow compute function only once.
+    std::call_once(once_flag_, [&]() {
+        auto* registry = arrow::compute::GetFunctionRegistry();
+        RegisterBodoStringCast(registry);
     });
 }
 
