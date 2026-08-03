@@ -191,10 +191,11 @@ def create_queries(queries, use_parquet, sql_dir="../sql"):
 
         func_name = f"tpch_q{nn}"
 
+        global data_param  # noqa
         if use_parquet:
-            pass
+            data_param = "tpch_data"  # noqa
         else:
-            pass
+            data_param = "catalog=tpch_data"  # noqa
 
         # Build the function source string
         func_src = (
@@ -204,8 +205,8 @@ def {func_name}(tpch_data):
             + "'''\\\n"
             + sql_text
             + "\\\n'''\n"
+            + f"    bc = BodoSQLContext({data_param}, default_tz=None)"
             + """
-    bc = BodoSQLContext({data_param}, default_tz=None)
     bodosql_output = bc.sql(tpch_query, None, None, {})
     return bodosql_output
 """
