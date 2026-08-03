@@ -502,13 +502,13 @@ def test_create_table_timing_debug_message(
             check_logger_msg(
                 stream, f"Execution time for writing table {table_name.upper()}"
             )
-    except Exception as e:
+    except Exception:
         # In the case that another exception ocurred within the body of the try,
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
         exception_occurred_in_test_body = True
-        raise e
+        raise
     finally:
         db = test_db_snowflake_catalog.database
         schema = test_db_snowflake_catalog.connection_params["schema"]
@@ -793,13 +793,13 @@ def test_default_table_type(
             f"Table type is not as expected. Expected {expected_table_type} but found {table_type}"
         )
 
-    except Exception as e:
+    except Exception:
         # In the case that another exception ocurred within the body of the try,
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
         exception_occurred_in_test_body = True
-        raise e
+        raise
     finally:
         if exception_occurred_in_test_body:
             try:
@@ -1003,13 +1003,13 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
             f"Table type is not as expected. Expected TRANSIENT but found {output_table_type}"
         )
 
-    except Exception as e:
+    except Exception:
         # In the case that another exception ocurred within the body of the try,
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
         exception_occurred_in_test_body = True
-        raise e
+        raise
     finally:
         if exception_occurred_in_test_body:
             try:
@@ -1077,13 +1077,13 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
             }
         )
         assert_tables_equal(output_df, result_df)
-    except Exception as e:
+    except Exception:
         # In the case that another exception ocurred within the body of the try,
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
         exception_occurred_in_test_body = True
-        raise e
+        raise
     finally:
         if exception_occurred_in_test_body:
             try:
@@ -1243,13 +1243,13 @@ def test_snowflake_catalog_simple_rewrite(
         output_df = comm.bcast(output_df)
         result_df = local_table
         assert_tables_equal(output_df, result_df)
-    except Exception as e:
+    except Exception:
         # In the case that another exception ocurred within the body of the try,
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
         exception_occurred_in_test_body = True
-        raise e
+        raise
     finally:
         if exception_occurred_in_test_body:
             try:
@@ -1468,7 +1468,7 @@ def test_snowflake_catalog_create_table_tpch(
         output_df = comm.bcast(output_df)
         expected_output = comm.bcast(expected_output)
         assert_tables_equal(output_df, expected_output, check_dtype=False)
-    except Exception as e:
+    except Exception:
         # In the case that the try body throws an error,
         # we may not have succeeded in creating the table. Therefore, we
         # need to try to drop the table, but we don't want to mask the
@@ -1477,7 +1477,7 @@ def test_snowflake_catalog_create_table_tpch(
             drop_snowflake_table(table_name, db, schema)
         except Exception:
             pass
-        raise e
+        raise
     else:
         # Drop the table.
         drop_snowflake_table(table_name, db, schema)
@@ -1916,7 +1916,7 @@ def test_snowflake_catalog_create_table_like(
         output_df = comm.bcast(output_df)
         expected_output = comm.bcast(expected_output)
         assert_tables_equal(output_df, expected_output)
-    except Exception as e:
+    except Exception:
         # Drop the table. In the case that the try body throws an error,
         # we may not have succeeded in creating the table. Therefore, we
         # need to try to drop the table, but we don't want to mask the
@@ -1925,7 +1925,7 @@ def test_snowflake_catalog_create_table_like(
             drop_snowflake_table(output_table_name, db, schema)
         except Exception:
             pass
-        raise e
+        raise
     else:
         drop_snowflake_table(output_table_name, db, schema)
 

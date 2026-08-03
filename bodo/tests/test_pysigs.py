@@ -87,9 +87,7 @@ def _skip_pysig_check(path: str) -> bool:
     """
     # TODO (fix in pandas): Series.dt.xxx methods have generic signatures that look
     # like (self, *arg, **kwargs)
-    if path[:2] == ["Series", "dt"]:
-        return True
-    return False
+    return path[:2] == ["Series", "dt"]
 
 
 @pytest.mark.skip(reason="Pandas 3 introduced new APIs")
@@ -145,7 +143,7 @@ def test_pandas_pysigs(get_apis, keys):
                 )
                 # keep track of all signatures that do not match and fail at the end.
                 if not is_equivalent_signatures:
-                    diff_str += f"\t{api}: overloaded signature: {str(overload_sig)} != {str(pysig)}\n"
+                    diff_str += f"\t{api}: overloaded signature: {overload_sig!s} != {pysig!s}\n"
                 else:
                     total_correct_signature += 1
                 total_decl_methods += 1

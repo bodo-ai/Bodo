@@ -286,8 +286,8 @@ def overload_init_nested_counts(arr_typ):
         or arr_typ == bodo.types.string_array_type
     ):
         data_arr_typ = arr_typ.dtype
-        return lambda arr_typ: (0,) + init_nested_counts(
-            data_arr_typ
+        return lambda arr_typ: (
+            (0,) + init_nested_counts(data_arr_typ)
         )  # pragma: no cover
 
     if (
@@ -315,9 +315,10 @@ def overload_add_nested_counts(nested_counts, arr_item):
     # array(array)
     if isinstance(arr_item, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
         return lambda nested_counts, arr_item: (
-            nested_counts[0] + len(arr_item),
-        ) + add_nested_counts(
-            nested_counts[1:], bodo.libs.array_item_arr_ext.get_data(arr_item)
+            (nested_counts[0] + len(arr_item),)
+            + add_nested_counts(
+                nested_counts[1:], bodo.libs.array_item_arr_ext.get_data(arr_item)
+            )
         )  # pragma: no cover
 
     # list is similar to array

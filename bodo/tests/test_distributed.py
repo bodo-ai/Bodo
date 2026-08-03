@@ -515,7 +515,7 @@ def test_bodo_func_dist_call_tup(memory_leak_check):
 
     @bodo.jit(distributed=["B"])
     def impl1(n):
-        A, B = f1(n)
+        _A, B = f1(n)
         return B
 
     impl1(11)
@@ -555,7 +555,7 @@ def test_bodo_func_dist_call_tup2(memory_leak_check):
 
     @bodo.jit(returns_maybe_distributed=False)
     def impl2(n):
-        A, B, a = f2(n)
+        _A, B, a = f2(n)
         C = B + a
         return C
 
@@ -1783,7 +1783,7 @@ def test_user_distributed_rep(memory_leak_check):
 
 def test_replicated_flag(memory_leak_check):
     """test replicated flag in jit decorator"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.transforms.distributed_analysis import Distribution, is_REP
 
     # mix of dist/rep inputs
@@ -2033,7 +2033,7 @@ def check_dist_meta(df, dist):
 @pytest.mark.parquet
 def test_bodo_meta(memory_leak_check, datapath):
     """Test Bodo metadata on data structures returned from JIT functions"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.transforms.distributed_analysis import Distribution
 
     fname = datapath("example.parquet")
@@ -3101,10 +3101,10 @@ def test_bcast_tuple_root(val1, val2, root):
                     Decimal("0.0"),
                     Decimal("-0.222"),
                     Decimal("1111.316"),
-                    Decimal("1"),
+                    Decimal(1),
                     Decimal("5.1"),
-                    Decimal("-1"),
-                    Decimal("-1"),
+                    Decimal(-1),
+                    Decimal(-1),
                 ]
             ),
         ),
@@ -3250,7 +3250,7 @@ def test_get_cpu_id(memory_leak_check):
 def bcast_intercomm(data):
     """broadcast data using spawner's intercomm"""
     # Import compiler for bodo.libs
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     spawner = bodo.spawn.spawner.get_spawner()
     bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
@@ -3271,7 +3271,7 @@ def test_bcast_intercomm():
 @pytest_mark_spawn_mode
 def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
     """Test scatterv's intercomm support in spawn mode"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     bodo.spawn.utils.import_compiler_on_workers()
 
@@ -3287,7 +3287,7 @@ def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
 @pytest_mark_spawn_mode
 def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     """Test gatherv's intercomm support in spawn mode"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     bodo.spawn.utils.import_compiler_on_workers()
 

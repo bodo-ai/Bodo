@@ -10,7 +10,7 @@ import pytest
 
 import bodo
 import bodo.tests.dataframe_common
-from bodo.tests.dataframe_common import *  # noqa
+from bodo.tests.dataframe_common import *
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
@@ -191,7 +191,7 @@ def test_dataframe_sample_distribution(
         return df.sample(n=nsamp, random_state=random_state)
 
     nitems = items_per_rank * bodo.get_size()
-    nsamp = int(round(nitems * frac))
+    nsamp = round(nitems * frac)
     data = np.arange(nitems)
 
     if distributed:

@@ -163,9 +163,8 @@ def calculate_month_begin_date(year, month, day, n):  # pragma: no cover
     # If n <= 0, we need to increment n when rolling back to the start of
     # the month. The exception is if we are already at the start of the
     # month.
-    if n <= 0:
-        if day > 1:
-            n += 1
+    if n <= 0 and day > 1:
+        n += 1
     # Alter the number of months by n, then update year. Note this is 1 indexed.
     month = month + n
     # Subtract 1 to map (1, 12) to (0, 11) so we can use the modulo operator.
@@ -997,8 +996,7 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
 
                 year, month, new_day = calculate_month_end_date(year, month, day, 0)
                 # If the day is out of bounds roll back to a legal date
-                if day > new_day:
-                    day = new_day
+                day = min(day, new_day)
 
                 # Remaining values can be handled with a timedelta to give the same
                 # effect as happening 1 at a time
@@ -1755,9 +1753,11 @@ month_end_unsupported = {
 
 month_begin_unsupported_attrs = {
     # MonthBegin
-    "base"
-    # Properties
-    "freqstr",
+    (
+        "base"
+        # Properties
+        "freqstr"
+    ),
     "kwds",
     "name",
     "nanos",
@@ -1786,9 +1786,11 @@ month_begin_unsupported = {
 
 week_unsupported_attrs = {
     # MonthBegin
-    "base"
-    # Properties
-    "freqstr",
+    (
+        "base"
+        # Properties
+        "freqstr"
+    ),
     "kwds",
     "name",
     "nanos",

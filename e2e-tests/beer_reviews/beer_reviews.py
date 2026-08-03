@@ -14,7 +14,7 @@ with open("nltk-stopwords.txt") as fh:
     STOPWORDS = list(map(str.strip, fh.readlines()))
 
 
-PUNCT_LIST = ["\.", "\-", "\?", "\:", ":", "!", "&", "'", ","]
+PUNCT_LIST = [r"\.", r"\-", r"\?", r"\:", ":", "!", "&", "'", ","]
 punc_regex = "|".join([f"({p})" for p in PUNCT_LIST])
 stopword_regex = "|".join([f"\\b({s})\\b" for s in STOPWORDS])
 

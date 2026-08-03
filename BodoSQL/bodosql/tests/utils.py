@@ -1164,7 +1164,7 @@ def _run_jit_query(
     args = args + values_list + list(bind_variables)
     func_text += "        }\n"
     if session_tz is not None:
-        func_text += f"        , default_tz={repr(session_tz)}\n"
+        func_text += f"        , default_tz={session_tz!r}\n"
     func_text += "    )\n"
     func_text += "    result = bc.sql(query, "
     if keys_list:
@@ -1487,7 +1487,7 @@ def convert_nullable_object(df):
 def convert_arrow_time_to_bodo_time(df):
     """Convert a DataFrame with potentially Arrow Time64[ns] columns to bodo.types.Time objects.
     Imports the compiler for bodo.types.Time"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if not isinstance(df, pd.DataFrame):
         return df
@@ -1731,7 +1731,7 @@ def remap_spark_agg_fn_name(query):
         "VARIANCE_SAMP": "VAR_SAMP",
     }
 
-    for key in spark_dict.keys():
+    for key in spark_dict:
         query = query.replace(key, spark_dict[key])
 
     return query

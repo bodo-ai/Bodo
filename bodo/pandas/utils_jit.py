@@ -1,7 +1,7 @@
 import typing as pt
 
 # Import JIT compiler lazily
-import bodo.decorators  # isort:skip # noqa
+import bodo.decorators  # isort:skip
 import numba
 from numba.core.ccallback import CFunc
 

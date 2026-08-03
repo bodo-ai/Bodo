@@ -28,10 +28,10 @@ from numba.core.ir_utils import (
 from numba.core.typing.templates import Signature
 
 import bodo
-import bodo.hiframes.series_dt_impl  # noqa # side effect: install Series overloads
-import bodo.hiframes.series_impl  # noqa # side effect: install Series overloads
-import bodo.hiframes.series_indexing  # noqa # side effect: install Series overloads
-import bodo.hiframes.series_str_impl  # noqa # side effect: install Series overloads
+import bodo.hiframes.series_dt_impl  # side effect: install Series overloads
+import bodo.hiframes.series_impl  # side effect: install Series overloads
+import bodo.hiframes.series_indexing  # side effect: install Series overloads
+import bodo.hiframes.series_str_impl  # side effect: install Series overloads
 from bodo.hiframes import series_kernels
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
@@ -244,7 +244,7 @@ class SeriesPass:
                         # extra pass over the IR (reducing compilation time).
                         bodo.ir.csv_ext.check_node_typing(inst, self.typemap)
                 except BodoError as e:
-                    msg = f"{self.curr_loc.strformat()}\n{str(e)}"
+                    msg = f"{self.curr_loc.strformat()}\n{e!s}"
                     raise BodoError(msg)
 
                 if isinstance(out_nodes, list):
@@ -901,7 +901,7 @@ class SeriesPass:
         if isinstance(rhs_type, DatetimeIndexType):
             if (
                 rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields
-                and not rhs.attr == "is_leap_year"
+                and rhs.attr != "is_leap_year"
             ):
                 impl = bodo.hiframes.pd_index_ext.gen_dti_field_impl(rhs.attr)
                 return replace_func(self, impl, [rhs.value])
@@ -1329,7 +1329,7 @@ class SeriesPass:
 
         # inline remaining Integer array ops
         if (
-            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map
             and any(isinstance(t, IntegerArrayType) for t in (typ1, typ2))
             # NOTE: decimal array comparison isn't inlined since it uses Arrow compute
             and not (
@@ -1342,8 +1342,7 @@ class SeriesPass:
             return replace_func(self, impl, [arg1, arg2])
 
         if (
-            rhs.fn
-            in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map
             and any(isinstance(t, IntegerArrayType) for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 2)
@@ -1352,7 +1351,7 @@ class SeriesPass:
 
         # inline remaining Float array ops
         if (
-            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map
             and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
             # NOTE: decimal array comparison isn't inlined since it uses Arrow compute
             and not (
@@ -1365,8 +1364,7 @@ class SeriesPass:
             return replace_func(self, impl, [arg1, arg2])
 
         if (
-            rhs.fn
-            in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map
             and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
         ):  # pragma: no cover
             overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 2)
@@ -1374,19 +1372,20 @@ class SeriesPass:
             return replace_func(self, impl, [arg1, arg2])
 
         # inline operator.or_ and operator.and_ for boolean arrays
-        if (rhs.fn in [operator.or_, operator.and_]) and any(
-            t == boolean_array_type for t in (typ1, typ2)
+        if (
+            (rhs.fn in [operator.or_, operator.and_])
+            and any(t == boolean_array_type for t in (typ1, typ2))
+            and is_valid_boolean_array_logical_op(typ1, typ2)
         ):
-            if is_valid_boolean_array_logical_op(typ1, typ2):
-                impl = bodo.libs.bool_arr_ext.create_nullable_logical_op_overload(
-                    rhs.fn
-                )(typ1, typ2)
-                assert impl != None
-                return replace_func(self, impl, [arg1, arg2])
+            impl = bodo.libs.bool_arr_ext.create_nullable_logical_op_overload(rhs.fn)(
+                typ1, typ2
+            )
+            assert impl != None
+            return replace_func(self, impl, [arg1, arg2])
 
         # inline Boolean array ops
         if (
-            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map
             and any(t == boolean_array_type for t in (typ1, typ2))
             # Don't inline operators between array + Series. These should be handled
             # by Series
@@ -1397,8 +1396,7 @@ class SeriesPass:
             return replace_func(self, impl, [arg1, arg2])
 
         if (
-            rhs.fn
-            in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map
             and any(t == boolean_array_type for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
@@ -1949,9 +1947,9 @@ class SeriesPass:
         ):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = getattr(
-                bodo.hiframes.series_kernels, "_get_type_max_value_overload"
-            )(*arg_typs, **kw_typs)
+            impl = bodo.hiframes.series_kernels._get_type_max_value_overload(
+                *arg_typs, **kw_typs
+            )
             return replace_func(
                 self,
                 impl,
@@ -1966,9 +1964,9 @@ class SeriesPass:
         ):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = getattr(
-                bodo.hiframes.series_kernels, "_get_type_min_value_overload"
-            )(*arg_typs, **kw_typs)
+            impl = bodo.hiframes.series_kernels._get_type_min_value_overload(
+                *arg_typs, **kw_typs
+            )
             return replace_func(
                 self,
                 impl,
@@ -4345,7 +4343,6 @@ class SeriesPass:
         dumm_block = ir.Block(ir.Scope(None, loc), loc)
         dumm_block.body = node_list
         build_definitions({0: dumm_block}, self.func_ir._definitions)
-        return
 
 
 def _fix_typ_undefs(new_typ, old_typ):

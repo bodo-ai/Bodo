@@ -343,9 +343,7 @@ class BodoTypeInference(PartialTypeInference):
         else:
             # last return type check in Numba:
             # https://github.com/numba/numba/blob/0bac18af44d08e913cd512babb9f9b7f6386d30a/numba/core/typed_passes.py#L141
-            if isinstance(return_type, types.Function) or isinstance(
-                return_type, types.Phantom
-            ):
+            if isinstance(return_type, (types.Function, types.Phantom)):
                 msg = "Can't return function object ({})"
                 raise TypeError(msg.format(return_type))
             state.return_type = return_type
@@ -496,7 +494,6 @@ class TypingTransforms:
         dumm_block = ir.Block(ir.Scope(None, loc), loc)
         dumm_block.body = node_list
         build_definitions({0: dumm_block}, self.func_ir._definitions)
-        return
 
     def _handle_inline_func(
         self, replacement_func, orig_inst, orig_inst_idx, cur_block
@@ -564,9 +561,9 @@ class TypingTransforms:
         # see test_groupby_agg_func_list
         if isinstance(rhs, ir.Expr) and rhs.op in ("build_tuple", "build_list"):
             tup_typ = self.typemap.get(assign.target.name, None)
-            is_func_literal = lambda t: isinstance(
-                t, types.MakeFunctionLiteral
-            ) or is_expr(t, "make_function")
+            is_func_literal = lambda t: (
+                isinstance(t, types.MakeFunctionLiteral) or is_expr(t, "make_function")
+            )
             # check for BaseTuple since could be types.unknown
             if (
                 isinstance(tup_typ, (types.BaseTuple, types.LiteralList))
@@ -600,9 +597,7 @@ class TypingTransforms:
             and (
                 idx_typ == bodo.types.string_type
                 or isinstance(idx_typ, types.Integer)
-                or (
-                    isinstance(idx_typ, types.List) and not idx_typ.dtype == types.bool_
-                )
+                or (isinstance(idx_typ, types.List) and idx_typ.dtype != types.bool_)
             )
         ):
             # NOTE: avoid using rhs.index for "static_getitem" since it can be wrong
@@ -4585,7 +4580,7 @@ class TypingTransforms:
         be handled in regular overloads (requires Bodo's untyped pass, typing pass)
         """
         import bodosql
-        import bodosql.compiler  # isort:skip # noqa
+        import bodosql.compiler  # isort:skip
         from bodosql.context_ext import BodoSQLContextType
 
         # In order to inline the sql() call, we must ensure that the type of the input dataframe(s)
@@ -4753,7 +4748,7 @@ class TypingTransforms:
             default=types.none,
         )
         # Make sure JIT options are not used inside JIT functions
-        for k in kws.keys():
+        for k in kws:
             if k not in ("sql", "params_dict", "dynamic_params_list"):
                 raise BodoError(
                     f"Argument '{k}' is not supported for BodoSQLContextType.{func_name}() inside JIT functions."
@@ -5240,11 +5235,11 @@ class TypingTransforms:
                 # save for potential loop unrolling
                 self._require_const[var] = label
                 self.needs_transform = True
-            raise e
-        except GuardException as e2:
+            raise
+        except GuardException:
             # save for potential loop unrolling
             self._require_const[var] = label
-            raise e2
+            raise
         return value
 
     def _is_constant_var(self, varname):
@@ -5316,7 +5311,7 @@ class TypingTransforms:
         # start the unroll transform
         # no more GuardException since we can't bail out from this point
         self._unroll_loop(loop, loop_index_var, iter_vals)
-        self._remove_container_updates(self.func_ir.blocks[list(loop.entries)[0]])
+        self._remove_container_updates(self.func_ir.blocks[next(iter(loop.entries))])
         return True
 
     def _try_loop_unroll_for_const_inner(self, var, label):
@@ -5344,7 +5339,7 @@ class TypingTransforms:
             or self._vars_dependant(var, loop_index_var)
         )
         iter_vals = self._get_loop_const_iter_vals(
-            loop_index_var, True, list(loop.entries)[0]
+            loop_index_var, True, next(iter(loop.entries))
         )
 
         # avoid unrolling very large loops (too many iterations and/or body statements)
@@ -5361,7 +5356,9 @@ class TypingTransforms:
         self._unroll_loop(loop, loop_index_var, iter_vals)
 
         if is_container_update:
-            self._remove_container_updates(self.func_ir.blocks[list(loop.entries)[0]])
+            self._remove_container_updates(
+                self.func_ir.blocks[next(iter(loop.entries))]
+            )
 
         return True
 
@@ -5690,8 +5687,8 @@ class TypingTransforms:
             body_labels = find_topo_order(loop_body)
         first_label = body_labels[0]
         last_label = body_labels[-1]
-        loop_entry = list(loop.entries)[0]
-        loop_exit = list(loop.exits)[0]
+        loop_entry = next(iter(loop.entries))
+        loop_exit = next(iter(loop.exits))
         # previous block's jump node, to be updated after each iter body gen
         prev_jump = self.func_ir.blocks[loop_entry].body[-1]
         scope = loop_index_var.scope
@@ -5749,7 +5746,7 @@ class TypingTransforms:
             # use label should dominate the loop
             if (
                 var.name in self._updated_containers
-                and list(loop.exits)[0] in label_doms
+                and next(iter(loop.exits)) in label_doms
             ):
                 return loop, True
             if label in loop.body:
@@ -6146,10 +6143,7 @@ class TypingTransforms:
             self.needs_transform = True
             return False
 
-        if not isinstance(method_obj_type, SeriesStrMethodType):
-            return False
-
-        return True
+        return isinstance(method_obj_type, SeriesStrMethodType)
 
     def _is_like_filter_pushdown_func(self, index_def: ir.Stmt, index_call_name):
         """Does an expression match a like call that may be possible to support

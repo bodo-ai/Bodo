@@ -28,14 +28,12 @@ class DDLTestHarness(ABC):
         """
         Executes a query on the Bodo catalog and returns the output as a pandas dataframe.
         """
-        pass
 
     @abstractmethod
     def run_spark_query(self, query: str) -> pd.DataFrame:
         """
         Executes a query on the Spark catalog and returns the output as a pandas dataframe.
         """
-        pass
 
     @abstractmethod
     def get_table_identifier(
@@ -51,7 +49,6 @@ class DDLTestHarness(ABC):
         Returns:
             str: Table identifier string (e.g. "schema"."table_name")
         """
-        pass
 
     @abstractmethod
     def create_test_table(self, table_identifier: str) -> None:
@@ -61,7 +58,6 @@ class DDLTestHarness(ABC):
         Args:
             table_identifier (str): The identifier for the test table.
         """
-        pass
 
     @abstractmethod
     def drop_test_table(self, table_identifier: str) -> None:
@@ -74,7 +70,6 @@ class DDLTestHarness(ABC):
         Returns:
             None
         """
-        pass
 
     @abstractmethod
     def check_table_exists(self, table_identifier: str) -> bool:
@@ -87,7 +82,6 @@ class DDLTestHarness(ABC):
         Returns:
             bool: True if the table exists, False otherwise.
         """
-        pass
 
     @abstractmethod
     def show_table_properties(self, table_identifier: str) -> pd.DataFrame:
@@ -100,7 +94,6 @@ class DDLTestHarness(ABC):
         Returns:
             pd.DataFrame: A dataframe containing the properties of the table.
         """
-        pass
 
     @abstractmethod
     def describe_table_extended(self, table_identifier: str) -> pd.DataFrame:
@@ -114,7 +107,6 @@ class DDLTestHarness(ABC):
         Returns:
             pd.DataFrame: A dataframe containing the extended information about the table.
         """
-        pass
 
     @abstractmethod
     def refresh_table(self, table_identifier: str) -> None:
@@ -127,7 +119,6 @@ class DDLTestHarness(ABC):
         Returns:
             None
         """
-        pass
 
     @abstractmethod
     def describe_table(self, table_identifier: str, spark=False) -> pd.DataFrame:
@@ -142,7 +133,6 @@ class DDLTestHarness(ABC):
         Returns:
             pd.DataFrame: A dataframe containing the description of the table.
         """
-        pass
 
     @abstractmethod
     def create_test_view(self, view_identifier: str) -> None:
@@ -152,7 +142,6 @@ class DDLTestHarness(ABC):
         Args:
             view_identifier (str): The identifier for the test view.
         """
-        pass
 
     @abstractmethod
     def drop_test_view(self, view_identifier: str) -> None:
@@ -165,7 +154,6 @@ class DDLTestHarness(ABC):
         Returns:
             None
         """
-        pass
 
     @abstractmethod
     def check_view_exists(self, table_name: str) -> bool:
@@ -178,7 +166,6 @@ class DDLTestHarness(ABC):
         Returns:
             bool: True if the view exists, False otherwise.
         """
-        pass
 
     @abstractmethod
     def check_schema_exists(self, schema_name: str) -> bool:
@@ -191,7 +178,6 @@ class DDLTestHarness(ABC):
         Returns:
             bool: True if the schema exists, False otherwise.
         """
-        pass
 
     #######################
     #   Helper functions  #

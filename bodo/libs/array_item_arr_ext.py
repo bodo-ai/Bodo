@@ -605,8 +605,8 @@ def overload_array_item_arr_ndim(A):
 
 @overload_attribute(ArrayItemArrayType, "nbytes")
 def overload_array_item_arr_nbytes(A):
-    return (
-        lambda A: get_data(A).nbytes + get_offsets(A).nbytes + get_null_bitmap(A).nbytes
+    return lambda A: (
+        get_data(A).nbytes + get_offsets(A).nbytes + get_null_bitmap(A).nbytes
     )  # pragma: no cover
 
 

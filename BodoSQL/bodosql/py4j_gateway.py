@@ -103,7 +103,7 @@ def get_gateway():
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))
         except Exception as e:
-            msg = f"Error when launching the BodoSQL JVM. {str(e)}"
+            msg = f"Error when launching the BodoSQL JVM. {e!s}"
             failed = True
 
     comm = MPI.COMM_WORLD

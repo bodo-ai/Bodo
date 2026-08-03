@@ -3474,7 +3474,7 @@ dm = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
 def test_next_previous_day_cols(
     dt_fn_dataframe, next_or_prev, dow_str, memory_leak_check
 ):
-    if dow_str in dm.keys():
+    if dow_str in dm:
         query = (
             f"SELECT {next_or_prev}_DAY(timestamps, '{dow_str}') AS OUTPUT from table1"
         )
@@ -3519,7 +3519,7 @@ def test_next_previous_day_cols(
 def test_next_previous_day_scalars(
     dt_fn_dataframe, next_or_prev, dow_str, memory_leak_check
 ):
-    if dow_str in dm.keys():
+    if dow_str in dm:
         query = f"SELECT CASE WHEN MONTH({next_or_prev}_DAY(timestamps, '{dow_str}')) < 4 THEN DATE '2021-05-31' ELSE {next_or_prev}_DAY(timestamps, '{dow_str}') END AS OUTPUT from table1"
     else:
         query = f"SELECT CASE WHEN MONTH({next_or_prev}_DAY(timestamps, {dow_str})) < 4 THEN DATE '2021-05-31' ELSE {next_or_prev}_DAY(timestamps, {dow_str}) END AS OUTPUT from table1"

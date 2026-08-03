@@ -219,7 +219,7 @@ def test_parse_json(arg):
             elems = [remove_whitespace(sub) for sub in elem]
             return "[" + ",".join(elems) + "]"
         if isinstance(elem, dict):
-            elems = [f"{repr(key)}:{remove_whitespace(elem[key])}" for key in elem]
+            elems = [f"{key!r}:{remove_whitespace(elem[key])}" for key in elem]
             return "{" + ",".join(elems) + "}"
         return repr(elem)
 

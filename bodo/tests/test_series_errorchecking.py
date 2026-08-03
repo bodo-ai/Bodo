@@ -286,7 +286,7 @@ def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
                 Decimal("-0.2"),
                 Decimal("44.2"),
                 None,
-                Decimal("0"),
+                Decimal(0),
             ]
         )
         bodo.jit(test_by_type)(S, byS)

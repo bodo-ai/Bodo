@@ -5578,10 +5578,7 @@ def compare_types(obj_type, expected_type):
     if hasattr(expected_type, "numpy_dtype"):
         expected_type = expected_type.numpy_dtype
 
-    if np.issubdtype(obj_type, expected_type):
-        return True
-
-    return False
+    return bool(np.issubdtype(obj_type, expected_type))
 
 
 def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
@@ -5597,11 +5594,11 @@ def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
             return
     if len(dtype) > 1:
         raise ValueError(
-            f"{expr_name}.value should be one of {str(dtype)} but instead was {type(expr.value)}"
+            f"{expr_name}.value should be one of {dtype!s} but instead was {type(expr.value)}"
         )
     else:
         raise ValueError(
-            f"{expr_name}.value should be {str(dtype[0])} but instead was {type(expr.value)}"
+            f"{expr_name}.value should be {dtype[0]!s} but instead was {type(expr.value)}"
         )
 
 
@@ -5643,11 +5640,11 @@ def ensure_type_of_expr(expr, expr_name, dtype):
 
     if len(dtype) > 1:
         raise ValueError(
-            f"Expected {expr_name} ({type(expr)}) to hold one of the datatypes {str(dtype)}, instead was {expr_dtype}"
+            f"Expected {expr_name} ({type(expr)}) to hold one of the datatypes {dtype!s}, instead was {expr_dtype}"
         )
     else:
         raise ValueError(
-            f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype[0])}, instead was {expr_dtype}"
+            f"Expected {expr_name} ({type(expr)}) to hold datatype {dtype[0]!s}, instead was {expr_dtype}"
         )
 
 
@@ -5791,39 +5788,36 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.OR):
         return ConjunctionOpExpression(bool_empty_data, left, right, "__or__")
 
-    if kind.equals(SqlKind.OTHER):
-        if op_name == "||":  # string concatenation
-            for op_expr in (left, right):
-                ensure_type_of_expr(op_expr, "op_expr (|| arg)", (str, pa.binary()))
+    if kind.equals(SqlKind.OTHER) and op_name == "||":  # string concatenation
+        for op_expr in (left, right):
+            ensure_type_of_expr(op_expr, "op_expr (|| arg)", (str, pa.binary()))
 
-            separator = bodo.pandas.plan.ConstantExpression(
-                left.empty_data,
-                left.source,
-                "",  # empty separator
-            )
-            return ArrowScalarFuncExpression(
-                left.empty_data,
-                [left, right, separator],
-                "binary_join_element_wise",
-                (),
-            )
+        separator = bodo.pandas.plan.ConstantExpression(
+            left.empty_data,
+            left.source,
+            "",  # empty separator
+        )
+        return ArrowScalarFuncExpression(
+            left.empty_data,
+            [left, right, separator],
+            "binary_join_element_wise",
+            (),
+        )
 
     raise NotImplementedError(f"Binary operator {kind.toString()} not supported yet")
 
 
 def get_common_int_type_list(
     exprs,
-    get_common_width=lambda expr1_width,
-    expr2_width,
-    expr1_is_signed,
-    expr2_is_signed: max(expr1_width, expr2_width),
-    get_common_signed=lambda expr1_width,
-    expr2_width,
-    expr1_is_signed,
-    expr2_is_signed: expr1_is_signed
-    if expr1_is_signed == expr2_is_signed
-    else (expr1_is_signed and expr1_width > expr2_width)
-    or (expr2_is_signed and expr2_width > expr1_width),
+    get_common_width=lambda expr1_width, expr2_width, expr1_is_signed, expr2_is_signed: (
+        max(expr1_width, expr2_width)
+    ),
+    get_common_signed=lambda expr1_width, expr2_width, expr1_is_signed, expr2_is_signed: (
+        expr1_is_signed
+        if expr1_is_signed == expr2_is_signed
+        else (expr1_is_signed and expr1_width > expr2_width)
+        or (expr2_is_signed and expr2_width > expr1_width)
+    ),
 ):
     """Find a common integer type for a list of expressions with integer dtypes.
 

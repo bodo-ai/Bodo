@@ -893,10 +893,8 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
 
     def is_legal_input(elem):
         # TODO(Nick): Replace with the correct type check
-        return (
-            is_overload_constant_str(elem)
-            or isinstance(elem, types.DTypeSpec)
-            or isinstance(elem, types.Function)
+        return is_overload_constant_str(elem) or isinstance(
+            elem, (types.DTypeSpec, types.Function)
         )
 
     if not include_none:
@@ -2529,8 +2527,8 @@ def overload_dataframe_drop_duplicates(
 
     # handle empty dataframe corner case
     if n_cols == 0:
-        return (
-            lambda df, subset=None, keep="first", inplace=False, ignore_index=False: df
+        return lambda df, subset=None, keep="first", inplace=False, ignore_index=False: (
+            df
         )  # pragma: no cover
 
     subset_args = [f"data_{i}" for i in subset_idx]
@@ -2626,8 +2624,8 @@ def create_dataframe_mask_where_overload(func_name):
             other_str = lambda i: "other"
         elif other.ndim == 2:
             if isinstance(other, DataFrameType):
-                other_str = (
-                    lambda i: f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {other.column_index[df.columns[i]]})"
+                other_str = lambda i: (
+                    f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {other.column_index[df.columns[i]]})"
                     if df.columns[i] in other.column_index
                     else "None"
                 )
@@ -3243,7 +3241,7 @@ def overload_dataframe_replace(
 def _is_col_access(expr_node):
     """return True if the expression is a column access"""
     expr_str = str(expr_node)
-    return expr_str.startswith("(left.") or expr_str.startswith("(right.")
+    return expr_str.startswith(("(left.", "(right."))
 
 
 def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_data):
@@ -3294,8 +3292,8 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
         saved__disallow_scalar_only_bool_ops = (
             pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
         )
-        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
-            lambda self: None
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: (
+            None
         )
 
         try:
@@ -3844,18 +3842,16 @@ def validate_keys_length(left_index, right_index, left_keys, right_keys):
     if (not is_overload_true(left_index)) and (not is_overload_true(right_index)):
         if len(right_keys) != len(left_keys):
             raise BodoError("merge(): len(right_on) must equal len(left_on)")
-    if is_overload_true(right_index):
-        if len(left_keys) != 1:
-            raise BodoError(
-                "merge(): len(left_on) must equal the number "
-                'of levels in the index of "right", which is 1'
-            )
-    if is_overload_true(left_index):
-        if len(right_keys) != 1:
-            raise BodoError(
-                "merge(): len(right_on) must equal the number "
-                'of levels in the index of "left", which is 1'
-            )
+    if is_overload_true(right_index) and len(left_keys) != 1:
+        raise BodoError(
+            "merge(): len(left_on) must equal the number "
+            'of levels in the index of "right", which is 1'
+        )
+    if is_overload_true(left_index) and len(right_keys) != 1:
+        raise BodoError(
+            "merge(): len(right_on) must equal the number "
+            'of levels in the index of "left", which is 1'
+        )
 
 
 def validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_keys):
@@ -4623,7 +4619,7 @@ def overload_dataframe_pivot_table(
     # Select all of the arrays. Since we have applied an iloc/groupby the new
     # locations are now always [0-m), m, [m+1, n)
     func_text += "        (\n"
-    for i in range(0, len(index_idx)):
+    for i in range(len(index_idx)):
         func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i}),\n"
     func_text += "        ),\n"
     func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {len(index_idx)}),),\n"
@@ -6244,14 +6240,16 @@ def _parse_query_expr(
 
     class NewFuncNode(pandas.core.computation.ops.FuncNode):
         def __init__(self, name):
-            if name not in pandas.core.computation.ops.MATHOPS or (
-                pandas.core.computation.check._NUMEXPR_INSTALLED
-                and pandas.core.computation.check_NUMEXPR_VERSION
-                < pandas.core.computation.ops.LooseVersion("2.6.9")
-                and name in ("floor", "ceil")
-            ):
-                if name not in new_funcs:
-                    raise BodoError(f'"{name}" is not a supported function')
+            if (
+                name not in pandas.core.computation.ops.MATHOPS
+                or (
+                    pandas.core.computation.check._NUMEXPR_INSTALLED
+                    and pandas.core.computation.check_NUMEXPR_VERSION
+                    < pandas.core.computation.ops.LooseVersion("2.6.9")
+                    and name in ("floor", "ceil")
+                )
+            ) and name not in new_funcs:
+                raise BodoError(f'"{name}" is not a supported function')
 
             self.name = name
             if name in new_funcs:
@@ -6297,8 +6295,7 @@ def _parse_query_expr(
             attr = join_cleaned_cols[escape_key]
 
         name = value_str + "." + attr
-        if name.startswith(sentinel):
-            name = name[len(sentinel) :]
+        name = name.removeprefix(sentinel)
 
         # make local variable in case of C.str
         if attr in ("str", "dt", "cat", "sparse"):
@@ -6332,12 +6329,12 @@ def _parse_query_expr(
                 )
 
             op = f"np.{self.op}"
-            ind = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({str(self.operands[0])}), 1, None)"
+            ind = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({self.operands[0]!s}), 1, None)"
             return pandas.io.formats.printing.pprint_thing(
                 "bodo.hiframes.pd_series_ext.init_series({}({}), {})".format(
                     op,
                     ",".join(
-                        f"bodo.hiframes.pd_series_ext.get_series_data({str(a)})"
+                        f"bodo.hiframes.pd_series_ext.get_series_data({a!s})"
                         for a in self.operands
                     ),
                     ind,
@@ -6405,8 +6402,8 @@ def _parse_query_expr(
         pandas.core.computation.ops.MathCall.__str__ = math__str__
         pandas.core.computation.ops.Op.__str__ = op__str__
         # _disallow_scalar_only_bool_ops accesses actual value which is not possible
-        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
-            lambda self: None
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: (
+            None
         )  # type: ignore
         parsed_expr = pandas.core.computation.expr.Expr(expr, env=env)
         parsed_expr_str = str(parsed_expr)
@@ -6590,9 +6587,10 @@ def iternext_itertuples(context, builder, sig, args, result):
                 getitem_sig = signature(pd_timestamp_tz_naive_type, arr_typ, types.intp)
                 val = context.compile_internal(
                     builder,
-                    lambda a,
-                    i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-                        np.int64(a[i])
+                    lambda a, i: (
+                        bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                            np.int64(a[i])
+                        )
                     ),
                     getitem_sig,
                     [arr_ptr, index],

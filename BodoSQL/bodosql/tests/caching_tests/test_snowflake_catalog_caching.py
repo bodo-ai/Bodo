@@ -14,7 +14,7 @@ from mpi4py import MPI
 
 import bodo
 import bodosql
-from bodo.tests.caching_tests.caching_tests_common import (  # noqa
+from bodo.tests.caching_tests.caching_tests_common import (
     fn_distribution,
 )
 from bodo.tests.user_logging_utils import (

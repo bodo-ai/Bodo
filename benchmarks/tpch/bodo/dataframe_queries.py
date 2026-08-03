@@ -11,7 +11,7 @@ from collections.abc import Callable
 import pandas as pd
 
 import bodo.pandas
-import bodo.spawn.spawner as spawner
+from bodo.spawn import spawner
 
 
 def load_lineitem(data_folder: str, pd=bodo.pandas):
@@ -1086,10 +1086,9 @@ def main():
 
     warnings.filterwarnings("ignore")
 
-    if args.log_timings is not None:
-        if not os.path.exists(args.log_timings):
-            with open(args.log_timings, "w") as f:
-                f.write("implementation,query,n_gpus,execution_time\n")
+    if args.log_timings is not None and not os.path.exists(args.log_timings):
+        with open(args.log_timings, "w") as f:
+            f.write("implementation,query,n_gpus,execution_time\n")
 
     if args.output_path:
         os.makedirs(args.output_path, exist_ok=True)

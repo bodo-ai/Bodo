@@ -86,7 +86,7 @@ def sort(key_arrs, lo, hi, data):  # pragma: no cover
 
         # If run is short, extend to min(minRun, nRemaining)
         if run_len < minRun:
-            force = nRemaining if nRemaining <= minRun else minRun
+            force = min(nRemaining, minRun)
             binarySort(key_arrs, lo, lo + force, lo + run_len, data)
             run_len = force
 
@@ -138,7 +138,7 @@ def sort(key_arrs, lo, hi, data):  # pragma: no cover
 
 @numba.njit(no_cpython_wrapper=True, cache=True)
 def binarySort(key_arrs, lo, hi, start, data):  # pragma: no cover
-    assert lo <= start and start <= hi
+    assert lo <= start <= hi
     if start == lo:
         start += 1
 
@@ -531,8 +531,7 @@ def gallopLeft(key, arr, base, _len, hint):  # pragma: no cover
             if ofs <= 0:  # overflow
                 ofs = maxOfs
 
-        if ofs > maxOfs:
-            ofs = maxOfs
+        ofs = min(ofs, maxOfs)
 
         # Make offsets relative to base
         lastOfs += hint
@@ -546,15 +545,14 @@ def gallopLeft(key, arr, base, _len, hint):  # pragma: no cover
             if ofs <= 0:  # overflow
                 ofs = maxOfs
 
-        if ofs > maxOfs:
-            ofs = maxOfs
+        ofs = min(ofs, maxOfs)
 
         # Make offsets relative to base
         tmp = lastOfs
         lastOfs = hint - ofs
         ofs = hint - tmp
 
-    assert -1 <= lastOfs and lastOfs < ofs and ofs <= _len
+    assert -1 <= lastOfs < ofs <= _len
 
     # Now a[base+lastOfs] < key <= a[base+ofs], so key belongs somewhere
     # to the right of lastOfs but no farther right than ofs.  Do a binary
@@ -601,8 +599,7 @@ def gallopRight(key, arr, base, _len, hint):  # pragma: no cover
             if ofs <= 0:  # overflow
                 ofs = maxOfs
 
-        if ofs > maxOfs:
-            ofs = maxOfs
+        ofs = min(ofs, maxOfs)
 
         # Make offsets relative to b
         tmp = lastOfs
@@ -617,14 +614,13 @@ def gallopRight(key, arr, base, _len, hint):  # pragma: no cover
             if ofs <= 0:  # overflow
                 ofs = maxOfs
 
-        if ofs > maxOfs:
-            ofs = maxOfs
+        ofs = min(ofs, maxOfs)
 
         # Make offsets relative to b
         lastOfs += hint
         ofs += hint
 
-    assert -1 <= lastOfs and lastOfs < ofs and ofs <= _len
+    assert -1 <= lastOfs < ofs <= _len
 
     # Now a[b + lastOfs] <= key < a[b + ofs], so key belongs somewhere to
     # the right of lastOfs but no farther right than ofs.  Do a binary
@@ -704,7 +700,7 @@ def mergeLo(
     )
     # XXX *****************
 
-    minGallop = 1 if minGallop < 1 else minGallop  # Write back to field
+    minGallop = max(minGallop, 1)  # Write back to field
 
     if len1 == 1:
         assert len2 > 0
@@ -808,8 +804,7 @@ def mergeLo_inner(
             if not (count1 >= MIN_GALLOP | count2 >= MIN_GALLOP):
                 break
 
-        if minGallop < 0:
-            minGallop = 0
+        minGallop = max(minGallop, 0)
 
         minGallop += 2  # Penalize for leaving gallop mode
 
@@ -878,7 +873,7 @@ def mergeHi(
     )
     # XXX *****************
 
-    minGallop = 1 if minGallop < 1 else minGallop  # Write back to field
+    minGallop = max(minGallop, 1)  # Write back to field
 
     if len2 == 1:
         assert len1 > 0
@@ -988,8 +983,7 @@ def mergeHi_inner(
             if not (count1 >= MIN_GALLOP | count2 >= MIN_GALLOP):
                 break
 
-        if minGallop < 0:
-            minGallop = 0
+        minGallop = max(minGallop, 0)
         minGallop += 2  # Penalize for leaving gallop mode
 
     return len1, len2, tmp, cursor1, cursor2, dest, minGallop

@@ -743,7 +743,7 @@ def test_nested_in_struct_metadata_handling(cursor):
 @pytest.fixture
 def bodo_schema(request):
     """Lazily create Bodo schemas to avoid importing JIT at collection time."""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     val = request.param
 

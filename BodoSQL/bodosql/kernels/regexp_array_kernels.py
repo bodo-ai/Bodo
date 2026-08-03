@@ -87,17 +87,16 @@ def make_flag_bit_vector(flags):
     """
     result = 0
     # Regular expressions are case sensitive unless the I flag is used
-    if "i" in flags:
-        if "c" not in flags or flags.rindex("i") > flags.rindex("c"):
-            result = result | re.I
+    if "i" in flags and ("c" not in flags or flags.rindex("i") > flags.rindex("c")):
+        result = result | re.IGNORECASE
     # Regular expressions only allow anchor chars ^ and $ to interact with
     # the start/end of a string, unless the M flag is used
     if "m" in flags:
-        result = result | re.M
+        result = result | re.MULTILINE
     # Regular expressions do not allow the . character to capture a newline
     # char, unless the S flag is used
     if "s" in flags:
-        result = result | re.S
+        result = result | re.DOTALL
     return result
 
 
@@ -984,9 +983,7 @@ def regexp_substr_util(
             "non_const_r": re.compile(converted_pattern, flag_bit_vector),
             "init_const_pattern": init_const_pattern,
         }
-        prefix_code += (
-            f"r = init_const_pattern(non_const_r, {repr(converted_pattern)})\n"
-        )
+        prefix_code += f"r = init_const_pattern(non_const_r, {converted_pattern!r})\n"
 
         # FROM https://docs.snowflake.com/en/sql-reference/functions/regexp_substr:
         #  If a group_num is specified, Snowflake allows extraction even if

@@ -510,7 +510,6 @@ def parquet_writer_append_table(
         local_is_last (bool): is last batch flag
         iter (int): iteration number
     """
-    pass
 
 
 @infer_global(parquet_writer_append_table)

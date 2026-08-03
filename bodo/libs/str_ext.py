@@ -275,7 +275,7 @@ def overload_builtin_max(lhs, rhs):
     if lhs == types.unicode_type and rhs == types.unicode_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs > rhs else rhs
+            return max(rhs, lhs)
 
         return impl
 
@@ -285,7 +285,7 @@ def overload_builtin_min(lhs, rhs):
     if lhs == types.unicode_type and rhs == types.unicode_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs < rhs else rhs
+            return min(rhs, lhs)
 
         return impl
 
@@ -436,7 +436,6 @@ _str_to_int64_base = types.ExternalFunction(
 
 
 def gen_unicode_to_std_str(context, builder, unicode_val):
-    #
     uni_str = cgutils.create_struct_proxy(string_type)(
         context, builder, value=unicode_val
     )
@@ -749,7 +748,7 @@ class StringAttribute(AttributeTemplate):
         arg_names = ", ".join(f"e{i}" for i in range(len(args)))
         if arg_names:
             arg_names += ", "
-        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws)
         func_text = f"def format_stub(string, {arg_names} {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -986,10 +985,8 @@ def overload_alloc_empty_bytes_or_string_data(typ, kind, length, is_ascii=0):
     if typ == bodo.types.bytes_type:
         return lambda typ, kind, length, is_ascii=0: np.empty(length, np.uint8)
     if typ == string_type:
-        return (
-            lambda typ, kind, length, is_ascii=0: numba.cpython.unicode._empty_string(
-                kind, length, is_ascii
-            )
+        return lambda typ, kind, length, is_ascii=0: (
+            numba.cpython.unicode._empty_string(kind, length, is_ascii)
         )  # pragma: no cover
     raise BodoError(f"Internal Error: Expected Bytes or String type, found {typ}")
 

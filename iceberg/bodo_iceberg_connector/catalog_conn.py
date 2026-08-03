@@ -70,16 +70,7 @@ def parse_conn_str(
             catalog_type = "s3tables"
 
         else:
-            types = ", ".join(
-                [
-                    "hadoop-s3",
-                    "hadoop",
-                    "hive",
-                    "glue",
-                    "rest",
-                    "s3tables",
-                ]
-            )
+            types = "hadoop-s3, hadoop, hive, glue, rest, s3tables"
             raise IcebergError(
                 f"Cannot detect Iceberg catalog type from connection string:\n  {conn_str}\nIn the connection string, set the URL parameter `type` to one of the following:\n  {types}"
             )
@@ -128,12 +119,7 @@ def gen_table_loc(
 def gen_file_loc(table_loc: str, db_name: str, table_name: str, file_name: str) -> str:
     """Construct Valid Paths for Files Written to Iceberg"""
     # S3 warehouse requires absolute file paths
-    if (
-        table_loc.startswith("s3a://")
-        or table_loc.startswith("s3://")
-        or table_loc.startswith("abfs://")
-        or table_loc.startswith("abfss://")
-    ):
+    if table_loc.startswith(("s3a://", "s3://", "abfs://", "abfss://")):
         return os.path.join(table_loc, file_name)
     else:
         # TODO: Not sure if this is the best approach

@@ -92,7 +92,7 @@ def test_listagg_seq_simple(args, memory_leak_check):
                 (True, False, True, True, False),
                 ("last", "last", "first", "last", "last"),
                 "-",
-                "-".join(["C", "B", "F", "D", "H", "J", "A", "I", "G", "E"]),
+                "C-B-F-D-H-J-A-I-G-E",
             ),
             id="listagg_multilevel_order",
         ),

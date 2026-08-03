@@ -6,7 +6,7 @@ from utils.utils import run_cmd
 
 
 def process_output(output):
-    regexp = re.compile("checksum (\S+)")
+    regexp = re.compile(r"checksum (\S+)")
     for l in output.splitlines():
         m = regexp.match(l)
         if m:

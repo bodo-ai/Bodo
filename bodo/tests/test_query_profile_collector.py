@@ -34,7 +34,6 @@ def test_query_profile_collection_compiles(memory_leak_check):
         bodo.libs.query_profile_collector.get_operator_duration(1)
         bodo.libs.query_profile_collector.end_pipeline(1, 10)
         bodo.libs.query_profile_collector.finalize()
-        return
 
     impl()
 
@@ -58,7 +57,6 @@ def test_output_directory_can_be_set(tmp_path):
             bodo.libs.query_profile_collector.start_pipeline(1)
             bodo.libs.query_profile_collector.end_pipeline(1, 10)
             bodo.libs.query_profile_collector.finalize()
-            return
 
         impl()
         bodo.barrier()
@@ -78,7 +76,7 @@ def test_join_row_count_collection(memory_leak_check):
     Check that Join submits its row counts to the QueryProfileCollector
     as expected.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.streaming.join import (
         delete_join_state,
         init_join_state,
@@ -211,7 +209,7 @@ def test_groupby_row_count_collection(memory_leak_check):
     Check that Groupby submits its row counts to the QueryProfileCollector
     as expected.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.streaming.groupby import (
         delete_groupby_state,
         groupby_build_consume_batch,
@@ -483,7 +481,7 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by hash join.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.streaming.join import (
         delete_join_state,
         init_join_state,
@@ -668,7 +666,7 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by nested loop join.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.streaming.join import (
         delete_join_state,
         init_join_state,
@@ -821,7 +819,7 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by groupby in the incremental aggregation case.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.streaming.groupby import (
         delete_groupby_state,
         groupby_build_consume_batch,
@@ -956,7 +954,7 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by groupby in the accumulate input case.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.streaming.groupby import (
         delete_groupby_state,
         groupby_build_consume_batch,
@@ -1087,7 +1085,7 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     Test that generated query profile has the metrics that we expect
     to be reported by MRNF.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.streaming.groupby import (
         delete_groupby_state,
         groupby_build_consume_batch,
@@ -1556,7 +1554,7 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
 def test_iceberg_metrics_collection(
     memory_leak_check, tmp_path, iceberg_database, iceberg_table_conn
 ):
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 
     comm = MPI.COMM_WORLD
@@ -1582,7 +1580,7 @@ def test_iceberg_metrics_collection(
         _iter_1 = 0
         bodo.libs.query_profile_collector.start_pipeline(0)
         while not is_last_global:
-            table, is_last = read_arrow_next(reader, True)
+            _table, is_last = read_arrow_next(reader, True)
             is_last_global = bodo.libs.distributed_api.dist_reduce(
                 is_last,
                 np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),

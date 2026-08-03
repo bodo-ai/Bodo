@@ -7,7 +7,7 @@ Declarative Templates.
 import numba
 from numba.core.target_extension import dispatcher_registry
 
-import bodo  # noqa
+import bodo
 
 import bodo.decorators  # isort:skip # noqa
 from bodo.ir.declarative_templates import DeclarativeTemplate

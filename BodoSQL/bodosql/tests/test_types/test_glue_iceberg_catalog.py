@@ -102,13 +102,13 @@ def test_glue_catalog_iceberg_write(glue_catalog, memory_leak_check):
         output_df = read_results(con_str, schema, table_name)
         assert_tables_equal(output_df, in_df, check_dtype=False)
 
-    except Exception as e:
+    except Exception:
         # In the case that another exception ocurred within the body of the try,
         # We may not have created a table to drop.
         # because of this, we call delete_table in a try/except, to avoid
         # masking the original exception
         exception_occurred_in_test_body = True
-        raise e
+        raise
     finally:
         try:
             run_rank0(

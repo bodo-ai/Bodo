@@ -4,7 +4,7 @@ Test that Dynamic Parameters can be used in arithmetic operations expressions.
 
 import pytest
 
-from bodosql.tests.named_params_common import *  # noqa
+from bodosql.tests.named_params_common import *
 from bodosql.tests.utils import check_query
 
 pytestmark = pytest.mark.bodosql_cpp

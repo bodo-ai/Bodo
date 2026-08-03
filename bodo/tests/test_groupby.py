@@ -4257,7 +4257,7 @@ def test_max_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].max()
         return A
 
-    def impl2(n):  # noqa: F841
+    def impl2(n):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].max()
         return A
@@ -4449,7 +4449,7 @@ def test_mean_median_other_supported_types(memory_leak_check):
                     Decimal("-0.2"),
                     Decimal("44.2"),
                     None,
-                    Decimal("0"),
+                    Decimal(0),
                 ]
             ),
         }
@@ -5004,7 +5004,7 @@ def test_first_last_supported_types(memory_leak_check):
         {
             "A": [2, 1, 1, 2, 2],
             "B": pd.Series(
-                [Decimal("1.6"), Decimal("-0.2"), Decimal("44.2"), None, Decimal("0")]
+                [Decimal("1.6"), Decimal("-0.2"), Decimal("44.2"), None, Decimal(0)]
             ),
         }
     )
@@ -6428,7 +6428,7 @@ def test_cumulatives_supported_cases(memory_leak_check):
                             Decimal("-0.2"),
                             Decimal("44.2"),
                             None,
-                            Decimal("0"),
+                            Decimal(0),
                         ]
                     ),
                 }
@@ -7214,7 +7214,7 @@ def test_head(memory_leak_check):
                     Decimal("44.2"),
                     Decimal("1.6"),
                     Decimal("4.3"),
-                    Decimal("0"),
+                    Decimal(0),
                 ]
             ).astype(pd.ArrowDtype(pa.decimal128(38, 18))),
             "C": pd.date_range(start="2018-04-24", end="2018-04-29", periods=7),

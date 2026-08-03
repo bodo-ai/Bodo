@@ -445,7 +445,7 @@ def test_dtype(memory_leak_check):
 @pytest.mark.slow
 def test_nbytes(memory_leak_check):
     """Test nbytes for string arrays"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     def impl(arr):
         return arr.nbytes
@@ -567,7 +567,7 @@ def _check_str_item_length(impl):
 
 def test_str_length_inplace(memory_leak_check):
     """Test optimizing len(A[i]) with inplace item length in series pass"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")

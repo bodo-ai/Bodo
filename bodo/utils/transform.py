@@ -1505,7 +1505,7 @@ def get_struct_keynames(f_ir, typemap):
     struct_if_heter_dict(), otherwise None.
     """
     cfg = compute_cfg_from_blocks(f_ir.blocks)
-    exit_label = list(cfg.exit_points())[0]
+    exit_label = next(iter(cfg.exit_points()))
     block = f_ir.blocks[exit_label]
     require(isinstance(block.body[-1], ir.Return))
     return_val = block.body[-1].value
@@ -1538,7 +1538,6 @@ def update_node_list_definitions(node_list, func_ir):
     dumm_block = ir.Block(ir.Scope(None, loc), loc)
     dumm_block.body = node_list
     build_definitions({0: dumm_block}, func_ir._definitions)
-    return
 
 
 # sentinel for nested const tuple gen used below
@@ -1658,7 +1657,7 @@ def get_call_expr_arg(
     """
     arg = None
     # If an argument is kwonly, arg_no < 0
-    if len(args) > arg_no and arg_no >= 0:
+    if len(args) > arg_no >= 0:
         arg = args[arg_no]
         if arg_name in kws:
             err_msg = f"{f_name}() got multiple values for argument '{arg_name}'"
