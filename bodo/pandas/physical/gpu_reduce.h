@@ -29,17 +29,13 @@ inline bool gpu_capable_reduce(duckdb::LogicalAggregate& logical_aggregate) {
             agg_expr.function.name != "product" &&
             agg_expr.function.name != "count" &&
             agg_expr.function.name != "mean" &&
-            agg_expr.function.name != "count_star") {
+            agg_expr.function.name != "count_star" &&
+            agg_expr.function.name != "first") {
             return false;
         }
     }
     return true;
 }
-
-enum class GPUReductionType {
-    COMPARISON,
-    AGGREGATION,
-};
 
 struct PhysicalGPUReduceMetrics {
     using stat_t = MetricBase::StatValue;
@@ -54,25 +50,21 @@ struct GPUReductionFunction {
     int input_col_idx;
     std::vector<std::string> function_names;
     std::vector<std::string> reduction_names;
-    std::vector<GPUReductionType> reduction_types;
     std::vector<std::unique_ptr<cudf::scalar>> results;
     cudf::data_type out_dtype;
     MPI_Op mpi_reduce_op;
     GPUReductionFunction(
         int input_col_idx, std::vector<std::string> function_names,
         std::vector<std::string> reduction_names,
-        std::vector<GPUReductionType> reduction_types,
         std::vector<std::unique_ptr<cudf::scalar>> initial_results,
         std::shared_ptr<arrow::DataType> dt, MPI_Op mpi_reduce_op)
         : input_col_idx(input_col_idx),
           function_names(std::move(function_names)),
           reduction_names(std::move(reduction_names)),
-          reduction_types(std::move(reduction_types)),
           results(std::move(initial_results)),
           out_dtype(arrow_to_cudf_type(dt)),
           mpi_reduce_op(mpi_reduce_op) {
         assert(this->function_names.size() == this->reduction_names.size());
-        assert(this->function_names.size() == this->reduction_types.size());
         assert(this->function_names.size() == this->results.size());
         assert(!this->function_names.empty());
     }
@@ -114,7 +106,6 @@ struct GPUReductionFunctionMax : public GPUReductionFunction {
                             std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(input_col_idx, {"max"}, {"greater"},
-                               {GPUReductionType::COMPARISON},
                                make_vector_of_one_nullptr(), dt, MPI_MAX) {}
 };
 
@@ -123,7 +114,6 @@ struct GPUReductionFunctionFirst : public GPUReductionFunction {
                               std::shared_ptr<arrow::DataType> dt,
                               rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(input_col_idx, {"first"}, {"first"},
-                               {GPUReductionType::COMPARISON},
                                make_vector_of_one_nullptr(), dt,
                                MPI_OP_NULL /* handled specially in Finalize*/) {
     }
@@ -134,7 +124,6 @@ struct GPUReductionFunctionMin : public GPUReductionFunction {
                             std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(input_col_idx, {"min"}, {"less"},
-                               {GPUReductionType::COMPARISON},
                                make_vector_of_one_nullptr(), dt, MPI_MIN) {}
 };
 
@@ -143,7 +132,7 @@ struct GPUReductionFunctionSum : public GPUReductionFunction {
                             std::shared_ptr<arrow::DataType> dt,
                             rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
-              input_col_idx, {"sum"}, {"add"}, {GPUReductionType::AGGREGATION},
+              input_col_idx, {"sum"}, {"add"},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   use_sql_rules ? arrow::MakeNullScalar(dt)
                                 : arrow::MakeScalar(dt, 0).ValueOrDie(),
@@ -157,7 +146,6 @@ struct GPUReductionFunctionProduct : public GPUReductionFunction {
                                 rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
               input_col_idx, {"product"}, {"multiply"},
-              {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   use_sql_rules ? arrow::MakeNullScalar(dt)
                                 : arrow::MakeScalar(dt, 1).ValueOrDie(),
@@ -171,7 +159,6 @@ struct GPUReductionFunctionCount : public GPUReductionFunction {
                               rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
               input_col_idx, {"count"}, {"add"},
-              {GPUReductionType::AGGREGATION},
               make_vector_of_cudf_scalar(arrow_scalar_to_cudf(
                   arrow::MakeScalar(dt, 0).ValueOrDie(), output_stream)),
               dt, MPI_SUM) {}
@@ -183,7 +170,6 @@ struct GPUReductionFunctionMean : public GPUReductionFunction {
                              rmm::cuda_stream_view& output_stream)
         : GPUReductionFunction(
               input_col_idx, {"sum", "count"}, {"add", "add"},
-              {GPUReductionType::AGGREGATION, GPUReductionType::AGGREGATION},
               make_vector_of_two_cudf_scalars(
                   arrow_scalar_to_cudf(arrow::MakeScalar(dt, 0).ValueOrDie(),
                                        output_stream),

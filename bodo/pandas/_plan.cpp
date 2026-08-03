@@ -1823,7 +1823,7 @@ struct BinaryDecimalBindData : public duckdb::FunctionData {
     duckdb::unique_ptr<FunctionData> Copy() const override {
         return duckdb::make_uniq<BinaryDecimalBindData>(return_type);
     }
-    bool Equals(const duckdb::FunctionData &other) const {
+    bool Equals(const duckdb::FunctionData &other) const override {
         const auto *other_decimal =
             dynamic_cast<const BinaryDecimalBindData *>(&other);
         if (other_decimal) {
