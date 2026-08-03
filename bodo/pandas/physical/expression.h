@@ -1454,6 +1454,8 @@ arrow::Datum do_arrow_compute_substring_index(arrow::Datum res_datum,
 arrow::Datum do_arrow_compute_split_part(arrow::Datum res_datum,
                                          std::string delim_str, int part_num);
 
+arrow::Datum do_arrow_compute_zip(const std::vector<arrow::Datum> &datums);
+
 struct PhysicalArrowExpressionMetrics {
     using timer_t = MetricBase::TimerValue;
     timer_t arrow_compute_time = 0;
@@ -1967,6 +1969,17 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::RoundTemporalOptions opts(multiple, unit);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "zip") {
+            // Unary case for zip: just wrap each array element in a list
+            arrow::Datum res_datum = ConvertExprResultToDatum(res, "zip input");
+            arrow::Datum wrapped_datum = do_arrow_compute_zip({res_datum});
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = wrapped_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(wrapped_datum);
+            }
         } else {
             std::string func_name = scalar_func_data.arrow_func_name;
             arrow::Type::type res_type = GetArrowTypeOfRes(res);

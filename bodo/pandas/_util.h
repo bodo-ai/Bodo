@@ -333,10 +333,13 @@ PyObject *duckdbFilterSetToPyicebergFilter(
  * (BoundConstantExpression) to an Arrow scalar.
  *
  * @param value DuckDB Value object to convert
+ * @param arrow_type (optional) the expected Arrow DataType for the scalar.
+ * If not specified, Arrow will infer the type.
  * @return std::shared_ptr<arrow::Scalar> equivalent Arrow scalar object
  */
 std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
-    const duckdb::Value &value);
+    const duckdb::Value &value,
+    std::shared_ptr<arrow::DataType> arrow_type = nullptr);
 
 /**
  * @brief Convert a DuckDB Value object to the corresponding arrow type
