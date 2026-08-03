@@ -638,42 +638,37 @@ auto _get_var_py_args_as_types_tuple(PyObject *args, const char *func_name,
 /**
  * @brief Get the PyTuple of function arguments as a tuple of the arguments
  * cast to the requested types specified by a sequence of type conversion
- * functions. Later arguments beyond the MinRequired template parameter
- * are wrapped in std::optional.
+ * functions. Later arguments beyond the minimum value found in the
+ * AllowedArgCounts template parameter are wrapped in std::optional.
  *
- * @tparam MinRequired The minimum number of arguments that are always required
- * @tparam AllowedArgCounts An std::array of valid argument counts (all must
- * be above MinRequired)
+ * @tparam AllowedArgCounts A list of valid argument counts for the function
  * @param args PyTuple containing the function arguments. The size of the tuple
  * should be in `allowed_arg_counts`.
  * @param func_name Name of the function (for error messages)
  * @param converters (varargs) PyObject-to-type conversion functions. The number
  * of converters should be equal to the maximum allowed argument count.
- * @return A tuple where elements [0, MinRequired) are the first MinRequired
- * Python arguments that have been converted by the respective `converters`, and
- * elements [MinRequired, len(Converters)) are each an std::optional
- * representing the converted Python argument if it exists, or std::nullopt if
- * not.
+ * @return A tuple where elements [0, min(AllowedArgCounts)) are the first
+ * min(AllowedArgCounts) Python arguments that have been converted by the
+ * respective `converters`, and elements [min(AllowedArgCounts),
+ * len(Converters)) are each an std::optional representing the converted Python
+ * argument if it exists, or std::nullopt if not.
  */
-template <size_t MinRequired, auto AllowedArgCounts, typename... Converters>
+template <size_t... AllowedArgCounts, typename... Converters>
 auto get_var_py_args_as_types(PyObject *args, const char *func_name,
                               Converters... converters) {
-    static_assert(sizeof...(Converters) >= MinRequired,
+    static_assert(sizeof...(AllowedArgCounts) > 0,
+                  "get_var_py_args_as_types: No allowed_arg_counts were given");
+    constexpr std::array allowed_arg_counts{AllowedArgCounts...};
+    constexpr size_t min_allowed =
+        *std::min_element(allowed_arg_counts.begin(), allowed_arg_counts.end());
+    static_assert(sizeof...(Converters) >= min_allowed,
                   "get_var_py_args_as_types: Number of PyObject-to-type "
                   "conversion functions must be equal or greater to the "
-                  "MinRequired template parameter.");
-    static_assert(AllowedArgCounts.size() > 0,
-                  "get_var_py_args_as_types: No allowed_arg_counts were given");
-    constexpr size_t min_allowed =
-        *std::min_element(AllowedArgCounts.begin(), AllowedArgCounts.end());
-    // Verify that MinRequired doesn't contradict the given allowed arg counts
-    static_assert(MinRequired <= min_allowed,
-                  "get_var_py_args_as_types: A passed allowed arg count is "
-                  "below the MinRequired template parameter.");
+                  "minimum allowed argument count.");
     // Verify that the maximum allowed argument count makes sense relative to
     // the number of provided conversion functions
     constexpr size_t max_allowed =
-        *std::max_element(AllowedArgCounts.begin(), AllowedArgCounts.end());
+        *std::max_element(allowed_arg_counts.begin(), allowed_arg_counts.end());
     static_assert(max_allowed <= sizeof...(Converters),
                   "get_var_py_args_as_types: The passed maximum allowed "
                   "arg count is greater than the number of "
@@ -688,11 +683,11 @@ auto get_var_py_args_as_types(PyObject *args, const char *func_name,
 
     // Throw an error if number of arguments provided is not
     // in the array of allowed arg counts
-    if (std::find(AllowedArgCounts.begin(), AllowedArgCounts.end(),
-                  arg_count) == AllowedArgCounts.end()) {
+    if (std::find(allowed_arg_counts.begin(), allowed_arg_counts.end(),
+                  arg_count) == allowed_arg_counts.end()) {
         // Format the list of allowed arg counts nicely for the error message
         std::string allowed_counts_str;
-        for (size_t count : AllowedArgCounts) {
+        for (size_t count : allowed_arg_counts) {
             if (!allowed_counts_str.empty()) {
                 allowed_counts_str += ", ";
             }
@@ -707,7 +702,7 @@ auto get_var_py_args_as_types(PyObject *args, const char *func_name,
     // Return tuple of converted args.
     // index_sequence_for generates a compile-time sequence of size_t from 0 to
     // (sizeof...(Converters) - 1).
-    return _get_var_py_args_as_types_tuple<MinRequired>(
+    return _get_var_py_args_as_types_tuple<min_allowed>(
         args, func_name, std::index_sequence_for<Converters...>{},
         converters...);
 }

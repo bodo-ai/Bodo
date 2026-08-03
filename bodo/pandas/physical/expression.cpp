@@ -1200,7 +1200,7 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
         // Special handling for multi-input Arrow functions with options
         if (scalar_func_data.arrow_func_name == "max_element_wise" ||
             scalar_func_data.arrow_func_name == "min_element_wise") {
-            auto [skip_nulls] = get_var_py_args_as_types<0, std::array{0, 1}>(
+            auto [skip_nulls] = get_var_py_args_as_types<0, 1>(
                 scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
                 get_py_object_as_bool);
 
@@ -2635,7 +2635,7 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        auto [seed_arg] = get_var_py_args_as_types<0, std::array{0, 1}>(
+        auto [seed_arg] = get_var_py_args_as_types<0, 1>(
             scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
             get_py_object_as_int64);
 
