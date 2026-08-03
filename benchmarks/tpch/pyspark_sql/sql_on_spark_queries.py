@@ -7,26 +7,47 @@ import warnings
 from pyspark.sql import SparkSession
 
 
-def load_tables(spark, base):
-    lineitem = spark.read.parquet(f"{base}/lineitem.pq")
-    orders = spark.read.parquet(f"{base}/orders.pq")
-    customer = spark.read.parquet(f"{base}/customer.pq")
-    part = spark.read.parquet(f"{base}/part.pq")
-    partsupp = spark.read.parquet(f"{base}/partsupp.pq")
-    supplier = spark.read.parquet(f"{base}/supplier.pq")
-    nation = spark.read.parquet(f"{base}/nation.pq")
-    region = spark.read.parquet(f"{base}/region.pq")
+def load_tables(spark, base, use_parquet: bool):
+    """
+    Load TPCH tables either from Parquet files (use_parquet=True)
+    or from Iceberg tables (use_parquet=False).
 
-    tables = {
-        "lineitem": lineitem,
-        "orders": orders,
-        "customer": customer,
-        "part": part,
-        "partsupp": partsupp,
-        "supplier": supplier,
-        "nation": nation,
-        "region": region,
-    }
+    For Iceberg:
+      - If base contains a dot (e.g., "iceberg_catalog.tpch"), tables are loaded as
+        spark.read.format("iceberg").load(f"{base}.{table_name}")
+      - Otherwise base is treated as a filesystem path and tables are loaded as
+        spark.read.format("iceberg").load(f"{base}/{table_name}")
+    """
+    table_names = [
+        "lineitem",
+        "orders",
+        "customer",
+        "part",
+        "partsupp",
+        "supplier",
+        "nation",
+        "region",
+    ]
+
+    tables = {}
+
+    if use_parquet:
+        # Existing parquet behavior
+        for name in table_names:
+            df = spark.read.parquet(f"{base}/{name}.pq")
+            tables[name] = df
+    else:
+        # Iceberg behavior
+        # Decide whether base looks like a catalog.namespace (contains a dot)
+        is_catalog_style = "." in base
+        for name in table_names:
+            if is_catalog_style:
+                iceberg_identifier = f"{base}.{name}"
+            else:
+                # treat base as a path prefix
+                iceberg_identifier = f"{base}/{name}"
+            df = spark.read.format("iceberg").load(iceberg_identifier)
+            tables[name] = df
 
     # Make table names recognizable from spark.sql queries.
     for name, df in tables.items():
@@ -50,11 +71,16 @@ def load_query(spark, nn: str, sql_dir="../sql") -> str:
     return sql_text
 
 
-def create_queries(spark, queries, sql_dir="../sql"):
+def create_queries(spark, queries, scale_factor, sql_dir="../sql"):
     for q in queries:
         nn = f"{q:02d}"  # zero-padded two-digit string
 
         sql_text = load_query(spark, nn, sql_dir)
+
+        # Allow queries to have f-string expressions in them using scale_factor.
+        sql_text = f'f"""{sql_text}"""'
+        # Calculate those f-string expressions if present.
+        sql_text = eval(sql_text)
 
         func_name = f"tpch_q{nn}"
 
@@ -81,9 +107,10 @@ def run_queries(
     queries: list[int],
     scale_factor: float = 1.0,
     sql_dir: str = "../sql",
+    use_parquet: bool = False,
 ):
-    load_tables(spark, data_folder)
-    create_queries(spark, queries, sql_dir)
+    load_tables(spark, data_folder, use_parquet)
+    create_queries(spark, queries, scale_factor, sql_dir)
 
     t1 = time.time()
 
@@ -109,7 +136,7 @@ def main():
         "--folder",
         type=str,
         default="data/tpch-datagen/data",
-        help="The folder containing TPCH data",
+        help="The folder containing TPCH data or the Iceberg catalog.namespace",
     )
     parser.add_argument(
         "--queries",
@@ -136,10 +163,16 @@ def main():
         action="store_true",
         help="Run queries on GPU (default: CPU).",
     )
+    parser.add_argument(
+        "--use_parquet",
+        action="store_true",
+        help="Read data from Parquet files instead of Iceberg (default: False).",
+    )
     args = parser.parse_args()
     folder = args.folder
     scale_factor = args.scale_factor
     run_on_gpu = args.gpu
+    use_parquet = args.use_parquet
 
     if run_on_gpu:
         spark = (
@@ -176,7 +209,7 @@ def main():
 
     warnings.filterwarnings("ignore")
 
-    run_queries(spark, folder, queries, scale_factor, args.sql_dir)
+    run_queries(spark, folder, queries, scale_factor, args.sql_dir, use_parquet)
 
 
 if __name__ == "__main__":

@@ -180,7 +180,7 @@ def run_queries(
         print(f"Failed queries: {failed_queries}")
 
 
-def create_queries(queries, use_parquet, sql_dir="../sql"):
+def create_queries(queries, scale_factor, use_parquet, sql_dir="../sql"):
     for q in queries:
         nn = f"{q:02d}"  # zero-padded two-digit string
         sql_path = os.path.join(sql_dir, f"q{nn}.sql")
@@ -196,6 +196,11 @@ def create_queries(queries, use_parquet, sql_dir="../sql"):
             data_param = "tpch_data"  # noqa
         else:
             data_param = "catalog=tpch_data"  # noqa
+
+        # Allow queries to have f-string expressions in them using scale_factor.
+        sql_text = f'f"""{sql_text}"""'
+        # Calculate those f-string expressions if present.
+        sql_text = eval(sql_text)
 
         # Build the function source string
         func_src = (
@@ -310,7 +315,7 @@ def main():
     if args.queries is not None:
         queries = args.queries
     print(f"Queries to run: {queries}")
-    create_queries(queries, use_parquet)
+    create_queries(queries, scale_factor, use_parquet)
 
     warnings.filterwarnings("ignore")
 
