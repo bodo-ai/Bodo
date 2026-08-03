@@ -1954,7 +1954,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operand_type = operand.getType()
         target_type = java_call.getType()
         SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-        func_name = operand.getName().upper()
+        func_name = op.getName().upper()
         in_expr = java_expr_to_python_expr(ctx, operand, input_plan)
         # TODO[BSE-5154]: support all Calcite casts
 
