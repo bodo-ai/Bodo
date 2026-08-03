@@ -32,10 +32,10 @@
 #endif
 
 #ifdef DEBUG_PIPELINE
-#define DEBUG_PIPELINE_PRE_EXECUTE(rank, out)                      \
-    do {                                                           \
-        out << "Rank " << rank << " Before execute pipeline " << i \
-            << std::endl;                                          \
+#define DEBUG_PIPELINE_PRE_EXECUTE(rank, out)                             \
+    do {                                                                  \
+        out << "Rank " << rank << " Before execute pipeline " << i << " " \
+            << getNSTime() << std::endl;                                  \
     } while (0)
 #else
 #define DEBUG_PIPELINE_PRE_EXECUTE(rank, out) \
@@ -44,10 +44,10 @@
 #endif
 
 #ifdef DEBUG_PIPELINE
-#define DEBUG_PIPELINE_POST_EXECUTE(rank, out)                    \
-    do {                                                          \
-        out << "Rank " << rank << " After execute pipeline " << i \
-            << std::endl;                                         \
+#define DEBUG_PIPELINE_POST_EXECUTE(rank, out)                           \
+    do {                                                                 \
+        out << "Rank " << rank << " After execute pipeline " << i << " " \
+            << getNSTime() << std::endl;                                 \
     } while (0)
 #else
 #define DEBUG_PIPELINE_POST_EXECUTE(rank, out) \

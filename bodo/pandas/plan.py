@@ -1094,9 +1094,11 @@ def execute_plan(plan: LazyPlan, optimize=True, use_sql_rules=False):
 
         if bodo.get_rank() == 0:
             start_time = time.perf_counter()
+
         optimized_plan = (
             plan_optimizer.py_optimize_plan(duckdb_plan) if optimize else duckdb_plan
         )
+
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time opt", time.perf_counter() - start_time)
 
