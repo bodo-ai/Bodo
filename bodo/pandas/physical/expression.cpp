@@ -1200,16 +1200,13 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
         // Special handling for multi-input Arrow functions with options
         if (scalar_func_data.arrow_func_name == "max_element_wise" ||
             scalar_func_data.arrow_func_name == "min_element_wise") {
-            arrow::compute::ElementWiseAggregateOptions opts;
+            auto [skip_nulls] = get_var_py_args_as_types<0, 1>(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_bool);
 
-            assert_py_args_is_tuple(scalar_func_data.args,
-                                    scalar_func_data.arrow_func_name.c_str());
-            if (PyTuple_Size(scalar_func_data.args) > 0) {
-                auto [skip_nulls] = get_py_args_as_types(
-                    scalar_func_data.args,
-                    scalar_func_data.arrow_func_name.c_str(),
-                    get_py_object_as_bool);
-                opts.skip_nulls = skip_nulls;
+            arrow::compute::ElementWiseAggregateOptions opts;
+            if (skip_nulls.has_value()) {
+                opts.skip_nulls = *skip_nulls;
             } else {
                 // Avoid skipping nulls to match SQL semantics.
                 // This is True by default in Arrow.
@@ -2547,6 +2544,50 @@ arrow::Datum do_arrow_compute_split_part(arrow::Datum res_datum,
         {return_empty_string, empty_string_scalar, part}, "if_else");
 }
 
+/**
+ * @brief Occurrences matched by the regex `delim_str` divide the input string
+ * `res_datum` into tokens. STRTOK returns the substring corresponding to a part
+ * number, where 1 is the first token. The part number cannot be negative.
+ * NULL is emitted if the requested token does not exist.
+ *
+ * Note: If called directly, this function differs from Snowflake's STRTOK in
+ * that `delim_str` is a regex pattern instead of a string where each character
+ * is considered a delimiter. The Python side converts the raw delimiter input
+ * to a regexp that matches any of the given delimeters. The Python side is also
+ * in charge of handling the edge cases (such as when the delimiter is empty).
+ */
+arrow::Datum do_arrow_compute_strtok(arrow::Datum res_datum,
+                                     std::string delim_regexp, int part_num) {
+    // Split the string on the delimiter `part_num` times, which is the minimum
+    // number of times to find the desired token.
+    arrow::compute::SplitPatternOptions split_opts{delim_regexp, part_num};
+    // string_tokens is a ListArray
+    arrow::Datum string_tokens =
+        do_arrow_compute_unary(res_datum, "split_pattern_regex", &split_opts);
+
+    // Get a single-element list of the token we want, with
+    // return_fixed_size_list = true. We need to do this since calling
+    // list_element directly will throw an error if there are fewer than
+    // `part_num` token in the split string.
+    arrow::compute::ListSliceOptions list_slice_opts;
+    // part_num is one-based, so part_num - 1 is the index corresponding to
+    // the token
+    list_slice_opts.start = part_num - 1;
+    list_slice_opts.stop = part_num;
+    list_slice_opts.return_fixed_size_list = true;
+    arrow::Datum token_list =
+        do_arrow_compute_unary(string_tokens, "list_slice", &list_slice_opts);
+
+    // Get the actual string part. This will be NULL if
+    // the string has fewer than `part_num` tokens, which
+    // isn't a problem since STRTOK is supposed to return
+    // NULL in that case.
+    auto zero_scalar = std::make_shared<arrow::Int64Scalar>(0);
+    arrow::Datum token =
+        do_arrow_compute_binary(token_list, zero_scalar, "list_element");
+    return token;
+}
+
 arrow::Datum do_arrow_compute_dow_num(arrow::Datum res_datum) {
     // We strip off the leading spaces and only look at the first two
     // characters of the input string in accordance with Snowflake (e.g.
@@ -2594,15 +2635,13 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        assert_py_args_is_tuple(scalar_func_data.args,
-                                scalar_func_data.arrow_func_name.c_str());
-        size_t num_args = PyTuple_Size(scalar_func_data.args);
+        auto [seed_arg] = get_var_py_args_as_types<0, 1>(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_int64);
 
-        if (num_args == 1) {
+        if (seed_arg.has_value()) {
             // Seed was explicitly provided, so use it
-            auto [seed] = get_py_args_as_types(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                get_py_object_as_int64);
+            int64_t seed = *seed_arg;
 
             if (rank == 0) {
                 // Create psuedo-random number generator.
@@ -2630,7 +2669,7 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
                 gen = std::make_shared<std::mt19937_64>(
                     std::mt19937_64(rank_seed));
             }
-        } else if (num_args == 0) {
+        } else {
             // Generate a seed with 96-bits of entropy from system's
             // random_device and the current system time. time(NULL) is
             // mainly a backup in case std::random_device falls back
@@ -2642,9 +2681,6 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
                                static_cast<uint32_t>(rank)};
             // Create psuedo-random number generator
             gen = std::make_shared<std::mt19937_64>(std::mt19937_64(seed));
-        } else {
-            throw std::runtime_error(
-                "random_int64 only accepts 0 or 1 arguments");
         }
     }
 
