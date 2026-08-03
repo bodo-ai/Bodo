@@ -3274,6 +3274,75 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (modified_regexp, "e" in regex_params, group_num),
             )
 
+        elif func_name == "STRTOK" and len(op_exprs) in (1, 2, 3):
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            if len(op_exprs) >= 2:
+                delim_expr = op_exprs[1]
+                ensure_arg_is_const_expr_of_type(
+                    delim_expr, "delim_expr", (str, pa.binary())
+                )
+                delimiter = delim_expr.value
+            else:
+                delimiter = " "
+
+            if len(op_exprs) == 3:
+                part_num_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
+                part_num = part_num_expr.value
+                if part_num <= 0:
+                    raise ValueError("STRTOK part number must be 1 or greater.")
+            else:
+                part_num = 1
+
+            # If delimiter is empty: return NULL if string is also empty, else
+            # return the original string.
+            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+            if delimiter == "":
+                return ArrowScalarFuncExpression(
+                    src.empty_data, [src, empty_string_expr], "nullif", ()
+                )
+
+            # STRTOK counts each character in the delimiter string as a delimiter.
+            # We use regex so any of those characters or combination of characters
+            # are treated as delimiters so we can split into the correct tokens with
+            # a single pass.
+            # Unlike SPLIT_PART, STRTOK never returns empty strings, so we have to
+            # be careful not to let empty strings count as tokens. In our case, it's
+            # easier to prevent empty strings from arising after splitting in the
+            # first place by trimming and using regex.
+
+            # We need to escape the delimiter string in case any of the characters
+            # have a special meaning in regex
+            escaped_delim = re.escape(delimiter)
+            # Wrap escaped delimiter string in brackets to match any of the characters
+            # inside.
+            # The '+' denotes one or more of those characters. This is so we don't
+            # get empty strings after splitting when there are neighboring delimiter
+            # characters.
+            delim_regexp = f"[{escaped_delim}]+"
+
+            # Trim off occurrences of the delimiters from the ends of the string. This helps avoid
+            # empty string tokens after split_pattern_regex.
+            trimmed_str = ArrowScalarFuncExpression(
+                src.empty_data, [src], "utf8_trim", (delimiter,)
+            )
+
+            # If the input string is empty or contains only delimiters, return NULL
+            trimmed_str = ArrowScalarFuncExpression(
+                src.empty_data, [trimmed_str, empty_string_expr], "nullif", ()
+            )
+
+            # Implementation involves fixed_size_list results, so easier
+            # to do it on the C++ side.
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [trimmed_str],
+                "strtok",
+                (delim_regexp, part_num),
+            )
+
         if func_name == "PI" and len(op_exprs) == 0:
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
             return ConstantExpression(dummy_empty_data, input_plan, np.pi)
@@ -4545,6 +4614,125 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 [src],
                 "split_part",
                 (delim_expr.value, part_num),
+            )
+
+        elif func_name == "STRTOK_TO_ARRAY" and len(op_exprs) in (1, 2):
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            if len(op_exprs) == 2:
+                delim_expr = op_exprs[1]
+                ensure_arg_is_const_expr_of_type(
+                    delim_expr, "delim_expr", (str, pa.binary())
+                )
+                delimiter = delim_expr.value
+            else:
+                delimiter = " "
+
+            src_pa_type = get_expr_dtype(
+                src, "STRTOK_TO_ARRAY src", get_const_val_type=False
+            ).pyarrow_dtype
+            list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+            empty_list = ConstantExpression(list_empty_data, input_plan, [])
+
+            # If delimiter is empty: return an empty list if string is also empty, else
+            # return a list containing only the original string. If original string is
+            # null, the result should be a null list rather than a list containing NULL.
+            if delimiter == "":
+                string_is_empty = ComparisonOpExpression(
+                    bool_empty_data, src, empty_string_expr, operator.eq
+                )
+                wrapped_src = ArrowScalarFuncExpression(
+                    list_empty_data, [src], "zip", ()
+                )
+                src_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
+                wrapped_src = CaseExpression(
+                    list_empty_data,
+                    src_is_null,
+                    NullExpression(list_empty_data, input_plan, 0),
+                    wrapped_src,
+                )
+                return CaseExpression(
+                    list_empty_data, string_is_empty, empty_list, wrapped_src
+                )
+
+            # STRTOK_TO_ARRAY counts each character in the delimiter string as a delimiter.
+            # We use regex so any of those characters or combination of characters
+            # are treated as delimiters so we can split into the correct tokens with
+            # a single pass.
+            # Unlike SPLIT, STRTOK_TO_ARRAY never returns empty strings in the
+            # list of tokens. In our case, it's easier to prevent empty strings from
+            # arising after splitting in the first place by trimming and using regex.
+
+            # We need to escape the delimiter string in case any of the characters
+            # have a special meaning in regex
+            escaped_delim = re.escape(delimiter)
+            # Wrap escaped delimiter string in brackets to match any of the characters
+            # inside.
+            # The '+' denotes one or more of those characters. This is so we don't
+            # get empty strings after splitting when there are neighboring delimiter
+            # characters.
+            delim_regexp = f"[{escaped_delim}]+"
+
+            # Trim off occurrences of the delimiters from the ends of the string. This helps avoid
+            # empty string tokens after split_pattern_regex.
+            trimmed_str = ArrowScalarFuncExpression(
+                src.empty_data, [src], "utf8_trim", (delimiter,)
+            )
+
+            # The only situation where the result has an empty string token is when the
+            # original string is empty or contains only delimiters
+            result_token_is_empty = ComparisonOpExpression(
+                bool_empty_data, trimmed_str, empty_string_expr, operator.eq
+            )
+
+            token_list = ArrowScalarFuncExpression(
+                list_empty_data,
+                [trimmed_str],
+                "split_pattern_regex",
+                (delim_regexp,),
+            )
+
+            # Ensure we are never left with a list containing only an empty string
+            return CaseExpression(
+                list_empty_data, result_token_is_empty, empty_list, token_list
+            )
+
+        elif func_name == "SPLIT" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            delim_expr = op_exprs[1]
+            ensure_arg_is_const_expr_of_type(
+                delim_expr, "delim_expr", (str, pa.binary())
+            )
+
+            src_pa_type = get_expr_dtype(
+                src, "SPLIT src", get_const_val_type=False
+            ).pyarrow_dtype
+            list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
+
+            # If delimiter is empty: return a list containing only the original string.
+            # If original string is null, the result should be a null list rather than
+            # a list containing NULL.
+            if delim_expr.value == "":
+                bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+                src_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
+                wrapped_src = ArrowScalarFuncExpression(
+                    list_empty_data, [src], "zip", ()
+                )
+                return CaseExpression(
+                    list_empty_data,
+                    src_is_null,
+                    NullExpression(list_empty_data, input_plan, 0),
+                    wrapped_src,
+                )
+
+            return ArrowScalarFuncExpression(
+                list_empty_data, [src], "split_pattern", (delim_expr.value,)
             )
 
         elif func_name == "REGEXP_REPLACE" and len(op_exprs) in (2, 3, 4, 5, 6):
@@ -6692,6 +6880,9 @@ def sql_type_to_pa_type(ctx, sql_type):
             raise ValueError("BodoSQL cpp backend does not support decimal256.")
         else:
             return pa.decimal128(precision, scale)
+    if sql_type_name.equals(SqlTypeName.ARRAY):
+        child_type = sql_type.getComponentType()
+        return pa.list_(sql_type_to_pa_type(ctx, child_type))
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 

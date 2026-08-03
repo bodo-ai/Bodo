@@ -11,7 +11,54 @@ import pandas as pd
 
 import bodo.pandas
 import bodo.spawn.spawner as spawner
-from bodosql import BodoSQLContext, FileSystemCatalog  # noqa
+from bodosql import BodoSQLContext, FileSystemCatalog, TablePath  # noqa
+
+
+def get_tpch_data_parquet(datapath, use_stats=False):
+    dataframe_dict = {
+        k.upper(): TablePath(
+            datapath + f"/{k}.pq",
+            file_type="parquet",
+            statistics_file=None if not use_stats else (datapath + f"/{k}.json"),
+        )
+        for k in [
+            "customer",
+            "orders",
+            "lineitem",
+            "nation",
+            "region",
+            "supplier",
+            "part",
+            "partsupp",
+        ]
+    }
+    return dataframe_dict
+
+
+required_tables = {
+    1: ["LINEITEM"],
+    2: ["PART", "PARTSUPP", "SUPPLIER", "NATION", "REGION"],
+    3: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    4: ["LINEITEM", "ORDERS"],
+    5: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION", "REGION", "SUPPLIER"],
+    6: ["LINEITEM"],
+    7: ["LINEITEM", "SUPPLIER", "ORDERS", "CUSTOMER", "NATION"],
+    8: ["PART", "LINEITEM", "SUPPLIER", "ORDERS", "CUSTOMER", "NATION", "REGION"],
+    9: ["LINEITEM", "ORDERS", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
+    10: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION"],
+    11: ["PARTSUPP", "SUPPLIER", "NATION"],
+    12: ["LINEITEM", "ORDERS"],
+    13: ["CUSTOMER", "ORDERS"],
+    14: ["LINEITEM", "PART"],
+    15: ["LINEITEM", "SUPPLIER"],
+    16: ["PART", "PARTSUPP", "SUPPLIER"],
+    17: ["LINEITEM", "PART"],
+    18: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    19: ["LINEITEM", "PART"],
+    20: ["LINEITEM", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
+    21: ["LINEITEM", "ORDERS", "SUPPLIER", "NATION"],
+    22: ["CUSTOMER", "ORDERS"],
+}
 
 
 def timethis(
@@ -67,6 +114,7 @@ def run_queries(
     answers_path: str | None = None,
     output_path: str | None = None,
     use_stats: bool = False,
+    use_parquet: bool = False,
 ):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
@@ -74,13 +122,22 @@ def run_queries(
     total_start = time.time()
     n_passed = 0
     failed_queries = []
-    tpch_data = FileSystemCatalog(root)
+    if use_parquet:
+        tpch_data = get_tpch_data_parquet(root, use_stats)
+    else:
+        tpch_data = FileSystemCatalog(root)
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
 
-        def query_func():
-            return q(tpch_data)
+        if use_parquet:
+
+            def query_func():
+                return q({k: tpch_data[k] for k in required_tables[query]})
+        else:
+
+            def query_func():
+                return q(tpch_data)
 
         query_func = timethis(
             query_func,
@@ -123,7 +180,7 @@ def run_queries(
         print(f"Failed queries: {failed_queries}")
 
 
-def create_queries(queries, sql_dir="../sql"):
+def create_queries(queries, scale_factor, use_parquet, sql_dir="../sql"):
     for q in queries:
         nn = f"{q:02d}"  # zero-padded two-digit string
         sql_path = os.path.join(sql_dir, f"q{nn}.sql")
@@ -134,6 +191,17 @@ def create_queries(queries, sql_dir="../sql"):
 
         func_name = f"tpch_q{nn}"
 
+        global data_param  # noqa
+        if use_parquet:
+            data_param = "tpch_data"  # noqa
+        else:
+            data_param = "catalog=tpch_data"  # noqa
+
+        # Allow queries to have f-string expressions in them using scale_factor.
+        sql_text = f'f"""{sql_text}"""'
+        # Calculate those f-string expressions if present.
+        sql_text = eval(sql_text)
+
         # Build the function source string
         func_src = (
             f"""
@@ -142,8 +210,8 @@ def {func_name}(tpch_data):
             + "'''\\\n"
             + sql_text
             + "\\\n'''\n"
+            + f"    bc = BodoSQLContext({data_param}, default_tz=None)"
             + """
-    bc = BodoSQLContext(catalog=tpch_data, default_tz=None)
     bodosql_output = bc.sql(tpch_query, None, None, {})
     return bodosql_output
 """
@@ -227,6 +295,12 @@ def main():
         required=False,
         help="Path to directory to write query outputs (in parquet format), will write files like q<query>.pq",
     )
+    parser.add_argument(
+        "--use_parquet",
+        action="store_true",
+        required=False,
+        help="Whether to use parquet instead of iceberg data.",
+    )
     args = parser.parse_args()
     data_set = args.folder
     scale_factor = args.scale_factor
@@ -235,12 +309,13 @@ def main():
     show_output = args.show_output
     do_warmup = not args.no_warmup
     use_stats = args.use_stats
+    use_parquet = args.use_parquet
 
     queries = list(range(1, 23))
     if args.queries is not None:
         queries = args.queries
     print(f"Queries to run: {queries}")
-    create_queries(queries)
+    create_queries(queries, scale_factor, use_parquet)
 
     warnings.filterwarnings("ignore")
 
@@ -269,6 +344,7 @@ def main():
         answers_path=args.answers_path,
         output_path=args.output_path,
         use_stats=use_stats,
+        use_parquet=use_parquet,
     )
 
 

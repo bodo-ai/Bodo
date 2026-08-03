@@ -4851,6 +4851,31 @@ def test_merge_empty_build(join_strategy):
     )
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param([None, None, None, None, 1], id="some_null"),
+        pytest.param(pd.array([pd.NA] * 5, dtype="Int32"), id="all_null"),
+    ],
+)
+def test_null_reduce(data):
+    """Test reduction with all null values on some or all ranks"""
+
+    df1 = pd.DataFrame({"A": data})
+    df2 = df1.A.min()
+
+    with assert_executed_plan_count(0):
+        bodo_df1 = bd.from_pandas(df1)
+        bodo_df2 = bodo_df1.A.min()
+
+    _test_equal(
+        bodo_df2,
+        df2,
+        check_pandas_types=False,
+    )
+
+
 def test_df_copy(datapath):
     """Test that dataframe copy on an unexecuted plan behaves as expected."""
 

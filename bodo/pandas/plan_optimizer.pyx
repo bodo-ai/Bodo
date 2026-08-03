@@ -372,6 +372,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_case_expr(unique_ptr[CExpression] when, unique_ptr[CExpression] then, unique_ptr[CExpression] else_) except +
     cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
     cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
+    cdef unique_ptr[CExpression] make_const_list_expr(object list_scalar) except +
     cdef unique_ptr[CExpression] make_const_number_expr[T](object arrow_schema, T val) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
@@ -819,6 +820,12 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
     elif isinstance(val, pa.Time64Scalar):
         ns_val = val.value * 1000 if val.type.unit == "us" else val.value
         return move(make_const_time64_expr(ns_val))
+    elif isinstance(val, list):
+        list_type = const_schema.field(0).type
+        list_scalar = pa.scalar(val, type=list_type)
+        return move(make_const_list_expr(list_scalar))
+    elif isinstance(val, pa.ListScalar):
+        return move(make_const_list_expr(val))
     elif isinstance(val, bodo.pandas.scalar.BodoScalar):
         return move(make_const_expr(None, val.get_value()))
     else:

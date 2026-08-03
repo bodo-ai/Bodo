@@ -571,7 +571,9 @@ def test_agg_replicated(datapath, memory_leak_check):
 @pytest.mark.parametrize(
     "query",
     [
-        pytest.param("SELECT ANY_VALUE(A) FROM table1", id="int32"),
+        pytest.param(
+            "SELECT ANY_VALUE(A) FROM table1", id="int32", marks=pytest.mark.gpu
+        ),
         pytest.param(
             "SELECT ANY_VALUE(B) FROM table1", id="string", marks=pytest.mark.slow
         ),

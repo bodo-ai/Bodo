@@ -407,6 +407,8 @@ arrow::Datum do_arrow_compute_multi_input_datum(
 
         func_res = arrow::compute::CallFunction(
             "case_when", {cond, null_datum, arg_datums[0]});
+    } else if (arrow_func_name == "zip") {
+        return do_arrow_compute_zip(arg_datums);
     } else if (arrow_func_name == "binary_join_element_wise") {
         // binary_join_element_wise appears to require all arguments to have the
         // same type. Cast all arguments to match the first argument's type
@@ -1198,16 +1200,13 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
         // Special handling for multi-input Arrow functions with options
         if (scalar_func_data.arrow_func_name == "max_element_wise" ||
             scalar_func_data.arrow_func_name == "min_element_wise") {
-            arrow::compute::ElementWiseAggregateOptions opts;
+            auto [skip_nulls] = get_var_py_args_as_types<0, 1>(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_bool);
 
-            assert_py_args_is_tuple(scalar_func_data.args,
-                                    scalar_func_data.arrow_func_name.c_str());
-            if (PyTuple_Size(scalar_func_data.args) > 0) {
-                auto [skip_nulls] = get_py_args_as_types(
-                    scalar_func_data.args,
-                    scalar_func_data.arrow_func_name.c_str(),
-                    get_py_object_as_bool);
-                opts.skip_nulls = skip_nulls;
+            arrow::compute::ElementWiseAggregateOptions opts;
+            if (skip_nulls.has_value()) {
+                opts.skip_nulls = *skip_nulls;
             } else {
                 // Avoid skipping nulls to match SQL semantics.
                 // This is True by default in Arrow.
@@ -2545,6 +2544,50 @@ arrow::Datum do_arrow_compute_split_part(arrow::Datum res_datum,
         {return_empty_string, empty_string_scalar, part}, "if_else");
 }
 
+/**
+ * @brief Occurrences matched by the regex `delim_str` divide the input string
+ * `res_datum` into tokens. STRTOK returns the substring corresponding to a part
+ * number, where 1 is the first token. The part number cannot be negative.
+ * NULL is emitted if the requested token does not exist.
+ *
+ * Note: If called directly, this function differs from Snowflake's STRTOK in
+ * that `delim_str` is a regex pattern instead of a string where each character
+ * is considered a delimiter. The Python side converts the raw delimiter input
+ * to a regexp that matches any of the given delimeters. The Python side is also
+ * in charge of handling the edge cases (such as when the delimiter is empty).
+ */
+arrow::Datum do_arrow_compute_strtok(arrow::Datum res_datum,
+                                     std::string delim_regexp, int part_num) {
+    // Split the string on the delimiter `part_num` times, which is the minimum
+    // number of times to find the desired token.
+    arrow::compute::SplitPatternOptions split_opts{delim_regexp, part_num};
+    // string_tokens is a ListArray
+    arrow::Datum string_tokens =
+        do_arrow_compute_unary(res_datum, "split_pattern_regex", &split_opts);
+
+    // Get a single-element list of the token we want, with
+    // return_fixed_size_list = true. We need to do this since calling
+    // list_element directly will throw an error if there are fewer than
+    // `part_num` token in the split string.
+    arrow::compute::ListSliceOptions list_slice_opts;
+    // part_num is one-based, so part_num - 1 is the index corresponding to
+    // the token
+    list_slice_opts.start = part_num - 1;
+    list_slice_opts.stop = part_num;
+    list_slice_opts.return_fixed_size_list = true;
+    arrow::Datum token_list =
+        do_arrow_compute_unary(string_tokens, "list_slice", &list_slice_opts);
+
+    // Get the actual string part. This will be NULL if
+    // the string has fewer than `part_num` tokens, which
+    // isn't a problem since STRTOK is supposed to return
+    // NULL in that case.
+    auto zero_scalar = std::make_shared<arrow::Int64Scalar>(0);
+    arrow::Datum token =
+        do_arrow_compute_binary(token_list, zero_scalar, "list_element");
+    return token;
+}
+
 arrow::Datum do_arrow_compute_dow_num(arrow::Datum res_datum) {
     // We strip off the leading spaces and only look at the first two
     // characters of the input string in accordance with Snowflake (e.g.
@@ -2592,15 +2635,13 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
         int rank;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        assert_py_args_is_tuple(scalar_func_data.args,
-                                scalar_func_data.arrow_func_name.c_str());
-        size_t num_args = PyTuple_Size(scalar_func_data.args);
+        auto [seed_arg] = get_var_py_args_as_types<0, 1>(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_int64);
 
-        if (num_args == 1) {
+        if (seed_arg.has_value()) {
             // Seed was explicitly provided, so use it
-            auto [seed] = get_py_args_as_types(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                get_py_object_as_int64);
+            int64_t seed = *seed_arg;
 
             if (rank == 0) {
                 // Create psuedo-random number generator.
@@ -2628,7 +2669,7 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
                 gen = std::make_shared<std::mt19937_64>(
                     std::mt19937_64(rank_seed));
             }
-        } else if (num_args == 0) {
+        } else {
             // Generate a seed with 96-bits of entropy from system's
             // random_device and the current system time. time(NULL) is
             // mainly a backup in case std::random_device falls back
@@ -2640,9 +2681,6 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
                                static_cast<uint32_t>(rank)};
             // Create psuedo-random number generator
             gen = std::make_shared<std::mt19937_64>(std::mt19937_64(seed));
-        } else {
-            throw std::runtime_error(
-                "random_int64 only accepts 0 or 1 arguments");
         }
     }
 
@@ -2666,6 +2704,190 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
         builder.Finish().ValueOrDie();
 
     return arrow::Datum(random_int64_array);
+}
+
+/**
+ * @brief Zip the Datums into a ListArray, provided they all have the
+ * same datatype. If N datums are passed, and each datum has R rows,
+ * the result will be an array with R rows where each array value is
+ * a list containing N elements.
+ *
+ * Scalars are accepted. If all arguments are scalars, the result will
+ * be a ListArray with one value (one list).
+ * `datums` must not be empty.
+ */
+arrow::Datum do_arrow_compute_zip(const std::vector<arrow::Datum>& datums) {
+    if (datums.empty()) {
+        throw std::invalid_argument(
+            "do_arrow_compute_zip does not accept an empty vector of datums.");
+    }
+
+    // First, loop over the datums to get the number of rows and
+    // verify that all array datums have the same length.
+    // Another option would be to pad with nulls when the lengths
+    // are not equal.
+    int64_t num_rows = 1;
+    for (const arrow::Datum& datum : datums) {
+        if (!datum.is_scalar()) {
+            int64_t datum_length = datum.length();
+            if (datum_length == -1) {
+                throw std::runtime_error(
+                    "do_arrow_compute_zip: Failed to get length of input "
+                    "datum.");
+            }
+            if (datum_length != num_rows && num_rows != 1) {
+                throw std::invalid_argument(
+                    "do_arrow_compute_zip: Input array datums must have the "
+                    "same length.");
+            }
+            num_rows = datum_length;
+        }
+    }
+
+    // Ensure all datums have the same datatype
+    std::shared_ptr<arrow::DataType> value_type = datums[0].type();
+    for (size_t i = 1; i < datums.size(); i++) {
+        if (!value_type->Equals(datums[i].type())) {
+            throw std::invalid_argument(
+                "do_arrow_compute_zip: Input datums must have the same "
+                "datatype.");
+        }
+    }
+
+    std::shared_ptr<arrow::Array> values_array;
+
+    // The interleaving step is only necessary if more than one datum is passed.
+    if (datums.size() > 1) {
+        // First, turn all datums into arrays. Scalar datums will become
+        // single-element arrays. This way we can make an ArraySpan and use the
+        // efficient AppendArraySlice() for both array and scalar datums.
+        std::vector<std::shared_ptr<arrow::ArrayData>> input_array_datas(
+            datums.size());
+        for (size_t i = 0; i < datums.size(); i++) {
+            if (datums[i].is_scalar()) {
+                input_array_datas[i] =
+                    arrow::MakeArrayFromScalar(*datums[i].scalar(), 1)
+                        .ValueOrDie()
+                        ->data();
+            } else {
+                input_array_datas[i] = datums[i].array();
+            }
+        }
+
+        // Helper struct for performance and to accommodate both arrays and
+        // scalars
+        struct InputView {
+            arrow::ArraySpan span;
+            // What to multiply the row index variable by in the builder loop.
+            // 0 for scalars and 1 for arrays. This avoids the branching of
+            // checking whether input is an array or scalar every iteration.
+            int index_multiplier;
+        };
+        std::vector<InputView> inputs(datums.size());
+
+        // Package input data into InputViews for faster memory
+        // access in the builder loop.
+        for (size_t i = 0; i < datums.size(); i++) {
+            InputView input_view;
+            // Convert input ArrayData to ArraySpan
+            input_view.span = arrow::ArraySpan(*input_array_datas[i]);
+            if (datums[i].is_scalar()) {
+                // Scalars are not broadcasted to number of rows, so
+                // the index multiplier should be 0 to grab the first
+                // element over and over.
+                input_view.index_multiplier = 0;
+            } else {
+                input_view.index_multiplier = 1;
+            }
+            inputs[i] = input_view;
+        }
+
+        // Make generic builder
+        std::unique_ptr<arrow::ArrayBuilder> interleaved_arr_builder;
+        auto make_builder_status = arrow::MakeBuilder(
+            arrow::default_memory_pool(), value_type, &interleaved_arr_builder);
+        if (!make_builder_status.ok()) {
+            throw std::runtime_error(
+                "do_arrow_compute_zip: Failed to create ArrayBuilder for " +
+                value_type->ToString() + ": " + make_builder_status.ToString());
+        }
+
+        // Presize array to minimize resize operations. If `value_type` is a
+        // variable-sized type, this doesn't guarantee that no reallocation will
+        // occur.
+        auto presize_builder_status =
+            interleaved_arr_builder->Resize(num_rows * datums.size());
+        if (!presize_builder_status.ok()) {
+            throw std::runtime_error(
+                "do_arrow_compute_zip: Failed to presize ArrayBuilder: " +
+                presize_builder_status.ToString());
+        }
+
+        // Append elements one row at a time (the first elements of arrays 1..N,
+        // then the second elements, etc.). This is not going to be ideal for
+        // cache locality, but there may not be a better generic solution that
+        // handles variable-width datatypes.
+        for (int64_t i = 0; i < num_rows; i++) {
+            for (const InputView& input : inputs) {
+                // Append element at index i (or 0, for scalars) from the array.
+                // AppendArraySlice should be faster than getting the scalar at
+                // position i and then appending that.
+                arrow::Status append_status =
+                    interleaved_arr_builder->AppendArraySlice(
+                        input.span, input.index_multiplier * i, 1);
+                if (!append_status.ok()) {
+                    throw std::runtime_error(
+                        "do_arrow_compute_zip: Failed to append scalar to "
+                        "builder: " +
+                        append_status.ToString());
+                }
+            }
+        }
+        auto values_array_res = interleaved_arr_builder->Finish();
+        if (!values_array_res.ok()) {
+            throw std::runtime_error(
+                "do_arrow_compute_zip: Failed to finish ArrayBuilder: " +
+                values_array_res.status().message());
+        }
+        values_array = values_array_res.ValueOrDie();
+    } else {
+        // If only one datum is passed, this function is the equivalent of
+        // turning the array into an array of single-element lists. We should be
+        // able to create a ListArray from the original array without any
+        // copying.
+        values_array =
+            datums[0].is_scalar()
+                ? arrow::MakeArrayFromScalar(*datums[0].scalar(), num_rows)
+                      .ValueOrDie()
+                : datums[0].make_array();
+    }
+
+    // Make offsets array. The offsets represent the indices of the boundaries
+    // between the lists, so they are separated by the number of input datums.
+    arrow::Int64Builder offsets_builder;
+    auto presize_builder_status = offsets_builder.Resize(num_rows + 1);
+    if (!presize_builder_status.ok()) {
+        throw std::runtime_error(
+            "do_arrow_compute_zip: Failed to presize Int64Builder: " +
+            presize_builder_status.ToString());
+    }
+    for (int64_t i = 0; i <= num_rows; i++) {
+        offsets_builder.UnsafeAppend(i * datums.size());
+    }
+    // Contains 0, N, 2N, ... R*N
+    auto offsets = offsets_builder.Finish().ValueOrDie();
+
+    // Make LargeListArray from interleaved values array and offsets array
+    auto list_type = arrow::large_list(value_type);
+    auto list_array_res =
+        arrow::LargeListArray::FromArrays(list_type, *offsets, *values_array);
+    if (!list_array_res.ok()) {
+        throw std::runtime_error(
+            "do_arrow_compute_zip: Failed to make LargeListArray: " +
+            list_array_res.status().message());
+    }
+
+    return arrow::Datum(list_array_res.ValueOrDie());
 }
 
 // -----------------------------------------------------------------------

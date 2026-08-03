@@ -124,6 +124,20 @@ duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
         duckdb::Value(out_type));
 }
 
+duckdb::unique_ptr<duckdb::Expression> make_const_list_expr(
+    PyObject *list_scalar_py) {
+    auto arrow_list_scalar_res = arrow::py::unwrap_scalar(list_scalar_py);
+    std::shared_ptr<arrow::Scalar> arrow_list_scalar;
+    CHECK_ARROW_AND_ASSIGN(arrow_list_scalar_res,
+                           "make_const_list_expr: unable to unwrap list scalar",
+                           arrow_list_scalar);
+
+    duckdb::Value duckdb_list_value =
+        ArrowScalarToDuckDBValue(arrow_list_scalar);
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb_list_value);
+}
+
 template <typename T>
 duckdb::unique_ptr<duckdb::Expression> make_const_number_expr(
     PyObject *out_schema_py, T val) {
@@ -1809,7 +1823,7 @@ struct BinaryDecimalBindData : public duckdb::FunctionData {
     duckdb::unique_ptr<FunctionData> Copy() const override {
         return duckdb::make_uniq<BinaryDecimalBindData>(return_type);
     }
-    bool Equals(const duckdb::FunctionData &other) const {
+    bool Equals(const duckdb::FunctionData &other) const override {
         const auto *other_decimal =
             dynamic_cast<const BinaryDecimalBindData *>(&other);
         if (other_decimal) {

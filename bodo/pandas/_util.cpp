@@ -154,7 +154,61 @@ extractValue(const duckdb::Value &value) {
                 } break;
             }
         } break;
+        case duckdb::LogicalTypeId::LIST: {
+            const auto &duckdb_list_elements =
+                duckdb::ListValue::GetChildren(value);
 
+            duckdb::LogicalType child_duckdb_type =
+                duckdb::ListType::GetChildType(value.type());
+            std::shared_ptr<arrow::DataType> child_arrow_type =
+                duckdbTypeToArrow(child_duckdb_type);
+
+            // Use generic ArrayBuilder to append list elements since we don't
+            // know the child list type at compile time
+            std::unique_ptr<arrow::ArrayBuilder> builder;
+            auto make_builder_status = arrow::MakeBuilder(
+                arrow::default_memory_pool(), child_arrow_type, &builder);
+            if (!make_builder_status.ok()) {
+                throw std::runtime_error(
+                    "Failed to create Arrow ArrayBuilder for list: " +
+                    make_builder_status.ToString());
+            }
+
+            // Iterate over the DuckDB list elements, convert each one to an
+            // Arrow scalar, and append them to the ArrayBuilder
+            for (const auto &list_element : duckdb_list_elements) {
+                if (list_element.IsNull()) {
+                    auto append_status = builder->AppendNull();
+                    if (!append_status.ok()) {
+                        throw std::runtime_error(
+                            "Failed to append null to list builder: " +
+                            append_status.ToString());
+                    }
+                } else {
+                    auto arrow_list_element = convertDuckdbValueToArrowScalar(
+                        list_element, child_arrow_type);
+                    auto append_status =
+                        builder->AppendScalar(*arrow_list_element);
+                    if (!append_status.ok()) {
+                        throw std::runtime_error(
+                            "Failed to append scalar to list builder" +
+                            append_status.ToString());
+                    }
+                }
+            }
+
+            std::shared_ptr<arrow::Array> arrow_list_elements_array;
+            auto finish_status = builder->Finish(&arrow_list_elements_array);
+            if (!finish_status.ok()) {
+                throw std::runtime_error(
+                    "Failed to finish building list array");
+            }
+
+            // Create ListScalar from an Array of elements
+            auto arrow_list_type = arrow::large_list(child_arrow_type);
+            return std::make_shared<arrow::ListScalar>(
+                arrow_list_elements_array, arrow_list_type);
+        } break;
         default:
             throw std::runtime_error("extractValue unhandled type: " +
                                      std::to_string(static_cast<int>(type)));
@@ -238,6 +292,10 @@ getDefaultValueForDuckdbValueType(const duckdb::Value &value) {
             }
 
             return arrow::MakeNullScalar(arrow::decimal128(precision, scale));
+        } break;
+        case duckdb::LogicalTypeId::LIST: {
+            auto list_type = duckdbTypeToArrow(value.type());
+            return arrow::MakeNullScalar(list_type);
         } break;
         default:
             throw std::runtime_error(
@@ -403,6 +461,47 @@ duckdb::Value ArrowScalarToDuckDBValue(
             }
 
             return duckdb::Value::INTERVAL(duckdb::Interval::FromMicro(val));
+        }
+
+        case arrow::Type::LIST:
+        case arrow::Type::LARGE_LIST: {
+            // Extract list values and their type depending whether input is
+            // LIST or LARGE_LIST
+            std::shared_ptr<arrow::Array> arrow_list_values;
+            duckdb::LogicalType child_duckdb_type;
+            if (scalar->type->id() == arrow::Type::LIST) {
+                auto list_scalar =
+                    std::static_pointer_cast<arrow::ListScalar>(scalar);
+                arrow_list_values = list_scalar->value;
+                auto list_scalar_type =
+                    std::static_pointer_cast<arrow::ListType>(
+                        list_scalar->type);
+                child_duckdb_type =
+                    arrowTypeToDuckDB(list_scalar_type->value_type());
+            } else {
+                auto list_scalar =
+                    std::static_pointer_cast<arrow::LargeListScalar>(scalar);
+                arrow_list_values = list_scalar->value;
+                auto list_scalar_type =
+                    std::static_pointer_cast<arrow::LargeListType>(
+                        list_scalar->type);
+                child_duckdb_type =
+                    arrowTypeToDuckDB(list_scalar_type->value_type());
+            }
+
+            duckdb::vector<duckdb::Value> duckdb_list_values;
+            // Convert Arrow list values to DuckDB values one by one
+            for (int64_t i = 0; i < arrow_list_values->length(); i++) {
+                auto element_scalar = arrow_list_values->GetScalar(i);
+                if (element_scalar.ok()) {
+                    duckdb_list_values.push_back(
+                        ArrowScalarToDuckDBValue(element_scalar.ValueOrDie()));
+                } else {
+                    throw std::runtime_error(
+                        "Failed to get element from Arrow list scalar.");
+                }
+            }
+            return duckdb::Value::LIST(child_duckdb_type, duckdb_list_values);
         }
 
         default:
@@ -633,6 +732,13 @@ std::shared_ptr<arrow::DataType> duckdbTypeToArrow(
 
             return arrow::decimal128(precision, scale);
         } break;
+        case duckdb::LogicalTypeId::LIST: {
+            duckdb::LogicalType child_type =
+                duckdb::ListType::GetChildType(type);
+            std::shared_ptr<arrow::DataType> child_arrow_type =
+                duckdbTypeToArrow(child_type);
+            return arrow::large_list(child_arrow_type);
+        }
         default:
             throw std::runtime_error(
                 "duckdbTypeToArrow unsupported LogicalType conversion " +
@@ -725,6 +831,19 @@ duckdb::LogicalType arrowTypeToDuckDB(
                     std::to_string(precision));
             }
             return duckdb::LogicalType::DECIMAL(precision, scale);
+        }
+        case arrow::Type::LIST: {
+            auto list_type = std::static_pointer_cast<arrow::ListType>(type);
+            auto child_arrow_type = list_type->value_type();
+            auto child_duckdb_type = arrowTypeToDuckDB(child_arrow_type);
+            return duckdb::LogicalType::LIST(child_duckdb_type);
+        }
+        case arrow::Type::LARGE_LIST: {
+            auto list_type =
+                std::static_pointer_cast<arrow::LargeListType>(type);
+            auto child_arrow_type = list_type->value_type();
+            auto child_duckdb_type = arrowTypeToDuckDB(child_arrow_type);
+            return duckdb::LogicalType::LIST(child_duckdb_type);
         }
         default:
             throw std::runtime_error(
@@ -888,9 +1007,9 @@ std::shared_ptr<table_info> runCfuncScalarFunction(
 }
 
 std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
-    const duckdb::Value &value) {
+    const duckdb::Value &value, std::shared_ptr<arrow::DataType> arrow_type) {
     arrow::Result<std::shared_ptr<arrow::Scalar>> scalar_res = std::visit(
-        [](const auto &&value) {
+        [&arrow_type](const auto &&value) {
             if constexpr (std::is_same_v<decltype(value),
                                          std::shared_ptr<arrow::Scalar>>) {
                 // If the value is already a scalar, we can just wrap it
@@ -899,8 +1018,26 @@ std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
                     arrow::ToResult(value);
                 return value;
             } else {
-                arrow::Result<std::shared_ptr<arrow::Scalar>> ret =
-                    arrow::MakeScalar(value);
+                // Use the type inferring factory method if `arrow_type`
+                // is nullptr, else pass in the expected `arrow_type`
+                // to force a type and circumvent incorrect type
+                // inferences.
+                arrow::Result<std::shared_ptr<arrow::Scalar>> ret;
+                if (arrow_type) {
+                    ret = arrow::MakeScalar(arrow_type, value);
+                    if (ret.ok()) {
+                        return ret;
+                    }
+                    // If !ret.ok(), we failed to make scalar of the specified
+                    // type. Even some valid calls like
+                    // arrow::MakeScalar(large_string(), "a_string") can lead to
+                    // an error such as "NotImplemented: constructing scalars of
+                    // type large_string from unboxed values".
+                    // In these cases we try to cast from the inferred-type
+                    // scalar to a scalar of `arrow_type`.
+                }
+
+                ret = arrow::MakeScalar(value);
                 return ret;
             }
         },
@@ -909,7 +1046,23 @@ std::shared_ptr<arrow::Scalar> convertDuckdbValueToArrowScalar(
         throw std::runtime_error("Failed to convert duckdb value to scalar: " +
                                  scalar_res.status().ToString());
     }
-    return scalar_res.ValueOrDie();
+    std::shared_ptr<arrow::Scalar> scalar = scalar_res.ValueOrDie();
+
+    if (arrow_type && !arrow_type->Equals(scalar->type)) {
+        // If the scalar type doesn't match our expected type, attempt a cast.
+        // Probably a better way would be to avoid creating a scalar of the
+        // wrong type to begin with, but that would require yet another
+        // switch-case or similar.
+        auto casted_scalar_res = arrow::compute::Cast(scalar, arrow_type);
+        if (!casted_scalar_res.ok()) {
+            throw std::runtime_error(
+                "Failed to cast scalar to the given Arrow type: " +
+                casted_scalar_res.status().ToString());
+        }
+        return casted_scalar_res.ValueOrDie().scalar();
+    } else {
+        return scalar;
+    }
 }
 
 std::shared_ptr<arrow::DataType> duckdbValueToArrowType(
