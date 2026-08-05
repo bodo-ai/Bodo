@@ -48,6 +48,9 @@ from bodo.pandas.plan import (
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
+
+CastOptions = CastExpression.CastOptions
+BodoStringCastOptions = CastExpression.BodoStringCastOptions
 from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
@@ -1958,6 +1961,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         in_expr = java_expr_to_python_expr(ctx, operand, input_plan)
         # TODO[BSE-5154]: support all Calcite casts
 
+        # Calcite converts TRY_CAST to SAFE_CAST
+        safe_cast = func_name == "SAFE_CAST"
+
         # No-op casts
         if operand_type.getSqlTypeName().equals(target_type.getSqlTypeName()):
             return in_expr
@@ -1981,9 +1987,134 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
             return in_expr
 
-        empty_data = pd.Series(
-            dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type))
-        )
+        pa_target_type = sql_type_to_pa_type(ctx, target_type)
+        empty_data = pd.Series(dtype=pd.ArrowDtype(pa_target_type))
+
+        if operand_type.getSqlTypeName().equals(SqlTypeName.VARCHAR) and is_int_type(
+            target_type
+        ):
+            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+
+            # Float strings should be truncated to integers, so parse as floats first.
+            # Casting directly from float strings to int isn't permitted.
+            # The allow_int_overflow and allow_float_truncate flags seem to
+            # only affect numeric-to-numeric casting.
+            float_parsed = CastExpression(
+                float_empty_data,
+                in_expr,
+                BodoStringCastOptions(True) if safe_cast else CastOptions(),
+            )
+            if not safe_cast:
+                # Throw an error if one of the float values cannot fit in the integer type
+                float_to_int_cast_options = CastOptions(
+                    allow_int_overflow=False, allow_float_truncate=True
+                )
+                # Truncate and cast to the target int type
+                float_to_int = CastExpression(
+                    empty_data, float_parsed, float_to_int_cast_options
+                )
+            else:
+                # Safe casting here means ensuring int overflow doesn't lead to an error,
+                # which is the opposite of how Arrow defines "safe" casting
+                float_to_int_cast_options = CastOptions(
+                    allow_int_overflow=True, allow_float_truncate=True
+                )
+                # Truncate and cast to the target int type
+                float_to_int = CastExpression(
+                    empty_data, float_parsed, float_to_int_cast_options
+                )
+
+                # If try-casting, converting from float64 to the int type could have overflowed.
+                # To catch these cases and return NULL instead, we need to compare the float
+                # value to the min/max bounds of the integer type.
+
+                if pa_target_type.bit_width < 64:
+                    # NOTE: Despite the name, to_pandas_dtype() converts to numpy integer dtypes
+                    int_val_bounds = np.iinfo(pa_target_type.to_pandas_dtype())
+                    # This code doesn't run for int64/uint64 target type, so we know we can
+                    # accurately represent the int bounds in float64.
+                    min_int_threshold = ConstantExpression(
+                        float_empty_data, input_plan, int_val_bounds.min - 1.0
+                    )
+                    max_int_threshold = ConstantExpression(
+                        float_empty_data, input_plan, int_val_bounds.max + 1.0
+                    )
+                    float_under_min = ComparisonOpExpression(
+                        bool_empty_data, float_parsed, min_int_threshold, operator.le
+                    )
+                    float_over_max = ComparisonOpExpression(
+                        bool_empty_data, float_parsed, max_int_threshold, operator.ge
+                    )
+                    val_out_of_bounds = ConjunctionOpExpression(
+                        bool_empty_data, float_under_min, float_over_max, "__or__"
+                    )
+                    return CaseExpression(
+                        empty_data,
+                        val_out_of_bounds,
+                        NullExpression(empty_data, input_plan, 0),
+                        float_to_int,
+                    )
+
+            # If float_parsed >= 2^53 or float_parsed <= -2^53 + 1,
+            # the result is unreliable.
+            # This only matters if the target type is a 64-bit int.
+            # In this case we try to parse the input string as an integer
+            # without going through float so we can support integer
+            # strings > 2^53 or <= -2^53.
+            if pa_target_type.bit_width == 64:
+                max_safe_float = ConstantExpression(float_empty_data, input_plan, 2**53)
+                too_high = ComparisonOpExpression(
+                    bool_empty_data, float_parsed, max_safe_float, operator.ge
+                )
+                if pa.types.is_signed_integer(pa_target_type):
+                    min_safe_float = ConstantExpression(
+                        float_empty_data, input_plan, -(2**53) + 1
+                    )
+                    too_low = ComparisonOpExpression(
+                        bool_empty_data, float_parsed, min_safe_float, operator.le
+                    )
+                    imprecise_result = ConjunctionOpExpression(
+                        bool_empty_data, too_high, too_low, "__or__"
+                    )
+                else:
+                    imprecise_result = too_high
+
+                # Here we want to handle the int strings that we could theoretically
+                # represent if casting straight to int. This will disqualify
+                # int strings outside of 64-bit bounds and float strings for
+                # which we can't determine the correct truncated int value.
+
+                if safe_cast:
+                    # With safe casting we don't need to worry about crashing with float strings
+                    # in the input
+                    int_parsed = CastExpression(
+                        empty_data, in_expr, BodoStringCastOptions(True)
+                    )
+                else:
+                    # With regular casting, we want to throw an error when there are float
+                    # strings in the input whose truncated values might not be perfectly
+                    # representable in float64.
+
+                    # First we need to set the strings that were in safe bounds to NULL, so we
+                    # don't get errors parsing float strings as ints that we already confirmed
+                    # are good.
+                    big_in_expr = CaseExpression(
+                        in_expr.empty_data,
+                        imprecise_result,
+                        in_expr,
+                        NullExpression(in_expr.empty_data, input_plan, 0),
+                    )
+                    # Try to parse strings that are too large in magnitude as int, throwing an error if at least one is a float or would overflow
+                    int_parsed = CastExpression(empty_data, big_in_expr)
+
+                # Select the string -> float -> int or string -> int path based on whether
+                # float64 has enough precision to accurately represent the output
+                return CaseExpression(
+                    empty_data, imprecise_result, int_parsed, float_to_int
+                )
+            else:
+                return float_to_int
 
         if operand_type.getSqlTypeName().equals(
             SqlTypeName.VARCHAR
@@ -2014,6 +2145,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             in_expr = CastExpression(
                 pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))),
                 cleaned_input,
+                BodoStringCastOptions(True) if safe_cast else CastOptions(),
             )
 
         if pa.types.is_decimal(
@@ -2086,30 +2218,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 cleaned_input,
             )
 
-            # Convert to a timestamp string before casting because Arrow's Cast can't convert
-            # directly from a string to a time for some reason.
-            # TODO: Arrow's internal ParseValue() function does have this capability, so this plan conversion can be
-            # simplified by calling our new bodo_string_cast compute function instead.
-            dummy_date_string = ConstantExpression(
-                string_empty_data, input_plan, "1970-01-01"
+            # Parse as a time via bodo_string_cast since Arrow's native cast function
+            # doesn't allow string-to-time casting for some reason.
+            parsed_time = CastExpression(
+                empty_data, safe_time_strings, BodoStringCastOptions(safe_cast)
             )
-            separator = ConstantExpression(string_empty_data, input_plan, " ")
-            timestamp_string = ArrowScalarFuncExpression(
-                string_empty_data,
-                [dummy_date_string, safe_time_strings, separator],
-                "binary_join_element_wise",
-                (),
-            )
-            # Parse as timestamp
-            timestamp_expr = CastExpression(
-                pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))), timestamp_string
-            )
-            # Casting to time64 will strip off the dummy date part of the timestamp
-            timestamp_time = CastExpression(empty_data, timestamp_expr)
 
             # Return the final time64 array, selecting the result based on whether each input was an integer string or time string
             return CaseExpression(
-                empty_data, represents_int, nanoseconds_time, timestamp_time
+                empty_data, represents_int, nanoseconds_time, parsed_time
             )
 
         # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
@@ -2192,9 +2309,18 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
             )
 
+        # Use bodo_string_cast with emit_null_on_failure=True if
+        # when the source expression has string dtype
+        string_try_cast = False
+        if safe_cast:
+            in_expr_dtype = get_expr_dtype(in_expr)
+            if compare_types(in_expr_dtype, str):
+                string_try_cast = True
+
         return CastExpression(
             empty_data,
             in_expr,
+            BodoStringCastOptions(True) if string_try_cast else CastOptions(),
         )
 
     if (
@@ -6407,14 +6533,9 @@ def standardize_java_time_unit(fname, time_unit):
 
 def is_int_type(java_type):
     """Check if a Calcite type is an integer type."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-    type_name = java_type.getSqlTypeName()
-    return (
-        type_name.equals(SqlTypeName.TINYINT)
-        or type_name.equals(SqlTypeName.SMALLINT)
-        or type_name.equals(SqlTypeName.INTEGER)
-        or type_name.equals(SqlTypeName.BIGINT)
-    )
+    SqlTypeUtil = gateway.jvm.org.apache.calcite.sql.type.SqlTypeUtil
+    # TINYINT, SMALLINT, INTEGER, or BIGINT
+    return SqlTypeUtil.isIntType(java_type)
 
 
 def is_float_type(java_type):
