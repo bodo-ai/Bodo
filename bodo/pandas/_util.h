@@ -321,6 +321,22 @@ std::shared_ptr<arrow::DataType> getCastReturnType(
     const duckdb::BoundCastExpression &bce);
 
 /**
+ * @brief Get the Arrow cast function options from the Bodo-generated cast node
+ * (stored by make_cast_expr in _plan.cpp). This contains the Arrow target type
+ * for the cast operation. We use this Arrow type instead of the
+ * duckdb::BoundCastExpression return type since DuckDB types may lose
+ * information (e.g. Interval precision). DuckDB generated types don't have
+ * Arrow type or DuckDB may change the type so this function has to reconcile
+ * (see: getCastReturnType()).
+ *
+ * @param bce Cast node
+ * @return std::unique_ptr<arrow::compute::FunctionOptions> Arrow function
+ *  options of the cast node
+ */
+std::unique_ptr<arrow::compute::FunctionOptions> getCastOptions(
+    const duckdb::BoundCastExpression &bce);
+
+/**
  * @brief Convert duckdb table filters to pyiceberg expressions.
  * @param filters - the duckdb table filters to convert
  * @param arrow_schema - the arrow schema to bind the filters to

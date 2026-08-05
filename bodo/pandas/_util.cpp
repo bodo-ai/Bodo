@@ -1245,23 +1245,76 @@ PyObject *_duckdbFilterToPyicebergFilter(
 
 std::shared_ptr<arrow::DataType> getCastReturnType(
     const duckdb::BoundCastExpression &bce) {
-    std::shared_ptr<arrow::DataType> arrow_type = bce.bound_cast.arrow_type;
     std::shared_ptr<arrow::DataType> duck_arrow_type =
         duckdbTypeToArrow(bce.return_type);
 
-    auto [_, arrow_duck_type] = arrow_field_to_duckdb(
-        std::make_shared<arrow::Field>("", duck_arrow_type));
-
-    // DuckDB generated cast nodes don't have Arrow type or DuckDB may change
-    // the type so reconcile here by prioritizing the DuckDB type. BodoSQL
-    // generated nodes have Arrow type and we run minimal DuckDB optimization so
-    // Arrow type is likely used for BodoSQL which has more complex date/time
-    // types with precision issues.
-    if (!arrow_type || !arrow_duck_type.EqualTypeInfo(bce.return_type)) {
-        arrow_type = duck_arrow_type;
+    // Get Arrow return type from FunctionOptions
+    std::shared_ptr<const arrow::compute::FunctionOptions> arrow_cast_opts =
+        bce.bound_cast.arrow_cast_opts;
+    if (!arrow_cast_opts) {
+        // If arrow_cast_opts is null, meaning this is likely a DuckDB-generated
+        // cast node return the DuckDB type
+        return duck_arrow_type;
+    }
+    std::shared_ptr<arrow::DataType> arrow_type;
+    std::shared_ptr<const arrow::compute::CastOptions> as_cast_options =
+        std::dynamic_pointer_cast<const arrow::compute::CastOptions>(
+            arrow_cast_opts);
+    std::shared_ptr<const BodoStringCastOptions> as_bodo_string_cast_options =
+        std::dynamic_pointer_cast<const BodoStringCastOptions>(arrow_cast_opts);
+    if (as_cast_options) {
+        arrow_type = as_cast_options->to_type.GetSharedPtr();
+    } else if (as_bodo_string_cast_options) {
+        arrow_type = as_bodo_string_cast_options->to_type.GetSharedPtr();
+    } else {
+        // Unexpected options class, return DuckDB type
+        return duck_arrow_type;
     }
 
+    // DuckDB may change the type of cast nodes, so reconcile here by
+    // prioritizing the DuckDB type. BodoSQL generated nodes have Arrow type and
+    // we run minimal DuckDB optimization so Arrow type is likely used for
+    // BodoSQL which has more complex date/time types with precision issues.
+    auto [_, arrow_duck_type] = arrow_field_to_duckdb(
+        std::make_shared<arrow::Field>("", duck_arrow_type));
+    if (!arrow_duck_type.EqualTypeInfo(bce.return_type)) {
+        return duck_arrow_type;
+    }
     return arrow_type;
+}
+
+std::unique_ptr<arrow::compute::FunctionOptions> getCastOptions(
+    const duckdb::BoundCastExpression &bce) {
+    // Determine target type which may be different from the existing one
+    std::shared_ptr<arrow::DataType> new_arrow_type = getCastReturnType(bce);
+
+    // If the cast node doesn't have cast options, use Arrow default
+    // CastOptions
+    if (!bce.bound_cast.arrow_cast_opts) {
+        std::unique_ptr<arrow::compute::CastOptions> default_cast_opts =
+            std::make_unique<arrow::compute::CastOptions>();
+        default_cast_opts->to_type = new_arrow_type;
+        return default_cast_opts;
+    }
+
+    // Copy the function options so we can modify the target type
+    std::unique_ptr<arrow::compute::FunctionOptions> new_arrow_cast_opts =
+        bce.bound_cast.arrow_cast_opts->Copy();
+    arrow::compute::CastOptions *as_cast_options =
+        dynamic_cast<arrow::compute::CastOptions *>(new_arrow_cast_opts.get());
+    if (as_cast_options) {
+        as_cast_options->to_type = new_arrow_type;
+        return new_arrow_cast_opts;
+    }
+    BodoStringCastOptions *as_bodo_string_cast_options =
+        dynamic_cast<BodoStringCastOptions *>(new_arrow_cast_opts.get());
+    if (as_bodo_string_cast_options) {
+        as_bodo_string_cast_options->to_type = new_arrow_type;
+        return new_arrow_cast_opts;
+    }
+    throw std::runtime_error(
+        "Cast options not arrow::compute::CastOptions or "
+        "BodoStringCastOptions");
 }
 
 PyObject *duckdbFilterSetToPyicebergFilter(
