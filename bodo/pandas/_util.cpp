@@ -1934,6 +1934,100 @@ size_t col_ref_map_lookup(
     return iter->second;
 }
 
+std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input) {
+    auto id = input.type()->id();
+    switch (id) {
+        case arrow::Type::INT8:
+        case arrow::Type::UINT8:
+            return std::make_pair<int, int>(3, 0);
+        case arrow::Type::INT16:
+        case arrow::Type::UINT16:
+            return std::make_pair<int, int>(5, 0);
+        case arrow::Type::INT32:
+        case arrow::Type::UINT32:
+            return std::make_pair<int, int>(10, 0);
+        case arrow::Type::INT64:
+        case arrow::Type::UINT64:
+            return std::make_pair<int, int>(19, 0);
+        default:
+            throw std::runtime_error(
+                "getPrecisionScaleNonDecimal unsupported type");
+    }
+}
+
+arrow::Datum ConvertIntArrayToDecimal128(const arrow::Datum &input,
+                                         int32_t precision, int32_t scale) {
+    if (!input.is_array()) {
+        throw std::runtime_error("Expected array datum");
+    }
+
+    auto arr = input.make_array();
+    int64_t n = arr->length();
+
+    arrow::Decimal128Builder builder(arrow::decimal128(precision, scale),
+                                     arrow::default_memory_pool());
+
+    arrow::Status status;
+    status = builder.Reserve(n);
+    if (!status.ok()) {
+        throw std::runtime_error("ConvertIntArrayToDecimal128 Reserve failed.");
+    }
+
+    for (int64_t i = 0; i < n; ++i) {
+        if (arr->IsNull(i)) {
+            status = builder.AppendNull();
+            if (!status.ok()) {
+                throw std::runtime_error(
+                    "ConvertIntArrayToDecimal128 AppendNull failed.");
+            }
+            continue;
+        }
+
+        int64_t value = 0;
+
+        switch (arr->type_id()) {
+            case arrow::Type::INT32:
+                value =
+                    std::static_pointer_cast<arrow::Int32Array>(arr)->Value(i);
+                break;
+            case arrow::Type::INT64:
+                value =
+                    std::static_pointer_cast<arrow::Int64Array>(arr)->Value(i);
+                break;
+            case arrow::Type::UINT32:
+                value =
+                    std::static_pointer_cast<arrow::UInt32Array>(arr)->Value(i);
+                break;
+            case arrow::Type::UINT64:
+                // value = static_cast<int64_t>(
+                value =
+                    std::static_pointer_cast<arrow::UInt64Array>(arr)->Value(i);
+                break;
+            default:
+                throw std::runtime_error("Unsupported integer array type");
+        }
+
+        arrow::Decimal128 dec(value);
+        // if (scale > 0) {
+        //     dec *= arrow::Decimal128::GetScaleMultiplier(scale);
+        // }
+
+        status = builder.Append(dec);
+        if (!status.ok()) {
+            throw std::runtime_error(
+                "ConvertIntArrayToDecimal128 Append failed.");
+        }
+    }
+
+    std::shared_ptr<arrow::Array> out;
+    status = builder.Finish(&out);
+    if (!status.ok()) {
+        throw std::runtime_error("ConvertIntArrayToDecimal128 Finish failed.");
+    }
+
+    return arrow::Datum(out);
+}
+
 #ifdef USE_CUDF
 
 template std::tuple<int64_t, int64_t, int64_t>
