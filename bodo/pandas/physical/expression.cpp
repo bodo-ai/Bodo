@@ -1,5 +1,6 @@
 #include "expression.h"
 #include <arrow/type_fwd.h>
+#include <arrow/util/checked_cast.h>
 #include <arrow/util/value_parsing.h>
 #include <cmath>
 #include "_util.h"
@@ -623,6 +624,16 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     return ConvertDatumToArrayInfo(casted);
 }
 
+std::shared_ptr<array_info> do_arrow_compute_cast(
+    std::shared_ptr<ExprResult> left_res,
+    const arrow::compute::FunctionOptions* cast_options) {
+    arrow::Datum src1 =
+        ConvertExprResultToDatum(left_res, "do_arrow_compute left");
+
+    arrow::Datum casted = do_arrow_compute_cast(src1, cast_options);
+    return ConvertDatumToArrayInfo(casted);
+}
+
 void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
                          const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum out_datum = out_res.ValueOrDie();
@@ -737,6 +748,36 @@ arrow::Datum do_arrow_compute_unary(
 arrow::Datum do_arrow_compute_cast(
     arrow::Datum left_res,
     const std::shared_ptr<arrow::DataType>& return_type) {
+    // If only return_type is given, configure CastOptions to Bodo defaults.
+    // This overload is only used if called directly from C++. Regular
+    // CastExpressions are guaranteed to have cast options, created in plan.py.
+    arrow::compute::CastOptions cast_opts;
+    cast_opts.to_type = return_type;
+    cast_opts.allow_int_overflow = true;
+    cast_opts.allow_float_truncate = true;
+
+    return do_arrow_compute_cast(left_res, &cast_opts);
+}
+
+arrow::Datum do_arrow_compute_cast(
+    arrow::Datum left_res,
+    const arrow::compute::FunctionOptions* cast_options) {
+    std::shared_ptr<arrow::DataType> return_type;
+
+    const arrow::compute::CastOptions* as_cast_options =
+        dynamic_cast<const arrow::compute::CastOptions*>(cast_options);
+    const BodoStringCastOptions* as_bodo_string_cast_options =
+        dynamic_cast<const BodoStringCastOptions*>(cast_options);
+    if (as_cast_options) {
+        return_type = as_cast_options->to_type.GetSharedPtr();
+    } else if (as_bodo_string_cast_options) {
+        return_type = as_bodo_string_cast_options->to_type.GetSharedPtr();
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute_cast: Cast options not "
+            "arrow::compute::CastOptions or BodoStringCastOptions");
+    }
+
     // No need to cast if type is already the target type.
     // Note that arrow::DataType.Equals() also compares type parameters such
     // as time units and timezones.
@@ -744,13 +785,17 @@ arrow::Datum do_arrow_compute_cast(
         return left_res;
     }
 
-    // Globally set the allow_int_overflow cast option to true; in the future,
-    // CastExpressions should support these options.
-    arrow::compute::CastOptions cast_opts;
-    cast_opts.allow_int_overflow = true;
-    cast_opts.allow_float_truncate = true;
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(left_res, return_type, cast_opts);
+    // Call Arrow Cast or bodo_string_cast depending on the class of cast
+    // options passed
+    arrow::Result<arrow::Datum> cmp_res;
+    if (as_cast_options) {
+        cmp_res = arrow::compute::Cast(left_res, *as_cast_options);
+    } else {
+        EnsureBodoStringCastRegistered();
+        cmp_res = arrow::compute::CallFunction("bodo_string_cast", {left_res},
+                                               as_bodo_string_cast_options);
+    }
+
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_arrow_compute_cast: Error in Arrow compute: " +
@@ -1058,7 +1103,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalCastExpression>(
                     buildPhysicalExprTree(bce.child, col_ref_map, no_scalars),
-                    getCastReturnType(bce)));
+                    getCastOptions(bce)));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_BETWEEN: {
             // Convert the base duckdb::Expression node to its actual derived
@@ -1774,37 +1819,79 @@ void EnsureSubstrRegistered() {
     });
 }
 
+class BodoStringCastOptionsType : public arrow::compute::FunctionOptionsType {
+   public:
+    const char* type_name() const override {
+        return BodoStringCastOptions::kTypeName;
+    }
+
+    std::string Stringify(
+        const arrow::compute::FunctionOptions& options) const override {
+        const auto& opts =
+            arrow::internal::checked_cast<const BodoStringCastOptions&>(
+                options);
+        return "{to_type=" + opts.to_type.ToString() +
+               ", emit_null_on_failure=" +
+               (opts.emit_null_on_failure ? "true" : "false") + "}";
+    }
+
+    bool Compare(const arrow::compute::FunctionOptions& options,
+                 const arrow::compute::FunctionOptions& other) const override {
+        const auto& lhs =
+            arrow::internal::checked_cast<const BodoStringCastOptions&>(
+                options);
+        const auto& rhs =
+            arrow::internal::checked_cast<const BodoStringCastOptions&>(other);
+        return lhs.to_type == rhs.to_type &&
+               lhs.emit_null_on_failure == rhs.emit_null_on_failure;
+    }
+
+    std::unique_ptr<arrow::compute::FunctionOptions> Copy(
+        const arrow::compute::FunctionOptions& options) const override {
+        const auto& opts =
+            arrow::internal::checked_cast<const BodoStringCastOptions&>(
+                options);
+        return std::make_unique<BodoStringCastOptions>(
+            opts.to_type, opts.emit_null_on_failure);
+    }
+};
+
+static const BodoStringCastOptionsType kBodoStringCastOptionsType =
+    BodoStringCastOptionsType();
+
+BodoStringCastOptions::BodoStringCastOptions()
+    : arrow::compute::FunctionOptions(&kBodoStringCastOptionsType) {}
+BodoStringCastOptions::BodoStringCastOptions(arrow::TypeHolder to_type,
+                                             bool emit_null_on_failure)
+    : arrow::compute::FunctionOptions(&kBodoStringCastOptionsType),
+      to_type(to_type),
+      emit_null_on_failure(emit_null_on_failure) {}
+
 struct BodoStringCastState : public arrow::compute::KernelState {
     std::shared_ptr<arrow::DataType> target_type;
-    // Later, Arrow's CastOptions will be replaced with a specialized options
-    // class for this kernel
-    arrow::compute::CastOptions options;
-    // Placeholder until we have a dedicated options class
-    bool emit_null_on_failure = true;
+    BodoStringCastOptions options;
 
     BodoStringCastState(std::shared_ptr<arrow::DataType> type,
-                        arrow::compute::CastOptions opts)
+                        BodoStringCastOptions opts)
         : target_type(std::move(type)), options(std::move(opts)) {}
 };
 
 arrow::Result<std::unique_ptr<arrow::compute::KernelState>> InitTryCast(
     arrow::compute::KernelContext* ctx,
     const arrow::compute::KernelInitArgs& args) {
-    // Safely cast the generic FunctionOptions to CastOptions
+    // Safely cast the generic FunctionOptions to BodoStringCastOptions
     const auto* cast_options =
-        dynamic_cast<const arrow::compute::CastOptions*>(args.options);
+        dynamic_cast<const BodoStringCastOptions*>(args.options);
     if (!cast_options) {
-        return arrow::Status::Invalid("CastOptions are required.");
+        return arrow::Status::Invalid("BodoStringCastOptions are required.");
     }
 
-    // TODO: Throw an error if other cast options are provided
-
-    // Extract the target type from CastOptions
+    // Extract the target type from BodoStringCastOptions
     std::shared_ptr<arrow::DataType> target_type =
         cast_options->to_type.GetSharedPtr();
     if (!target_type) {
         return arrow::Status::Invalid(
-            "target type (CastOptions.to_type) must be specified.");
+            "target type (BodoStringCastOptions.to_type) must be specified.");
     }
 
     // Return our custom state wrapping the options
@@ -1819,7 +1906,7 @@ struct BodoStringCastVisitor {
     template <typename ParseFunc, typename OutputSetter>
     arrow::Status ParseValues(ParseFunc parse_func, OutputSetter set_output) {
         auto* state = static_cast<BodoStringCastState*>(ctx->state());
-        bool emit_null_on_failure = state->emit_null_on_failure;
+        bool emit_null_on_failure = state->options.emit_null_on_failure;
 
         // GetValues accounts for the ArraySpan offset, so we don't need to
         // account for it when indexing into input_offsets or input_data
@@ -2011,7 +2098,7 @@ arrow::Result<arrow::TypeHolder> ResolveCastTargetType(
     }
 
     // Return the target type in the BodoStringCastState which comes from
-    // CastOptions
+    // BodoStringCastOptions
     return arrow::TypeHolder(state->target_type);
 }
 
@@ -2025,7 +2112,7 @@ void RegisterBodoStringCast(arrow::compute::FunctionRegistry* registry) {
             "are coerced to NULL if the `emit_null_on_failure` option is set "
             "to true.",
             {"str_array"},
-            "CastOptions"});
+            "BodoStringCastOptions"});
 
     // Use arrow::compute::OutputType(ResolveCastTargetType) for dynamic mapping
     arrow::compute::ScalarKernel kernel(
@@ -2058,6 +2145,13 @@ void EnsureBodoStringCastRegistered() {
     std::call_once(once_flag_, [&]() {
         auto* registry = arrow::compute::GetFunctionRegistry();
         RegisterBodoStringCast(registry);
+        arrow::Status add_options_type_status =
+            registry->AddFunctionOptionsType(&kBodoStringCastOptionsType);
+        if (!add_options_type_status.ok()) {
+            throw std::runtime_error(
+                "Failed to add BodoStringCastOptionsType to Arrow function "
+                "registry.");
+        }
     });
 }
 

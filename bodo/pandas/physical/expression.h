@@ -266,6 +266,14 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     const std::shared_ptr<arrow::DataType> &return_type);
 
 /**
+ * @brief Convert ExprResult to arrow and cast using the provided
+ * `cast_options`, which must contain the target type.
+ */
+std::shared_ptr<array_info> do_arrow_compute_cast(
+    std::shared_ptr<ExprResult> left_res,
+    const arrow::compute::FunctionOptions *cast_options);
+
+/**
  * @brief Convert ExprResult to arrow and run case compute on them.
  *
  */
@@ -294,11 +302,22 @@ arrow::Datum do_arrow_compute_binary(
     const std::shared_ptr<arrow::DataType> result_type = nullptr);
 
 /**
- * @brief Run cast on arrow Datum.
+ * @brief Run cast on arrow Datum using Bodo default cast options.
  *
  */
 arrow::Datum do_arrow_compute_cast(
     arrow::Datum left_res, const std::shared_ptr<arrow::DataType> &return_type);
+
+/**
+ * @brief Run cast on an Arrow Datum using the provided `cast_options`, which
+ * must be an instance of arrow::compute::CastOptions or BodoStringCastOptions
+ * with the `to_type` field filled in. `arrow::compute::Cast` is called if
+ * `cast_options` is an instance of arrow::compute::CastOptions, and
+ * bodo_string_cast is called if `cast_options` is an instance of
+ * BodoStringCastOptions.
+ */
+arrow::Datum do_arrow_compute_cast(
+    arrow::Datum left_res, const arrow::compute::FunctionOptions *cast_options);
 
 /**
  * @brief Physical expression tree node type for comparisons resulting in
@@ -832,15 +851,32 @@ class PhysicalConjunctionExpression : public PhysicalExpression {
 };
 
 /**
+ * @bnief Options class for the bodo_string_cast kernel
+ *
+ */
+class BodoStringCastOptions : public arrow::compute::FunctionOptions {
+   public:
+    explicit BodoStringCastOptions(arrow::TypeHolder to_type,
+                                   bool emit_null_on_failure = false);
+    BodoStringCastOptions();
+
+    static constexpr const char kTypeName[] = "BodoStringCastOptions";
+
+    arrow::TypeHolder to_type;
+    bool emit_null_on_failure = false;
+};
+
+/**
  * @brief Physical expression tree node type for casting.
  *
  */
 class PhysicalCastExpression : public PhysicalExpression {
    public:
-    PhysicalCastExpression(std::shared_ptr<PhysicalExpression> left,
-                           std::shared_ptr<arrow::DataType> _return_type)
+    PhysicalCastExpression(
+        std::shared_ptr<PhysicalExpression> left,
+        std::unique_ptr<arrow::compute::FunctionOptions> _cast_opts)
         : PhysicalExpression(PhysicalExpressionType::CAST),
-          return_type(_return_type) {
+          cast_opts(std::move(_cast_opts)) {
         children.push_back(left);
     }
 
@@ -855,7 +891,7 @@ class PhysicalCastExpression : public PhysicalExpression {
         // Process child first.
         std::shared_ptr<ExprResult> left_res =
             children[0]->ProcessBatch(input_batch);
-        auto result = do_arrow_compute_cast(left_res, return_type);
+        auto result = do_arrow_compute_cast(left_res, cast_opts.get());
         auto left_as_scalar =
             std::dynamic_pointer_cast<ScalarExprResult>(left_res);
         if (left_as_scalar) {
@@ -871,11 +907,11 @@ class PhysicalCastExpression : public PhysicalExpression {
         arrow::Datum left_datum = children[0]->join_expr_internal(
             left_table, right_table, left_data, right_data, left_null_bitmap,
             right_null_bitmap, left_index, right_index);
-        return do_arrow_compute_cast(left_datum, return_type);
+        return do_arrow_compute_cast(left_datum, cast_opts.get());
     }
 
    protected:
-    std::shared_ptr<arrow::DataType> return_type;
+    std::unique_ptr<arrow::compute::FunctionOptions> cast_opts;
 };
 
 /**
