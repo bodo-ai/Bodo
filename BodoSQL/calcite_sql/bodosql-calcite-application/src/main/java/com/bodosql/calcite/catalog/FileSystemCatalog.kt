@@ -20,6 +20,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.LocalFileSystem
 import org.apache.hadoop.fs.Path
+import org.apache.iceberg.exceptions.NoSuchTableException
 import org.apache.iceberg.hadoop.HadoopCatalog
 import org.apache.iceberg.hadoop.Util
 import org.apache.iceberg.util.LocationUtil
@@ -166,15 +167,18 @@ class FileSystemCatalog(
      *
      * @param schemaPath The list of schemas to traverse before finding the table.
      * @param tableName Name of the table.
-     * @return The table object.
+     * @return The table object, or null if there is no such table.
      */
     override fun getTable(
         schemaPath: ImmutableList<String>,
         tableName: String,
-    ): CatalogTable {
-        val columns = getIcebergTableColumns(schemaPath, tableName)
-        return IcebergCatalogTable(tableName, schemaPath, columns, this)
-    }
+    ): CatalogTable? =
+        try {
+            val columns = getIcebergTableColumns(schemaPath, tableName)
+            IcebergCatalogTable(tableName, schemaPath, columns, this)
+        } catch (_: NoSuchTableException) {
+            null
+        }
 
     /**
      * Get the available subSchema names for the given path.

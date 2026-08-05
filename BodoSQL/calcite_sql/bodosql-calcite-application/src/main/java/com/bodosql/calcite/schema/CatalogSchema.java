@@ -85,7 +85,7 @@ public class CatalogSchema extends BodoSqlSchema {
    * schema depth doesn't contain any tables.
    *
    * @param name Name of the table to load.
-   * @return Table object.
+   * @return Table object or null if there is no such table.
    */
   @Override
   public CatalogTable getTable(String name) {
@@ -96,10 +96,7 @@ public class CatalogSchema extends BodoSqlSchema {
       return this.tableMap.get(name);
     }
     CatalogTable table = this.catalog.getTable(getFullPath(), name);
-    if (table == null) {
-      throw new RuntimeException(
-          String.format("Table %s not found in Schema %s.", name, this.getName()));
-    } else {
+    if (table != null) {
       this.tableMap.put(name, table);
     }
     return table;
@@ -129,7 +126,7 @@ public class CatalogSchema extends BodoSqlSchema {
    * subSchemas then it returns an empty Set.
    *
    * @param schemaName Name of the subSchema.
-   * @return The subSchema object.
+   * @return The subSchema object or null if there is no such subSchema.
    */
   @Override
   public CatalogSchema getSubSchema(String schemaName) {
@@ -140,10 +137,7 @@ public class CatalogSchema extends BodoSqlSchema {
       return this.subSchemaMap.get(schemaName);
     }
     CatalogSchema schema = this.catalog.getSchema(getFullPath(), schemaName);
-    if (schema == null) {
-      throw new RuntimeException(
-          String.format("Schema %s not found in Schema %s.", schemaName, this.getName()));
-    } else {
+    if (schema != null) {
       this.subSchemaMap.put(schemaName, schema);
     }
     return schema;
