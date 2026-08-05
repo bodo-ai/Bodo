@@ -2062,6 +2062,9 @@ static std::pair<int, int> precision_scale_from_double_array(
     int out_precision = -1, out_scale = -1;
     int one_precision, one_scale;
 
+    if (n == 0) {
+        return {1, 0};
+    }
     for (int64_t i = 0; i < n; ++i) {
         if (arr->IsNull(i)) {
             continue;
