@@ -706,7 +706,7 @@ arrow::Datum do_arrow_compute_binary(
                 "do_arrow_compute_binary decimal operator not supported with "
                 "scalar yet for right arg");
         }
-        int p1, s1, p2, s2;
+        int p1, s1, l1, p2, s2, l2;
         if (left_is_decimal) {
             auto left_dec_type =
                 std::static_pointer_cast<arrow::Decimal128Type>(
@@ -726,6 +726,9 @@ arrow::Datum do_arrow_compute_binary(
             std::tie(p2, s2) = getPrecisionScaleNonDecimal(right_res);
         }
 
+        l1 = p1 - s1;
+        l2 = p2 - s2;
+
         int result_precision = 0;
         int result_scale = 0;
 
@@ -741,7 +744,7 @@ arrow::Datum do_arrow_compute_binary(
             // scale = max(s1, s2)
             // precision = max(p1 - s1, p2 - s2) + scale + 1
             result_scale = std::max(s1, s2);
-            result_precision = std::max(p1 - s1, p2 - s2) + result_scale + 1;
+            result_precision = std::max(l1, l2) + result_scale + 1;
         } else if (op == "multiply") {
             // Snowflake rule:
             // precision = p1 + p2
@@ -753,7 +756,12 @@ arrow::Datum do_arrow_compute_binary(
             // scale = max(6, s1 + p2 + 1)
             // precision = p1 - s1 + s2 + scale
             result_scale = std::max(6, s1 + p2 + 1);
-            result_precision = p1 - s1 + s2 + result_scale;
+            result_precision = l1 + s2 + result_scale;
+        } else if (op == "equal" || op == "not_equal" || op == "less" ||
+                   op == "greater" || op == "less_equal" ||
+                   op == "greater_equal") {
+            result_scale = std::max(s1, s2);
+            result_precision = std::max(l1, l2) + result_scale;
         } else {
             // Not a decimal arithmetic op we know; fall back to normal
             // CallFunction (or you can throw) fall through to normal path below
@@ -762,10 +770,10 @@ arrow::Datum do_arrow_compute_binary(
 
         if (result_precision > 38) {
             if (!left_is_decimal) {
-                left_res = ConvertIntArrayToDecimal128(left_res, p1, s1);
+                left_res = ConvertArrayToDecimal128(left_res, p1, s1);
             }
             if (!right_is_decimal) {
-                right_res = ConvertIntArrayToDecimal128(right_res, p2, s2);
+                right_res = ConvertArrayToDecimal128(right_res, p2, s2);
             }
             // Use decimal_arithmetic elementwise with overflow checking
             return decimal_arithmetic(left_res, right_res, op, 38, result_scale,

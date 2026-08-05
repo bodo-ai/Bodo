@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include <arrow/array/builder_decimal.h>
+#include <arrow/array/builder_primitive.h>
 #include <arrow/compute/cast.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/util/bit_util.h>
@@ -2955,6 +2956,93 @@ void decimal_to_str(uint64_t in_low, int64_t in_high, NRT_MemInfo** meminfo_ptr,
     *meminfo_ptr = meminfo;
 }
 
+// -------------------Decimal comparisons ---------------------------------
+
+template <auto Op, bool fast, bool rescale_left, bool rescale_right>
+inline void compare_decimal_scalars(const arrow::Decimal128& d1,
+                                    const arrow::Decimal128& d2, int64_t s1,
+                                    int64_t s2, int64_t out_scale,
+                                    bool* overflow, bool* result) {
+    if constexpr (fast) {
+        arrow::Decimal128 lhs = d1;
+        arrow::Decimal128 rhs = d2;
+        // Ensure the two decimals have the same scale
+        if constexpr (rescale_left) {
+            lhs = d1.Rescale(s1, out_scale).ValueOrDie();
+        }
+        if constexpr (rescale_right) {
+            rhs = d2.Rescale(s2, out_scale).ValueOrDie();
+        }
+        *result = Op(lhs, rhs);
+    } else {
+        // Ensure the two decimals have the same scale (but are first upcasted
+        // to 256)
+        auto lhs = decimalops::ConvertToInt256(d1);
+        auto rhs = decimalops::ConvertToInt256(d2);
+        if constexpr (rescale_left) {
+            lhs = decimalops::IncreaseScaleBy(lhs, out_scale - s1);
+        }
+        if constexpr (rescale_right) {
+            rhs = decimalops::IncreaseScaleBy(rhs, out_scale - s2);
+        }
+        *result = Op(lhs, rhs);
+    }
+}
+
+/**
+ * @brief Compare two decimal scalars with the given precision and scale
+ * and return the output. If overflow is detected, then the overflow
+ * need to be updated to true.
+ *
+ * @param v1 First decimal value
+ * @param p1 Precision of first decimal value
+ * @param s1 Scale of first decimal value
+ * @param v2 Second decimal value
+ * @param p2 Precision of second decimal value
+ * @param s2 Scale of second decimal value
+ * @param out_precision Output precision
+ * @param out_scale Output scale
+ * @param do_addition True if we are adding the two decimals, false if we are
+ *                    subtracting them.
+ * @param[out] overflow Overflow flag
+ * @return bool
+ */
+template <auto Op>
+bool compare_decimal_scalars_util(arrow::Decimal128 v1, int64_t p1, int64_t s1,
+                                  arrow::Decimal128 v2, int64_t p2, int64_t s2,
+                                  int64_t out_precision, int64_t out_scale,
+                                  bool* overflow) {
+    bool fast = out_precision < decimalops::kMaxPrecision;
+    bool result;
+    if (fast) {
+        if (s1 < s2) {
+            compare_decimal_scalars<Op, true, true, false>(
+                v1, v2, s1, s2, out_scale, overflow, &result);
+        } else if (s2 < s1) {
+            compare_decimal_scalars<Op, true, false, true>(
+                v1, v2, s1, s2, out_scale, overflow, &result);
+        } else {
+            compare_decimal_scalars<Op, true, false, false>(
+                v1, v2, s1, s2, out_scale, overflow, &result);
+        }
+    } else {
+        if (s1 < s2) {
+            compare_decimal_scalars<Op, false, true, false>(
+                v1, v2, s1, s2, out_scale, overflow, &result);
+        } else if (s2 < s1) {
+            compare_decimal_scalars<Op, false, false, true>(
+                v1, v2, s1, s2, out_scale, overflow, &result);
+        } else {
+            compare_decimal_scalars<Op, false, false, false>(
+                v1, v2, s1, s2, out_scale, overflow, &result);
+        }
+    }
+
+    return result;
+}
+
+// -------------------Decimal comparisons ---------------------------------
+
 template <size_t N>
 struct ct_string {
     char value[N];
@@ -3040,6 +3128,58 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic(
     return out_arr;
 }
 
+template <auto Op>
+std::shared_ptr<arrow::Array> arrow_array_boolean_op(
+    std::shared_ptr<arrow::Decimal128Array> left_arr, int left_precision,
+    int left_scale, std::shared_ptr<arrow::Decimal128Array> right_arr,
+    int right_precision, int right_scale, int length, int result_precision,
+    int result_scale) {
+    arrow::Status status;
+    bool overflow = false;
+    arrow::BooleanBuilder builder;
+    status = builder.Reserve(length);
+    if (!status.ok()) {
+        throw std::runtime_error(
+            "arrow_array_decimal_arithmetic error in builder.Reserve");
+    }
+
+    bool result;
+    // Iterate elements
+    for (int64_t i = 0; i < length; ++i) {
+        if (left_arr->IsNull(i) || right_arr->IsNull(i)) {
+            status = builder.AppendNull();
+            if (!status.ok()) {
+                throw std::runtime_error(
+                    "arrow_array_decimal_arithmetic error in AppendNull");
+            }
+        }
+        auto left_bytes = left_arr->GetValue(i);
+        auto right_bytes = right_arr->GetValue(i);
+        arrow::Decimal128 left_val(left_bytes);
+        arrow::Decimal128 right_val(right_bytes);
+
+        result = compare_decimal_scalars_util<Op>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale, &overflow);
+
+        if (overflow) {
+            return nullptr;
+        }
+        status = builder.Append(result);
+        if (!status.ok()) {
+            throw std::runtime_error(
+                "arrow_array_decimal_arithmetic error in Append");
+        }
+    }
+    std::shared_ptr<arrow::Array> out_arr;
+    status = builder.Finish(&out_arr);
+    if (!status.ok()) {
+        throw std::runtime_error(
+            "arrow_array_decimal_arithmetic error in builder.Finish");
+    }
+    return out_arr;
+}
+
 std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic_util(
     std::shared_ptr<arrow::Decimal128Array> left_arr, int left_precision,
     int left_scale, std::shared_ptr<arrow::Decimal128Array> right_arr,
@@ -3059,6 +3199,30 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic_util(
             right_scale, length, result_precision, result_scale);
     } else if (op == "divide") {
         return arrow_array_decimal_arithmetic<"divide">(
+            left_arr, left_precision, left_scale, right_arr, right_precision,
+            right_scale, length, result_precision, result_scale);
+    } else if (op == "equal") {
+        return arrow_array_boolean_op<std::equal_to<>{}>(
+            left_arr, left_precision, left_scale, right_arr, right_precision,
+            right_scale, length, result_precision, result_scale);
+    } else if (op == "not_equal") {
+        return arrow_array_boolean_op<std::not_equal_to<>{}>(
+            left_arr, left_precision, left_scale, right_arr, right_precision,
+            right_scale, length, result_precision, result_scale);
+    } else if (op == "less") {
+        return arrow_array_boolean_op<std::less<>{}>(
+            left_arr, left_precision, left_scale, right_arr, right_precision,
+            right_scale, length, result_precision, result_scale);
+    } else if (op == "greater") {
+        return arrow_array_boolean_op<std::greater<>{}>(
+            left_arr, left_precision, left_scale, right_arr, right_precision,
+            right_scale, length, result_precision, result_scale);
+    } else if (op == "less_equal") {
+        return arrow_array_boolean_op<std::less_equal<>{}>(
+            left_arr, left_precision, left_scale, right_arr, right_precision,
+            right_scale, length, result_precision, result_scale);
+    } else if (op == "greater_equal") {
+        return arrow_array_boolean_op<std::greater_equal<>{}>(
             left_arr, left_precision, left_scale, right_arr, right_precision,
             right_scale, length, result_precision, result_scale);
     } else {

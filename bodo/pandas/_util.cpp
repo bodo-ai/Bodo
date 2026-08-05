@@ -9,7 +9,11 @@
 #include <arrow/table.h>
 #include <arrow/type_fwd.h>
 #include <arrow/util/decimal.h>
+#include <iomanip>
+#include <limits>
 #include <memory>
+#include <sstream>
+#include <utility>
 #include "../io/arrow_compat.h"
 #include "../libs/_utils.h"
 #include "_plan.h"
@@ -1934,6 +1938,171 @@ size_t col_ref_map_lookup(
     return iter->second;
 }
 
+static std::string SciToFixed(const std::string &s) {
+    // Find exponent marker
+    size_t epos = s.find_first_of("eE");
+    if (epos == std::string::npos)
+        return s;
+
+    bool neg = false;
+    size_t pos = 0;
+
+    // Handle sign
+    if (s[pos] == '+' || s[pos] == '-') {
+        neg = (s[pos] == '-');
+        pos++;
+    }
+
+    // Mantissa
+    std::string mant = s.substr(pos, epos - pos);
+    std::string exp_str = s.substr(epos + 1);
+
+    int exp = std::stoi(exp_str);
+
+    // Split mantissa
+    std::string int_part, frac_part;
+    size_t dot = mant.find('.');
+    if (dot == std::string::npos) {
+        int_part = mant;
+    } else {
+        int_part = mant.substr(0, dot);
+        frac_part = mant.substr(dot + 1);
+    }
+
+    // Combine digits
+    std::string digits = int_part + frac_part;
+    if (digits.empty())
+        digits = "0";
+
+    int cur_pos = static_cast<int>(int_part.size());
+    int new_pos = cur_pos + exp;
+
+    std::string out;
+    out.reserve(digits.size() + 32);
+
+    if (new_pos <= 0) {
+        out = "0.";
+        out.append(static_cast<size_t>(-new_pos), '0');
+        out += digits;
+    } else if (new_pos >= static_cast<int>(digits.size())) {
+        out = digits;
+        out.append(static_cast<size_t>(new_pos - digits.size()), '0');
+    } else {
+        out = digits.substr(0, new_pos);
+        out.push_back('.');
+        out += digits.substr(new_pos);
+    }
+
+    if (neg)
+        out.insert(out.begin(), '-');
+    return out;
+}
+
+static std::pair<int, int> precision_scale_from_double(double value) {
+    if (std::isnan(value)) {
+        throw std::invalid_argument("NaN has no decimal precision/scale");
+    }
+    if (std::isinf(value)) {
+        throw std::invalid_argument("Infinity has no decimal precision/scale");
+    }
+
+    // Produce the shortest round-trip decimal representation for the double.
+    // Use max_digits10 to ensure round-trip safety.
+    std::ostringstream oss;
+    oss << std::setprecision(std::numeric_limits<double>::max_digits10)
+        << std::defaultfloat << value;
+    std::string s = oss.str();
+
+    if (s.find_first_of("eE") != std::string::npos) {
+        s = SciToFixed(s);
+    }
+
+    // Remove leading sign if present
+    if (!s.empty() && (s[0] == '+' || s[0] == '-'))
+        s.erase(0, 1);
+
+    // Ensure we have a decimal point explicitly for consistent handling
+    // (if no decimal point, treat frac_part as empty)
+    std::string int_part;
+    std::string frac_part;
+    auto dotpos = s.find('.');
+    if (dotpos == std::string::npos) {
+        int_part = s;
+    } else {
+        int_part = s.substr(0, dotpos);
+        frac_part = s.substr(dotpos + 1);
+    }
+
+    // Normalize integer part: if empty (shouldn't happen), treat as "0"
+    if (int_part.empty())
+        int_part = "0";
+
+    int scale = static_cast<int>(frac_part.size());
+
+    // integer digits: count digits in integer part after stripping leading
+    // zeros but treat "0" as 1 digit
+    size_t first_nonzero = int_part.find_first_not_of('0');
+    int int_digits = 0;
+    if (first_nonzero == std::string::npos) {
+        // integer part is all zeros
+        int_digits = 1;
+    } else {
+        int_digits = static_cast<int>(int_part.size() - first_nonzero);
+    }
+
+    int precision = int_digits + scale;
+    return {precision, scale};
+}
+
+static std::pair<int, int> precision_scale_from_double_array(
+    std::shared_ptr<arrow::Array> arr) {
+    int64_t n = arr->length();
+
+    arrow::Status status;
+    int out_precision = -1, out_scale = -1;
+    int one_precision, one_scale;
+
+    for (int64_t i = 0; i < n; ++i) {
+        if (arr->IsNull(i)) {
+            continue;
+        }
+
+        switch (arr->type_id()) {
+            case arrow::Type::FLOAT:
+                std::tie(one_precision, one_scale) =
+                    precision_scale_from_double(
+                        std::static_pointer_cast<arrow::FloatArray>(arr)->Value(
+                            i));
+                break;
+            case arrow::Type::DOUBLE:
+                std::tie(one_precision, one_scale) =
+                    precision_scale_from_double(
+                        std::static_pointer_cast<arrow::DoubleArray>(arr)
+                            ->Value(i));
+                break;
+            default:
+                throw std::runtime_error(
+                    "precision_scale_from_double unsupported array type " +
+                    arr->type()->ToString());
+        }
+
+        if (one_precision > out_precision) {
+            out_precision = one_precision;
+        }
+        if (one_scale > out_scale) {
+            out_scale = one_scale;
+        }
+    }
+
+    if (out_precision == -1 || out_scale == -1) {
+        throw std::runtime_error(
+            "precision_scale_from_double_array output precision or scale is "
+            "missing.");
+    }
+
+    return {out_precision, out_scale};
+}
+
 std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input) {
     auto id = input.type()->id();
     switch (id) {
@@ -1949,14 +2118,18 @@ std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input) {
         case arrow::Type::INT64:
         case arrow::Type::UINT64:
             return std::make_pair<int, int>(19, 0);
+        case arrow::Type::FLOAT:
+        case arrow::Type::DOUBLE:
+            return precision_scale_from_double_array(input.make_array());
         default:
             throw std::runtime_error(
-                "getPrecisionScaleNonDecimal unsupported type");
+                "getPrecisionScaleNonDecimal unsupported type " +
+                input.type()->ToString());
     }
 }
 
-arrow::Datum ConvertIntArrayToDecimal128(const arrow::Datum &input,
-                                         int32_t precision, int32_t scale) {
+arrow::Datum ConvertArrayToDecimal128(const arrow::Datum &input,
+                                      int32_t precision, int32_t scale) {
     if (!input.is_array()) {
         throw std::runtime_error("Expected array datum");
     }
@@ -1983,36 +2156,55 @@ arrow::Datum ConvertIntArrayToDecimal128(const arrow::Datum &input,
             continue;
         }
 
-        int64_t value = 0;
-
         switch (arr->type_id()) {
             case arrow::Type::INT32:
-                value =
-                    std::static_pointer_cast<arrow::Int32Array>(arr)->Value(i);
+                status = builder.Append(arrow::Decimal128(
+                    std::static_pointer_cast<arrow::Int32Array>(arr)->Value(
+                        i)));
                 break;
             case arrow::Type::INT64:
-                value =
-                    std::static_pointer_cast<arrow::Int64Array>(arr)->Value(i);
+                status = builder.Append(arrow::Decimal128(
+                    std::static_pointer_cast<arrow::Int64Array>(arr)->Value(
+                        i)));
                 break;
             case arrow::Type::UINT32:
-                value =
-                    std::static_pointer_cast<arrow::UInt32Array>(arr)->Value(i);
+                status = builder.Append(arrow::Decimal128(
+                    std::static_pointer_cast<arrow::UInt32Array>(arr)->Value(
+                        i)));
                 break;
             case arrow::Type::UINT64:
-                // value = static_cast<int64_t>(
-                value =
-                    std::static_pointer_cast<arrow::UInt64Array>(arr)->Value(i);
+                status = builder.Append(arrow::Decimal128(
+                    std::static_pointer_cast<arrow::UInt64Array>(arr)->Value(
+                        i)));
                 break;
+            case arrow::Type::FLOAT: {
+                float val =
+                    std::static_pointer_cast<arrow::FloatArray>(arr)->Value(i);
+                auto res = arrow::Decimal128::FromReal(val, precision, scale);
+                if (!res.ok()) {
+                    throw std::runtime_error(
+                        "ConvertArrayToDecimal128 converting float to decimal "
+                        "failed");
+                }
+                status = builder.Append(*res);
+            } break;
+            case arrow::Type::DOUBLE: {
+                double val =
+                    std::static_pointer_cast<arrow::DoubleArray>(arr)->Value(i);
+                auto res = arrow::Decimal128::FromReal(val, precision, scale);
+                if (!res.ok()) {
+                    throw std::runtime_error(
+                        "ConvertArrayToDecimal128 converting double to decimal "
+                        "failed");
+                }
+                status = builder.Append(*res);
+            } break;
             default:
-                throw std::runtime_error("Unsupported integer array type");
+                throw std::runtime_error(
+                    "ConvertArrayToDecimal128 unsupported array type " +
+                    arr->type()->ToString());
         }
 
-        arrow::Decimal128 dec(value);
-        // if (scale > 0) {
-        //     dec *= arrow::Decimal128::GetScaleMultiplier(scale);
-        // }
-
-        status = builder.Append(dec);
         if (!status.ok()) {
             throw std::runtime_error(
                 "ConvertIntArrayToDecimal128 Append failed.");
