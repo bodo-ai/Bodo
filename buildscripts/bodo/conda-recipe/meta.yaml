@@ -46,9 +46,6 @@ requirements:
     - {{ compiler('cxx') }}
     - sccache
     - mold  # [linux]
-    # Restrict gcc version to <16 for compatibility with mold.
-    - gcc_impl_linux-64 <16 # [linux]
-    - gxx_impl_linux-64 <16 # [linux]
     - cmake <4.0,>=3.23
     - make
     - ninja
