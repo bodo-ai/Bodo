@@ -1020,15 +1020,18 @@ class CaseExpression(Expression):
 class CastExpression(Expression):
     """
     Expression representing a type cast in the query plan.
+    The `empty_data` type is used as the target type.
+
     `cast_opts` is an instance of `pyarrow.compute.FunctionOptions`,
     either `CastOptions` or `BodoStringOptions` to signify
     which cast compute function shoud be called.
     """
 
-    class CastOptions(pa.compute.CastOptions):
+    class CastOptions(plan_optimizer._CastOptions):
         """
-        A subclass of Arrow's CastOptions that attempts to hide the
-        target_type parameter to avoid accidental discrepancies
+        A subclass of _CastOptions for easier construction.
+        The target type cannot be set through this Python
+        wrapper. This is to avoid accidental discrepancies
         between to_type in CastOptions and schema type.
 
         The allow_int_overflow and allow_float_truncate options are
@@ -1046,14 +1049,19 @@ class CastExpression(Expression):
             allow_float_truncate=True,
             allow_invalid_utf8=None,
         ):
-            super().__init__(
-                allow_int_overflow=allow_int_overflow,
-                allow_time_truncate=allow_time_truncate,
-                allow_time_overflow=allow_time_overflow,
-                allow_decimal_truncate=allow_decimal_truncate,
-                allow_float_truncate=allow_float_truncate,
-                allow_invalid_utf8=allow_invalid_utf8,
-            )
+            super().__init__()
+            if allow_int_overflow is not None:
+                self.allow_int_overflow = allow_int_overflow
+            if allow_time_truncate is not None:
+                self.allow_time_truncate = allow_time_truncate
+            if allow_time_overflow is not None:
+                self.allow_time_overflow = allow_time_overflow
+            if allow_decimal_truncate is not None:
+                self.allow_decimal_truncate = allow_decimal_truncate
+            if allow_float_truncate is not None:
+                self.allow_float_truncate = allow_float_truncate
+            if allow_invalid_utf8 is not None:
+                self.allow_invalid_utf8 = allow_invalid_utf8
 
         @classmethod
         def safe(cls):
@@ -1096,7 +1104,7 @@ class CastExpression(Expression):
             # Use regular Arrow casting if no cast options are given
             cast_opts = CastExpression.CastOptions()
 
-        # target type is assigned in plan_optimizer.pyx
+        # target type is assigned in make_cast_expr in _plan.cpp
 
         self.cast_opts = cast_opts
         super().__init__(empty_data, source_expr, cast_opts)

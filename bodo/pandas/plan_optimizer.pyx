@@ -23,8 +23,8 @@ import bodo
 import decimal
 
 from pyarrow._compute cimport FunctionOptions
-from pyarrow.lib cimport DataType
-from pyarrow.includes.libarrow cimport CDataType, CFunctionOptions
+from pyarrow.lib cimport pyarrow_wrap_data_type, pyarrow_unwrap_data_type
+from pyarrow.includes.libarrow cimport CDataType, CFunctionOptions, CCastOptions
 
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
@@ -34,18 +34,8 @@ ctypedef pair[int, int] int_pair
 cdef extern from "<arrow/python/pyarrow.h>" namespace "arrow::py" nogil:
     int import_pyarrow()
 
-cdef extern from "arrow/compute/api.h" namespace "arrow::compute" nogil:
-    cdef cppclass CCastOptions" arrow::compute::CastOptions"(CFunctionOptions):
-        # NOTE: Arrow's own CCastOptions defines to_type as shared_ptr[CDataType]
-        # instead of as TypeHolder which is how C++ CastOptions declares it.
-        # This discrepancy can lead to weird compilation issues where Cython
-        # expects one thing where C++ expects another, so we make a custom
-        # wrapper here to resolve this.
-        CTypeHolder to_type
-
 cdef extern from "arrow/type.h" namespace "arrow" nogil:
     cdef cppclass CTypeHolder "arrow::TypeHolder":
-        CTypeHolder() except +
         CTypeHolder(shared_ptr[CDataType]) except +
         shared_ptr[CDataType] GetSharedPtr() except +
 
@@ -54,6 +44,124 @@ cdef extern from "physical/expression.h" nogil:
         CBodoStringCastOptions() except +
         CTypeHolder to_type
         c_bool emit_null_on_failure
+
+cdef class _CastOptions(FunctionOptions):
+    """
+    _CastOptions is defined in arrow/python/pyarrow/_compute.pyx
+    but isn't declared in _compute.pxd, so we can't cimport it.
+    This makes it hard to write pickling logic, so our own version
+    of _CastOptions is below with some other modifications.
+    
+    Versus Arrow's _CastOptions, we don't define a _set_type()
+    method(). Our intention is that this wrapper class stores the
+    cast options aside from the target type, since our convention
+    is to use the schema type as the target type. Only on the C++
+    side is `to_type` filled in so that the CastOptions encapsulate
+    all the cast information.
+    """
+    cdef CCastOptions* options
+
+    def __init__(self):
+        cdef shared_ptr[CCastOptions] wrapped = make_shared[CCastOptions]()
+        FunctionOptions.init(self, <const shared_ptr[CFunctionOptions]> wrapped)
+        self.options = <CCastOptions*> self.wrapped.get()
+
+    def _set_safe(self):
+        self.init(shared_ptr[CFunctionOptions](
+            new CCastOptions(CCastOptions.Safe())))
+
+    def _set_unsafe(self):
+        self.init(shared_ptr[CFunctionOptions](
+            new CCastOptions(CCastOptions.Unsafe())))
+
+    def is_safe(self):
+        return not (deref(self.options).allow_int_overflow or
+                    deref(self.options).allow_time_truncate or
+                    deref(self.options).allow_time_overflow or
+                    deref(self.options).allow_decimal_truncate or
+                    deref(self.options).allow_float_truncate or
+                    deref(self.options).allow_invalid_utf8)
+
+    @property
+    def allow_int_overflow(self):
+        return deref(self.options).allow_int_overflow
+
+    @allow_int_overflow.setter
+    def allow_int_overflow(self, c_bool flag):
+        deref(self.options).allow_int_overflow = flag
+
+    @property
+    def allow_time_truncate(self):
+        return deref(self.options).allow_time_truncate
+
+    @allow_time_truncate.setter
+    def allow_time_truncate(self, c_bool flag):
+        deref(self.options).allow_time_truncate = flag
+
+    @property
+    def allow_time_overflow(self):
+        return deref(self.options).allow_time_overflow
+
+    @allow_time_overflow.setter
+    def allow_time_overflow(self, c_bool flag):
+        deref(self.options).allow_time_overflow = flag
+
+    @property
+    def allow_decimal_truncate(self):
+        return deref(self.options).allow_decimal_truncate
+
+    @allow_decimal_truncate.setter
+    def allow_decimal_truncate(self, c_bool flag):
+        deref(self.options).allow_decimal_truncate = flag
+
+    @property
+    def allow_float_truncate(self):
+        return deref(self.options).allow_float_truncate
+
+    @allow_float_truncate.setter
+    def allow_float_truncate(self, c_bool flag):
+        deref(self.options).allow_float_truncate = flag
+
+    @property
+    def allow_invalid_utf8(self):
+        return deref(self.options).allow_invalid_utf8
+
+    @allow_invalid_utf8.setter
+    def allow_invalid_utf8(self, c_bool flag):
+        deref(self.options).allow_invalid_utf8 = flag
+
+    def __reduce__(self):
+        state = self.__getstate__()
+        return (self.__class__, (), state)
+
+    # In the following code for pickling, we handle serializing
+    # to_type even though we never set it in Cython.
+
+    def __getstate__(self):
+        if self.options == NULL:
+            raise ValueError("CCastOptions pointer is unexpectedly NULL")
+        
+        # NOTE: Arrow's CCastOptions defines `to_type` as shared_ptr[CDataType]
+        # instead of as TypeHolder which is how C++ CastOptions declares it.
+        # To reconcile such that both the Cython and C++ builds pass, we wrap
+        # `to_type` in CTypeHolder which relies on TypeHolder having a copy
+        # constructor. Then we can get the actual CDataType.
+        cdef shared_ptr[CDataType] c_to_type = CTypeHolder(deref(self.options).to_type).GetSharedPtr()
+        py_to_type = pyarrow_wrap_data_type(c_to_type) if c_to_type.get() != NULL else None
+
+        serialized_dict = {"to_type": py_to_type}
+        for option_str in ["allow_int_overflow", "allow_time_truncate", "allow_time_overflow", "allow_decimal_truncate", "allow_float_truncate", "allow_invalid_utf8"]:
+            serialized_dict[option_str] = getattr(self, option_str, None)
+        return serialized_dict
+
+    def __setstate__(self, state):
+        self.__init__()
+        py_to_type = state["to_type"]
+        if py_to_type is not None:
+            deref(self.options).to_type = pyarrow_unwrap_data_type(py_to_type)
+        
+        for option_str in ["allow_int_overflow", "allow_time_truncate", "allow_time_overflow", "allow_decimal_truncate", "allow_float_truncate", "allow_invalid_utf8"]:
+            setattr(self, option_str, state[option_str])
 
 # The below structure is similar to how Arrow defines function options:
 # https://github.com/apache/arrow/blob/8e63098846b6216d76605bd627a2dd89615a5328/python/pyarrow/_compute.pyx#L680
@@ -66,10 +174,6 @@ cdef class _BodoStringCastOptions(FunctionOptions):
         FunctionOptions.init(self, <const shared_ptr[CFunctionOptions]> wrapped)
         self.options = <CBodoStringCastOptions*> self.wrapped.get()
 
-    def _set_type(self, target_type=None):
-        if target_type is not None:
-            deref(self.options).to_type = CTypeHolder((<DataType>target_type).sp_type)
-
     @property
     def emit_null_on_failure(self):
         return deref(self.options).emit_null_on_failure
@@ -77,6 +181,30 @@ cdef class _BodoStringCastOptions(FunctionOptions):
     @emit_null_on_failure.setter
     def emit_null_on_failure(self, c_bool flag):
         deref(self.options).emit_null_on_failure = flag
+
+    # In the following code for pickling, we handle serializing
+    # to_type even though we never set it in Cython.
+
+    def __reduce__(self):
+        state = self.__getstate__()
+        return (self.__class__, (), state)
+
+    def __getstate__(self):
+        if self.options == NULL:
+            raise ValueError("CBodoStringCastOptions pointer is unexpectedly NULL")
+        
+        cdef shared_ptr[CDataType] c_to_type = deref(self.options).to_type.GetSharedPtr()
+        py_to_type = pyarrow_wrap_data_type(c_to_type) if c_to_type.get() != NULL else None
+
+        serialized_dict = {"to_type": py_to_type, "emit_null_on_failure": self.emit_null_on_failure}
+        return serialized_dict
+
+    def __setstate__(self, state):
+        self.__init__()
+        py_to_type = state["to_type"]
+        if py_to_type is not None:
+            deref(self.options).to_type = CTypeHolder(pyarrow_unwrap_data_type(py_to_type))
+        self.emit_null_on_failure = state["emit_null_on_failure"]
 
 cdef extern from "duckdb/common/types.hpp" namespace "duckdb" nogil:
     cpdef enum class CLogicalTypeId "duckdb::LogicalTypeId":
@@ -419,7 +547,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
     cdef unique_ptr[CExpression] make_unaryop_expr(unique_ptr[CExpression] source, c_string opstr, object out_schema) except +
-    cdef unique_ptr[CExpression] make_cast_expr(unique_ptr[CExpression] source, object out_schema, shared_ptr[const CFunctionOptions] cast_opts) except +
+    cdef unique_ptr[CExpression] make_cast_expr(unique_ptr[CExpression] source, object out_schema, unique_ptr[CFunctionOptions] cast_opts) except +
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype, object out_schema) except +
     cdef unique_ptr[CExpression] make_case_expr(unique_ptr[CExpression] when, unique_ptr[CExpression] then, unique_ptr[CExpression] else_) except +
@@ -1088,36 +1216,17 @@ cdef class CastExpression(Expression):
 
         import_pyarrow()
 
-        # Get shared_ptr of the function options to pass. This way we ensure
-        # that the options are kept alive.
+        # Make a copy of the CFunctionOptions to pass to the C++ side.
+        # This way there aren't issues when reusing the same Python cast options
+        # object for multiple CastExpressions.
         cdef shared_ptr[CFunctionOptions] c_opts = (<FunctionOptions> cast_opts).unwrap()
-
-        cdef CTypeHolder to_type_holder
-        if isinstance(cast_opts, pa.compute.CastOptions):
-            to_type_holder = deref(static_pointer_cast[CCastOptions, CFunctionOptions](c_opts)).to_type
-        elif isinstance(cast_opts, _BodoStringCastOptions):
-            to_type_holder = deref(static_pointer_cast[CBodoStringCastOptions, CFunctionOptions](c_opts)).to_type
-        else:
-            # We don't expect to get here after the validation in plan.py
-            raise TypeError("Unexpected type of cast_opts in CastExpression")
-        cdef shared_ptr[CDataType] to_type = to_type_holder.GetSharedPtr()
-
-        schema_type = out_schema.field(0).type
-        if to_type != NULL:
-            # This case is unlikely since we try our best to hide the to_type field
-            # from the Python cast options API. We want to use the empty_data
-            # type to serve as the target type.
-            if not deref(to_type).Equals((<DataType> schema_type).sp_type, False):
-                raise ValueError(f"to_type ({deref(to_type).ToString()}) in cast options does not match the schema type ({str(schema_type)})")
-        else:
-            # Standard case: store the target type from the schema in the cast options
-            cast_opts._set_type(schema_type)
+        cdef unique_ptr[CFunctionOptions] c_opts_copy = deref(c_opts).Copy()
 
         self.out_schema = out_schema
         self.c_expression = make_cast_expr(
             source_expr,
             out_schema,
-            <shared_ptr[const CFunctionOptions]> c_opts)
+            move(c_opts_copy))
 
     def __str__(self):
         return f"CastExpression({self.out_schema})"

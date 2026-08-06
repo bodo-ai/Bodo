@@ -513,7 +513,7 @@ static duckdb::BoundCastInfo BindCastFunction(
 
 std::unique_ptr<duckdb::Expression> make_cast_expr(
     std::unique_ptr<duckdb::Expression> &source, PyObject *out_schema_py,
-    std::shared_ptr<const arrow::compute::FunctionOptions> cast_opts) {
+    std::unique_ptr<arrow::compute::FunctionOptions> cast_opts) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
@@ -527,10 +527,22 @@ std::unique_ptr<duckdb::Expression> make_cast_expr(
         std::move(source_duck), out_type,
         BindCastFunction(source_duck->return_type, out_type));
 
+    // Fill in the cast options target type with the schema field type.
+    // We expect the existing to_type to be null.
+    arrow::compute::CastOptions *as_cast_options =
+        dynamic_cast<arrow::compute::CastOptions *>(cast_opts.get());
+    if (as_cast_options) {
+        as_cast_options->to_type = field->type();
+    }
+    BodoStringCastOptions *as_bodo_string_cast_options =
+        dynamic_cast<BodoStringCastOptions *>(cast_opts.get());
+    if (as_bodo_string_cast_options) {
+        as_bodo_string_cast_options->to_type = field->type();
+    }
     // Store the Arrow cast options in the cast info. This also helps
     // track the original Arrow type to have full type information (e.g.
     // interval precision).
-    res->bound_cast.arrow_cast_opts = cast_opts;
+    res->bound_cast.arrow_cast_opts = std::move(cast_opts);
     return res;
 }
 
