@@ -107,9 +107,10 @@ class RootSchema {
                     rootMap[catalog] = newSchema
                     newSchema
                 }
-            // Wrap in a CachingCalciteSchema
-            val cachedSchema = CalciteSchema.createRootSchema(false, true, rootName, schema)
-            return cachedSchema.plus()
+            // Wrap in a SimpleCalciteSchema
+            // Disable caching because it can be very expensive to initially populate the cache for large schemas
+            val simpleSchema = CalciteSchema.createRootSchema(false, false, rootName, schema)
+            return simpleSchema.plus()
         }
     }
 }

@@ -13,10 +13,7 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.sql.ddl.CreateTableMetadata;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 
@@ -85,7 +82,7 @@ public class CatalogSchema extends BodoSqlSchema {
    * schema depth doesn't contain any tables.
    *
    * @param name Name of the table to load.
-   * @return Table object or null if there is no such table.
+   * @return Table object or null if not found.
    */
   @Override
   public CatalogTable getTable(String name) {
@@ -126,7 +123,7 @@ public class CatalogSchema extends BodoSqlSchema {
    * subSchemas then it returns an empty Set.
    *
    * @param schemaName Name of the subSchema.
-   * @return The subSchema object or null if there is no such subSchema.
+   * @return The subSchema object or null if not found.
    */
   @Override
   public CatalogSchema getSubSchema(String schemaName) {
@@ -136,10 +133,13 @@ public class CatalogSchema extends BodoSqlSchema {
     if (this.subSchemaMap.containsKey(schemaName)) {
       return this.subSchemaMap.get(schemaName);
     }
-    CatalogSchema schema = this.catalog.getSchema(getFullPath(), schemaName);
-    if (schema != null) {
-      this.subSchemaMap.put(schemaName, schema);
+
+    if (!getSubSchemaNames().contains(schemaName)) {
+      return null;
     }
+
+    CatalogSchema schema = this.catalog.getSchema(getFullPath(), schemaName);
+    this.subSchemaMap.put(schemaName, schema);
     return schema;
   }
 
