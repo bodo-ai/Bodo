@@ -3078,6 +3078,7 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic(
                 throw std::runtime_error(
                     "arrow_array_decimal_arithmetic error in AppendNull");
             }
+            continue;
         }
         auto left_bytes = left_arr->GetValue(i);
         auto right_bytes = right_arr->GetValue(i);
@@ -3110,9 +3111,9 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic(
                 op);
         }
 
-        if (overflow) {
-            return nullptr;
-        }
+        // if (overflow) {
+        //     return nullptr;
+        // }
         status = builder.Append(result128);
         if (!status.ok()) {
             throw std::runtime_error(
