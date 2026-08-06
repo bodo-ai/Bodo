@@ -1889,21 +1889,23 @@ struct BodoStringCastVisitor {
     }
 
     template <typename T>
-    typename arrow::enable_if_t<arrow::is_fixed_width_type<T>::value &&
-                                    arrow::has_c_type<T>::value &&
-                                    !arrow::is_boolean_type<T>::value &&
-                                    !arrow::is_half_float_type<T>::value &&
-                                    !arrow::is_decimal_type<T>::value &&
-                                    !arrow::is_interval_type<T>::value,
-                                arrow::Status>
-    Visit(const T& type) {
+    arrow::Status Visit(const T& type)
+        requires(arrow::is_fixed_width_type<T>::value &&
+                 arrow::has_c_type<T>::value &&
+                 !arrow::is_boolean_type<T>::value &&
+                 !arrow::is_half_float_type<T>::value &&
+                 !arrow::is_decimal_type<T>::value &&
+                 !arrow::is_interval_type<T>::value)
+    {
         using CType = typename T::c_type;
         return ParseValues(get_standard_parse_func<CType>(type),
                            get_standard_output_setter<CType>());
     }
 
     template <typename T>
-    typename arrow::enable_if_boolean<T, arrow::Status> Visit(const T& type) {
+    arrow::Status Visit(const T& type)
+        requires arrow::is_boolean_type<T>::value
+    {
         using CType = typename T::c_type;
         // Arrow booleans are bitpacked, so we need to apply the bit
         // offset ourselves and set individual bits.
@@ -1919,7 +1921,9 @@ struct BodoStringCastVisitor {
     }
 
     template <typename T>
-    typename arrow::enable_if_decimal<T, arrow::Status> Visit(const T& type) {
+    arrow::Status Visit(const T& type)
+        requires arrow::is_decimal_type<T>::value
+    {
         using DecimalType = typename arrow::TypeTraits<T>::CType;
         auto parse_func = [&type](const char* data,
                                   int64_t len) -> std::optional<DecimalType> {
@@ -1962,15 +1966,15 @@ struct BodoStringCastVisitor {
 
     // Fallback for unsupported types
     template <typename T>
-    typename arrow::enable_if_t<!((arrow::is_boolean_type<T>::value) ||
-                                  (arrow::is_decimal_type<T>::value) ||
-                                  (arrow::is_fixed_width_type<T>::value &&
-                                   arrow::has_c_type<T>::value &&
-                                   !arrow::is_half_float_type<T>::value &&
-                                   !arrow::is_decimal_type<T>::value &&
-                                   !arrow::is_interval_type<T>::value)),
-                                arrow::Status>
-    Visit(const T& type) {
+    arrow::Status Visit(const T& type)
+        requires(!((arrow::is_boolean_type<T>::value) ||
+                   (arrow::is_decimal_type<T>::value) ||
+                   (arrow::is_fixed_width_type<T>::value &&
+                    arrow::has_c_type<T>::value &&
+                    !arrow::is_half_float_type<T>::value &&
+                    !arrow::is_decimal_type<T>::value &&
+                    !arrow::is_interval_type<T>::value)))
+    {
         return arrow::Status::NotImplemented(
             "bodo_string_cast doesn't support the given target type " +
             type.ToString());
@@ -1989,7 +1993,7 @@ arrow::Status BodoStringCastGeneric(arrow::compute::KernelContext* ctx,
 
     // Call our string cast visitor which specializes the implementation
     // according to the target type.
-    BodoStringCastVisitor visitor{input, output, ctx};
+    BodoStringCastVisitor visitor{.input = input, .output = output, .ctx = ctx};
     arrow::Status result_status =
         arrow::VisitTypeInline(*out->type(), &visitor);
 
