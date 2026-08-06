@@ -14,7 +14,7 @@ import bodo.pandas
 import bodo.spawn.spawner as spawner
 
 
-def load_lineitem(data_folder: str, pd=bodo.pandas, use_parquet=False):
+def load_lineitem(data_folder: str, pd=bodo.pandas, use_parquet=True):
     if use_parquet:
         data_path = data_folder + "/lineitem.pq"
         df = pd.read_parquet(data_path, dtype_backend="pyarrow")
@@ -23,7 +23,7 @@ def load_lineitem(data_folder: str, pd=bodo.pandas, use_parquet=False):
     return df
 
 
-def load_part(data_folder: str, pd=bodo.pandas, use_parquet=False):
+def load_part(data_folder: str, pd=bodo.pandas, use_parquet=True):
     if use_parquet:
         data_path = data_folder + "/part.pq"
         df = pd.read_parquet(data_path, dtype_backend="pyarrow")
@@ -32,7 +32,7 @@ def load_part(data_folder: str, pd=bodo.pandas, use_parquet=False):
     return df
 
 
-def load_orders(data_folder: str, pd=bodo.pandas, use_parquet=False):
+def load_orders(data_folder: str, pd=bodo.pandas, use_parquet=True):
     if use_parquet:
         data_path = data_folder + "/orders.pq"
         df = pd.read_parquet(data_path, dtype_backend="pyarrow")
@@ -41,7 +41,7 @@ def load_orders(data_folder: str, pd=bodo.pandas, use_parquet=False):
     return df
 
 
-def load_customer(data_folder: str, pd=bodo.pandas, use_parquet=False):
+def load_customer(data_folder: str, pd=bodo.pandas, use_parquet=True):
     if use_parquet:
         data_path = data_folder + "/customer.pq"
         df = pd.read_parquet(data_path, dtype_backend="pyarrow")
@@ -50,7 +50,7 @@ def load_customer(data_folder: str, pd=bodo.pandas, use_parquet=False):
     return df
 
 
-def load_nation(data_folder: str, pd=bodo.pandas, use_parquet=False):
+def load_nation(data_folder: str, pd=bodo.pandas, use_parquet=True):
     if use_parquet:
         data_path = data_folder + "/nation.pq"
         df = pd.read_parquet(data_path, dtype_backend="pyarrow")
@@ -59,7 +59,7 @@ def load_nation(data_folder: str, pd=bodo.pandas, use_parquet=False):
     return df
 
 
-def load_region(data_folder: str, pd=bodo.pandas, use_parquet=False):
+def load_region(data_folder: str, pd=bodo.pandas, use_parquet=True):
     if use_parquet:
         data_path = data_folder + "/region.pq"
         df = pd.read_parquet(data_path, dtype_backend="pyarrow")
@@ -68,7 +68,7 @@ def load_region(data_folder: str, pd=bodo.pandas, use_parquet=False):
     return df
 
 
-def load_supplier(data_folder: str, pd=bodo.pandas, use_parquet=False):
+def load_supplier(data_folder: str, pd=bodo.pandas, use_parquet=True):
     if use_parquet:
         data_path = data_folder + "/supplier.pq"
         df = pd.read_parquet(data_path, dtype_backend="pyarrow")
@@ -77,7 +77,7 @@ def load_supplier(data_folder: str, pd=bodo.pandas, use_parquet=False):
     return df
 
 
-def load_partsupp(data_folder: str, pd=bodo.pandas, use_parquet=False):
+def load_partsupp(data_folder: str, pd=bodo.pandas, use_parquet=True):
     if use_parquet:
         data_path = data_folder + "/partsupp.pq"
         df = pd.read_parquet(data_path, dtype_backend="pyarrow")
@@ -974,7 +974,7 @@ def run_queries(
     log_file: str | None = None,
     answers_path: str | None = None,
     output_path: str | None = None,
-    use_parquet: bool = False,
+    use_parquet: bool = True,
 ):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
