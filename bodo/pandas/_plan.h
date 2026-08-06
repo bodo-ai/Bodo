@@ -472,7 +472,7 @@ std::unique_ptr<duckdb::Expression> make_unaryop_expr(
  */
 std::unique_ptr<duckdb::Expression> make_cast_expr(
     std::unique_ptr<duckdb::Expression> &source, PyObject *out_schema_py,
-    std::shared_ptr<const arrow::compute::FunctionOptions> cast_opts);
+    std::unique_ptr<arrow::compute::FunctionOptions> cast_opts);
 
 /**
  * @brief Create a conjunction (and/or) expression from two sources.

@@ -1258,7 +1258,11 @@ std::unique_ptr<arrow::compute::FunctionOptions> getCastOptions(
         return default_cast_opts;
     }
 
-    // Copy the function options so we can modify the target type
+    // Copy the function options so we can modify the target type.
+    // We could declare BoundCastInfo::arrow_cast_opts as mutable
+    // and modify it directly, but it would be unintuitive for a
+    // getter function to have that side effect and could potentially
+    // lead to mysterious bugs.
     std::unique_ptr<arrow::compute::FunctionOptions> new_arrow_cast_opts =
         bce.bound_cast.arrow_cast_opts->Copy();
     arrow::compute::CastOptions *as_cast_options =
