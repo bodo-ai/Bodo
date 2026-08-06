@@ -1816,33 +1816,31 @@ struct BodoStringCastVisitor {
     arrow::ArraySpan* output;
     arrow::compute::KernelContext* ctx;
 
-    template <typename CType, typename ParseFunc>
-    arrow::Status ParseValues(ParseFunc parse_func) {
+    template <typename ParseFunc, typename OutputSetter>
+    arrow::Status ParseValues(ParseFunc parse_func, OutputSetter set_output) {
         auto* state = static_cast<BodoStringCastState*>(ctx->state());
         bool emit_null_on_failure = state->emit_null_on_failure;
 
-        const int64_t* input_offsets =
-            reinterpret_cast<const int64_t*>(input.buffers[1].data);
-        const char* input_data =
-            reinterpret_cast<const char*>(input.buffers[2].data);
+        // GetValues accounts for the ArraySpan offset, so we don't need to
+        // account for it when indexing into input_offsets or input_data
+        const int64_t* input_offsets = input.GetValues<const int64_t>(1);
+        const char* input_data = input.GetValues<const char>(2);
 
-        auto out_validity_buffer =
-            reinterpret_cast<uint8_t*>(output->buffers[0].data);
-        // Accounts for the ArraySpan offset, so we don't need to account for it
-        // when indexing
-        auto out_data_buffer = output->GetValues<CType>(1);
+        // Validity buffer is bitpacked, so we need to pass 0 as the
+        // offset to GetValues so that the bit offset (output->offset)
+        // isn't applied as a byte offset
+        uint8_t* out_validity_buffer = output->GetValues<uint8_t>(0, 0);
 
         for (int64_t i = 0; i < input.length; i++) {
             if (input.IsValid(i)) {
                 // Get the start and end positions for the current element
-                const int64_t adjusted_index = input.offset + i;
-                int64_t start = input_offsets[adjusted_index];
-                int64_t end = input_offsets[adjusted_index + 1];
+                int64_t start = input_offsets[i];
+                int64_t end = input_offsets[i + 1];
 
                 // Attempt to parse the string element
                 auto parsed_value = parse_func(input_data + start, end - start);
                 if (parsed_value.has_value()) {
-                    out_data_buffer[i] = *parsed_value;
+                    set_output(*parsed_value, i);
                     arrow::bit_util::SetBit(out_validity_buffer,
                                             output->offset + i);
                 } else {
@@ -1869,69 +1867,103 @@ struct BodoStringCastVisitor {
         return arrow::Status::OK();
     }
 
+    template <typename CType, typename T>
+    auto get_standard_parse_func(const T& type) {
+        return [&type](const char* data, int64_t len) -> std::optional<CType> {
+            CType parsed_value;
+            if (arrow::internal::ParseValue(type, data, len, &parsed_value)) {
+                return parsed_value;
+            }
+            return std::nullopt;
+        };
+    }
+
+    template <typename CType>
+    auto get_standard_output_setter() {
+        // Accounts for the ArraySpan offset, so we don't need to account for it
+        // when indexing
+        CType* out_data_buffer = output->GetValues<CType>(1);
+        return [out_data_buffer](CType parsed_value, int64_t i) {
+            out_data_buffer[i] = parsed_value;
+        };
+    }
+
     template <typename T>
     typename arrow::enable_if_t<arrow::is_fixed_width_type<T>::value &&
                                     arrow::has_c_type<T>::value &&
+                                    !arrow::is_boolean_type<T>::value &&
                                     !arrow::is_half_float_type<T>::value &&
                                     !arrow::is_decimal_type<T>::value &&
                                     !arrow::is_interval_type<T>::value,
                                 arrow::Status>
     Visit(const T& type) {
         using CType = typename T::c_type;
-        return ParseValues<CType>([&type](const char* data,
-                                          int64_t len) -> std::optional<CType> {
-            CType parsed_value;
-            if (arrow::internal::ParseValue(type, data, len, &parsed_value)) {
-                return parsed_value;
-            }
-            return std::nullopt;
-        });
+        return ParseValues(get_standard_parse_func<CType>(type),
+                           get_standard_output_setter<CType>());
+    }
+
+    template <typename T>
+    typename arrow::enable_if_boolean<T, arrow::Status> Visit(const T& type) {
+        using CType = typename T::c_type;
+        // Arrow booleans are bitpacked, so we need to apply the bit
+        // offset ourselves and set individual bits.
+        uint8_t* out_data_buffer = output->GetValues<uint8_t>(1, 0);
+        int64_t out_offset = output->offset;
+        auto output_setter = [out_data_buffer, &out_offset](CType parsed_value,
+                                                            int64_t i) {
+            // Either set or clear the bit depending on `parsed_value`
+            arrow::bit_util::SetBitTo(out_data_buffer, out_offset + i,
+                                      parsed_value);
+        };
+        return ParseValues(get_standard_parse_func<CType>(type), output_setter);
     }
 
     template <typename T>
     typename arrow::enable_if_decimal<T, arrow::Status> Visit(const T& type) {
         using DecimalType = typename arrow::TypeTraits<T>::CType;
-        return ParseValues<DecimalType>(
-            [&type](const char* data,
-                    int64_t len) -> std::optional<DecimalType> {
-                std::string_view view(data, len);
-                DecimalType parsed_decimal;
-                int32_t precision;
-                int32_t scale;
-                if (DecimalType::FromString(view, &parsed_decimal, &precision,
-                                            &scale)
-                        .ok()) {
-                    // The parsed scale may be different than the target scale,
-                    // so we need to rescale to the target scale so the value is
-                    // interpreted correctly.
-                    int32_t target_scale = type.scale();
-                    // First, check that the scaled number can fit within the
-                    // limits of the type, since Arrow's own overflow checking
-                    // is poor.
-                    int32_t needed_precision = precision + target_scale - scale;
-                    if (0 < needed_precision &&
-                        needed_precision <= T::kMaxPrecision) {
-                        // When reducing scale we want to round, so we should
-                        // call ReduceScaleBy() in that case instead of
-                        // Rescale() which always returns a failed status when
-                        // there is data loss.
-                        if (target_scale <= scale) {
-                            return parsed_decimal.ReduceScaleBy(scale -
-                                                                target_scale);
-                        }
-                        if (target_scale > scale) {
-                            return parsed_decimal.IncreaseScaleBy(target_scale -
-                                                                  scale);
-                        }
+        auto parse_func = [&type](const char* data,
+                                  int64_t len) -> std::optional<DecimalType> {
+            std::string_view view(data, len);
+            DecimalType parsed_decimal;
+            int32_t precision;
+            int32_t scale;
+            if (DecimalType::FromString(view, &parsed_decimal, &precision,
+                                        &scale)
+                    .ok()) {
+                // The parsed scale may be different than the target scale,
+                // so we need to rescale to the target scale so the value is
+                // interpreted correctly.
+                int32_t target_scale = type.scale();
+                // First, check that the scaled number can fit within the
+                // limits of the type, since Arrow's own overflow checking
+                // is poor.
+                int32_t needed_precision = precision + target_scale - scale;
+                if (0 < needed_precision &&
+                    needed_precision <= T::kMaxPrecision) {
+                    // When reducing scale we want to round, so we should
+                    // call ReduceScaleBy() in that case instead of
+                    // Rescale() which always returns a failed status when
+                    // there is data loss.
+                    if (target_scale <= scale) {
+                        return parsed_decimal.ReduceScaleBy(
+                            scale - target_scale, /*round=*/true);
+                    }
+                    if (target_scale > scale) {
+                        return parsed_decimal.IncreaseScaleBy(target_scale -
+                                                              scale);
                     }
                 }
-                return std::nullopt;
-            });
+            }
+            return std::nullopt;
+        };
+        return ParseValues(parse_func,
+                           get_standard_output_setter<DecimalType>());
     }
 
     // Fallback for unsupported types
     template <typename T>
-    typename arrow::enable_if_t<!((arrow::is_decimal_type<T>::value) ||
+    typename arrow::enable_if_t<!((arrow::is_boolean_type<T>::value) ||
+                                  (arrow::is_decimal_type<T>::value) ||
                                   (arrow::is_fixed_width_type<T>::value &&
                                    arrow::has_c_type<T>::value &&
                                    !arrow::is_half_float_type<T>::value &&
@@ -1953,6 +1985,7 @@ arrow::Status BodoStringCastGeneric(arrow::compute::KernelContext* ctx,
     // kernel's mem_allocation and null_handling options.
     const arrow::ArraySpan& input = batch[0].array;
     arrow::ArraySpan* output = out->array_span_mutable();
+    output->null_count = 0;
 
     // Call our string cast visitor which specializes the implementation
     // according to the target type.
