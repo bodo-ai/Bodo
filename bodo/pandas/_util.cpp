@@ -2106,7 +2106,7 @@ static std::pair<int, int> precision_scale_from_double_array(
     return {out_precision, out_scale};
 }
 
-std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input) {
+std::pair<int, int> getPrecisionScaleNonDecimal(const arrow::Datum &input) {
     auto id = input.type()->id();
     switch (id) {
         case arrow::Type::INT8:
@@ -2122,8 +2122,29 @@ std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input) {
         case arrow::Type::UINT64:
             return std::make_pair<int, int>(19, 0);
         case arrow::Type::FLOAT:
+            if (input.is_scalar()) {
+                std::shared_ptr<arrow::Scalar> s = input.scalar();
+                if (!s->is_valid) {
+                    return {1, 0};
+                }
+                return precision_scale_from_double(
+                    std::static_pointer_cast<arrow::FloatScalar>(s)->value);
+            } else {
+                return precision_scale_from_double_array(input.make_array());
+            }
+            break;
         case arrow::Type::DOUBLE:
-            return precision_scale_from_double_array(input.make_array());
+            if (input.is_scalar()) {
+                std::shared_ptr<arrow::Scalar> s = input.scalar();
+                if (!s->is_valid) {
+                    return {1, 0};
+                }
+                return precision_scale_from_double(
+                    std::static_pointer_cast<arrow::DoubleScalar>(s)->value);
+            } else {
+                return precision_scale_from_double_array(input.make_array());
+            }
+            break;
         default:
             throw std::runtime_error(
                 "getPrecisionScaleNonDecimal unsupported type " +
@@ -2221,6 +2242,54 @@ arrow::Datum ConvertArrayToDecimal128(const arrow::Datum &input,
     }
 
     return arrow::Datum(out);
+}
+
+std::tuple<bool, int, int, int> getDatumPrecisionScale(
+    const arrow::Datum &datum) {
+    bool is_decimal =
+        datum.type() && datum.type()->id() == arrow::Type::DECIMAL128;
+    int p1, s1, l1;
+    if (is_decimal) {
+        // Decimal doesn't matter if scalar or array.
+        auto dec_type =
+            std::static_pointer_cast<arrow::Decimal128Type>(datum.type());
+        p1 = dec_type->precision();
+        s1 = dec_type->scale();
+    } else {
+        std::tie(p1, s1) = getPrecisionScaleNonDecimal(datum);
+    }
+    l1 = p1 - s1;
+    return std::tuple<bool, int, int, int>(datum.is_scalar(), p1, s1, l1);
+}
+
+std::pair<int, int> getOpPrecisionScale(const std::string &op, int p1, int s1,
+                                        int l1, int p2, int s2, int l2) {
+    int result_precision = -1;
+    int result_scale = -1;
+    if (op == "add" || op == "subtract") {
+        // Snowflake rule:
+        // scale = max(s1, s2)
+        // precision = max(p1 - s1, p2 - s2) + scale + 1
+        result_scale = std::max(s1, s2);
+        result_precision = std::max(l1, l2) + result_scale + 1;
+    } else if (op == "multiply") {
+        // Snowflake rule:
+        // precision = p1 + p2
+        // scale = s1 + s2
+        result_precision = p1 + p2;
+        result_scale = s1 + s2;
+    } else if (op == "divide") {
+        // Snowflake rule (one common variant):
+        // scale = max(6, s1 + p2 + 1)
+        // precision = p1 - s1 + s2 + scale
+        result_scale = std::max(6, s1 + p2 + 1);
+        result_precision = l1 + s2 + result_scale;
+    } else if (op == "equal" || op == "not_equal" || op == "less" ||
+               op == "greater" || op == "less_equal" || op == "greater_equal") {
+        result_scale = std::max(s1, s2);
+        result_precision = std::max(l1, l2) + result_scale;
+    }
+    return {result_precision, result_scale};
 }
 
 #ifdef USE_CUDF
