@@ -1195,17 +1195,7 @@ public class RexSimplify {
         }
     }
 
-    // TEMP DEBUG: counter for simplifyCase blowup detection
-    private static long counter = 0;
-
     private RexNode simplifyCase(RexCall call, RexUnknownAs unknownAs) {
-        // TEMP DEBUG: count branches to find the blowup
-        if (System.getenv("DEBUG_SIMPLIFY_CASE") != null) {
-            counter++;
-            if (counter % 1000 == 0) {
-                System.err.println("simplifyCase #" + counter + " branches=" + call.operands.size() + " expr=" + call.toString().substring(0, Math.min(500, call.toString().length())));
-            }
-        }
         List<CaseBranch> inputBranches =
                 CaseBranch.fromCaseOperands(rexBuilder, new ArrayList<>(call.getOperands()));
 

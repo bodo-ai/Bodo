@@ -442,7 +442,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @param schemaName The name of the schema to use to load the table.
    * @param tableName Name of the table.
    * @param shouldRetry Should we retry the connection if we see an exception?
-   * @return The table object.
+   * @return The table object or null.
    */
   private SnowflakeCatalogTable getTableImpl(
       String databaseName, String schemaName, String tableName, boolean shouldRetry) {
@@ -494,7 +494,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         closeConnections();
         return getTableImpl(databaseName, schemaName, tableName, false);
       } else {
-        throw new RuntimeException(errorMsg);
+        // TODO(scott): need to distinguish between actual error and not found.
+        return null;
       }
     }
   }

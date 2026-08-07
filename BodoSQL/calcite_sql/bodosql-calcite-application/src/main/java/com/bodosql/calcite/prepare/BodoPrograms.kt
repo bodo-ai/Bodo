@@ -244,14 +244,7 @@ object BodoPrograms {
             requiredOutputTraits: RelTraitSet,
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>,
-        ): RelNode {
-            // TEMP DEBUG
-            if (System.getenv("DUMP_PRE_VOLCANO") != null) {
-                java.io.File("/tmp/pre_volcano.txt").writeText(RelOptUtil.toString(rel))
-                System.err.println("DUMPED pre-volcano plan to /tmp/pre_volcano.txt")
-            }
-            return program.run(planner, rel, requiredOutputTraits, materializations, lattices)
-        }
+        ): RelNode = program.run(planner, rel, requiredOutputTraits, materializations, lattices)
     }
 
     /**

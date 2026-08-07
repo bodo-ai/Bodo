@@ -20,6 +20,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.LocalFileSystem
 import org.apache.hadoop.fs.Path
+import org.apache.iceberg.exceptions.NoSuchTableException
 import org.apache.iceberg.hadoop.HadoopCatalog
 import org.apache.iceberg.hadoop.Util
 import org.apache.iceberg.util.LocationUtil
@@ -171,9 +172,13 @@ class FileSystemCatalog(
     override fun getTable(
         schemaPath: ImmutableList<String>,
         tableName: String,
-    ): CatalogTable {
-        val columns = getIcebergTableColumns(schemaPath, tableName)
-        return IcebergCatalogTable(tableName, schemaPath, columns, this)
+    ): CatalogTable? {
+        try {
+            val columns = getIcebergTableColumns(schemaPath, tableName)
+            return IcebergCatalogTable(tableName, schemaPath, columns, this)
+        } catch (_: NoSuchTableException) {
+            return null
+        }
     }
 
     /**

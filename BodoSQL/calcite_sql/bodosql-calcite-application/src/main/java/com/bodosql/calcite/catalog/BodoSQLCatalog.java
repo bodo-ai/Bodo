@@ -39,7 +39,7 @@ public interface BodoSQLCatalog {
    *
    * @param schemaPath The list of schemas to traverse before finding the table.
    * @param tableName Name of the table.
-   * @return The table object.
+   * @return The table object or null.
    */
   CatalogTable getTable(ImmutableList<String> schemaPath, String tableName);
 
