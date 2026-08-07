@@ -7125,13 +7125,14 @@ def java_search_to_pyiceberg_expr(java_call, field_names):
 
     operands = java_call.getOperands()
     ref = java_expr_to_pyiceberg_expr(operands[0], field_names)
+    s_typename = operands[1].getType().getSqlTypeName()
     sarg = operands[1].getValue()
     null_as = _get_sarg_null_as(sarg)
 
     # Collect each range as a Python value (point) or a comparison pair (range).
     points = []
     range_exprs = []
-    for lower, lower_incl, upper, upper_incl in iter_sarg_ranges(sarg):
+    for lower, lower_incl, upper, upper_incl in iter_sarg_ranges(sarg, s_typename):
         if (
             lower is not None
             and upper is not None
@@ -7179,14 +7180,24 @@ def java_search_to_pyiceberg_expr(java_call, field_names):
     return expr
 
 
-def _sarg_endpoint_to_python(endpoint):
+def _sarg_endpoint_to_python(endpoint, s_typename):
     """Convert a Java Sarg range endpoint (e.g. NlsString, BigDecimal) to a
     Python value."""
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+
     if isinstance(endpoint, py4j.java_gateway.JavaObject):
         # NlsString and other Calcite literal wrappers expose getValue()
         return endpoint.getValue()
     if isinstance(endpoint, decimal.Decimal):
-        return float(endpoint)
+        if (
+            s_typename.equals(SqlTypeName.TINYINT)
+            or s_typename.equals(SqlTypeName.SMALLINT)
+            or s_typename.equals(SqlTypeName.INTEGER)
+            or s_typename.equals(SqlTypeName.BIGINT)
+        ):
+            return int(endpoint)
+        else:
+            return float(endpoint)
     return endpoint
 
 
@@ -7195,7 +7206,7 @@ def _get_sarg_null_as(sarg):
     return sarg.getClass().getDeclaredField("nullAs").get(sarg).toString()
 
 
-def iter_sarg_ranges(sarg):
+def iter_sarg_ranges(sarg, s_typename):
     """Iterate over the ranges in a Calcite Sarg's range set, yielding
     ``(lower, lower_inclusive, upper, upper_inclusive)`` tuples with
     Python-typed endpoints.
@@ -7212,9 +7223,13 @@ def iter_sarg_ranges(sarg):
         has_lower = r.hasLowerBound()
         has_upper = r.hasUpperBound()
         yield (
-            _sarg_endpoint_to_python(r.lowerEndpoint()) if has_lower else None,
+            _sarg_endpoint_to_python(r.lowerEndpoint(), s_typename)
+            if has_lower
+            else None,
             r.lowerBoundType().toString() == "CLOSED" if has_lower else False,
-            _sarg_endpoint_to_python(r.upperEndpoint()) if has_upper else None,
+            _sarg_endpoint_to_python(r.upperEndpoint(), s_typename)
+            if has_upper
+            else None,
             r.upperBoundType().toString() == "CLOSED" if has_upper else False,
         )
 
