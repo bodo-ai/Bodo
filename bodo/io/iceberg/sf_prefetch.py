@@ -36,7 +36,6 @@ def prefetch_sf_tables_njit(
         conn_str (str): Snowflake connection string to connect to.
         table_paths (list[str]): List of table paths to prefetch paths for.
     """
-    pass
 
 
 @overload(prefetch_sf_tables_njit)

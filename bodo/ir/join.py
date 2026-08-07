@@ -133,7 +133,6 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
         )
         # add cfunc library to the library of the Bodo function being compiled.
         context.add_linking_libs([join_gen_cond_cfunc[sym._literal_value]._library])
-        return
 
     return types.none(func, sym), codegen
 
@@ -784,7 +783,7 @@ def remove_dead_join(
                 join_node.get_out_table_used_cols()
             )
 
-        for col_num in join_node.out_to_input_col_map.keys():
+        for col_num in join_node.out_to_input_col_map:
             if col_num in join_node.out_used_cols:
                 continue
             # Set the column to delete
@@ -811,14 +810,13 @@ def remove_dead_join(
                     join_node.left_dead_var_inds.add(col_num)
                     if not join_node.is_left_table:
                         join_node.left_vars[col_num] = None
-            elif orig == "right":
-                if (
-                    col_num not in join_node.right_key_set
-                    and col_num not in join_node.right_cond_cols
-                ):
-                    join_node.right_dead_var_inds.add(col_num)
-                    if not join_node.is_right_table:
-                        join_node.right_vars[col_num] = None
+            elif orig == "right" and (
+                col_num not in join_node.right_key_set
+                and col_num not in join_node.right_cond_cols
+            ):
+                join_node.right_dead_var_inds.add(col_num)
+                if not join_node.is_right_table:
+                    join_node.right_vars[col_num] = None
 
         # Remove dead columns from the dictionary.
         for i in del_col_nums:

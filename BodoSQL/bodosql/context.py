@@ -82,8 +82,6 @@ class SqlTypeEnum(Enum):
 class _CPPBackendExecutionFailed:
     """Sentinel class to indicate C++ backend execution failed and we should fall back to JIT"""
 
-    pass
-
 
 CPP_BACKEND_EXECUTION_FAILED = _CPPBackendExecutionFailed()
 
@@ -125,7 +123,7 @@ class BodoSQLContext:
         self.tables = tables
         self.default_tz = default_tz
         # Check types
-        if any(not isinstance(key, str) for key in self.tables.keys()):
+        if any(not isinstance(key, str) for key in self.tables):
             raise ValueError("BodoSQLContext(): 'table' keys must be strings")
         if any(
             not isinstance(value, (pd.DataFrame, TablePath))
@@ -452,13 +450,13 @@ class BodoSQLContext:
                 # Hard code the context name for DDL execution. This is used
                 # for compilation testing and JIT code generation.
                 context_names = ["bodo_sql_context"] if is_ddl else []
-                table_names = [TABLE_ARG_PREFIX + x for x in self.tables.keys()]
+                table_names = [TABLE_ARG_PREFIX + x for x in self.tables]
                 dynamic_param_names = [
                     DYNAMIC_PARAM_ARG_PREFIX + str(i)
                     for i in range(len(dynamic_params_list))
                 ]
                 named_param_names = [
-                    NAMED_PARAM_ARG_PREFIX + x for x in named_params_dict.keys()
+                    NAMED_PARAM_ARG_PREFIX + x for x in named_params_dict
                 ]
                 args = ", ".join(
                     context_names
@@ -543,7 +541,7 @@ class BodoSQLContext:
             return output
         else:
             import numba
-            import bodosql.compiler  # isort:skip # noqa
+            import bodosql.compiler  # isort:skip
 
             func_text, lowered_globals = self._convert_to_pandas(
                 sql,
@@ -1390,7 +1388,7 @@ def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
         return build_java_array_list([])
 
     # Fallback to JIT for typing parameters
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from numba.core import types
 
     from bodosql.context_ext import (
@@ -1419,7 +1417,7 @@ def create_java_named_parameter_type_map(named_params: dict[str, Any]):
         return build_java_hash_map({})
 
     # Fallback to JIT for typing parameters
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from numba.core import types
 
     from bodosql.context_ext import (

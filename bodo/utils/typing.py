@@ -119,7 +119,7 @@ def type_has_unknown_cats(typ):
         and typ.dtype.categories is None
     ) or (
         isinstance(typ, bodo.types.TableType)
-        and any(type_has_unknown_cats(t) for t in typ.type_to_blk.keys())
+        and any(type_has_unknown_cats(t) for t in typ.type_to_blk)
     )
 
 
@@ -421,10 +421,8 @@ def is_overload_none(val):
 
 
 def is_overload_constant_bool(val):
-    return (
-        isinstance(val, bool)
-        or isinstance(val, types.BooleanLiteral)
-        or (isinstance(val, types.Omitted) and isinstance(val.value, bool))
+    return isinstance(val, (bool, types.BooleanLiteral)) or (
+        isinstance(val, types.Omitted) and isinstance(val.value, bool)
     )
 
 
@@ -459,8 +457,7 @@ def is_overload_constant_list(val):
         isinstance(val, (list, tuple))
         or (isinstance(val, types.Omitted) and isinstance(val.value, tuple))
         or is_initial_value_list_type(val)
-        or isinstance(val, types.LiteralList)
-        or isinstance(val, bodo.utils.typing.ListLiteral)
+        or isinstance(val, (types.LiteralList, bodo.utils.typing.ListLiteral))
         or (
             isinstance(val, types.BaseTuple)
             and all(is_literal_type(t) for t in val.types)
@@ -1100,7 +1097,7 @@ def parse_dtype(dtype, func_name=None):
 
     try:
         d_str = get_overload_const_str(dtype)
-        if d_str.startswith("Int") or d_str.startswith("UInt"):
+        if d_str.startswith(("Int", "UInt")):
             return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
                 pd.api.types.pandas_dtype(d_str), None
             )
@@ -1141,9 +1138,10 @@ def is_list_like_index_type(
     return (
         isinstance(t, types.List)
         or (isinstance(t, types.Array) and t.ndim == 1)
-        or isinstance(t, (NumericIndexType, RangeIndexType))
-        or isinstance(t, SeriesType)
-        or isinstance(t, bodo.types.IntegerArrayType)
+        or isinstance(
+            t,
+            (NumericIndexType, RangeIndexType, SeriesType, bodo.types.IntegerArrayType),
+        )
         or t == boolean_array_type
     )
 
@@ -1512,16 +1510,21 @@ def is_literal_type(t):
             and not isinstance(t, types.LiteralStrKeyDict)
         )
         or t == types.none  # None type is always literal since single value
-        or isinstance(t, types.Dispatcher)
-        or isinstance(t, bodo.decorators.WrapPythonDispatcherType)
+        or isinstance(t, (types.Dispatcher, bodo.decorators.WrapPythonDispatcherType))
         # LiteralStrKeyDict is a BaseTuple in Numba 0.51 also
         or (isinstance(t, types.BaseTuple) and all(is_literal_type(v) for v in t.types))
         # List/Dict types preserve const initial values in Numba 0.51
         or is_initial_value_type(t)
         # dtype literals should be treated as literals
-        or isinstance(t, (types.DTypeSpec, types.Function))
-        or isinstance(t, bodo.libs.int_arr_ext.IntDtype)
-        or isinstance(t, bodo.libs.float_arr_ext.FloatDtype)
+        or isinstance(
+            t,
+            (
+                types.DTypeSpec,
+                types.Function,
+                bodo.libs.int_arr_ext.IntDtype,
+                bodo.libs.float_arr_ext.FloatDtype,
+            ),
+        )
         or t
         in (
             bodo.libs.bool_arr_ext.boolean_dtype,
@@ -2317,7 +2320,7 @@ def _gen_objmode_overload(
             for arg in func_spec.kwonlyargs:
                 # write args as arg=arg to handle kwonly requirement
                 args.append(f"{arg}={arg}")
-                arg_strs.append(f"{arg}={str(func_spec.kwonlydefaults[arg])}")
+                arg_strs.append(f"{arg}={func_spec.kwonlydefaults[arg]!s}")
 
         sig = ", ".join(arg_strs)
         args = ", ".join(args)
@@ -3181,8 +3184,6 @@ def error_on_unsupported_streaming_arrays(table_type):
 
 class ExternalFunctionErrorChecked(types.ExternalFunction):
     """Same as Numba's ExternalFunction, but lowering checks for Python exceptions"""
-
-    pass
 
 
 register_model(ExternalFunctionErrorChecked)(models.OpaqueModel)

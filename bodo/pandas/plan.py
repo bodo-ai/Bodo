@@ -364,31 +364,21 @@ class LogicalProjection(LogicalOperator):
 class LogicalFilter(LogicalOperator):
     """Logical operator for filtering rows based on conditions."""
 
-    pass
-
 
 class LogicalAggregate(LogicalOperator):
     """Logical operator for aggregation operations."""
-
-    pass
 
 
 class LogicalDistinct(LogicalOperator):
     """Logical operator for distinct rows."""
 
-    pass
-
 
 class LogicalMaterializedCTE(LogicalOperator):
     """Logical operator for CTE."""
 
-    pass
-
 
 class LogicalCTERef(LogicalOperator):
     """Logical operator for CTE ref."""
-
-    pass
 
 
 class LogicalComparisonJoin(LogicalOperator):
@@ -450,50 +440,34 @@ class LogicalInsertScalarSubquery(LogicalCrossProduct):
     This is just a cross product with a single row DataFrame. This isn't enforced automatically.
     """
 
-    pass
-
 
 class LogicalSetOperation(LogicalOperator):
     """Logical operator for set operations like union."""
-
-    pass
 
 
 class LogicalLimit(LogicalOperator):
     """Logical operator for limiting the number of rows (e.g. df.head())."""
 
-    pass
-
 
 class LogicalOrder(LogicalOperator):
     """Logical operator for sorting data."""
-
-    pass
 
 
 class LogicalTopN(LogicalOperator):
     """Logical operator for sorting data."""
 
-    pass
-
 
 class LogicalGetParquetRead(LogicalOperatorLeaf):
     """Logical operator for reading Parquet files."""
-
-    pass
 
 
 class LogicalGetPandasReadSeq(LogicalOperatorLeaf):
     """Logical operator for sequential read of a Pandas DataFrame."""
 
-    pass
-
 
 class LogicalGetPandasReadParallel(LogicalOperatorLeaf):
     """Logical operator for parallel read of a Pandas DataFrame.\
     """
-
-    pass
 
 
 class LogicalGetIcebergRead(LogicalOperatorLeaf):
@@ -544,13 +518,9 @@ class LogicalGetIcebergRead(LogicalOperatorLeaf):
 class LogicalParquetWrite(LogicalOperator):
     """Logical operator for writing data to Parquet files."""
 
-    pass
-
 
 class LogicalIcebergWrite(LogicalOperator):
     """Logical operator for writing data to Apache Iceberg tables."""
-
-    pass
 
 
 class LogicalS3VectorsWrite(LogicalOperator):
@@ -913,13 +883,9 @@ class BinaryExpression(Expression):
 class ComparisonOpExpression(BinaryExpression):
     """Expression representing a comparison operation in the query plan."""
 
-    pass
-
 
 class ConjunctionOpExpression(BinaryExpression):
     """Expression representing a conjunction (AND) operation in the query plan."""
-
-    pass
 
 
 class UnaryOpExpression(Expression):
@@ -1052,8 +1018,6 @@ class ArithOpExpression(BinaryExpression):
     in the query plan.
     """
 
-    pass
-
 
 total_init_lazy = 0
 total_execute_plan = 0
@@ -1129,7 +1093,7 @@ def execute_plan(plan: LazyPlan, optimize=True, use_sql_rules=False):
 
         # Import compiler on workers if spawner imported the compiler to avoid
         # inconsistency issues in different scatter implementations.
-        if "bodo.decorators" in sys.modules.keys():
+        if "bodo.decorators" in sys.modules:
             bodo.spawn.spawner.get_spawner().import_compiler_on_workers()
 
         # Initialize LazyPlanDistributedArg objects that may need scattering data
@@ -1151,7 +1115,7 @@ def execute_plan(plan: LazyPlan, optimize=True, use_sql_rules=False):
             # select a different Pandas API or an internal Pandas function that
             # bypasses the issue.
             traceback.print_stack(file=sys.stdout)
-            print("")  # Print on new line during tests.
+            print()  # Print on new line during tests.
 
         start_time = time.perf_counter()
         ret = bodo.spawn.spawner.submit_func_to_workers(_exec_plan, [], plan, optimize)
@@ -1164,7 +1128,7 @@ def execute_plan(plan: LazyPlan, optimize=True, use_sql_rules=False):
     else:
         if bodo.dataframe_library_dump_plans:
             traceback.print_stack(file=sys.stdout)
-            print("")  # Print on new line during tests.
+            print()  # Print on new line during tests.
 
     return _exec_plan(plan, optimize)
 

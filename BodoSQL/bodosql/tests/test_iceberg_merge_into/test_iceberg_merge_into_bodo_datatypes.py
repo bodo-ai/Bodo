@@ -101,7 +101,7 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
     db_schema, warehouse_loc = iceberg_database()
     sql_schema = [("ID", "int", False)] + [
         (col, bodo_datatype_expected_sql_types[col], False)
-        for col in bodo_datatype_cols.keys()
+        for col in bodo_datatype_cols
     ]
     if bodo.get_rank() == 0:
         create_iceberg_table(

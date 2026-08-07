@@ -2,11 +2,11 @@ import pytest
 
 from bodo.tests.utils import check_func
 
-_non_repeating_data = [f"A{i}" for i in range(0, 100)]
+_non_repeating_data = [f"A{i}" for i in range(100)]
 
 _non_repeating_data_subset = _non_repeating_data[::2]
 
-_repeating_data = [f"A{i}" for i in range(0, 100)] * 3
+_repeating_data = [f"A{i}" for i in range(100)] * 3
 
 _repeating_data_subset = _repeating_data[::2]
 

@@ -306,9 +306,7 @@ def test_decimal_moment_functions_groupby(query, answer, memory_leak_check):
 
     # Ninth group: four rows that sum to zero
     keys.extend(["J"] * 4)
-    decimals.extend(
-        [Decimal("-10.75"), Decimal("-10"), Decimal("-10.25"), Decimal("31")]
-    )
+    decimals.extend([Decimal("-10.75"), Decimal(-10), Decimal("-10.25"), Decimal(31)])
 
     # Combine with the correct dtype, and deterministically shuffle the order of the data
     df = pd.DataFrame(
@@ -464,7 +462,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         pytest.param(
             pd.array([1, 2, 3, 0, 5], dtype=pd.Int8Dtype()),
             pa.array(
-                [Decimal("0"), None, Decimal("7.5"), None, Decimal("51.25")],
+                [Decimal(0), None, Decimal("7.5"), None, Decimal("51.25")],
                 type=pa.decimal128(38, 2),
             ),
             id="int8",
@@ -473,7 +471,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         pytest.param(
             pd.array([1, 20, 30, 0, 50], dtype=pd.Int16Dtype()),
             pa.array(
-                [Decimal("0"), None, Decimal("75"), None, Decimal("512.5")],
+                [Decimal(0), None, Decimal(75), None, Decimal("512.5")],
                 type=pa.decimal128(38, 2),
             ),
             id="int16",
@@ -482,7 +480,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         pytest.param(
             pd.array([1, -125, 300, 0, 131072], dtype=pd.Int32Dtype()),
             pa.array(
-                [Decimal("0"), None, Decimal("750"), None, Decimal("1343488")],
+                [Decimal(0), None, Decimal(750), None, Decimal(1343488)],
                 type=pa.decimal128(38, 2),
             ),
             id="int32",
@@ -491,7 +489,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         pytest.param(
             pd.array([1, 2, 3, 0, 987654321], dtype=pd.Int64Dtype()),
             pa.array(
-                [Decimal("0"), None, Decimal("7.5"), None, Decimal("10123456790.25")],
+                [Decimal(0), None, Decimal("7.5"), None, Decimal("10123456790.25")],
                 type=pa.decimal128(38, 2),
             ),
             id="int64",
@@ -499,7 +497,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         pytest.param(
             pd.array([1, 20, 40, 0, 80], dtype=pd.UInt8Dtype()),
             pa.array(
-                [Decimal("0"), None, Decimal("100"), None, Decimal("820")],
+                [Decimal(0), None, Decimal(100), None, Decimal(820)],
                 type=pa.decimal128(38, 2),
             ),
             id="uint8",
@@ -508,7 +506,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         pytest.param(
             pd.array([1, 20, 300, 0, 5000], dtype=pd.UInt16Dtype()),
             pa.array(
-                [Decimal("0"), None, Decimal("750"), None, Decimal("51250")],
+                [Decimal(0), None, Decimal(750), None, Decimal(51250)],
                 type=pa.decimal128(38, 2),
             ),
             id="uint16",
@@ -517,7 +515,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         pytest.param(
             pd.array([1, 21, 321, 0, 54321], dtype=pd.UInt32Dtype()),
             pa.array(
-                [Decimal("0"), None, Decimal("802.5"), None, Decimal("556790.25")],
+                [Decimal(0), None, Decimal("802.5"), None, Decimal("556790.25")],
                 type=pa.decimal128(38, 2),
             ),
             id="uint32",
@@ -527,7 +525,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
             pd.array([1, 54321, 654321, 0, 7654321], dtype=pd.UInt64Dtype()),
             pa.array(
                 [
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                     Decimal("1635802.5"),
                     None,
@@ -554,10 +552,10 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
                 "D": pd.array(
                     pa.array(
                         [
-                            Decimal("0"),
-                            Decimal("1"),
+                            Decimal(0),
+                            Decimal(1),
                             Decimal("2.5"),
-                            Decimal("3"),
+                            Decimal(3),
                             Decimal("10.25"),
                         ],
                         type=pa.decimal128(4, 2),
@@ -630,13 +628,13 @@ def test_decimal_int_multiply_scalar(int_data, result, memory_leak_check):
             0,
             pa.array(
                 [
-                    Decimal("15"),
+                    Decimal(15),
                     None,
-                    Decimal("255"),
+                    Decimal(255),
                     None,
-                    Decimal("4095"),
+                    Decimal(4095),
                     None,
-                    Decimal("65535"),
+                    Decimal(65535),
                 ],
                 type=pa.decimal128(24, 0),
             ),
@@ -688,13 +686,13 @@ def test_int_to_decimal(int_data, prec, scale, result, use_case, memory_leak_che
             0,
             pa.array(
                 [
-                    Decimal("1"),
-                    Decimal("3"),
+                    Decimal(1),
+                    Decimal(3),
                     None,
-                    Decimal("1234"),
-                    Decimal("-12"),
-                    Decimal("144"),
-                    Decimal("-99"),
+                    Decimal(1234),
+                    Decimal(-12),
+                    Decimal(144),
+                    Decimal(-99),
                 ],
                 type=pa.decimal128(4, 0),
             ),
@@ -787,7 +785,7 @@ def test_decimal_to_float_cast(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pa.array(
-                [Decimal("0"), None, Decimal("7.5"), None, Decimal("51.25")],
+                [Decimal(0), None, Decimal("7.5"), None, Decimal("51.25")],
                 type=pa.decimal128(38, 2),
             )
         }
@@ -814,7 +812,7 @@ def test_decimal_to_float_cast(memory_leak_check):
                             Decimal("1.23"),
                             None,
                             Decimal("-45.67"),
-                            Decimal("0"),
+                            Decimal(0),
                             Decimal("123456789012345678901234567890.12345678"),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
@@ -833,7 +831,7 @@ def test_decimal_to_float_cast(memory_leak_check):
                             Decimal("1.23"),
                             None,
                             Decimal("-45.67"),
-                            Decimal("0"),
+                            Decimal(0),
                             Decimal("123456789012345678901234567890.12345678"),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
@@ -903,11 +901,11 @@ def test_decimal_sign(df, expr, expected, memory_leak_check):
                 {
                     "D1": pd.array(
                         [
-                            Decimal("10"),
+                            Decimal(10),
                             None,
-                            Decimal("20"),
-                            Decimal("30"),
-                            Decimal("-40"),
+                            Decimal(20),
+                            Decimal(30),
+                            Decimal(-40),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(2, 0)),
                     ),
@@ -946,11 +944,11 @@ def test_decimal_sign(df, expr, expected, memory_leak_check):
                     ),
                     "D2": pd.array(
                         [
-                            Decimal("54321"),
+                            Decimal(54321),
                             None,
-                            Decimal("11110"),
+                            Decimal(11110),
                             None,
-                            Decimal("-99999"),
+                            Decimal(-99999),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(5, 0)),
                     ),
@@ -1118,11 +1116,11 @@ def test_decimal_addition(df, expr, answer, memory_leak_check):
                 {
                     "D1": pd.array(
                         [
-                            Decimal("10"),
+                            Decimal(10),
                             None,
-                            Decimal("20"),
-                            Decimal("30"),
-                            Decimal("-40"),
+                            Decimal(20),
+                            Decimal(30),
+                            Decimal(-40),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(2, 0)),
                     ),
@@ -1161,11 +1159,11 @@ def test_decimal_addition(df, expr, answer, memory_leak_check):
                     ),
                     "D2": pd.array(
                         [
-                            Decimal("-54321"),
+                            Decimal(-54321),
                             None,
-                            Decimal("-11110"),
+                            Decimal(-11110),
                             None,
-                            Decimal("99999"),
+                            Decimal(99999),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(5, 0)),
                     ),
@@ -1550,7 +1548,7 @@ def test_decimal_rounding(df, expr, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-0.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1564,7 +1562,7 @@ def test_decimal_rounding(df, expr, memory_leak_check):
                     Decimal("-152.58"),
                     Decimal("-0.15"),
                     Decimal("0.53"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
@@ -1580,7 +1578,7 @@ def test_decimal_rounding(df, expr, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-0.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1590,11 +1588,11 @@ def test_decimal_rounding(df, expr, memory_leak_check):
             "CEIL(D1)",
             pd.array(
                 [
-                    Decimal("649"),
-                    Decimal("-152"),
-                    Decimal("0"),
-                    Decimal("1"),
-                    Decimal("0"),
+                    Decimal(649),
+                    Decimal(-152),
+                    Decimal(0),
+                    Decimal(1),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
@@ -1610,7 +1608,7 @@ def test_decimal_rounding(df, expr, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-0.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1620,11 +1618,11 @@ def test_decimal_rounding(df, expr, memory_leak_check):
             "CEIL(D1, -2)",
             pd.array(
                 [
-                    Decimal("700"),
-                    Decimal("-100"),
-                    Decimal("0"),
-                    Decimal("100"),
-                    Decimal("0"),
+                    Decimal(700),
+                    Decimal(-100),
+                    Decimal(0),
+                    Decimal(100),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 0)),
@@ -1690,7 +1688,7 @@ def test_decimal_ceil(df, expr, answer, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-0.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1704,7 +1702,7 @@ def test_decimal_ceil(df, expr, answer, memory_leak_check):
                     Decimal("-152.59"),
                     Decimal("-0.16"),
                     Decimal("0.52"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
@@ -1720,7 +1718,7 @@ def test_decimal_ceil(df, expr, answer, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-0.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1730,11 +1728,11 @@ def test_decimal_ceil(df, expr, answer, memory_leak_check):
             "FLOOR(D1)",
             pd.array(
                 [
-                    Decimal("648"),
-                    Decimal("-153"),
-                    Decimal("-1"),
-                    Decimal("0"),
-                    Decimal("0"),
+                    Decimal(648),
+                    Decimal(-153),
+                    Decimal(-1),
+                    Decimal(0),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
@@ -1750,7 +1748,7 @@ def test_decimal_ceil(df, expr, answer, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-0.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1760,11 +1758,11 @@ def test_decimal_ceil(df, expr, answer, memory_leak_check):
             "FLOOR(D1, -2)",
             pd.array(
                 [
-                    Decimal("600"),
-                    Decimal("-200"),
-                    Decimal("-100"),
-                    Decimal("0"),
-                    Decimal("0"),
+                    Decimal(600),
+                    Decimal(-200),
+                    Decimal(-100),
+                    Decimal(0),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 0)),
@@ -1830,7 +1828,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-1.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1849,7 +1847,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-1.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1869,7 +1867,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
                             Decimal("-152.5826"),
                             Decimal("-1.15122"),
                             Decimal("0.5233"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -1928,7 +1926,7 @@ def test_decimal_trunc(df, expr, memory_leak_check):
                         [
                             Decimal("-8.0"),
                             Decimal("75.12"),
-                            Decimal("-16777216"),
+                            Decimal(-16777216),
                             Decimal("16777.216"),
                             None,
                         ],
@@ -2408,7 +2406,7 @@ def test_decimal_trunc(df, expr, memory_leak_check):
                             Decimal("1.2"),
                             None,
                             Decimal("2.34"),
-                            Decimal("0"),
+                            Decimal(0),
                             Decimal("-0.9"),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
@@ -2741,7 +2739,7 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
                     0: [1, 2, 3, 4],
                     1: [
                         Decimal("1.5"),
-                        Decimal("3"),
+                        Decimal(3),
                         Decimal("4.5"),
                         Decimal("4.10906127"),
                     ],
@@ -2769,11 +2767,11 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
                 {
                     0: [1, 2, 3, 4, 5],
                     1: [
-                        Decimal("1"),
-                        Decimal("2"),
-                        Decimal("3"),
-                        Decimal("4"),
-                        Decimal("5"),
+                        Decimal(1),
+                        Decimal(2),
+                        Decimal(3),
+                        Decimal(4),
+                        Decimal(5),
                     ],
                 }
             ),
@@ -2800,7 +2798,7 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
                     ),
                 }
             ),
-            pd.DataFrame({0: [1, 2], 1: [Decimal("2.5123"), Decimal("0")]}),
+            pd.DataFrame({0: [1, 2], 1: [Decimal("2.5123"), Decimal(0)]}),
             id="negatives-zeroes-nulls",
         ),
         pytest.param(
@@ -3477,7 +3475,7 @@ def test_decimal_abs(df, expr, answer, memory_leak_check):
                             Decimal("2.4"),
                             None,
                             Decimal("-0.12"),
-                            Decimal("5"),
+                            Decimal(5),
                             Decimal("6.7"),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
@@ -3487,11 +3485,11 @@ def test_decimal_abs(df, expr, answer, memory_leak_check):
             "FACTORIAL(D1)",
             pd.array(
                 [
-                    Decimal("2"),
+                    Decimal(2),
                     None,
-                    Decimal("1"),
-                    Decimal("120"),
-                    Decimal("5040"),
+                    Decimal(1),
+                    Decimal(120),
+                    Decimal(5040),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(37, 0)),
             ),
@@ -3533,7 +3531,7 @@ def test_decimal_abs(df, expr, answer, memory_leak_check):
                             Decimal("2.4"),
                             None,
                             Decimal("-0.12"),
-                            Decimal("5"),
+                            Decimal(5),
                             Decimal("6.7"),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
@@ -3602,7 +3600,7 @@ def test_decimal_factorial(df, expr, answer, memory_leak_check):
                     "D": pd.array(
                         [
                             Decimal("-118.2500"),
-                            Decimal("190"),
+                            Decimal(190),
                             Decimal("2.34"),
                             Decimal("-180.66"),
                             Decimal("350.5"),

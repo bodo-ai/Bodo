@@ -10,13 +10,12 @@ def main(input_file: str, output_file: str):
     unique_tables = set()
     # Read the input and remove any inputs
     with open(input_file) as f:
-        for line in f.readlines():
+        for line in f:
             unique_tables.add(line.strip())
     # Sort the output
     sorted_tables = sorted(unique_tables)
     with open(output_file, "w") as f:
-        for table in sorted_tables:
-            f.write(f"{table}\n")
+        f.writelines(f"{table}\n" for table in sorted_tables)
 
 
 if __name__ == "__main__":

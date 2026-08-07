@@ -353,16 +353,10 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
     # [BE-416] Support with list
     # [BE-433] Support with tuples
     elif (
-        func_name in {"last", "sum", "prod", "min", "max", "nunique", "head"}
-    ) and isinstance(
-        arr_type, (ArrayItemArrayType, TupleArrayType)
-    ):  # pragma: no cover
-        return (
-            None,
-            f"column type of {arr_type} of {in_dtype} is not supported in groupby built-in function {func_name}",
-        )
-    elif func_name in {"count"} and isinstance(
-        arr_type, TupleArrayType
+        (func_name in {"last", "sum", "prod", "min", "max", "nunique", "head"})
+        and isinstance(arr_type, (ArrayItemArrayType, TupleArrayType))
+        or func_name in {"count"}
+        and isinstance(arr_type, TupleArrayType)
     ):  # pragma: no cover
         return (
             None,
@@ -547,7 +541,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
 def check_args_kwargs(func_name, len_args, args, kws):
     """Check for extra incorrect arguments"""
     if len(kws) > 0:
-        bad_key = list(kws.keys())[0]
+        bad_key = next(iter(kws.keys()))
         raise BodoError(
             f"Groupby.{func_name}() got an unexpected keyword argument '{bad_key}'."
         )
@@ -1472,13 +1466,12 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         if name_operation == "cumprod":
             if not isinstance(data.dtype, (types.Integer, types.Float)):
                 raise BodoError(msg)
-        if name_operation == "cumsum":
-            if (
-                data.dtype != types.unicode_type
-                and data != ArrayItemArrayType(string_array_type)
-                and not isinstance(data.dtype, (types.Integer, types.Float))
-            ):
-                raise BodoError(msg)
+        if name_operation == "cumsum" and (
+            data.dtype != types.unicode_type
+            and data != ArrayItemArrayType(string_array_type)
+            and not isinstance(data.dtype, (types.Integer, types.Float))
+        ):
+            raise BodoError(msg)
         if name_operation in ("cummin", "cummax"):
             if not isinstance(data.dtype, types.Integer) and not is_dtype_nullable(
                 data.dtype
@@ -2353,7 +2346,7 @@ def crosstab_dummy(index, columns, _pivot_values):  # pragma: no cover
 class CrossTabTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        index, columns, _pivot_values = args
+        index, _columns, _pivot_values = args
 
         # TODO: support agg func other than frequency
         out_arr_typ = types.Array(types.int64, 1, "C")

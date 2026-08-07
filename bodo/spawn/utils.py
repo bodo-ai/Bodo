@@ -99,8 +99,10 @@ class WorkerProcess:
     _uuid: uuid.UUID
     _rank_to_pid: dict[int, int] = {}
 
-    def __init__(self, rank_to_pid: dict[int, int] = {}):
+    def __init__(self, rank_to_pid: dict[int, int] | None = None):
         """Initialize WorkerProcess with a mapping of ranks to PIDs."""
+        if rank_to_pid is None:
+            rank_to_pid = {}
         self._uuid = uuid.uuid4()
         self._rank_to_pid = rank_to_pid
 
@@ -300,9 +302,8 @@ def _is_supported_gather_scatter_type(data) -> bool:
             if isinstance(dtype, pd.CategoricalDtype):
                 return False
 
-    if isinstance(data, pd.Series):
-        if isinstance(data.dtype, pd.CategoricalDtype):
-            return False
+    if isinstance(data, pd.Series) and isinstance(data.dtype, pd.CategoricalDtype):
+        return False
 
     return isinstance(data, (pd.DataFrame, pd.Series)) and not isinstance(
         data.index, (pd.CategoricalIndex, pd.PeriodIndex, pd.IntervalIndex)

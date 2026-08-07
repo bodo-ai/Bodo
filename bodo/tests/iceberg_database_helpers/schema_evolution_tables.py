@@ -415,7 +415,7 @@ def create_struct_field_evolution_table(table: str, spark=None, postfix: str = "
             )
             df["A"] = df["A"].apply(
                 lambda x: {
-                    **{"b": x["b"]},
+                    "b": x["b"],
                     **{key: value for key, value in x.items() if key != "b"},
                 }
             )
@@ -815,4 +815,4 @@ if __name__ == "__main__":
         create_schema_evolution_tables(list(SCHEMA_EVOLUTION_TABLE_NAME_MAP.keys()))
     else:
         print("Invalid Number of Arguments")
-        exit(1)
+        sys.exit(1)

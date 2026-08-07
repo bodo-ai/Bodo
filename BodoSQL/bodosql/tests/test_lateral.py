@@ -585,7 +585,7 @@ def test_generator(query, answer, is_out_distributed, memory_leak_check):
                     "M": pd.Series(
                         [
                             {char: ord(char) for char in word}
-                            for word in "ABC A  AEIOU RSTLNE".split(" ")
+                            for word in ["ABC", "A", "", "AEIOU", "RSTLNE"]
                         ],
                         dtype=pd.ArrowDtype(pa.map_(pa.string(), pa.int32())),
                     ),

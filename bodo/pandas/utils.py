@@ -1191,7 +1191,7 @@ def get_scalar_udf_result_type(obj, method_name, func, *args, **kwargs) -> pd.Se
                 empty_series = _get_empty_series_arrow(out_sample)
             except (pa.lib.ArrowTypeError, pa.lib.ArrowInvalid) as e:
                 # Could not get a pyarrow type for the series, Fallback to pandas.
-                except_msg = f", got: {str(e)}."
+                except_msg = f", got: {e!s}."
                 break
 
             return empty_series
@@ -1440,7 +1440,7 @@ class JITFallback:
         # only JIT fallback for methods that we have tested.
         if self.name in ("duplicated", "pivot") and cache_entry != False:
             # Import compiler
-            import bodo.decorators  # isort:skip # noqa
+            import bodo.decorators  # isort:skip
 
             bodo.spawn.utils.import_compiler_on_workers()
 
@@ -1464,7 +1464,7 @@ class JITFallback:
                     )
                     caller_args = ",".join(
                         [f"arg{i}" for i in range(len(args))]
-                        + [f"{x}={x}" for x in kwargs.keys()]
+                        + [f"{x}={x}" for x in kwargs]
                     )
                     func_text = f"def {fname}({self_arg}{sig_args}):\n"
                     if self.base_obj is None:
@@ -1603,7 +1603,7 @@ def log_wrapper(func):
                 elif x.__class__.__name__ == "BodoSeries":
                     return f"s{id(x)}"
                 else:
-                    return f"{type(x).__name__}({repr(x)})"
+                    return f"{type(x).__name__}({x!r})"
 
             arg_str = ", ".join(
                 [

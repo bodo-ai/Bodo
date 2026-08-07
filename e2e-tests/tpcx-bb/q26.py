@@ -157,7 +157,7 @@ def run_clustering(training_df):
 
 
 def tpcx_bb_q26_ml(kmeans_input_df):
-    model, sse = run_clustering(kmeans_input_df)
+    model, _sse = run_clustering(kmeans_input_df)
     return {
         "cid_labels": model.labels_,
         "wssse": model.inertia_,

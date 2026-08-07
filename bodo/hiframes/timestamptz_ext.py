@@ -335,8 +335,8 @@ def overload_timestamptz(utc_timestamp, offset_minutes):
 
 @overload_method(TimestampTZType, "local_timestamp")
 def overload_timestamptz_local_timestamp(A):
-    return lambda A: A.utc_timestamp + pd.Timedelta(
-        minutes=A.offset_minutes
+    return lambda A: (
+        A.utc_timestamp + pd.Timedelta(minutes=A.offset_minutes)
     )  # pragma: no cover
 
 
@@ -358,9 +358,7 @@ def create_cmp_op_overload(op):
         if isinstance(lhs, TimestampTZType) and is_overload_none(rhs):
             # When we compare TimestampTZ and None in order to sort or take extreme values
             # in a series/array of TimestampTZ, TimestampTZ() > None, TimestampTZ() < None should all return True
-            return lambda lhs, rhs: (
-                False if op is operator.eq else True
-            )  # pragma: no cover
+            return lambda lhs, rhs: not op is operator.eq  # pragma: no cover
 
         if is_overload_none(lhs) and isinstance(rhs, TimestampTZType):
             # When we compare None and TimestampTZ in order to sort or take extreme values

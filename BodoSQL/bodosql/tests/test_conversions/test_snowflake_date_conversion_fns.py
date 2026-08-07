@@ -77,9 +77,11 @@ def test_date_casting_functions(
     expected_output = pd.DataFrame(
         {
             "FOO": dt_fn_dataframe["TABLE1"][date_casting_input_type].apply(
-                lambda val: pd.NA
-                if scalar_to_date_equiv_fn(val) is None
-                else scalar_to_date_equiv_fn(val)
+                lambda val: (
+                    pd.NA
+                    if scalar_to_date_equiv_fn(val) is None
+                    else scalar_to_date_equiv_fn(val)
+                )
             )
         }
     )
@@ -110,10 +112,14 @@ def test_date_casting_functions_case(
     expected_output = pd.DataFrame(
         {
             "FOO": dt_fn_dataframe_nullable["TABLE1"][date_casting_input_type].apply(
-                lambda val: scalar_to_date_equiv_fn(val)
-                if scalar_to_date_equiv_fn(val) is not None
-                and (scalar_to_date_equiv_fn(val) < pd.Timestamp("2013-01-03").date())
-                else pd.NA
+                lambda val: (
+                    scalar_to_date_equiv_fn(val)
+                    if scalar_to_date_equiv_fn(val) is not None
+                    and (
+                        scalar_to_date_equiv_fn(val) < pd.Timestamp("2013-01-03").date()
+                    )
+                    else pd.NA
+                )
             )
         }
     )
@@ -409,9 +415,11 @@ def test_date_casting_with_colon(
     expected_output = pd.DataFrame(
         {
             "FOO": dt_fn_dataframe["TABLE1"][date_casting_input_type].apply(
-                lambda val: pd.NA
-                if scalar_to_date_equiv_fn(val) is None
-                else scalar_to_date_equiv_fn(val)
+                lambda val: (
+                    pd.NA
+                    if scalar_to_date_equiv_fn(val) is None
+                    else scalar_to_date_equiv_fn(val)
+                )
             )
         }
     )
@@ -799,7 +807,7 @@ def test_to_timestamp_numeric(
         "TRY_TO_TIMESTAMP_TZ",
     }
     data, answer, scale_str = to_timestamp_numeric_data
-    if to_timestamp_fn.endswith("_LTZ") or to_timestamp_fn.endswith("_TZ"):
+    if to_timestamp_fn.endswith(("_LTZ", "_TZ")):
         tz = local_tz
     else:
         tz = None

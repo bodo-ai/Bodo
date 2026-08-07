@@ -141,7 +141,7 @@ def determine_iceberg_type(
         else:
             msg = f"Dropping unsupported snowflake type: {snowflake_type}"
             warnings.warn(msg)
-            return None
+            return
 
     if snowflake_type == "BOOLEAN":
         return "BOOLEAN"

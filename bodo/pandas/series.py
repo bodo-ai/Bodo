@@ -747,7 +747,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
 
         if engine == "bodo":
             # Import compiler
-            import bodo.decorators  # isort:skip # noqa
+            import bodo.decorators  # isort:skip
             from bodo.pandas.utils_jit import (
                 cpp_table_to_series_jit,
                 get_udf_cfunc_decorator,
@@ -973,12 +973,11 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 "Series.sort_values(): argument na_position does not contain only 'first' or 'last'"
             )
 
-        if kind is not None:
-            if bodo.dataframe_library_warn:
-                warnings.warn("sort_values() kind argument ignored")
+        if kind is not None and bodo.dataframe_library_warn:
+            warnings.warn("sort_values() kind argument ignored")
 
         ascending = [ascending]
-        na_position = [True if na_position == "first" else False]
+        na_position = [na_position == "first"]
         cols = [0]
 
         """ Create 0 length versions of the dataframe as sorted dataframe
@@ -1708,9 +1707,9 @@ class BodoStringMethods:
     @check_args_fallback(unsupported="none")
     def slice(
         self,
-        start: int = None,
-        stop: int = None,
-        step: int = None,
+        start: int | None = None,
+        stop: int | None = None,
+        step: int | None = None,
     ):
         """
         Support Series.str.slice() method same as Pandas using Arrow/cuDF compute.
@@ -1858,7 +1857,7 @@ class BodoStringMethods:
             ]
         else:
             field_list = [
-                pa.field(f"{name}", pa.large_string()) for name in group_names.keys()
+                pa.field(f"{name}", pa.large_string()) for name in group_names
             ]
 
         arrow_schema = pa.schema(field_list)
@@ -2040,7 +2039,7 @@ class BodoSeriesAiMethods:
         modelId: str,
         request_formatter: Callable[[str], str] | None = None,
         response_formatter: Callable[[str], str] | None = None,
-        region: str = None,
+        region: str | None = None,
         **generation_kwargs,
     ) -> BodoSeries:
         """Generate text using Amazon Bedrock model.
@@ -2238,8 +2237,8 @@ class BodoSeriesAiMethods:
         vector_bucket_name: str,
         index_name: str,
         topk: int,
-        region: str = None,
-        filter: dict = None,
+        region: str | None = None,
+        filter: dict | None = None,
         return_distance: bool = False,
         return_metadata: bool = False,
     ):
@@ -3580,22 +3579,23 @@ def validate_dtype(name, obj):
 
     dtype = obj._dtype
     accessor = name.split(".")[0]
-    if accessor == "str":
-        if dtype not in allowed_types_map.get(
-            name, (pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string()))
-        ):
-            raise AttributeError("Can only use .str accessor with string values!")
-    if accessor == "dt":
-        if dtype not in allowed_types_map.get(
-            name, allowed_types_map["dt_default"]
-        ) and not _is_pd_pa_timestamp(dtype):
-            raise AttributeError("Can only use .dt accessor with datetimelike values!")
+    if accessor == "str" and dtype not in allowed_types_map.get(
+        name, (pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string()))
+    ):
+        raise AttributeError("Can only use .str accessor with string values!")
+    if (
+        accessor == "dt"
+        and dtype not in allowed_types_map.get(name, allowed_types_map["dt_default"])
+        and not _is_pd_pa_timestamp(dtype)
+    ):
+        raise AttributeError("Can only use .dt accessor with datetimelike values!")
 
 
-def gen_method(
-    name, return_type, is_method=True, accessor_type="", allowed_types=[str]
-):
+def gen_method(name, return_type, is_method=True, accessor_type="", allowed_types=None):
     """Generates Series methods, supports optional/positional args."""
+
+    if allowed_types is None:
+        allowed_types = [str]
 
     def method(self, *args, **kwargs):
         """Generalized template for Series methods and argument validation using signature"""

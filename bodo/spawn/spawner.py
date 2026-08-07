@@ -266,7 +266,7 @@ class Spawner:
 
         for i in range(len(args)):
             _recv_updated_arg(args[i], args_meta[i])
-        for name in kwargs.keys():
+        for name in kwargs:
             _recv_updated_arg(kwargs[name], kwargs_meta[name])
 
     def _send_env_var(self, bcast_root, propagate_env):
@@ -301,14 +301,12 @@ class Spawner:
 
         # Import compiler on workers if spawner imported the compiler to avoid
         # inconsistency issues like different scatter implementations.
-        if "bodo.decorators" in sys.modules.keys() or _not_all_lazy_plan_args(
-            args, kwargs
-        ):
+        if "bodo.decorators" in sys.modules or _not_all_lazy_plan_args(args, kwargs):
             import bodo.decorators  # isort:skip # noqa
 
             self.import_compiler_on_workers()
 
-        if "bodosql.compiler" in sys.modules.keys():
+        if "bodosql.compiler" in sys.modules:
             import bodosql.compiler  # isort:skip # noqa
 
             self.import_bodosql_compiler_on_workers()
@@ -589,7 +587,7 @@ class Spawner:
             return None
 
         # Import compiler lazily.
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
 
         # The compiler should have already been imported on workers before this point,
         # but just to be safe.
@@ -634,7 +632,7 @@ class Spawner:
         if isinstance(arg_meta, ArgMetadata):
             if arg_meta == ArgMetadata.BROADCAST:
                 # Import compiler lazily
-                import bodo.decorators  # isort:skip # noqa
+                import bodo.decorators  # isort:skip
 
                 bodo.libs.distributed_api.bcast(
                     arg, root=self.bcast_root, comm=spawner.worker_intercomm
@@ -651,7 +649,7 @@ class Spawner:
             for tname, tmeta in arg_meta.tables.items():
                 if tmeta is ArgMetadata.BROADCAST:
                     # Import compiler lazily
-                    import bodo.decorators  # isort:skip # noqa
+                    import bodo.decorators  # isort:skip
 
                     bodo.libs.distributed_api.bcast(
                         arg.tables[tname],

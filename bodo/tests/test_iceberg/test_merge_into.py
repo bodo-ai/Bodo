@@ -109,9 +109,9 @@ def test_merge_into_cow_write_api(
             db_schema, table_name, "data", new_fname
         )
 
-    except Exception as e:
+    except Exception:
         passed = False
-        raise e
+        raise
     finally:
         passed = comm.bcast(passed)
 
@@ -216,9 +216,9 @@ def test_merge_into_cow_write_api_partitioned(
             os.path.join(db_schema, table_name, "data", path) for path in new_paths
         }
 
-    except Exception as e:
+    except Exception:
         passed = False
-        raise e
+        raise
     finally:
         passed = comm.bcast(passed)
 
@@ -296,9 +296,9 @@ def test_merge_into_cow_write_api_snapshot_check(
         )
         assert not success, "MERGE INTO Commit Operation should not have succeeded"
 
-    except Exception as e:
+    except Exception:
         passed = False
-        raise e
+        raise
     finally:
         passed = comm.bcast(passed)
 

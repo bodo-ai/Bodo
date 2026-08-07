@@ -4,7 +4,6 @@ This file is mostly wrappers for C++ implementations.
 
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING
 
 import llvmlite.binding as ll
 import numba
@@ -43,10 +42,6 @@ from bodo.utils.typing import (
     to_nullable_type,
     unwrap_typeref,
 )
-
-if TYPE_CHECKING:  # pragma: no cover
-    pass
-
 
 ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
 ll.add_symbol("join_state_init_py_entry", stream_join_cpp.join_state_init_py_entry)
@@ -1412,7 +1407,6 @@ def runtime_join_filter(
             a column level filter on the column corresponding to
             the i'th join key.
     """
-    pass
 
 
 def _get_runtime_join_filter_info(
@@ -1645,8 +1639,8 @@ def overload_runtime_join_filter(
     # If no filter can be applied, just return a NOP implementation
     # (that will get optimized out) to avoid function call overheads.
     if (not any(can_apply_bloom_filters)) and (not any(can_apply_col_filters)):
-        return (
-            lambda join_states, table, join_keys_idxs, process_col_bitmasks: table
+        return lambda join_states, table, join_keys_idxs, process_col_bitmasks: (
+            table
         )  # pragma: no cover
 
     col_inds_t = MetaType(tuple(range(n_cols)))

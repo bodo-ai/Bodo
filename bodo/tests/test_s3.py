@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-import pyarrow.csv as csv
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import pytest
+from pyarrow import csv
 from pyarrow import fs as pafs
 
 import bodo

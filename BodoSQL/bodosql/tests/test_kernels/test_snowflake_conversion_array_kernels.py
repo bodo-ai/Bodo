@@ -131,13 +131,12 @@ def test_to_boolean(to_boolean_test_arrs):
             with pytest.raises(ValueError, match="string must be one of"):
                 bodo.jit(impl)(arr)
             run_check = False
-    elif is_float_dtype(arr):
-        if np.isinf(arr).any():
-            with pytest.raises(
-                ValueError, match="value must be a valid numeric expression"
-            ):
-                bodo.jit(impl)(arr)
-            run_check = False
+    elif is_float_dtype(arr) and np.isinf(arr).any():
+        with pytest.raises(
+            ValueError, match="value must be a valid numeric expression"
+        ):
+            bodo.jit(impl)(arr)
+        run_check = False
     if run_check:
         py_output = vectorized_sol((arr,), to_bool_scalar_fn, "boolean")
         check_func(
