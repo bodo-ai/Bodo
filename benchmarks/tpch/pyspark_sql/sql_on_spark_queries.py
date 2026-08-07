@@ -95,6 +95,7 @@ def {func_name}(spark):
             + """
     df = spark.sql(tpch_query)
     df.collect()
+    return df
 """
         )
 
@@ -108,6 +109,7 @@ def run_queries(
     scale_factor: float = 1.0,
     sql_dir: str = "../sql",
     use_parquet: bool = False,
+    store_output: bool = False,
 ):
     load_tables(spark, data_folder, use_parquet)
     create_queries(spark, queries, scale_factor, sql_dir)
@@ -122,8 +124,10 @@ def run_queries(
             continue
 
         t2 = time.time()
-        query_func(spark)  # run the query
+        output_df = query_func(spark)  # run the query
         print(f"Query {query:02} took {time.time() - t2:.2f} seconds")
+        if store_output:
+            output_df.coalesce(1).write.parquet(f"q{query:02}_output")
         spark.catalog.clearCache()
         gc.collect()
 
@@ -168,11 +172,17 @@ def main():
         action="store_true",
         help="Read data from Parquet files instead of Iceberg (default: False).",
     )
+    parser.add_argument(
+        "--store_output",
+        action="store_true",
+        help="Write the output for each query to a file (default: False).",
+    )
     args = parser.parse_args()
     folder = args.folder
     scale_factor = args.scale_factor
     run_on_gpu = args.gpu
     use_parquet = args.use_parquet
+    store_output = args.store_output
 
     if run_on_gpu:
         spark = (
@@ -209,7 +219,9 @@ def main():
 
     warnings.filterwarnings("ignore")
 
-    run_queries(spark, folder, queries, scale_factor, args.sql_dir, use_parquet)
+    run_queries(
+        spark, folder, queries, scale_factor, args.sql_dir, use_parquet, store_output
+    )
 
 
 if __name__ == "__main__":
