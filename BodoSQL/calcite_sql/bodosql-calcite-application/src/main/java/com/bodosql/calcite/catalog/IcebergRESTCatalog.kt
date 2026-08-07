@@ -13,6 +13,7 @@ import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.hadoop.conf.Configuration
 import org.apache.iceberg.CatalogProperties
+import org.apache.iceberg.exceptions.NoSuchTableException
 import org.apache.iceberg.rest.RESTCatalog
 
 open class IcebergRESTCatalog(
@@ -44,14 +45,18 @@ open class IcebergRESTCatalog(
      *
      * @param schemaPath The list of schemas to traverse before finding the table.
      * @param tableName Name of the table.
-     * @return The table object.
+     * @return The table object or null.
      */
     override fun getTable(
         schemaPath: ImmutableList<String>,
         tableName: String,
-    ): CatalogTable {
-        val columns = getIcebergTableColumns(schemaPath, tableName)
-        return IcebergCatalogTable(tableName, schemaPath, columns, this)
+    ): CatalogTable? {
+        try {
+            val columns = getIcebergTableColumns(schemaPath, tableName)
+            return IcebergCatalogTable(tableName, schemaPath, columns, this)
+        } catch (_: NoSuchTableException) {
+            return null
+        }
     }
 
     /**

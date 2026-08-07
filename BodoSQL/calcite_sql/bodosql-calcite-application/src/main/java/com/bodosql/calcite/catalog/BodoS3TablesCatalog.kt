@@ -11,6 +11,7 @@ import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
+import org.apache.iceberg.exceptions.NoSuchTableException
 import software.amazon.s3tables.iceberg.S3TablesCatalog
 import software.amazon.s3tables.iceberg.imports.AwsClientProperties.CLIENT_REGION
 
@@ -33,14 +34,18 @@ class BodoS3TablesCatalog(
      *
      * @param schemaPath The list of schemas to traverse before finding the table.
      * @param tableName Name of the table.
-     * @return The table object.
+     * @return The table object or null.
      */
     override fun getTable(
         schemaPath: ImmutableList<String>,
         tableName: String,
-    ): CatalogTable {
-        val columns = getIcebergTableColumns(schemaPath, tableName)
-        return IcebergCatalogTable(tableName, schemaPath, columns, this)
+    ): CatalogTable? {
+        try {
+            val columns = getIcebergTableColumns(schemaPath, tableName)
+            return IcebergCatalogTable(tableName, schemaPath, columns, this)
+        } catch (_: NoSuchTableException) {
+            return null
+        }
     }
 
     /**
