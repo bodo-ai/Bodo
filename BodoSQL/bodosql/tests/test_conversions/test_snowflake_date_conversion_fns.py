@@ -68,6 +68,7 @@ def date_casting_input_type(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_date_casting_functions(
     dt_fn_dataframe, test_fn, date_casting_input_type, memory_leak_check
 ):
@@ -95,6 +96,7 @@ def test_date_casting_functions(
 
 
 @pytest.mark.slow
+@pytest.mark.bodosql_cpp
 def test_date_casting_functions_case(
     dt_fn_dataframe, test_fn, date_casting_input_type, memory_leak_check
 ):
@@ -221,6 +223,7 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
 
 
 # [BE-3774] Leaks Memory
+@pytest.mark.bodosql_cpp
 def test_date_casting_functions_invalid_args(dt_fn_dataframe, test_fn):
     """
     tests arguments which cause NA in try_to_date, and throw an error for DATE/TO_DATE/TRY_TO_DATE
@@ -242,7 +245,10 @@ def test_date_casting_functions_invalid_args(dt_fn_dataframe, test_fn):
             expected_output=expected_output,
         )
     else:
-        msg = "Invalid input while converting to date value"
+        if bodosql.use_cpp_backend:
+            msg = "Failed to parse.*[date|timestamp]"
+        else:
+            msg = "Invalid input while converting to date value"
         with pytest.raises(Exception, match=msg):
             bc = bodosql.BodoSQLContext(dt_fn_dataframe)
             bc.sql(query)
@@ -649,6 +655,7 @@ def to_timestamp_fn(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_to_timestamp_non_numeric(
     to_timestamp_fn, to_timestamp_non_numeric_data, local_tz, memory_leak_check
 ):
