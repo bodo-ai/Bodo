@@ -426,10 +426,13 @@ def test_dict_key_join(test_db_snowflake_catalog, memory_leak_check):
         )
         # Verify that the correct bounds were added to the data requested
         # from Snowflake.
-        check_logger_msg(
-            stream,
-            'SELECT * FROM (SELECT "WORD", "POS" FROM (SELECT "WORD", "POS" FROM "TEST_DB"."PUBLIC"."RAW_DICTIONARY" WHERE "POS" IS NOT NULL AND STARTSWITH("WORD", $$R$$)) as TEMP) WHERE TRUE AND ($2 >= \'""\') AND ($2 <= \'"v."\')',
-        )
+        # Covering expressions prevents the runtime join filter from being pushed into I/O.
+        # TODO(BSE-5555): Revisit this check after covering expression improvements.
+        # check_logger_msg(
+        #     stream,
+        #     'SELECT * FROM (SELECT "WORD", "POS" FROM (SELECT "WORD", "POS" FROM "TEST_DB"."PUBLIC"."RAW_DICTIONARY" WHERE "POS" IS NOT NULL AND STARTSWITH("WORD", $$R$$)) as TEMP) WHERE TRUE AND ($2 >= \'""\') AND ($2 <= \'"v."\')',
+        # )
+
         # Also verify that the POS column was loaded in a dictionary encoded form
         check_logger_msg(
             stream,

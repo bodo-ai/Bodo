@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import decimal
+import math
 import operator
 import re
 import zoneinfo
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -3272,6 +3274,75 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (modified_regexp, "e" in regex_params, group_num),
             )
 
+        elif func_name == "STRTOK" and len(op_exprs) in (1, 2, 3):
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            if len(op_exprs) >= 2:
+                delim_expr = op_exprs[1]
+                ensure_arg_is_const_expr_of_type(
+                    delim_expr, "delim_expr", (str, pa.binary())
+                )
+                delimiter = delim_expr.value
+            else:
+                delimiter = " "
+
+            if len(op_exprs) == 3:
+                part_num_expr = op_exprs[2]
+                ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
+                part_num = part_num_expr.value
+                if part_num <= 0:
+                    raise ValueError("STRTOK part number must be 1 or greater.")
+            else:
+                part_num = 1
+
+            # If delimiter is empty: return NULL if string is also empty, else
+            # return the original string.
+            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+            if delimiter == "":
+                return ArrowScalarFuncExpression(
+                    src.empty_data, [src, empty_string_expr], "nullif", ()
+                )
+
+            # STRTOK counts each character in the delimiter string as a delimiter.
+            # We use regex so any of those characters or combination of characters
+            # are treated as delimiters so we can split into the correct tokens with
+            # a single pass.
+            # Unlike SPLIT_PART, STRTOK never returns empty strings, so we have to
+            # be careful not to let empty strings count as tokens. In our case, it's
+            # easier to prevent empty strings from arising after splitting in the
+            # first place by trimming and using regex.
+
+            # We need to escape the delimiter string in case any of the characters
+            # have a special meaning in regex
+            escaped_delim = re.escape(delimiter)
+            # Wrap escaped delimiter string in brackets to match any of the characters
+            # inside.
+            # The '+' denotes one or more of those characters. This is so we don't
+            # get empty strings after splitting when there are neighboring delimiter
+            # characters.
+            delim_regexp = f"[{escaped_delim}]+"
+
+            # Trim off occurrences of the delimiters from the ends of the string. This helps avoid
+            # empty string tokens after split_pattern_regex.
+            trimmed_str = ArrowScalarFuncExpression(
+                src.empty_data, [src], "utf8_trim", (delimiter,)
+            )
+
+            # If the input string is empty or contains only delimiters, return NULL
+            trimmed_str = ArrowScalarFuncExpression(
+                src.empty_data, [trimmed_str, empty_string_expr], "nullif", ()
+            )
+
+            # Implementation involves fixed_size_list results, so easier
+            # to do it on the C++ side.
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [trimmed_str],
+                "strtok",
+                (delim_regexp, part_num),
+            )
+
         if func_name == "PI" and len(op_exprs) == 0:
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
             return ConstantExpression(dummy_empty_data, input_plan, np.pi)
@@ -4501,6 +4572,169 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 new_index,
             )
 
+        elif func_name == "SUBSTRING_INDEX" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            delim_expr = op_exprs[1]
+            count_expr = op_exprs[2]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                delim_expr, "delim_expr", (str, pa.binary())
+            )
+            ensure_arg_is_const_expr_of_type(count_expr, "count_expr", int)
+
+            # Implementation involves fixed_size_list results, so easier
+            # to do it on the C++ side.
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "substring_index",
+                (delim_expr.value, count_expr.value),
+            )
+
+        elif func_name == "SPLIT_PART" and len(op_exprs) == 3:
+            src = op_exprs[0]
+            delim_expr = op_exprs[1]
+            part_num_expr = op_exprs[2]
+
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+            ensure_arg_is_const_expr_of_type(
+                delim_expr, "delim_expr", (str, pa.binary())
+            )
+            ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
+
+            # Snowflake treats a part number of 0 the same as 1.
+            # part_num is 1-based.
+            part_num = part_num_expr.value if part_num_expr.value != 0 else 1
+
+            # Implementation involves fixed_size_list results, so easier
+            # to do it on the C++ side.
+            return ArrowScalarFuncExpression(
+                src.empty_data,
+                [src],
+                "split_part",
+                (delim_expr.value, part_num),
+            )
+
+        elif func_name == "STRTOK_TO_ARRAY" and len(op_exprs) in (1, 2):
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            if len(op_exprs) == 2:
+                delim_expr = op_exprs[1]
+                ensure_arg_is_const_expr_of_type(
+                    delim_expr, "delim_expr", (str, pa.binary())
+                )
+                delimiter = delim_expr.value
+            else:
+                delimiter = " "
+
+            src_pa_type = get_expr_dtype(
+                src, "STRTOK_TO_ARRAY src", get_const_val_type=False
+            ).pyarrow_dtype
+            list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
+
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+            empty_list = ConstantExpression(list_empty_data, input_plan, [])
+
+            # If delimiter is empty: return an empty list if string is also empty, else
+            # return a list containing only the original string. If original string is
+            # null, the result should be a null list rather than a list containing NULL.
+            if delimiter == "":
+                string_is_empty = ComparisonOpExpression(
+                    bool_empty_data, src, empty_string_expr, operator.eq
+                )
+                wrapped_src = ArrowScalarFuncExpression(
+                    list_empty_data, [src], "zip", ()
+                )
+                src_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
+                wrapped_src = CaseExpression(
+                    list_empty_data,
+                    src_is_null,
+                    NullExpression(list_empty_data, input_plan, 0),
+                    wrapped_src,
+                )
+                return CaseExpression(
+                    list_empty_data, string_is_empty, empty_list, wrapped_src
+                )
+
+            # STRTOK_TO_ARRAY counts each character in the delimiter string as a delimiter.
+            # We use regex so any of those characters or combination of characters
+            # are treated as delimiters so we can split into the correct tokens with
+            # a single pass.
+            # Unlike SPLIT, STRTOK_TO_ARRAY never returns empty strings in the
+            # list of tokens. In our case, it's easier to prevent empty strings from
+            # arising after splitting in the first place by trimming and using regex.
+
+            # We need to escape the delimiter string in case any of the characters
+            # have a special meaning in regex
+            escaped_delim = re.escape(delimiter)
+            # Wrap escaped delimiter string in brackets to match any of the characters
+            # inside.
+            # The '+' denotes one or more of those characters. This is so we don't
+            # get empty strings after splitting when there are neighboring delimiter
+            # characters.
+            delim_regexp = f"[{escaped_delim}]+"
+
+            # Trim off occurrences of the delimiters from the ends of the string. This helps avoid
+            # empty string tokens after split_pattern_regex.
+            trimmed_str = ArrowScalarFuncExpression(
+                src.empty_data, [src], "utf8_trim", (delimiter,)
+            )
+
+            # The only situation where the result has an empty string token is when the
+            # original string is empty or contains only delimiters
+            result_token_is_empty = ComparisonOpExpression(
+                bool_empty_data, trimmed_str, empty_string_expr, operator.eq
+            )
+
+            token_list = ArrowScalarFuncExpression(
+                list_empty_data,
+                [trimmed_str],
+                "split_pattern_regex",
+                (delim_regexp,),
+            )
+
+            # Ensure we are never left with a list containing only an empty string
+            return CaseExpression(
+                list_empty_data, result_token_is_empty, empty_list, token_list
+            )
+
+        elif func_name == "SPLIT" and len(op_exprs) == 2:
+            src = op_exprs[0]
+            ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+            delim_expr = op_exprs[1]
+            ensure_arg_is_const_expr_of_type(
+                delim_expr, "delim_expr", (str, pa.binary())
+            )
+
+            src_pa_type = get_expr_dtype(
+                src, "SPLIT src", get_const_val_type=False
+            ).pyarrow_dtype
+            list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
+
+            # If delimiter is empty: return a list containing only the original string.
+            # If original string is null, the result should be a null list rather than
+            # a list containing NULL.
+            if delim_expr.value == "":
+                bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+                src_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
+                wrapped_src = ArrowScalarFuncExpression(
+                    list_empty_data, [src], "zip", ()
+                )
+                return CaseExpression(
+                    list_empty_data,
+                    src_is_null,
+                    NullExpression(list_empty_data, input_plan, 0),
+                    wrapped_src,
+                )
+
+            return ArrowScalarFuncExpression(
+                list_empty_data, [src], "split_pattern", (delim_expr.value,)
+            )
+
         elif func_name == "REGEXP_REPLACE" and len(op_exprs) in (2, 3, 4, 5, 6):
             src = op_exprs[0]
             regexp = op_exprs[1]
@@ -4728,7 +4962,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 # Nothing to concatenate, just return the input string
                 return src
 
-            separator = bodo.pandas.plan.ConstantExpression(
+            separator = bd.plan.ConstantExpression(
                 src.empty_data,
                 src.source,
                 "",  # empty separator to concat without anything in between
@@ -4789,9 +5023,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
 
-            space_expr = bodo.pandas.plan.ConstantExpression(
-                str_empty_data, input_plan, " "
-            )
+            space_expr = bd.plan.ConstantExpression(str_empty_data, input_plan, " ")
 
             return ArrowScalarFuncExpression(
                 str_empty_data, [space_expr], "binary_repeat", (num_repeats_expr.value,)
@@ -5054,6 +5286,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             ensure_arg_is_const_expr_of_type(like_expr, "like_expr", str)
 
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            import bodo.decorators  # isort:skip # noqa
+
             converted_like, needs_regex, start_match, end_match, match_anything = (
                 bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
                     like_expr.value, escape_val, False
@@ -5419,6 +5653,103 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         )
 
 
+def precision_scale_from_float(value):
+    """
+    Return (precision, scale) suitable for a DECIMAL(precision, scale)
+    that can store `value` without truncation of its current decimal digits.
+
+    - Uses Decimal(str(value)) to avoid binary-float artifacts.
+    - precision = integer_digits + scale, where integer_digits >= 1 (zero counts as 1).
+    - scale = number of digits after the decimal point in the decimal string form.
+    """
+    if value is None:
+        raise ValueError("value must not be None")
+
+    # Handle special floats
+    if isinstance(value, float):
+        if math.isnan(value):
+            raise ValueError("NaN has no decimal precision/scale")
+        if math.isinf(value):
+            raise ValueError("Infinity has no decimal precision/scale")
+
+    # Convert via str to avoid binary representation artifacts
+    try:
+        d = Decimal(str(value))
+    except Exception as e:
+        raise ValueError(f"Cannot convert value to Decimal: {e}")
+
+    # Use fixed-point string form (no exponent)
+    s = format(d, "f")  # e.g., "123.4500", "0.00123", "1000"
+    if s[0] == "-":
+        s = s[1:]
+
+    if "." in s:
+        int_part, frac_part = s.split(".", 1)
+    else:
+        int_part, frac_part = s, ""
+
+    # scale is number of fractional digits
+    scale = len(frac_part)
+
+    # integer digits: count digits in integer part, but treat "0" as 1 digit
+    int_digits = len(int_part.lstrip("0"))
+    if int_digits == 0:
+        int_digits = 1
+
+    precision = int_digits + scale
+
+    return precision, scale
+
+
+def get_decimal_type(atype, expr):
+    if pa.types.is_int64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_int32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_int16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_int8(atype):
+        return pa.decimal128(3, 0)
+    elif pa.types.is_uint64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_uint32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_uint16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_uint8(atype):
+        return pa.decimal128(3, 0)
+    elif (pa.types.is_float32(atype) or pa.types.is_float64(atype)) and isinstance(
+        expr, ConstantExpression
+    ):
+        return pa.decimal128(*precision_scale_from_float(expr.value))
+    else:
+        raise TypeError(f"Not decimal conversion from {atype} yet")
+
+
+def get_output_type(left, right, non_decimal_func, decimal_func):
+    left_empty = left.empty_data
+    right_empty = right.empty_data
+    left_atype = left_empty.dtypes.iloc[0].pyarrow_dtype
+    right_atype = right_empty.dtypes.iloc[0].pyarrow_dtype
+    if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
+        if not pa.types.is_decimal(left_atype):
+            left_atype = get_decimal_type(left_atype, left)
+        if not pa.types.is_decimal(right_atype):
+            right_atype = get_decimal_type(right_atype, right)
+        output_leading, output_scale = decimal_func(
+            left_atype.precision - left_atype.scale,
+            left_atype.scale,
+            right_atype.precision - right_atype.scale,
+            right_atype.scale,
+        )
+        precision = output_leading + output_scale
+        return pd.Series(
+            dtype=pd.ArrowDtype(pa.decimal128(min(38, precision), output_scale))
+        )
+    else:
+        return non_decimal_func(left_empty.iloc[:, 0], right_empty.iloc[:, 0])
+
+
 def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
 
@@ -5435,7 +5766,12 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.PLUS):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
         # TODO: upcast output to avoid overflow?
-        out_empty = left.empty_data.iloc[:, 0] + right.empty_data.iloc[:, 0]
+        out_empty = get_output_type(
+            left,
+            right,
+            lambda l, r: l + r,
+            lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
+        )
         expr = ArithOpExpression(out_empty, left, right, "__add__")
         return expr
 
@@ -5456,17 +5792,32 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             right_cast = CastExpression(out_empty, right) if right_unsigned else right
             expr = ArithOpExpression(out_empty, left_cast, right_cast, "__sub__")
         else:
-            out_empty = left_type - right_type
+            out_empty = get_output_type(
+                left,
+                right,
+                lambda l, r: l - r,
+                lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
+            )
             expr = ArithOpExpression(out_empty, left, right, "__sub__")
         return expr
 
     if kind.equals(SqlKind.TIMES):
-        out_empty = left.empty_data.iloc[:, 0] * right.empty_data.iloc[:, 0]
+        out_empty = get_output_type(
+            left,
+            right,
+            lambda l, r: l * r,
+            lambda ll, ls, rl, rs: (ll + rl, ls + rs),
+        )
         expr = ArithOpExpression(out_empty, left, right, "__mul__")
         return expr
 
     if kind.equals(SqlKind.DIVIDE):
-        out_empty = left.empty_data.iloc[:, 0] / right.empty_data.iloc[:, 0]
+        out_empty = get_output_type(
+            left,
+            right,
+            lambda l, r: l / r,
+            lambda ll, ls, rl, rs: (ll + rs, max(ls, rs + 4)),
+        )
         expr = ArithOpExpression(out_empty, left, right, "__truediv__")
         return expr
 
@@ -6529,6 +6880,9 @@ def sql_type_to_pa_type(ctx, sql_type):
             raise ValueError("BodoSQL cpp backend does not support decimal256.")
         else:
             return pa.decimal128(precision, scale)
+    if sql_type_name.equals(SqlTypeName.ARRAY):
+        child_type = sql_type.getComponentType()
+        return pa.list_(sql_type_to_pa_type(ctx, child_type))
 
     raise NotImplementedError(f"SQL type {sql_type_name.toString()} not supported yet")
 
@@ -6902,7 +7256,7 @@ def _sarg_range_to_pyiceberg_expr(ref, lower, lower_inclusive, upper, upper_incl
 
 
 def java_binop_to_pyiceberg_expr(kind, op_exprs):
-    """Convert a BodoSQL Java binary operator call to a DataFrame library expression."""
+    """Convert a BodoSQL Java binary operator call to a PyIceberg expression."""
     import pyiceberg.expressions as pie
 
     left = op_exprs[0]

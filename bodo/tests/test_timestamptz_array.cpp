@@ -120,14 +120,15 @@ bodo::tests::suite timestamptz_array_tests([] {
         std::unique_ptr<table_info> table = make_timestamptz_arr();
         std::stringstream ss;
         DEBUG_PrintTable(ss, table.release());
-        bodo::tests::check(ss.str() ==
-                           "Column 0 : arr_type=TIMESTAMPTZ dtype=TIMESTAMPTZ\n"
-                           "nCol=1 List of number of rows: 5\n"
-                           "0 : 2024-07-04 18:45:31.250991000 +02:30\n"
-                           "1 : NA                                  \n"
-                           "2 : 2024-03-14 00:00:00.000000000 -01:00\n"
-                           "3 : NA                                  \n"
-                           "4 : 1999-12-31 23:59:59.999999250 +11:05\n");
+        bodo::tests::check(
+            ss.str() ==
+            "Column 0 : arr_type=TIMESTAMPTZ dtype=TIMESTAMPTZ[TIMESTAMPTZ]\n"
+            "nCol=1 List of number of rows: 5\n"
+            "0 : 2024-07-04 18:45:31.250991000 +02:30\n"
+            "1 : NA                                  \n"
+            "2 : 2024-03-14 00:00:00.000000000 -01:00\n"
+            "3 : NA                                  \n"
+            "4 : 1999-12-31 23:59:59.999999250 +11:05\n");
     });
 
     bodo::tests::test("test_timestamptz_array_sort", [] {
@@ -140,13 +141,14 @@ bodo::tests::suite timestamptz_array_tests([] {
             sort_values_table_local(table, 1, &asc, &napos, nullptr, false);
         std::stringstream ss;
         DEBUG_PrintTable(ss, sorted_table);
-        bodo::tests::check(ss.str() ==
-                           "Column 0 : arr_type=TIMESTAMPTZ dtype=TIMESTAMPTZ\n"
-                           "nCol=1 List of number of rows: 5\n"
-                           "0 : 1999-12-31 23:59:59.999999250 +11:05\n"
-                           "1 : 2024-03-14 00:00:00.000000000 -01:00\n"
-                           "2 : 2024-07-04 18:45:31.250991000 +02:30\n"
-                           "3 : NA                                  \n"
-                           "4 : NA                                  \n");
+        bodo::tests::check(
+            ss.str() ==
+            "Column 0 : arr_type=TIMESTAMPTZ dtype=TIMESTAMPTZ[TIMESTAMPTZ]\n"
+            "nCol=1 List of number of rows: 5\n"
+            "0 : 1999-12-31 23:59:59.999999250 +11:05\n"
+            "1 : 2024-03-14 00:00:00.000000000 -01:00\n"
+            "2 : 2024-07-04 18:45:31.250991000 +02:30\n"
+            "3 : NA                                  \n"
+            "4 : NA                                  \n");
     });
 });

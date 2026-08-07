@@ -15,7 +15,6 @@
 #include "../window/_window_compute.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
-#include "_groupby_ftypes.h"
 #include "_groupby_mode.h"
 #include "_groupby_udf.h"
 #include "_groupby_update.h"

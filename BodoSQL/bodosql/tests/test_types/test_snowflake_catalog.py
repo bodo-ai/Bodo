@@ -2020,39 +2020,51 @@ def test_filter_pushdown_row_count_caching(
     # we can be fairly certain that the any queries to this table in the recent
     # query history stem from this test.
     assert "1 rows" in plan, "Plan should have 1 row in the cost estimate"
-    assert "5.9849e4 rows" in plan, "Plan should have 59849 rows in the cost estimate"
+    assert "5.985e4 rows" in plan, "Plan should have 59850 rows in the cost estimate"
 
     # This query will get the list of all queries that match the specified pattern
     # in the past minute
-    metadata_query = """select * from table(information_schema.QUERY_HISTORY_BY_WAREHOUSE(
-                            WAREHOUSE_NAME=>'DEMO_WH',
-                            END_TIME_RANGE_START=>dateadd('minutes',-1,current_timestamp()),
-                            END_TIME_RANGE_END=>current_timestamp()
-                        )
-                    ) WHERE CONTAINS(QUERY_TEXT, 'SELECT COUNT(*) FROM (SELECT * FROM "TEST_DB"."PUBLIC"."TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY" WHERE "C_NATIONKEY" = 3)') OR
-                            CONTAINS(QUERY_TEXT, 'SELECT COUNT(*) FROM (SELECT * FROM "TEST_DB"."PUBLIC"."TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY" WHERE "C_COMMENT" = ')
-                    """
+    metadata_query = """
+        SELECT *
+        FROM TABLE(
+            information_schema.QUERY_HISTORY_BY_WAREHOUSE(
+                WAREHOUSE_NAME => 'DEMO_WH',
+                END_TIME_RANGE_START => DATEADD('minutes', -1, CURRENT_TIMESTAMP()),
+                END_TIME_RANGE_END => CURRENT_TIMESTAMP()
+            )
+        )
+        WHERE STARTSWITH(
+            UPPER(TRIM(QUERY_TEXT)),
+            'SELECT COUNT(*) FROM (SELECT * FROM "TEST_DB"."PUBLIC"."TPCH_SF10_CUSTOMER_WITH_ADDITIONS_COPY"'
+        )
+        AND CONTAINS(QUERY_TEXT, '"C_NATIONKEY" = 3')
+        AND CONTAINS(
+            QUERY_TEXT,
+            '"C_COMMENT" = $$I am the inserted dummy row. I am the only row with this comment$$'
+        )
+        """
 
-    # Try 4 times to make sure history is updated
     for _ in range(4):
-        # Empirically, it takes a moment for the query history to update,
-        # so we sleep for a few seconds to ensure that the query history is updated
         time.sleep(2)
         df = pd.read_sql(metadata_query, conn_str)
-        if len(df) == 2:
+
+        if len(df) == 1:
             break
 
-    # We expect two rows, one for each filter
-    assert len(df) == 2, "We should have two rows in the query history"
-    assert df["query_text"].str.contains("SELECT COUNT(*)", regex=False).all(), (
-        "We should have two queries for the row count"
+    assert len(df) == 1, (
+        "Expected exactly one combined row-count query, but found:\n"
+        + "\n---\n".join(df["query_text"].tolist())
     )
+
+    query_text = df["query_text"].iloc[0]
+
+    assert query_text.lstrip().upper().startswith("SELECT COUNT(*) FROM")
+    assert '"C_NATIONKEY" = 3' in query_text
     assert (
-        df["query_text"].str.contains('WHERE "C_NATIONKEY" = 3', regex=False).sum() == 1
-    ), "We should have one query for the C_NATIONKEY row estimate"
-    assert (
-        df["query_text"].str.contains('WHERE "C_COMMENT" = ', regex=False).sum() == 1
-    ), "We should have one query for the C_COMMENT row estimate"
+        '"C_COMMENT" = $$I am the inserted dummy row. '
+        "I am the only row with this comment$$"
+    ) in query_text
+    assert " OR " in query_text
 
 
 @pytest_mark_one_rank

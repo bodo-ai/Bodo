@@ -18,6 +18,7 @@
 #include "_executor.h"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/common/enums/cte_materialize.hpp"
+#include "duckdb/common/extra_type_info.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/unique_ptr.hpp"
@@ -25,6 +26,7 @@
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
@@ -120,6 +122,20 @@ duckdb::unique_ptr<duckdb::Expression> make_const_null(PyObject *out_schema_py,
     // You just pass the duckdb type to the Value constructor.
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(
         duckdb::Value(out_type));
+}
+
+duckdb::unique_ptr<duckdb::Expression> make_const_list_expr(
+    PyObject *list_scalar_py) {
+    auto arrow_list_scalar_res = arrow::py::unwrap_scalar(list_scalar_py);
+    std::shared_ptr<arrow::Scalar> arrow_list_scalar;
+    CHECK_ARROW_AND_ASSIGN(arrow_list_scalar_res,
+                           "make_const_list_expr: unable to unwrap list scalar",
+                           arrow_list_scalar);
+
+    duckdb::Value duckdb_list_value =
+        ArrowScalarToDuckDBValue(arrow_list_scalar);
+    return duckdb::make_uniq<duckdb::BoundConstantExpression>(
+        duckdb_list_value);
 }
 
 template <typename T>
@@ -350,24 +366,52 @@ std::unique_ptr<duckdb::Expression> make_arithop_expr(
     duckdb::ScalarFunctionCatalogEntry &func =
         entry->Cast<duckdb::ScalarFunctionCatalogEntry>();
 
-    duckdb::FunctionBinder function_binder(*binder);
-    duckdb::unique_ptr<duckdb::Expression> result =
-        function_binder.BindScalarFunction(
+    duckdb::LogicalType arg_type1, arg_type2;
+    arg_type1 = children[0]->return_type;
+    arg_type2 = children[1]->return_type;
+    duckdb::vector<duckdb::LogicalType> arg_types;
+    arg_types.push_back(arg_type1);
+    arg_types.push_back(arg_type2);
+
+    duckdb::unique_ptr<duckdb::Expression> result;
+    bool handled = false;
+    if (arg_type1.id() == duckdb::LogicalTypeId::DECIMAL ||
+        arg_type2.id() == duckdb::LogicalTypeId::DECIMAL) {
+        duckdb::LogicalType return_type;
+        if (arg_type1.id() == duckdb::LogicalTypeId::DECIMAL) {
+            return_type = arg_type1;
+        } else {
+            return_type = arg_type2;
+        }
+        result = duckdb::make_uniq<duckdb::BoundFunctionExpression>(
+            return_type,
+            duckdb::ScalarFunction(opstr, arg_types, return_type, nullptr),
+            std::move(children),
+            duckdb::make_uniq<BodoScalarFunctionData>(out_schema), true);
+        handled = true;
+    }
+
+    if (!handled) {
+        duckdb::FunctionBinder function_binder(*binder);
+        result = function_binder.BindScalarFunction(
             func, std::move(children), error,
             true,  // function is an operator
             duckdb::optional_ptr<duckdb::Binder>(*binder));
-    if (!result) {
-        throw std::runtime_error("make_arithop_expr BindScalarFunction failed");
-    }
-    if (result->GetExpressionType() != duckdb::ExpressionType::BOUND_FUNCTION) {
-        throw std::runtime_error(
-            "make_arithop_expr BindScalarFunction did not return a "
-            "BOUND_FUNCTION");
-    }
+        if (!result) {
+            throw std::runtime_error(
+                "make_arithop_expr BindScalarFunction failed");
+        }
+        if (result->GetExpressionType() !=
+            duckdb::ExpressionType::BOUND_FUNCTION) {
+            throw std::runtime_error(
+                "make_arithop_expr BindScalarFunction did not return a "
+                "BOUND_FUNCTION");
+        }
 
-    auto &bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
-    bound_func_expr.bind_info =
-        duckdb::make_uniq<BodoScalarFunctionData>(out_schema);
+        auto &bound_func_expr = result->Cast<duckdb::BoundFunctionExpression>();
+        bound_func_expr.bind_info =
+            duckdb::make_uniq<BodoScalarFunctionData>(out_schema);
+    }
 
     if (started_transaction) {
         client_context->transaction.Rollback({});
@@ -1087,6 +1131,22 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
             arrowArrayToDuckdbBasic<arrow::DoubleArray, double>(arr, vec,
                                                                 count);
             break;
+        case arrow::Type::LARGE_STRING: {
+            ValidityMask &validity = FlatVector::Validity(vec);
+            auto str_arr =
+                std::static_pointer_cast<arrow::LargeStringArray>(arr);
+            auto data = FlatVector::GetData<string_t>(vec);
+            for (idx_t i = 0; i < count; i++) {
+                if (str_arr->IsNull(i)) {
+                    validity.SetInvalid(i);
+                } else {
+                    auto view = str_arr->GetView(i);
+                    data[i] =
+                        StringVector::AddString(vec, view.data(), view.size());
+                }
+            }
+            break;
+        }
         case arrow::Type::STRING: {
             ValidityMask &validity = FlatVector::Validity(vec);
             auto str_arr = std::static_pointer_cast<arrow::StringArray>(arr);
@@ -1182,8 +1242,8 @@ void arrowArrayToDuckdbVector(const std::shared_ptr<arrow::Array> &arr,
             break;
         }
         default:
-            std::cout << "arrow type " << static_cast<int>(arrow_type)
-                      << std::endl;
+            std::cout << "arrowArrayToDuckdbVector: unhandled arrow type "
+                      << arr->type()->ToString() << std::endl;
             throw std::runtime_error("Unsupported Arrow type for conversion");
     }
 }
@@ -1756,6 +1816,24 @@ struct DecimalBindData : public duckdb::FunctionData {
     }
 };
 
+struct BinaryDecimalBindData : public duckdb::FunctionData {
+    duckdb::LogicalType return_type;
+    explicit BinaryDecimalBindData(duckdb::LogicalType rt)
+        : return_type(std::move(rt)) {}
+    duckdb::unique_ptr<FunctionData> Copy() const override {
+        return duckdb::make_uniq<BinaryDecimalBindData>(return_type);
+    }
+    bool Equals(const duckdb::FunctionData &other) const override {
+        const auto *other_decimal =
+            dynamic_cast<const BinaryDecimalBindData *>(&other);
+        if (other_decimal) {
+            return return_type == other_decimal->return_type;
+        } else {
+            return false;
+        }
+    }
+};
+
 // Bind callback: inspect concrete argument types and set return type
 static duckdb::unique_ptr<duckdb::FunctionData> SameReturnDecimalBindUnary(
     duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,
@@ -1913,6 +1991,20 @@ duckdb::vector<ScalarFunctionSignature> &&append_signatures(
 duckdb::vector<ScalarFunctionSignature> copy_signatures(
     const duckdb::vector<ScalarFunctionSignature> &signatures) {
     return signatures;
+}
+
+duckdb::shared_ptr<duckdb::ClientContext> get_duckdb_context(
+    duckdb::shared_ptr<duckdb::DuckDB> db) {
+    static duckdb::shared_ptr<duckdb::ClientContext> context =
+        duckdb::make_shared_ptr<duckdb::ClientContext>(db->instance);
+    return context;
+}
+
+duckdb::shared_ptr<duckdb::Binder> get_duckdb_binder(
+    duckdb::shared_ptr<duckdb::ClientContext> cc) {
+    static duckdb::shared_ptr<duckdb::Binder> binder =
+        duckdb::Binder::CreateBinder(*cc);
+    return binder;
 }
 
 void register_duckdb_scalar_funcs(duckdb::shared_ptr<duckdb::DuckDB> db) {

@@ -1448,6 +1448,17 @@ arrow::Datum do_arrow_compute_replace_substring_regex_single(
 
 arrow::Datum do_arrow_compute_dow_num(arrow::Datum res_datum);
 
+arrow::Datum do_arrow_compute_substring_index(arrow::Datum res_datum,
+                                              std::string delim_str, int count);
+
+arrow::Datum do_arrow_compute_split_part(arrow::Datum res_datum,
+                                         std::string delim_str, int part_num);
+
+arrow::Datum do_arrow_compute_strtok(arrow::Datum res_datum,
+                                     std::string delim_regexp, int part_num);
+
+arrow::Datum do_arrow_compute_zip(const std::vector<arrow::Datum> &datums);
+
 struct PhysicalArrowExpressionMetrics {
     using timer_t = MetricBase::TimerValue;
     timer_t arrow_compute_time = 0;
@@ -1613,22 +1624,21 @@ class PhysicalArrowExpression : public PhysicalExpression {
             // of Pandas, we Cast to Date32 instead.
             result = do_arrow_compute_cast(res, arrow::date32());
         } else if (scalar_func_data.arrow_func_name == "day_of_week") {
-            assert_py_args_is_tuple(scalar_func_data.args,
-                                    scalar_func_data.arrow_func_name.c_str());
-            size_t num_args = PyTuple_Size(scalar_func_data.args);
-            if (num_args == 2) {
-                auto [count_from_zero, week_start] = get_py_args_as_types(
+            auto [count_from_zero, week_start] =
+                get_var_py_args_as_types<0, 1, 2>(
                     scalar_func_data.args,
                     scalar_func_data.arrow_func_name.c_str(),
                     get_py_object_as_bool, get_py_object_as_int64);
 
-                arrow::compute::DayOfWeekOptions opts(count_from_zero,
-                                                      week_start);
-                result = do_arrow_compute_unary(res, "day_of_week", &opts);
-            } else {
-                // Only support 0 or 2 optional parameters for now
-                result = do_arrow_compute_unary(res, "day_of_week");
+            arrow::compute::DayOfWeekOptions opts;
+            if (count_from_zero.has_value()) {
+                opts.count_from_zero = *count_from_zero;
             }
+            if (week_start.has_value()) {
+                opts.week_start = *week_start;
+            }
+
+            result = do_arrow_compute_unary(res, "day_of_week", &opts);
         } else if (scalar_func_data.arrow_func_name == "day_of_week_num") {
             // day_of_week_num is a made up function representing the
             // number representing a day of week string.
@@ -1657,36 +1667,27 @@ class PhysicalArrowExpression : public PhysicalExpression {
                    scalar_func_data.arrow_func_name == "count_substring" ||
                    scalar_func_data.arrow_func_name ==
                        "count_substring_regex") {
-            assert_py_args_is_tuple(scalar_func_data.args,
-                                    scalar_func_data.arrow_func_name.c_str());
-            size_t num_args = PyTuple_Size(scalar_func_data.args);
-            const char *c_str;
-            bool ignore_case = false;
-            if (num_args == 1) {
-                // Only string was passed
-                c_str = get_py_single_arg_as_cstr(
-                    scalar_func_data.args,
-                    scalar_func_data.arrow_func_name.c_str());
-            } else {
-                // string and ignore_case passed
-                std::tie(c_str, ignore_case) = get_py_args_as_types(
-                    scalar_func_data.args,
-                    scalar_func_data.arrow_func_name.c_str(),
-                    get_py_object_as_cstr, get_py_object_as_bool);
-            }
+            auto [pattern, ignore_case] = get_var_py_args_as_types<1, 2>(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_bool);
 
             std::string func_name = scalar_func_data.arrow_func_name;
-            std::string pattern(c_str);
+            std::string pattern_str(pattern);
             if (func_name == "match_substring_regex_first") {
                 // match_substring_regex in Arrow matches anywhere in the string
                 // but Series.str.match() matches from the start. Add ^ to the
                 // pattern to match from the start same as Pandas:
                 // https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/_arrow_string_mixins.py#L378
                 func_name = "match_substring_regex";
-                pattern = "^(" + pattern + ")";
+                pattern_str = "^(" + pattern_str + ")";
             }
 
-            arrow::compute::MatchSubstringOptions opts(pattern, ignore_case);
+            arrow::compute::MatchSubstringOptions opts;
+            opts.pattern = pattern_str;
+            if (ignore_case.has_value()) {
+                opts.ignore_case = *ignore_case;
+            }
+
             result = do_arrow_compute_unary(res, func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "round") {
             auto [digits, round_mode] =
@@ -1782,6 +1783,77 @@ class PhysicalArrowExpression : public PhysicalExpression {
             } else {
                 result = ConvertDatumToArrayInfo(replaced_string_datum);
             }
+        } else if (scalar_func_data.arrow_func_name == "substring_index") {
+            auto [delimiter, count] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_int64);
+            std::string delim_str(delimiter);
+
+            arrow::Datum res_datum =
+                ConvertExprResultToDatum(res, "substring_index string");
+            arrow::Datum substring_datum =
+                do_arrow_compute_substring_index(res_datum, delim_str, count);
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = substring_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(substring_datum);
+            }
+        } else if (scalar_func_data.arrow_func_name == "split_part") {
+            auto [delimiter, part_num] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_int64);
+            std::string delim_str(delimiter);
+
+            arrow::Datum res_datum =
+                ConvertExprResultToDatum(res, "split_part string");
+            arrow::Datum part_datum =
+                do_arrow_compute_split_part(res_datum, delim_str, part_num);
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = part_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(part_datum);
+            }
+        } else if (scalar_func_data.arrow_func_name == "strtok") {
+            auto [delimiter, part_num] = get_py_args_as_types(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_int64);
+            std::string delim_str(delimiter);
+
+            arrow::Datum res_datum =
+                ConvertExprResultToDatum(res, "strtok string");
+            arrow::Datum token_datum =
+                do_arrow_compute_strtok(res_datum, delim_str, part_num);
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = token_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(token_datum);
+            }
+        } else if (scalar_func_data.arrow_func_name == "split_pattern" ||
+                   scalar_func_data.arrow_func_name == "split_pattern_regex") {
+            auto [delimiter, max_splits, reverse] =
+                get_var_py_args_as_types<1, 2, 3>(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_cstr, get_py_object_as_int64,
+                    get_py_object_as_bool);
+
+            arrow::compute::SplitPatternOptions opts;
+            opts.pattern = std::string(delimiter);
+            if (max_splits.has_value()) {
+                opts.max_splits = *max_splits;
+            }
+            if (reverse.has_value()) {
+                opts.reverse = *reverse;
+            }
+
+            result = do_arrow_compute_unary(
+                res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "utf8_trim" ||
                    scalar_func_data.arrow_func_name == "utf8_ltrim" ||
                    scalar_func_data.arrow_func_name == "utf8_rtrim" ||
@@ -1797,27 +1869,22 @@ class PhysicalArrowExpression : public PhysicalExpression {
                 res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "utf8_lpad" ||
                    scalar_func_data.arrow_func_name == "utf8_rpad") {
-            int64_t width;
-            const char *padding;
+            auto [width, padding, lean_left_on_odd_padding] =
+                get_var_py_args_as_types<1, 2, 3>(
+                    scalar_func_data.args,
+                    scalar_func_data.arrow_func_name.c_str(),
+                    get_py_object_as_int64, get_py_object_as_cstr,
+                    get_py_object_as_bool);
 
-            assert_py_args_is_tuple(scalar_func_data.args,
-                                    scalar_func_data.arrow_func_name.c_str());
-            if (PyTuple_Size(scalar_func_data.args) > 1) {
-                std::tie(width, padding) = get_py_args_as_types(
-                    scalar_func_data.args,
-                    scalar_func_data.arrow_func_name.c_str(),
-                    get_py_object_as_int64, get_py_object_as_cstr);
-            } else {
-                std::tie(width) = get_py_args_as_types(
-                    scalar_func_data.args,
-                    scalar_func_data.arrow_func_name.c_str(),
-                    get_py_object_as_int64);
-                padding = " ";
+            arrow::compute::PadOptions opts;
+            opts.width = width;
+            if (padding.has_value()) {
+                opts.padding = std::string(*padding);
+            }
+            if (lean_left_on_odd_padding.has_value()) {
+                opts.lean_left_on_odd_padding = *lean_left_on_odd_padding;
             }
 
-            std::string padding_str(padding);
-
-            arrow::compute::PadOptions opts(width, padding_str);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "binary_repeat") {
@@ -1831,32 +1898,20 @@ class PhysicalArrowExpression : public PhysicalExpression {
         } else if (scalar_func_data.arrow_func_name == "replace_substring" ||
                    scalar_func_data.arrow_func_name ==
                        "replace_substring_regex") {
-            const char *pattern;
-            const char *replacement;
-            int64_t max_replacements = -1;
-
-            assert_py_args_is_tuple(scalar_func_data.args,
-                                    scalar_func_data.arrow_func_name.c_str());
-
-            if (PyTuple_Size(scalar_func_data.args) > 2) {
-                std::tie(pattern, replacement, max_replacements) =
-                    get_py_args_as_types(
-                        scalar_func_data.args,
-                        scalar_func_data.arrow_func_name.c_str(),
-                        get_py_object_as_cstr, get_py_object_as_cstr,
-                        get_py_object_as_int64);
-            } else {
-                std::tie(pattern, replacement) = get_py_args_as_types(
+            auto [pattern, replacement, max_replacements] =
+                get_var_py_args_as_types<2, 3>(
                     scalar_func_data.args,
                     scalar_func_data.arrow_func_name.c_str(),
-                    get_py_object_as_cstr, get_py_object_as_cstr);
+                    get_py_object_as_cstr, get_py_object_as_cstr,
+                    get_py_object_as_int64);
+
+            arrow::compute::ReplaceSubstringOptions opts;
+            opts.pattern = std::string(pattern);
+            opts.replacement = std::string(replacement);
+            if (max_replacements.has_value()) {
+                opts.max_replacements = *max_replacements;
             }
 
-            std::string pattern_str(pattern);
-            std::string replacement_str(replacement);
-
-            arrow::compute::ReplaceSubstringOptions opts(pattern, replacement,
-                                                         max_replacements);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
         } else if (scalar_func_data.arrow_func_name == "utf8_replace_slice") {
@@ -1927,6 +1982,17 @@ class PhysicalArrowExpression : public PhysicalExpression {
             arrow::compute::RoundTemporalOptions opts(multiple, unit);
             result = do_arrow_compute_unary(
                 res, scalar_func_data.arrow_func_name, &opts);
+        } else if (scalar_func_data.arrow_func_name == "zip") {
+            // Unary case for zip: just wrap each array element in a list
+            arrow::Datum res_datum = ConvertExprResultToDatum(res, "zip input");
+            arrow::Datum wrapped_datum = do_arrow_compute_zip({res_datum});
+
+            // Assign to result based on input type
+            if constexpr (std::is_same_v<T, arrow::Datum>) {
+                result = wrapped_datum;
+            } else {
+                result = ConvertDatumToArrayInfo(wrapped_datum);
+            }
         } else {
             std::string func_name = scalar_func_data.arrow_func_name;
             arrow::Type::type res_type = GetArrowTypeOfRes(res);
