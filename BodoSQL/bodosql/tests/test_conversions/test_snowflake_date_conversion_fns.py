@@ -12,6 +12,11 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.timezone_common import representative_tz  # noqa
+from bodosql.tests.conftest import (
+    fixture_id_is_in,
+    fixture_value_is_in,
+    mark_bodosql_cpp_if,
+)
 from bodosql.tests.test_datetime_fns import dt_fn_dataframe  # noqa
 from bodosql.tests.test_kernels.test_snowflake_date_conversion_array_kernels import (  # pragma: no cover
     scalar_to_date_equiv_fn,
@@ -128,6 +133,7 @@ def test_date_casting_functions_case(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
     """tests DATE/TO_DATE/TRY_TO_DATE on valid timestamp with timezone values"""
     df = pd.DataFrame(
@@ -149,6 +155,7 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     """tests DATE/TO_DATE/TRY_TO_DATE on valid datetime values in a case statement"""
     df = pd.DataFrame(
@@ -246,7 +253,7 @@ def test_date_casting_functions_invalid_args(dt_fn_dataframe, test_fn):
         )
     else:
         if bodosql.use_cpp_backend:
-            msg = "Failed to parse.*[date|timestamp]"
+            msg = "Failed to parse.*type [date|timestamp]"
         else:
             msg = "Invalid input while converting to date value"
         with pytest.raises(Exception, match=msg):
@@ -406,6 +413,7 @@ def test_date_casting_functions_with_invalid_format(
             bc.sql(query)
 
 
+@pytest.mark.bodosql_cpp
 def test_date_casting_with_colon(
     dt_fn_dataframe, date_casting_input_type, memory_leak_check
 ):
@@ -432,8 +440,9 @@ def test_date_casting_with_colon(
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_date_casting_with_colon_tz_aware(memory_leak_check):
-    """tests ::DATE on valid datetime values in a case statment"""
+    """tests ::DATE on valid datetime values in a case statement"""
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
@@ -456,12 +465,16 @@ def test_date_casting_with_colon_tz_aware(memory_leak_check):
 
 
 # [BE-3774] Leaks Memory
+@pytest.mark.bodosql_cpp
 def test_date_casting_with_colon_invalid_args(dt_fn_dataframe):
     """tests ::DATE throws correct error for invalid inputs"""
 
     query = "SELECT (invalid_dt_strings)::DATE from table1"
 
-    msg = "Invalid input while converting to date value"
+    if bodosql.use_cpp_backend:
+        msg = "Failed to parse.*type [date|timestamp]"
+    else:
+        msg = "Invalid input while converting to date value"
     with pytest.raises(Exception, match=msg):
         bc = bodosql.BodoSQLContext(dt_fn_dataframe)
         bc.sql(query)
@@ -777,9 +790,14 @@ def test_to_timestamp_non_numeric(
                     [
                         "1970-01-01 00:00:00.015411",
                         None,
-                        "2009-02-13 23:31:30.123456768",
+                        # The objectively correct answer is 2009-02-13 23:31:30.123456789.
+                        # Due to the limits of double-precision the best we can do is 2009-02-13 23:31:30.123456787.
+                        # Previously the answer was hard-coded to be 2009-02-13 23:31:30.123456768 (likely to match the JIT backend result).
+                        "2009-02-13 23:31:30.123456787",
                         "1970-01-04 15:15:59.265358979",
-                        "1966-11-22 07:29:03.210987648",
+                        # Similarly, the objectively correct answer here is 1966-11-22 07:29:03.210987660.
+                        # The best we can do is 1966-11-22 07:29:03.210987656.
+                        "1966-11-22 07:29:03.210987656",
                     ]
                 ),
                 ", 3",
@@ -796,6 +814,17 @@ def to_timestamp_numeric_data(request):
     return request.param
 
 
+@mark_bodosql_cpp_if(
+    lambda item: not (
+        fixture_value_is_in(
+            "to_timestamp_fn",
+            {"TRY_TO_TIMESTAMP", "TRY_TO_TIMESTAMP_NTZ", "TRY_TO_TIMESTAMP_LTZ"},
+        )(item)
+        and fixture_id_is_in("to_timestamp_numeric_data", {"floats-millisecond_scale"})(
+            item
+        )
+    )
+)
 def test_to_timestamp_numeric(
     to_timestamp_fn, to_timestamp_numeric_data, local_tz, memory_leak_check
 ):

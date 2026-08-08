@@ -11,6 +11,7 @@ from pandas.api.types import is_bool_dtype, is_datetime64_any_dtype, is_float_dt
 
 import bodosql
 from bodo.types import Time
+from bodosql.tests.conftest import fixture_id_is_in, mark_bodosql_cpp_if
 from bodosql.tests.test_kernels.test_snowflake_conversion_array_kernels import (
     _dates,
     _dates_nans,
@@ -114,6 +115,7 @@ def to_boolean_all_test_dfs(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_to_boolean_valid_cols(to_boolean_valid_test_dfs, memory_leak_check):
     df = to_boolean_valid_test_dfs
     query = "SELECT TO_BOOLEAN(a) FROM table1"
@@ -134,6 +136,7 @@ def test_to_boolean_valid_cols(to_boolean_valid_test_dfs, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_to_boolean_invalid_cols(to_boolean_invalid_test_dfs):
     df = to_boolean_invalid_test_dfs
     query = "SELECT TO_BOOLEAN(a) FROM table1"
@@ -168,6 +171,7 @@ def to_boolean_equiv(arr):
         return arr.apply(lambda x: np.nan if pd.isna(x) or np.isinf(x) else bool(x))
 
 
+@pytest.mark.bodosql_cpp
 def test_to_boolean_scalars(memory_leak_check):
     df = pd.DataFrame(
         {
@@ -202,6 +206,7 @@ def test_to_boolean_scalars(memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_try_to_boolean_cols(to_boolean_all_test_dfs, memory_leak_check):
     df = to_boolean_all_test_dfs
     if bodosql.use_cpp_backend:
@@ -228,6 +233,7 @@ def test_try_to_boolean_cols(to_boolean_all_test_dfs, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_try_to_boolean_scalars():
     df = pd.DataFrame(
         {
@@ -403,6 +409,7 @@ def test_to_char_scalars(func):
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.tz_aware
 def test_tz_aware_datetime_to_char(tz_aware_df, memory_leak_check):
     """simplest test for TO_CHAR on timezone aware data"""
@@ -620,6 +627,7 @@ def binary_cast_data(request):
 
 
 # TODO ([BE-4344]): implement and test to_binary with other formats
+@mark_bodosql_cpp_if(fixture_id_is_in("binary_cast_data", {"binary_copy"}))
 @pytest.mark.parametrize(
     "calculation",
     [
@@ -756,9 +764,6 @@ invalid_double_params = [
             }
         ),
         id="invalid_to_double_strings",
-        marks=pytest.mark.skipif(
-            bodosql.use_cpp_backend, reason="C++ backend throws different errors"
-        ),
     ),
 ]
 
@@ -823,23 +828,29 @@ def test_to_double_valid_cols(to_double_valid_test_dfs, memory_leak_check):
     )
 
 
+@pytest.mark.bodosql_cpp
 def test_to_double_invalid_cols(to_double_invalid_test_dfs):
     df = to_double_invalid_test_dfs
     query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
-    bc = bodosql.BodoSQLContext(ctx)
-    is_str = arr.apply(type).eq(str).any()
-    if is_str:
-        with pytest.raises(
-            ValueError, match="string must be a valid numeric expression"
-        ):
-            bc.sql(query)
+
+    if bodosql.use_cpp_backend:
+        raises_ctx = pytest.raises(RuntimeError, match="Failed to parse.*type double")
     else:
-        with pytest.raises(
-            ValueError, match="value must be a valid numeric expression"
-        ):
-            bc.sql(query)
+        is_str = arr.apply(type).eq(str).any()
+        if is_str:
+            raises_ctx = pytest.raises(
+                ValueError, match="string must be a valid numeric expression"
+            )
+        else:
+            raises_ctx = pytest.raises(
+                ValueError, match="value must be a valid numeric expression"
+            )
+
+    bc = bodosql.BodoSQLContext(ctx)
+    with raises_ctx:
+        bc.sql(query)
 
 
 @pytest.mark.bodosql_cpp
@@ -896,13 +907,19 @@ def test_to_double_scalars(memory_leak_check):
     )
 
 
-def test_try_to_double_cols(to_double_all_test_dfs, memory_leak_check):
+@pytest.mark.bodosql_cpp
+def test_try_to_double_cols(request, to_double_all_test_dfs, memory_leak_check):
     df = to_double_all_test_dfs
     query = "SELECT TRY_TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     out_arr = to_double_equiv(arr)
     if bodosql.use_cpp_backend:
+        # The fourth parameter is for invalid_to_double_strings
+        if request.node.callspec.indices["to_double_all_test_dfs"] == 3:
+            pytest.skip(
+                "Arrow can't generate the expected output for the test when there are invalid double elements."
+            )
         out_arr = pc.cast(pa.Array.from_pandas(arr), pa.float64()).to_pandas()
     py_output = pd.DataFrame({"A": out_arr})
     check_query(
@@ -969,6 +986,7 @@ def test_try_to_double_scalars():
     )
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "fn_name",
@@ -1029,12 +1047,19 @@ def test_to_boolean_optional_invalid_str(fn_name):
             expected_output=expected_output,
         )
     else:
-        with pytest.raises(ValueError, match="invalid value for boolean conversion"):
+        if bodosql.use_cpp_backend:
+            raises_ctx = pytest.raises(RuntimeError, match="Failed to parse.*type bool")
+        else:
+            raises_ctx = pytest.raises(
+                ValueError, match="invalid value for boolean conversion"
+            )
+        with raises_ctx:
             bc = bodosql.BodoSQLContext({"TABLE1": df})
 
             bc.sql(query)
 
 
+@pytest.mark.bodosql_cpp
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "fn_name",
