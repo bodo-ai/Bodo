@@ -5350,6 +5350,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
             sarg = search_expr.value
             nullAs = _get_sarg_null_as(sarg)
+            s_typename = operands[1].getType().getSqlTypeName()
 
             def process_one_search_option(lower, lower_incl, upper, upper_incl):
                 """Generate an expression to check if src satisfies this
@@ -5415,7 +5416,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
                 return in_range
 
-            search_options = list(iter_sarg_ranges(sarg))
+            search_options = list(iter_sarg_ranges(sarg, s_typename))
             out_expr = process_one_search_option(*search_options[0])
             # The definition of search is that the value is one of the
             # possibilities in the range set.  so, "or" in the other
