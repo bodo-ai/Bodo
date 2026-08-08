@@ -2011,8 +2011,8 @@ struct BodoStringCastVisitor {
         // The strings are evaluated with case-insensitivity.
         // 'true', 't', 'yes', 'y', 'on', '1' return True.
         // 'false', 'f', 'no', 'n', 'off', '0' return False.
-        auto parse_func = [&type](const char* data,
-                                  int64_t len) -> std::optional<CType> {
+        auto parse_func = [](const char* data,
+                             int64_t len) -> std::optional<CType> {
             if (len == 1) {
                 // "0", "f", or "n"
                 if (data[0] == '0' || (data[0] == 'f' || data[0] == 'F') ||
