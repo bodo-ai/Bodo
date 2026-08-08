@@ -54,9 +54,6 @@ BodoStringCastOptions = CastExpression.BodoStringCastOptions
 from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
-SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
-
 _DATE_PART_ARROW_FUNCS = {
     "YEAR": "year",
     "QUARTER": "quarter",
@@ -153,6 +150,12 @@ def java_plan_to_python_plan(ctx, java_plan):
     """Convert a BodoSQL Java plan (RelNode) to a DataFrame library plan
     (bodo.pandas.plan.LazyPlan) for execution in the C++ runtime backend.
     """
+    # This is the entry point, so define SqlTypeName and SqlKind global
+    # aliases here to reduce repetition.
+    global SqlTypeName, SqlKind
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
     java_class_name = java_plan.getClass().getSimpleName()
 
     if java_class_name in (
