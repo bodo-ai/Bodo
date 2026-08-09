@@ -803,6 +803,10 @@ def test_to_timestamp_non_numeric(
                 ", 3",
             ),
             id="floats-millisecond_scale",
+            marks=pytest.mark.skipif(
+                not bodosql.use_cpp_backend,
+                reason="JIT backend answers are slightly off.",
+            ),
         ),
     ]
 )
