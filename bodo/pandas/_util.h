@@ -766,9 +766,6 @@ size_t col_ref_map_lookup(
 
 std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input);
 
-arrow::Datum ConvertArrayToDecimal128(const arrow::Datum &input,
-                                      int32_t precision, int32_t scale);
-
 #ifdef USE_CUDF
 
 #include <cstdint>

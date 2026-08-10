@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import decimal
-import math
 import operator
 import re
 import zoneinfo
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -5653,89 +5651,14 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         )
 
 
-def precision_scale_from_float(value):
-    """
-    Return (precision, scale) suitable for a DECIMAL(precision, scale)
-    that can store `value` without truncation of its current decimal digits.
-
-    - Uses Decimal(str(value)) to avoid binary-float artifacts.
-    - precision = integer_digits + scale, where integer_digits >= 1 (zero counts as 1).
-    - scale = number of digits after the decimal point in the decimal string form.
-    """
-    if value is None:
-        raise ValueError("value must not be None")
-
-    # Handle special floats
-    if isinstance(value, float):
-        if math.isnan(value):
-            raise ValueError("NaN has no decimal precision/scale")
-        if math.isinf(value):
-            raise ValueError("Infinity has no decimal precision/scale")
-
-    # Convert via str to avoid binary representation artifacts
-    try:
-        d = Decimal(str(value))
-    except Exception as e:
-        raise ValueError(f"Cannot convert value to Decimal: {e}")
-
-    # Use fixed-point string form (no exponent)
-    s = format(d, "f")  # e.g., "123.4500", "0.00123", "1000"
-    if s[0] == "-":
-        s = s[1:]
-
-    if "." in s:
-        int_part, frac_part = s.split(".", 1)
-    else:
-        int_part, frac_part = s, ""
-
-    # scale is number of fractional digits
-    scale = len(frac_part)
-
-    # integer digits: count digits in integer part, but treat "0" as 1 digit
-    int_digits = len(int_part.lstrip("0"))
-    if int_digits == 0:
-        int_digits = 1
-
-    precision = int_digits + scale
-
-    return precision, scale
-
-
-def get_decimal_type(atype, expr):
-    if pa.types.is_int64(atype):
-        return pa.decimal128(19, 0)
-    elif pa.types.is_int32(atype):
-        return pa.decimal128(10, 0)
-    elif pa.types.is_int16(atype):
-        return pa.decimal128(5, 0)
-    elif pa.types.is_int8(atype):
-        return pa.decimal128(3, 0)
-    elif pa.types.is_uint64(atype):
-        return pa.decimal128(19, 0)
-    elif pa.types.is_uint32(atype):
-        return pa.decimal128(10, 0)
-    elif pa.types.is_uint16(atype):
-        return pa.decimal128(5, 0)
-    elif pa.types.is_uint8(atype):
-        return pa.decimal128(3, 0)
-    elif (pa.types.is_float32(atype) or pa.types.is_float64(atype)) and isinstance(
-        expr, ConstantExpression
-    ):
-        return pa.decimal128(*precision_scale_from_float(expr.value))
-    else:
-        raise TypeError(f"Not decimal conversion from {atype} yet")
-
-
 def get_output_type(left, right, non_decimal_func, decimal_func):
     left_empty = left.empty_data
     right_empty = right.empty_data
     left_atype = left_empty.dtypes.iloc[0].pyarrow_dtype
     right_atype = right_empty.dtypes.iloc[0].pyarrow_dtype
-    if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
-        if not pa.types.is_decimal(left_atype):
-            left_atype = get_decimal_type(left_atype, left)
-        if not pa.types.is_decimal(right_atype):
-            right_atype = get_decimal_type(right_atype, right)
+    # Snowflake seems to keep decimal representation if any decimal has
+    # arithmetic operation with non-decimal.
+    if pa.types.is_decimal(left_atype) and pa.types.is_decimal(right_atype):
         output_leading, output_scale = decimal_func(
             left_atype.precision - left_atype.scale,
             left_atype.scale,
@@ -5745,6 +5668,14 @@ def get_output_type(left, right, non_decimal_func, decimal_func):
         precision = output_leading + output_scale
         return pd.Series(
             dtype=pd.ArrowDtype(pa.decimal128(min(38, precision), output_scale))
+        )
+    elif pa.types.is_decimal(left_atype):
+        return pd.Series(
+            dtype=pd.ArrowDtype(pa.decimal128(left_atype.precision, left_atype.scale))
+        )
+    elif pa.types.is_decimal(right_atype):
+        return pd.Series(
+            dtype=pd.ArrowDtype(pa.decimal128(right_atype.precision, right_atype.scale))
         )
     else:
         return non_decimal_func(left_empty.iloc[:, 0], right_empty.iloc[:, 0])

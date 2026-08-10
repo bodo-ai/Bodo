@@ -770,10 +770,12 @@ arrow::Datum do_arrow_compute_binary(
 
         if (result_precision > 38) {
             if (!left_is_decimal) {
-                left_res = ConvertArrayToDecimal128(left_res, p1, s1);
+                left_res =
+                    do_arrow_compute_cast(left_res, arrow::decimal128(p1, s1));
             }
             if (!right_is_decimal) {
-                right_res = ConvertArrayToDecimal128(right_res, p2, s2);
+                right_res =
+                    do_arrow_compute_cast(right_res, arrow::decimal128(p2, s2));
             }
             // Use decimal_arithmetic elementwise with overflow checking
             return decimal_arithmetic(left_res, right_res, op, 38, result_scale,
