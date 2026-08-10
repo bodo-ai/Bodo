@@ -3047,8 +3047,9 @@ template <size_t N>
 struct ct_string {
     char value[N];
     constexpr ct_string(const char (&s)[N]) {
-        for (size_t i = 0; i < N; ++i)
+        for (size_t i = 0; i < N; ++i) {
             value[i] = s[i];
+        }
     }
 };
 
@@ -3111,9 +3112,6 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic(
                 op);
         }
 
-        // if (overflow) {
-        //     return nullptr;
-        // }
         status = builder.Append(result128);
         if (!status.ok()) {
             throw std::runtime_error(

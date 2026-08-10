@@ -139,8 +139,18 @@ extractValue(const duckdb::Value &value) {
             uint8_t width = duckdb::DecimalType::GetWidth(value.type());
             uint8_t scale = duckdb::DecimalType::GetScale(value.type());
             switch (value.type().InternalType()) {
-                case duckdb::PhysicalType::INT32:
-                case duckdb::PhysicalType::INT64:
+                case duckdb::PhysicalType::INT32: {
+                    int32_t val = value.GetValueUnsafe<int32_t>();
+                    return arrow::MakeScalar(arrow::decimal128(width, scale),
+                                             arrow::Decimal128(val))
+                        .ValueOrDie();
+                } break;
+                case duckdb::PhysicalType::INT64: {
+                    int64_t val = value.GetValueUnsafe<int64_t>();
+                    return arrow::MakeScalar(arrow::decimal128(width, scale),
+                                             arrow::Decimal128(val))
+                        .ValueOrDie();
+                } break;
                 case duckdb::PhysicalType::INT128: {
                     duckdb::hugeint_t val =
                         value.GetValueUnsafe<duckdb::hugeint_t>();
@@ -2150,98 +2160,6 @@ std::pair<int, int> getPrecisionScaleNonDecimal(const arrow::Datum &input) {
                 "getPrecisionScaleNonDecimal unsupported type " +
                 input.type()->ToString());
     }
-}
-
-arrow::Datum ConvertArrayToDecimal128(const arrow::Datum &input,
-                                      int32_t precision, int32_t scale) {
-    if (!input.is_array()) {
-        throw std::runtime_error("Expected array datum");
-    }
-
-    auto arr = input.make_array();
-    int64_t n = arr->length();
-
-    arrow::Decimal128Builder builder(arrow::decimal128(precision, scale),
-                                     arrow::default_memory_pool());
-
-    arrow::Status status;
-    status = builder.Reserve(n);
-    if (!status.ok()) {
-        throw std::runtime_error("ConvertIntArrayToDecimal128 Reserve failed.");
-    }
-
-    for (int64_t i = 0; i < n; ++i) {
-        if (arr->IsNull(i)) {
-            status = builder.AppendNull();
-            if (!status.ok()) {
-                throw std::runtime_error(
-                    "ConvertIntArrayToDecimal128 AppendNull failed.");
-            }
-            continue;
-        }
-
-        switch (arr->type_id()) {
-            case arrow::Type::INT32:
-                status = builder.Append(arrow::Decimal128(
-                    std::static_pointer_cast<arrow::Int32Array>(arr)->Value(
-                        i)));
-                break;
-            case arrow::Type::INT64:
-                status = builder.Append(arrow::Decimal128(
-                    std::static_pointer_cast<arrow::Int64Array>(arr)->Value(
-                        i)));
-                break;
-            case arrow::Type::UINT32:
-                status = builder.Append(arrow::Decimal128(
-                    std::static_pointer_cast<arrow::UInt32Array>(arr)->Value(
-                        i)));
-                break;
-            case arrow::Type::UINT64:
-                status = builder.Append(arrow::Decimal128(
-                    std::static_pointer_cast<arrow::UInt64Array>(arr)->Value(
-                        i)));
-                break;
-            case arrow::Type::FLOAT: {
-                float val =
-                    std::static_pointer_cast<arrow::FloatArray>(arr)->Value(i);
-                auto res = arrow::Decimal128::FromReal(val, precision, scale);
-                if (!res.ok()) {
-                    throw std::runtime_error(
-                        "ConvertArrayToDecimal128 converting float to decimal "
-                        "failed");
-                }
-                status = builder.Append(*res);
-            } break;
-            case arrow::Type::DOUBLE: {
-                double val =
-                    std::static_pointer_cast<arrow::DoubleArray>(arr)->Value(i);
-                auto res = arrow::Decimal128::FromReal(val, precision, scale);
-                if (!res.ok()) {
-                    throw std::runtime_error(
-                        "ConvertArrayToDecimal128 converting double to decimal "
-                        "failed");
-                }
-                status = builder.Append(*res);
-            } break;
-            default:
-                throw std::runtime_error(
-                    "ConvertArrayToDecimal128 unsupported array type " +
-                    arr->type()->ToString());
-        }
-
-        if (!status.ok()) {
-            throw std::runtime_error(
-                "ConvertIntArrayToDecimal128 Append failed.");
-        }
-    }
-
-    std::shared_ptr<arrow::Array> out;
-    status = builder.Finish(&out);
-    if (!status.ok()) {
-        throw std::runtime_error("ConvertIntArrayToDecimal128 Finish failed.");
-    }
-
-    return arrow::Datum(out);
 }
 
 std::tuple<bool, int, int, int> getDatumPrecisionScale(

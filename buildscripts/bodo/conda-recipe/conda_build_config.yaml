@@ -16,15 +16,12 @@ target_platform:
 SDKROOT:                      # [osx and arm64]
   - /opt/MacOSX11.0.sdk       # [osx and arm64]
 
-c_compiler_version:           # [osx]
+c_compiler_version:
+  - 15                        # [linux]
   - 19                        # [osx]
-cxx_compiler_version:         # [osx]
+cxx_compiler_version:
+  - 15                        # [linux]
   - 19                        # [osx]
-
-c_compiler_version:    # [osx]
-  - 19                 # [osx]
-cxx_compiler_version:  # [osx]
-  - 19                 # [osx]
 
 c_compiler:    # [win]
   - vs2022     # [win]

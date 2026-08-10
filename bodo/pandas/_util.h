@@ -775,15 +775,6 @@ size_t col_ref_map_lookup(
 std::pair<int, int> getPrecisionScaleNonDecimal(const arrow::Datum &input);
 
 /**
- * @brief Convert input array to a decimal with the given precision and scale.
- *
- * @param input the input datum
- * @return a Datum containing the converted array
- */
-arrow::Datum ConvertArrayToDecimal128(const arrow::Datum &input,
-                                      int32_t precision, int32_t scale);
-
-/**
  * @brief Get precision and scale of a datum.  If a decimal type then
  * return its precision and scale.  If not, use getPrecisionScaleNonDecimal
  * above.
