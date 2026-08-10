@@ -185,9 +185,9 @@ def main():
     use_parquet = args.use_parquet
     store_output = args.store_output
 
-    iceberg_version = "1.5.2"  # or your preferred Iceberg version
-    spark_version = "3.5"  # match your Spark major.minor version
-    scala_version = "2.12"
+    iceberg_version = "1.11.0"  # or your preferred Iceberg version
+    spark_version = "4.0"  # match your Spark major.minor version
+    scala_version = "2.13"
     catalog_name = "local"  # arbitrary catalog identifier
 
     if run_on_gpu:
