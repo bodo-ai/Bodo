@@ -796,8 +796,10 @@ def convert_timestamp_ltz_from_parts(ctx, input_plan, op_exprs, num_operands):
     )
 
 
-def convert_date_from_parts(year_expr, month_expr, day_expr):
-    constructed_timestamp = timestamp_from_parts(year_expr, month_expr, day_expr)
+def convert_date_from_parts(input_plan, year_expr, month_expr, day_expr):
+    constructed_timestamp = timestamp_from_parts(
+        input_plan, year_expr, month_expr, day_expr
+    )
     return CastExpression(
         pd.Series(dtype=pd.ArrowDtype(pa.date32())), constructed_timestamp
     )
@@ -881,7 +883,7 @@ def convert_makedate(input_plan, year_expr, doy_expr):
     )
 
     # Convert MAKEDATE(year, dayofyear) to DATE_FROM_PARTS(year, 1, dayofyear).
-    result_timestamp = timestamp_from_parts(year_expr, one_expr, doy_expr)
+    result_timestamp = timestamp_from_parts(input_plan, year_expr, one_expr, doy_expr)
 
     # If dayofyear is less than one, return NULL, else return the result date
     date_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.date32()))
@@ -1743,7 +1745,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if func_name == "TIMESTAMP_NTZ_FROM_PARTS" and num_operands in (2, 6, 7):
             if num_operands in (6, 7):
                 # Parts provided individually, with or without nanoseconds
-                return timestamp_from_parts(*op_exprs)
+                return timestamp_from_parts(input_plan, *op_exprs)
             elif num_operands == 2:
                 # Date expression and time expression provided
                 return convert_timestamp_ntz_from_parts_two_arg(*op_exprs)
@@ -1759,7 +1761,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
         if func_name == "DATE_FROM_PARTS" and num_operands == 3:
-            return convert_date_from_parts(*op_exprs)
+            return convert_date_from_parts(input_plan, *op_exprs)
 
         if func_name == "TIME_FROM_PARTS" and num_operands in (3, 4):
             return convert_time_from_parts(input_plan, *op_exprs)
