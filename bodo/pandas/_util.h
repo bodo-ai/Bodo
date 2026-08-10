@@ -780,6 +780,8 @@ size_t col_ref_map_lookup(
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
     duckdb::idx_t table, duckdb::idx_t column);
 
+std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input);
+
 #ifdef USE_CUDF
 
 #include <cstdint>

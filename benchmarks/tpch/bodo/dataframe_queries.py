@@ -14,51 +14,75 @@ import bodo.pandas
 import bodo.spawn.spawner as spawner
 
 
-def load_lineitem(data_folder: str, pd=bodo.pandas):
-    data_path = data_folder + "/lineitem.pq"
-    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+def load_lineitem(data_folder: str, pd=bodo.pandas, use_parquet=True):
+    if use_parquet:
+        data_path = data_folder + "/lineitem.pq"
+        df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+    else:
+        df = pd.read_iceberg("LINEITEM", location=data_folder)
     return df
 
 
-def load_part(data_folder: str, pd=bodo.pandas):
-    data_path = data_folder + "/part.pq"
-    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+def load_part(data_folder: str, pd=bodo.pandas, use_parquet=True):
+    if use_parquet:
+        data_path = data_folder + "/part.pq"
+        df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+    else:
+        df = pd.read_iceberg("PART", location=data_folder)
     return df
 
 
-def load_orders(data_folder: str, pd=bodo.pandas):
-    data_path = data_folder + "/orders.pq"
-    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+def load_orders(data_folder: str, pd=bodo.pandas, use_parquet=True):
+    if use_parquet:
+        data_path = data_folder + "/orders.pq"
+        df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+    else:
+        df = pd.read_iceberg("ORDERS", location=data_folder)
     return df
 
 
-def load_customer(data_folder: str, pd=bodo.pandas):
-    data_path = data_folder + "/customer.pq"
-    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+def load_customer(data_folder: str, pd=bodo.pandas, use_parquet=True):
+    if use_parquet:
+        data_path = data_folder + "/customer.pq"
+        df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+    else:
+        df = pd.read_iceberg("CUSTOMER", location=data_folder)
     return df
 
 
-def load_nation(data_folder: str, pd=bodo.pandas):
-    data_path = data_folder + "/nation.pq"
-    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+def load_nation(data_folder: str, pd=bodo.pandas, use_parquet=True):
+    if use_parquet:
+        data_path = data_folder + "/nation.pq"
+        df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+    else:
+        df = pd.read_iceberg("NATION", location=data_folder)
     return df
 
 
-def load_region(data_folder: str, pd=bodo.pandas):
-    data_path = data_folder + "/region.pq"
-    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+def load_region(data_folder: str, pd=bodo.pandas, use_parquet=True):
+    if use_parquet:
+        data_path = data_folder + "/region.pq"
+        df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+    else:
+        df = pd.read_iceberg("REGION", location=data_folder)
     return df
 
 
-def load_supplier(data_folder: str, pd=bodo.pandas):
-    data_path = data_folder + "/supplier.pq"
-    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+def load_supplier(data_folder: str, pd=bodo.pandas, use_parquet=True):
+    if use_parquet:
+        data_path = data_folder + "/supplier.pq"
+        df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+    else:
+        df = pd.read_iceberg("SUPPLIER", location=data_folder)
     return df
 
 
-def load_partsupp(data_folder: str, pd=bodo.pandas):
-    data_path = data_folder + "/partsupp.pq"
-    df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+def load_partsupp(data_folder: str, pd=bodo.pandas, use_parquet=True):
+    if use_parquet:
+        data_path = data_folder + "/partsupp.pq"
+        df = pd.read_parquet(data_path, dtype_backend="pyarrow")
+    else:
+        df = pd.read_iceberg("PARTSUPP", location=data_folder)
     return df
 
 
@@ -926,7 +950,7 @@ def q22(customer, orders, pd):
     return exec_func(tpch_q22(customer, orders, pd))
 
 
-def _load_args(query: int, root: str, scale_factor: float, backend):
+def _load_args(query: int, root: str, scale_factor: float, backend, use_parquet):
     args = []
     for arg in _query_to_args[query]:
         if arg == "scale_factor":
@@ -934,7 +958,9 @@ def _load_args(query: int, root: str, scale_factor: float, backend):
         elif arg == "pd":
             args.append(backend)
         else:
-            args.append(globals()[f"load_{arg}"](root, pd=backend))
+            args.append(
+                globals()[f"load_{arg}"](root, pd=backend, use_parquet=use_parquet)
+            )
     return args
 
 
@@ -948,6 +974,7 @@ def run_queries(
     log_file: str | None = None,
     answers_path: str | None = None,
     output_path: str | None = None,
+    use_parquet: bool = True,
 ):
     if backend is bodo.pandas and bodo.dataframe_library_run_parallel:
         spawner.submit_func_to_workers(lambda: warnings.filterwarnings("ignore"), [])
@@ -960,7 +987,7 @@ def run_queries(
         q = globals()[f"q{query:02}"]
 
         def query_func():
-            return q(*_load_args(query, root, scale_factor, backend))
+            return q(*_load_args(query, root, scale_factor, backend, use_parquet))
 
         query_func = timethis(
             query_func,
@@ -1069,6 +1096,12 @@ def main():
         required=False,
         help="Path to directory to write query outputs (in parquet format), will write files like q<query>.pq",
     )
+    parser.add_argument(
+        "--use_iceberg",
+        action="store_true",
+        required=False,
+        help="Whether to use iceberg instead of parquet data.",
+    )
     args = parser.parse_args()
     data_set = args.folder
     scale_factor = args.scale_factor
@@ -1078,6 +1111,7 @@ def main():
     global show_output
     show_output = args.show_output
     do_warmup = not args.no_warmup
+    use_parquet = not args.use_iceberg
 
     queries = list(range(1, 23))
     if args.queries is not None:
@@ -1111,6 +1145,7 @@ def main():
         log_file=args.log_timings,
         answers_path=args.answers_path,
         output_path=args.output_path,
+        use_parquet=use_parquet,
     )
 
 
