@@ -134,7 +134,7 @@ public class CatalogSchema extends BodoSqlSchema {
       return this.subSchemaMap.get(schemaName);
     }
 
-    // TODO(scott): Avoid fetching all schema names
+    // TODO(BSE-5563): Avoid fetching all schema names
     if (!getSubSchemaNames().contains(schemaName)) {
       return null;
     }

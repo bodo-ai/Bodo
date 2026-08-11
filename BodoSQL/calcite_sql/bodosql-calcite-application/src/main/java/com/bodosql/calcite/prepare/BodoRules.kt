@@ -50,6 +50,7 @@ import com.bodosql.calcite.application.logicalRules.ValuesReduceRule
 import com.bodosql.calcite.application.logicalRules.WindowDecomposeRule
 import com.bodosql.calcite.application.utils.BodoJoinConditionUtil
 import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
+import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_BOTH_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_LEFT_PROJECT
 import com.bodosql.calcite.prepare.MultiJoinRules.MULTI_JOIN_RIGHT_PROJECT
@@ -1173,7 +1174,7 @@ object BodoRules {
             MULTI_JOIN_BOTH_PROJECT,
             MULTI_JOIN_LEFT_PROJECT,
             MULTI_JOIN_RIGHT_PROJECT,
-            // JOIN_TO_MULTI_JOIN,
+            JOIN_TO_MULTI_JOIN,
             PROJECT_MULTI_JOIN_MERGE,
             FILTER_MULTI_JOIN_MERGE,
             // Need to merge filters/projects to prevent blocking multi-joins.
