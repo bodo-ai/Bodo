@@ -7,11 +7,8 @@ import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.CreateTableMetadata
-import com.bodosql.calcite.table.CatalogTable
-import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
-import org.apache.iceberg.exceptions.NoSuchTableException
 import software.amazon.s3tables.iceberg.S3TablesCatalog
 import software.amazon.s3tables.iceberg.imports.AwsClientProperties.CLIENT_REGION
 
@@ -27,25 +24,6 @@ class BodoS3TablesCatalog(
     override fun getTableNames(schemaPath: ImmutableList<String>): MutableSet<String> {
         val ns = schemaPathToNamespace(schemaPath)
         return getIcebergConnection().listTables(ns).map { it.name() }.toMutableSet()
-    }
-
-    /**
-     * Returns a table with the given name and found in the given schema.
-     *
-     * @param schemaPath The list of schemas to traverse before finding the table.
-     * @param tableName Name of the table.
-     * @return The table object or null.
-     */
-    override fun getTable(
-        schemaPath: ImmutableList<String>,
-        tableName: String,
-    ): CatalogTable? {
-        try {
-            val columns = getIcebergTableColumns(schemaPath, tableName)
-            return IcebergCatalogTable(tableName, schemaPath, columns, this)
-        } catch (_: NoSuchTableException) {
-            return null
-        }
     }
 
     /**

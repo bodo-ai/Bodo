@@ -7,13 +7,10 @@ import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.CreateTableMetadata
-import com.bodosql.calcite.table.CatalogTable
-import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.hadoop.conf.Configuration
 import org.apache.iceberg.CatalogProperties
-import org.apache.iceberg.exceptions.NoSuchTableException
 import org.apache.iceberg.rest.RESTCatalog
 
 open class IcebergRESTCatalog(
@@ -38,25 +35,6 @@ open class IcebergRESTCatalog(
         // Views are initially treated as variables, so include their names here
         val viewNames = getIcebergConnection().listViews(ns).map { it.name() }
         return tableNames.union(viewNames).toMutableSet()
-    }
-
-    /**
-     * Returns a table with the given name and found in the given schema.
-     *
-     * @param schemaPath The list of schemas to traverse before finding the table.
-     * @param tableName Name of the table.
-     * @return The table object or null.
-     */
-    override fun getTable(
-        schemaPath: ImmutableList<String>,
-        tableName: String,
-    ): CatalogTable? {
-        try {
-            val columns = getIcebergTableColumns(schemaPath, tableName)
-            return IcebergCatalogTable(tableName, schemaPath, columns, this)
-        } catch (_: NoSuchTableException) {
-            return null
-        }
     }
 
     /**

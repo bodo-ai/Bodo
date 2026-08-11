@@ -9,8 +9,6 @@ import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.CreateTableMetadata
-import com.bodosql.calcite.table.CatalogTable
-import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.ddl.SqlCreateTable
@@ -20,7 +18,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.LocalFileSystem
 import org.apache.hadoop.fs.Path
-import org.apache.iceberg.exceptions.NoSuchTableException
 import org.apache.iceberg.hadoop.HadoopCatalog
 import org.apache.iceberg.hadoop.Util
 import org.apache.iceberg.util.LocationUtil
@@ -160,25 +157,6 @@ class FileSystemCatalog(
         val fullPath = schemaPathToFilePath(schemaPath)
         val elements = getDirectoryContents(fullPath).filter { isTable(it) }.map { it.name }
         return elements.toSet()
-    }
-
-    /**
-     * Returns a table with the given name and found in the given schema.
-     *
-     * @param schemaPath The list of schemas to traverse before finding the table.
-     * @param tableName Name of the table.
-     * @return The table object.
-     */
-    override fun getTable(
-        schemaPath: ImmutableList<String>,
-        tableName: String,
-    ): CatalogTable? {
-        try {
-            val columns = getIcebergTableColumns(schemaPath, tableName)
-            return IcebergCatalogTable(tableName, schemaPath, columns, this)
-        } catch (_: NoSuchTableException) {
-            return null
-        }
     }
 
     /**
