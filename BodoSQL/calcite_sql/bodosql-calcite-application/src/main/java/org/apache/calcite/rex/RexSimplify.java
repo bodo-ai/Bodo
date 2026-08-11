@@ -2260,8 +2260,11 @@ public class RexSimplify {
         operand = simplify(operand, UNKNOWN);
         // The type of DYNAMIC_PARAM is indeterminate, so the cast cannot be eliminated
         if (operand.getKind() != SqlKind.DYNAMIC_PARAM
-            && sameTypeOrNarrowsNullability(e.getType(), operand.getType())) {
-          return operand;
+                && sameTypeOrNarrowsNullability(e.getType(), operand.getType())
+                // DECIMAL casts are never no-ops: they perform bounds checking
+                && e.getType().getSqlTypeName() != SqlTypeName.DECIMAL) {
+
+            return operand;
         }
         if (RexUtil.isLosslessCast(operand)) {
             // x :: y below means cast(x as y) (which is PostgreSQL-specific cast by the way)
@@ -2853,6 +2856,11 @@ public class RexSimplify {
         }
 
         @Override public boolean allowedInOr(RelOptPredicateList predicates) {
+            // if ref is not a 'loss-less' cast then can't be allowed to be used
+            // while simplifying other OR operands
+            if (ref.isA(SqlKind.CAST) && !RexUtil.isLosslessCast(ref)) {
+                return false;
+            }
             return !ref.getType().isNullable()
                     || predicates.isEffectivelyNotNull(ref);
         }
