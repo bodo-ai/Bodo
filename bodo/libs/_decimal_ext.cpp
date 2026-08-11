@@ -3161,9 +3161,6 @@ std::shared_ptr<arrow::Array> arrow_array_boolean_op(
             left_val, left_precision, left_scale, right_val, right_precision,
             right_scale, result_precision, result_scale, &overflow);
 
-        if (overflow) {
-            return nullptr;
-        }
         status = builder.Append(result);
         if (!status.ok()) {
             throw std::runtime_error(
@@ -3270,10 +3267,6 @@ std::shared_ptr<arrow::Scalar> arrow_scalar_decimal_arithmetic(
     } else {
         throw std::runtime_error(
             "arrow_array_decimal_arithmetic does not support operation " + op);
-    }
-
-    if (overflow) {
-        return nullptr;
     }
 
     return std::make_shared<arrow::Decimal128Scalar>(result128, dtype);
