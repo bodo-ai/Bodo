@@ -13,7 +13,10 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.sql.ddl.CreateTableMetadata;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Set;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 
