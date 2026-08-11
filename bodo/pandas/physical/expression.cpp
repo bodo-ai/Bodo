@@ -1,6 +1,7 @@
 #include "expression.h"
 #include <arrow/type_fwd.h>
 #include <cmath>
+#include "../libs/_decimal_ext.h"
 #include "_util.h"
 #include "duckdb/common/types/interval.hpp"
 
@@ -642,11 +643,148 @@ void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
     }
 }
 
+static arrow::Datum decimal_arithmetic(
+    const arrow::Datum& left_res, const arrow::Datum& right_res,
+    const std::string& op,  // "add","subtract","multiply","divide"
+    int result_precision, int result_scale, int left_precision, int left_scale,
+    int right_precision, int right_scale) {
+    // Determine length and whether inputs are arrays or scalars
+    std::shared_ptr<arrow::Array> left_arr =
+        left_res.is_array() ? left_res.make_array() : nullptr;
+    std::shared_ptr<arrow::Array> right_arr =
+        right_res.is_array() ? right_res.make_array() : nullptr;
+    bool left_is_scalar = left_res.is_scalar();
+    bool right_is_scalar = right_res.is_scalar();
+
+    if (left_is_scalar || right_is_scalar) {
+        throw std::runtime_error(
+            "decimal_arithmetic: don't handle scalars yet");
+    }
+
+    int64_t length = 0;
+    length = left_arr->length();
+    if (length != right_arr->length()) {
+        throw std::runtime_error("decimal_arithmetic: array length mismatch");
+    }
+
+    auto left_dec_arr =
+        std::static_pointer_cast<arrow::Decimal128Array>(left_arr);
+    auto right_dec_arr =
+        std::static_pointer_cast<arrow::Decimal128Array>(right_arr);
+    std::shared_ptr<arrow::Array> result = arrow_array_decimal_arithmetic_util(
+        left_dec_arr, left_precision, left_scale, right_dec_arr,
+        right_precision, right_scale, length, result_precision, result_scale,
+        op);
+    // check for overflow
+    if (result == nullptr) {
+        throw std::runtime_error("Decimal overflow in operation " + op);
+    }
+    return arrow::Datum(result);
+}
+
+// Main function with added decimal check and Snowflake rules
 arrow::Datum do_arrow_compute_binary(
     arrow::Datum left_res, arrow::Datum right_res,
     const std::string& comparator,
     const arrow::compute::FunctionOptions* func_options,
     const std::shared_ptr<arrow::DataType> result_type) {
+    // --- New: if both are decimal types, compute Snowflake-style result
+    // precision/scale ---
+    bool left_is_decimal =
+        left_res.type() && left_res.type()->id() == arrow::Type::DECIMAL128;
+    bool right_is_decimal =
+        right_res.type() && right_res.type()->id() == arrow::Type::DECIMAL128;
+
+    if (left_is_decimal || right_is_decimal) {
+        if (left_res.is_scalar()) {
+            throw std::runtime_error(
+                "do_arrow_compute_binary decimal operator not supported with "
+                "scalar yet for left arg");
+        }
+        if (right_res.is_scalar()) {
+            throw std::runtime_error(
+                "do_arrow_compute_binary decimal operator not supported with "
+                "scalar yet for right arg");
+        }
+        int p1, s1, l1, p2, s2, l2;
+        if (left_is_decimal) {
+            auto left_dec_type =
+                std::static_pointer_cast<arrow::Decimal128Type>(
+                    left_res.type());
+            p1 = left_dec_type->precision();
+            s1 = left_dec_type->scale();
+        } else {
+            std::tie(p1, s1) = getPrecisionScaleNonDecimal(left_res);
+        }
+        if (right_is_decimal) {
+            auto right_dec_type =
+                std::static_pointer_cast<arrow::Decimal128Type>(
+                    right_res.type());
+            p2 = right_dec_type->precision();
+            s2 = right_dec_type->scale();
+        } else {
+            std::tie(p2, s2) = getPrecisionScaleNonDecimal(right_res);
+        }
+
+        l1 = p1 - s1;
+        l2 = p2 - s2;
+
+        int result_precision = 0;
+        int result_scale = 0;
+
+        // Map comparator to operation name used in Snowflake rules
+        // We handle add, subtract, multiply, divide
+        std::string op = comparator;  // assume comparator is
+                                      // "add","subtract","multiply","divide"
+        // If comparator is an Arrow function name like "multiply", "add", etc.,
+        // adapt accordingly.
+
+        if (op == "add" || op == "subtract") {
+            // Snowflake rule:
+            // scale = max(s1, s2)
+            // precision = max(p1 - s1, p2 - s2) + scale + 1
+            result_scale = std::max(s1, s2);
+            result_precision = std::max(l1, l2) + result_scale + 1;
+        } else if (op == "multiply") {
+            // Snowflake rule:
+            // precision = p1 + p2
+            // scale = s1 + s2
+            result_precision = p1 + p2;
+            result_scale = s1 + s2;
+        } else if (op == "divide") {
+            // Snowflake rule (one common variant):
+            // scale = max(6, s1 + p2 + 1)
+            // precision = p1 - s1 + s2 + scale
+            result_scale = std::max(6, s1 + p2 + 1);
+            result_precision = l1 + s2 + result_scale;
+        } else if (op == "equal" || op == "not_equal" || op == "less" ||
+                   op == "greater" || op == "less_equal" ||
+                   op == "greater_equal") {
+            result_scale = std::max(s1, s2);
+            result_precision = std::max(l1, l2) + result_scale;
+        } else {
+            // Not a decimal arithmetic op we know; fall back to normal
+            // CallFunction (or you can throw) fall through to normal path below
+            result_precision = -1;
+        }
+
+        if (result_precision > 38) {
+            if (!left_is_decimal) {
+                left_res =
+                    do_arrow_compute_cast(left_res, arrow::decimal128(p1, s1));
+            }
+            if (!right_is_decimal) {
+                right_res =
+                    do_arrow_compute_cast(right_res, arrow::decimal128(p2, s2));
+            }
+            // Use decimal_arithmetic elementwise with overflow checking
+            return decimal_arithmetic(left_res, right_res, op, 38, result_scale,
+                                      p1, s1, p2, s2);
+        }
+    }
+
+    // --- Default path: not both decimals or unknown op: call Arrow compute
+    // directly ---
     arrow::Result<arrow::Datum> cmp_res = arrow::compute::CallFunction(
         comparator, {left_res, right_res}, func_options);
     if (!cmp_res.ok()) [[unlikely]] {
