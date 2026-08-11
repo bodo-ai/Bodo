@@ -900,9 +900,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
     // The physical node and pipeline root will be filled in
     // the first time the CTE is referenced and reused afterwards.
     ctes.insert({op.table_index,
-                 {.physical_node = nullptr,
-                  .cte_pipeline_root = nullptr,
-                  .cte_logical_node = op}});
+                 {.cte_pipeline_root = nullptr, .cte_logical_node = op}});
 
     this->Visit(*op.children[1]);
 }
@@ -917,7 +915,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
     }
     CTEInfo& cte_index_info = table_index_iter->second;
 
-    if (cte_index_info.physical_node == nullptr) {
+    if (cte_index_info.cte_pipeline_root == nullptr) {
         this->Visit(*cte_index_info.cte_logical_node.children[0]);
         std::shared_ptr<bodo::Schema> in_table_schema =
             this->active_pipeline->getPrevOpOutputSchema();
