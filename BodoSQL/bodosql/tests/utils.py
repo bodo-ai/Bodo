@@ -59,7 +59,7 @@ class InputDist(Enum):
 
 def check_query(
     query: str,
-    dataframe_dict: dict[str, pd.DataFrame],
+    dataframe_dict: dict[str, pd.DataFrame, bodosql.FileSystemCatalog],
     spark: Optional["SparkSession"],
     named_params: dict[str, Any] | None = None,
     bind_variables: tuple[Any] | None = None,
@@ -118,8 +118,9 @@ def check_query(
     @params:
         query: The SQL query to execute.
 
-        dataframe_dict: A dictionary mapping Table names -> DataFrames.
-            These tables will be placed inside a SparkSQL/BodoSQL context
+        dataframe_dict: A dictionary mapping Table names -> DataFrames or
+            a FileSystemCatalog for an Iceberg warehouse.
+            This variable will be placed inside a SparkSQL/BodoSQL context
             for query execution.
 
         spark: SparkSession used to generate expected output.
@@ -324,7 +325,10 @@ def check_query(
     if debug_mode:
         print("Query:")
         print(query)
-        bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
+        if isinstance(dataframe_dict, bodosql.FileSystemCatalog):
+            bc = bodosql.BodoSQLContext(catalog=dataframe_dict, default_tz=session_tz)
+        else:
+            bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
         print("Plan:")
         print(bc.generate_plan(query, named_params, bind_variables))
         print("Pandas Code:")
@@ -502,7 +506,10 @@ def check_query(
     result = {}
 
     if return_codegen or return_seq_dataframe:
-        bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
+        if isinstance(dataframe_dict, bodosql.FileSystemCatalog):
+            bc = bodosql.BodoSQLContext(catalog=dataframe_dict, default_tz=session_tz)
+        else:
+            bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
 
     # Return Pandas code if requested
     if return_codegen:
@@ -792,7 +799,11 @@ def check_query_python(
 
         session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
     """
-    bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
+    if isinstance(dataframe_dict, bodosql.FileSystemCatalog):
+        bc = bodosql.BodoSQLContext(catalog=dataframe_dict, default_tz=session_tz)
+    else:
+        bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
+
     if jit_options is None:
         jit_options = {}
     if bodo.tests.utils.test_spawn_mode_enabled:
