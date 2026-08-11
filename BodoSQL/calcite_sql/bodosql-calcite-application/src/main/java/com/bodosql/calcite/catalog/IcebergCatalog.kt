@@ -4,6 +4,10 @@ import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.schema.InlineViewMetadata
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
+import com.bodosql.calcite.table.BodoSQLColumnImpl
+import com.bodosql.calcite.table.CatalogTable
+import com.bodosql.calcite.table.ColumnDataTypeInfo
+import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.util.Util
