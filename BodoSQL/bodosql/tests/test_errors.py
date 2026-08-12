@@ -751,7 +751,7 @@ def test_qualify_no_window_err(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match=r"QUALIFY expression '`TABLE1`.`A` > .*' must contain a window function",
+        match=r"QUALIFY expression '`TABLE1`.`A` > CAST\(3 AS BIGINT\)' must contain a window function",
     ):
         impl(table1)
 
