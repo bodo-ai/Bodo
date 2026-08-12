@@ -5669,10 +5669,6 @@ def get_decimal_type(atype, expr):
         return pa.decimal128(5, 0)
     elif pa.types.is_uint8(atype):
         return pa.decimal128(3, 0)
-    # elif (pa.types.is_float32(atype) or pa.types.is_float64(atype)) and isinstance(
-    #    expr, ConstantExpression
-    # ):
-    #    return pa.decimal128(*precision_scale_from_float(expr.value))
     else:
         raise TypeError(f"Not decimal conversion from {atype} yet")
 
@@ -5716,11 +5712,15 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.PLUS):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
         # TODO: upcast output to avoid overflow?
+        from bodo.libs.decimal_arr_ext import (
+            decimal_addition_subtraction_output_precision_scale,
+        )
+
         out_empty = get_output_type(
             left,
             right,
             lambda l, r: l + r,
-            lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
+            decimal_addition_subtraction_output_precision_scale,
         )
         expr = ArithOpExpression(out_empty, left, right, "__add__")
         return expr
