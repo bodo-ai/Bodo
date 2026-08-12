@@ -1204,6 +1204,18 @@ PyObject *_duckdbFilterToPyicebergFilter(
                 }
             }
         } break;
+        case duckdb::TableFilterType::OPTIONAL_FILTER: {
+            duckdb::unique_ptr<duckdb::OptionalFilter> optionalFilter =
+                dynamic_cast_unique_ptr<duckdb::OptionalFilter>(std::move(tf));
+            try {
+                py_expr = _duckdbFilterToPyicebergFilter(
+                    std::move(optionalFilter->child_filter), field_name,
+                    pyiceberg_expression_mod);
+            } catch (...) {
+                py_expr = PyObject_CallMethod(pyiceberg_expression_mod.get(),
+                                              "AlwaysTrue", nullptr);
+            }
+        } break;
         default:
             throw std::runtime_error(
                 "duckdbFilterToPyicebergFilter unsupported filter "
