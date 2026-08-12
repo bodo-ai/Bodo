@@ -125,7 +125,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         this->initOutputSchema(build_table_schema, probe_table_schema,
                                build_kept_cols, probe_kept_cols, false, false);
         // We use duckdb::JoinType::INVALID to mark cross join
-        this->cuda_join = std::make_unique<CudaNonEquiJoin>(
+        this->cuda_join = std::make_shared<CudaNonEquiJoin>(
             build_table_schema, probe_table_schema, build_kept_cols,
             probe_kept_cols, output_schema, duckdb::JoinType::INVALID, nullptr,
             true);
@@ -286,12 +286,12 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
                                build_table_outer, probe_table_outer);
 
         if (build_keys.empty()) {
-            this->cuda_join = std::make_unique<CudaNonEquiJoin>(
+            this->cuda_join = std::make_shared<CudaNonEquiJoin>(
                 build_table_schema, probe_table_schema, build_kept_cols,
                 probe_kept_cols, output_schema, logical_join.join_type,
                 std::move(physExprTree), is_broadcast_join);
         } else {
-            this->cuda_join = std::make_unique<CudaHashJoin>(
+            this->cuda_join = std::make_shared<CudaHashJoin>(
                 build_keys, probe_keys, build_table_schema, probe_table_schema,
                 build_kept_cols, probe_kept_cols, output_schema,
                 logical_join.join_type, std::move(physExprTree),
