@@ -1,6 +1,7 @@
 # Original from https://gist.githubusercontent.com/UranusSeven/55817bf0f304cc24f5eb63b2f1c3e2cd/raw/796dbd2fce6441821fc0b5bc51491edb49639c55/tpch.py
 import argparse
 import datetime
+import decimal
 import functools
 import inspect
 import os
@@ -461,7 +462,10 @@ def tpch_q11(partsupp, supplier, nation, scale_factor=1.0, pd=bodo.pandas):
 
     jn2 = jn2[jn2["N_NAME"] == var1]
 
-    threshold = (jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]).sum() * var2
+    threshold = (jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]).sum()
+    if isinstance(threshold, decimal.Decimal):
+        var2 = decimal.Decimal(str(var2))
+    threshold = threshold * var2
 
     jn2["VALUE"] = jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]
 
