@@ -727,6 +727,7 @@ class BodoSQLContext:
             # Keeps track of join ids and their join filter key locations for join
             # filter translation during conversion to Python plan.
             self.join_filter_info = {}
+            self.subplan_cache = {}
             # Temporarily monkey-patch so java_plan_to_python_plan
             # can see dynamic and named params.
             self.named_params_dict = (java_named_params_map, named_params_dict)
