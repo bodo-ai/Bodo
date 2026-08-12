@@ -1706,3 +1706,52 @@ PANDAS_ARROW_TYPE_MAP = {
     "date32": pa.date32(),
     "date64": pa.date64(),
 }
+
+
+def get_decimal_type(atype, expr):
+    if pa.types.is_int64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_int32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_int16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_int8(atype):
+        return pa.decimal128(3, 0)
+    elif pa.types.is_uint64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_uint32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_uint16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_uint8(atype):
+        return pa.decimal128(3, 0)
+    else:
+        raise TypeError(f"Not decimal conversion from {atype} yet")
+
+
+def get_output_type(
+    left,
+    left_empty,
+    left_atype,
+    right,
+    right_empty,
+    right_atype,
+    non_decimal_func,
+    decimal_func,
+):
+    if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
+        if not pa.types.is_decimal(left_atype):
+            left_atype = get_decimal_type(left_atype, left)
+        if not pa.types.is_decimal(right_atype):
+            right_atype = get_decimal_type(right_atype, right)
+        output_precision, output_scale = decimal_func(
+            left_atype.precision,
+            left_atype.scale,
+            right_atype.precision,
+            right_atype.scale,
+        )
+        return pd.Series(
+            dtype=pd.ArrowDtype(pa.decimal128(min(38, output_precision), output_scale))
+        )
+    else:
+        return non_decimal_func(left_empty.iloc[:, 0], right_empty.iloc[:, 0])
