@@ -2185,23 +2185,20 @@ std::pair<int, int> getOpPrecisionScale(const std::string &op, int p1, int s1,
     int result_precision = -1;
     int result_scale = -1;
     if (op == "add" || op == "subtract") {
-        // Snowflake rule:
-        // scale = max(s1, s2)
-        // precision = max(p1 - s1, p2 - s2) + scale + 1
+        // from decimal_arr_ext.py
+        auto l = std::max(l1, l2) + 1;
         result_scale = std::max(s1, s2);
-        result_precision = std::max(l1, l2) + result_scale + 1;
+        result_precision = l + result_scale;
     } else if (op == "multiply") {
-        // Snowflake rule:
-        // precision = p1 + p2
-        // scale = s1 + s2
-        result_precision = p1 + p2;
-        result_scale = s1 + s2;
+        // from decimal_arr_ext.py
+        auto l = l1 + l2;
+        result_scale = std::min(s1 + s2, std::max(std::max(s1, s2), 12));
+        result_precision = l + result_scale;
     } else if (op == "divide") {
-        // Snowflake rule (one common variant):
-        // scale = max(6, s1 + p2 + 1)
-        // precision = p1 - s1 + s2 + scale
-        result_scale = std::max(6, s1 + p2 + 1);
-        result_precision = l1 + s2 + result_scale;
+        // from decimal_arr_ext.py
+        auto l = l1 + s2;
+        result_scale = std::max(s1, std::min(s1 + 6, 12));
+        result_precision = l + result_scale;
     } else if (op == "equal" || op == "not_equal" || op == "less" ||
                op == "greater" || op == "less_equal" || op == "greater_equal") {
         result_scale = std::max(s1, s2);
