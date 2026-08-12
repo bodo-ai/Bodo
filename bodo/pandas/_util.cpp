@@ -1429,7 +1429,7 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
     return std::visit(
         [&](const auto &join_state)
             -> std::optional<JoinFilterColStats::col_min_max_t> {
-            using T = std::decay_t<decltype(join_state)>;
+            using T = std::decay_t<decltype(join_state.get())>;
             if constexpr (std::is_same_v<T, JoinState *>) {
                 std::unique_ptr<bodo::DataType> dt =
                     join_state->build_table_schema->column_types[build_key_col]

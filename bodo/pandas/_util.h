@@ -409,9 +409,10 @@ arrow::Type::type GetArrowTypeOfRes(std::shared_ptr<ExprResult> res);
 arrow::Type::type GetArrowTypeOfRes(arrow::Datum res);
 
 #ifdef USE_CUDF
-using join_state_t = std::variant<JoinState *, CudaJoin *>;
+using join_state_t =
+    std::variant<std::shared_ptr<JoinState>, std::shared_ptr<CudaJoin>>;
 #else
-using join_state_t = std::variant<JoinState *>;
+using join_state_t = std::variant<std::shared_ptr<JoinState>>;
 #endif
 /**
  * @brief Collect min/max statistics from join build tables for join filter

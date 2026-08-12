@@ -457,7 +457,7 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     int64_t getOpId() const { return PhysicalGPUSink::getOpId(); }
 
-    CudaJoin* getJoinStatePtr() { return this->cuda_join.get(); }
+    std::shared_ptr<CudaJoin> getJoinStatePtr() { return this->cuda_join; }
 
    private:
     std::shared_ptr<bodo::Schema> output_schema;
@@ -468,6 +468,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     PhysicalGPUJoinMetrics metrics;
 
-    std::unique_ptr<CudaJoin> cuda_join;
+    std::shared_ptr<CudaJoin> cuda_join;
     bool is_broadcast_join = false;
 };
