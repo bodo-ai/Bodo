@@ -409,9 +409,10 @@ arrow::Type::type GetArrowTypeOfRes(std::shared_ptr<ExprResult> res);
 arrow::Type::type GetArrowTypeOfRes(arrow::Datum res);
 
 #ifdef USE_CUDF
-using join_state_t = std::variant<JoinState *, CudaJoin *>;
+using join_state_t =
+    std::variant<std::shared_ptr<JoinState>, std::shared_ptr<CudaJoin>>;
 #else
-using join_state_t = std::variant<JoinState *>;
+using join_state_t = std::variant<std::shared_ptr<JoinState>>;
 #endif
 /**
  * @brief Collect min/max statistics from join build tables for join filter
@@ -764,7 +765,44 @@ size_t col_ref_map_lookup(
     std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> &col_ref_map,
     duckdb::idx_t table, duckdb::idx_t column);
 
-std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input);
+/**
+ * @brief Get precision and scale of a datum containing a non-decimal type.
+ * Pick a maximal precision for integers and inspect actual data for
+ * real values to get a reasonable precision and scale.
+ *
+ * @param input the input datum
+ * @return pair of the precision and the scale
+ */
+std::pair<int, int> getPrecisionScaleNonDecimal(const arrow::Datum &input);
+
+/**
+ * @brief Get precision and scale of a datum.  If a decimal type then
+ * return its precision and scale.  If not, use getPrecisionScaleNonDecimal
+ * above.
+ *
+ * @param input the input datum
+ * @return tuple of whether datum is a scalar, followed by precision, scale, and
+ * leading digits sizes.
+ */
+std::tuple<bool, int, int, int> getDatumPrecisionScale(
+    const arrow::Datum &datum);
+
+/**
+ * @brief Get output precision and scale of a given operation and the given
+ * precision, scale, and leading digits of the two operands.
+ *
+ * @param  op - a string containing the operation, e.g., add, multiply, greater
+ * @param p1 - first operand precision
+ * @param s1 - first operand scale
+ * @param l1 - first operand leading digits
+ * @param p2 - second operand precision
+ * @param s2 - second operand scale
+ * @param l2 - second operand leading digits
+ * @return pair of the precision and the scale required for the output or
+ * intermediate calculation
+ */
+std::pair<int, int> getOpPrecisionScale(const std::string &op, int p1, int s1,
+                                        int l1, int p2, int s2, int l2);
 
 #ifdef USE_CUDF
 
