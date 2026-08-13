@@ -2540,9 +2540,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 timestamp_unit = timestamp_expr_dtype.unit
                 # If the timestamp is TZ-aware, use the local timestamp
                 if timestamp_expr_dtype.tz is not None:
-                    pd.Series(dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit)))
+                    timestamp_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit))
+                    )
                     timestamp_expr = ArrowScalarFuncExpression(
-                        timestamp_expr.empty_data, timestamp_expr, "local_timestamp", ()
+                        timestamp_empty_data, timestamp_expr, "local_timestamp", ()
                     )
             else:
                 raise ValueError("TO_SECONDS: Unsupported input type")
