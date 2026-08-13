@@ -141,12 +141,20 @@ def test_to_boolean_invalid_cols(to_boolean_invalid_test_dfs):
     arr = df[df.columns[0]]
     is_str = arr.apply(type).eq(str).any()
     bc = bodosql.BodoSQLContext(ctx)
-    if bodosql.use_cpp_backend:
-        pytest.skip("CPP backend does not currently throw strict errors for TO_BOOLEAN")
     if is_str:
-        with pytest.raises(ValueError, match="string must be one of"):
+        if bodosql.use_cpp_backend:
+            raises_ctx = pytest.raises(RuntimeError, match="Failed to parse.*type bool")
+        else:
+            pytest.raises(ValueError, match="string must be one of")
+        with raises_ctx:
             bc.sql(query)
     else:
+        if bodosql.use_cpp_backend:
+            # Arrow turns np.nan into NULL and np.inf to True. Both should result in
+            # an error to match Snowflake.
+            pytest.skip(
+                "CPP backend does not currently throw strict errors for TO_BOOLEAN"
+            )
         with pytest.raises(
             ValueError, match="value must be a valid numeric expression"
         ):
@@ -1077,7 +1085,15 @@ def test_to_double_optional_invalid_str(fn_name):
             expected_output=expected_output,
         )
     else:
-        with pytest.raises(ValueError, match="invalid value for double conversion"):
+        if bodosql.use_cpp_backend:
+            raises_ctx = pytest.raises(
+                RuntimeError, match="Failed to parse.*type double"
+            )
+        else:
+            raises_ctx = pytest.raises(
+                ValueError, match="invalid value for double conversion"
+            )
+        with raises_ctx:
             bc = bodosql.BodoSQLContext({"TABLE1": df})
 
             bc.sql(query)
