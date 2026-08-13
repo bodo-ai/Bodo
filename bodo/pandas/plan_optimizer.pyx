@@ -375,7 +375,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
     cdef unique_ptr[CExpression] make_const_list_expr(object list_scalar) except +
     cdef unique_ptr[CExpression] make_const_number_expr[T](object arrow_schema, T val) except +
-    cdef unique_ptr[CExpression] make_const_arrow_scalar_expr(object arrow_schema, object arrow_scalar) except +
+    cdef unique_ptr[CExpression] make_const_arrow_scalar_expr(object arrow_scalar) except +
     cdef unique_ptr[CExpression] make_const_timestamp_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_timedelta_ns_expr(int64_t val) except +
     cdef unique_ptr[CExpression] make_const_date_offset_expr(int32_t months, int32_t days, int64_t nanos) except +
@@ -831,7 +831,7 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
     elif isinstance(val, bodo.pandas.scalar.BodoScalar):
         return move(make_const_expr(None, val.get_value()))
     elif isinstance(val, decimal.Decimal):
-        return move(make_const_arrow_scalar_expr(const_schema, pa.scalar(val)))
+        return move(make_const_arrow_scalar_expr(pa.scalar(val)))
     else:
         raise NotImplementedError("Unknown expr type in make_const_expr " + str(type(val)))
 

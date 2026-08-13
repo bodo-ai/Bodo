@@ -163,12 +163,7 @@ template duckdb::unique_ptr<duckdb::Expression> make_const_number_expr<double>(
     PyObject *out_schema_py, double val);
 
 duckdb::unique_ptr<duckdb::Expression> make_const_arrow_scalar_expr(
-    PyObject *out_schema_py, PyObject *arrow_scalar_py) {
-    std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(out_schema_py);
-    if (arrow_schema->num_fields() != 1) {
-        throw std::runtime_error(
-            "make_const_number_expr expects schema with exactly one field");
-    }
+    PyObject *arrow_scalar_py) {
     auto arrow_scalar_res = arrow::py::unwrap_scalar(arrow_scalar_py);
     std::shared_ptr<arrow::Scalar> arrow_scalar;
     CHECK_ARROW_AND_ASSIGN(

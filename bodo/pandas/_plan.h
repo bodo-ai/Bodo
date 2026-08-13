@@ -337,7 +337,7 @@ duckdb::unique_ptr<duckdb::Expression> make_const_number_expr(
  * @return duckdb::unique_ptr<duckdb::Expression> - the const number expr
  */
 duckdb::unique_ptr<duckdb::Expression> make_const_arrow_scalar_expr(
-    PyObject *out_schema_py, PyObject *arrow_scalar_py);
+    PyObject *arrow_scalar_py);
 
 /**
  * @brief Create an expression from a constant string.
