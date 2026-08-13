@@ -7262,6 +7262,18 @@ def java_binop_to_pyiceberg_expr(kind, op_exprs):
         right_null = pie.IsNull(right)
         return pie.Or(pie.EqualTo(left, right), pie.And(left_null, right_null))
 
+    # The Calcite planner doesn't seem to evaluate constant expressions
+    # so we have to do it here to insert in PyIceberg expressions.
+    if pd.api.types.is_scalar(left) and pd.api.types.is_scalar(right):
+        if kind.equals(SqlKind.PLUS):
+            return left + right
+        if kind.equals(SqlKind.MINUS):
+            return left - right
+        if kind.equals(SqlKind.TIMES):
+            return left * right
+        if kind.equals(SqlKind.DIVIDE):
+            return left / right
+
     raise NotImplementedError(
         f"Binary operator {kind.toString()} not supported yet in java_binop_to_pyiceberg_expr"
     )
