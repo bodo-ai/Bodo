@@ -549,7 +549,11 @@ def tpch_q14(lineitem, part, pd=bodo.pandas):
     total_revenue = (jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])).sum()
 
     # aggregate promo revenue calculation
-    ratio = 100.00 * total_promo_revenue / total_revenue
+    multiplier = 100.00
+    ratio = total_promo_revenue / total_revenue
+    if isinstance(ratio, decimal.Decimal):
+        multiplier = decimal.Decimal(str(multiplier))
+    ratio = multiplier * ratio
     result_df = pd.DataFrame({"PROMO_REVENUE": [round(ratio, 2)]})
 
     return result_df

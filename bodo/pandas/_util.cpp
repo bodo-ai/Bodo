@@ -390,6 +390,23 @@ duckdb::Value ArrowScalarToDuckDBValue(
         case arrow::Type::DOUBLE:
             return duckdb::Value::DOUBLE(
                 std::static_pointer_cast<arrow::DoubleScalar>(scalar)->value);
+        case arrow::Type::DECIMAL: {
+            auto dec_scalar =
+                std::static_pointer_cast<arrow::Decimal128Scalar>(scalar);
+            arrow::Decimal128 dec_value = dec_scalar->value;
+            auto dec_type = std::static_pointer_cast<arrow::Decimal128Type>(
+                dec_scalar->type);
+            int32_t precision = dec_type->precision();
+            int32_t scale = dec_type->scale();
+            int64_t high_bits = dec_value.high_bits();
+            if (high_bits != 0) {
+                throw std::runtime_error(
+                    "Don't currently handle values larger than 64-bits when "
+                    "converting from Arrow scalar to DuckDB decimal.");
+            }
+            int64_t low_bits = dec_value.low_bits();
+            return duckdb::Value::DECIMAL(low_bits, precision, scale);
+        } break;
         case arrow::Type::BOOL:
             return duckdb::Value::BOOLEAN(
                 std::static_pointer_cast<arrow::BooleanScalar>(scalar)->value);
