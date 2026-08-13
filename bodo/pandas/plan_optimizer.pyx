@@ -52,7 +52,7 @@ cdef class _CastOptions(FunctionOptions):
     of _CastOptions is below with some other modifications.
     
     Versus Arrow's _CastOptions, we don't define a _set_type()
-    method(). Our intention is that this wrapper class stores the
+    method. Our intention is that this wrapper class stores the
     cast options aside from the target type, since our convention
     is to use the schema type as the target type. Only on the C++
     side is `to_type` filled in so that the CastOptions encapsulate
