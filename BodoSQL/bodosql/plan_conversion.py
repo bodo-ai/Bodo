@@ -5712,7 +5712,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.PLUS):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
         # TODO: upcast output to avoid overflow?
-        from bodo.libs.decimal_arr_ext import (
+        from bodo.utils.decimal_utils import (
             decimal_addition_subtraction_output_precision_scale,
         )
 
@@ -5742,7 +5742,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             right_cast = CastExpression(out_empty, right) if right_unsigned else right
             expr = ArithOpExpression(out_empty, left_cast, right_cast, "__sub__")
         else:
-            from bodo.libs.decimal_arr_ext import (
+            from bodo.utils.decimal_utils import (
                 decimal_addition_subtraction_output_precision_scale,
             )
 
@@ -5756,7 +5756,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
         return expr
 
     if kind.equals(SqlKind.TIMES):
-        from bodo.libs.decimal_arr_ext import (
+        from bodo.utils.decimal_utils import (
             decimal_multiplication_output_precision_scale,
         )
 
@@ -5770,7 +5770,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
         return expr
 
     if kind.equals(SqlKind.DIVIDE):
-        from bodo.libs.decimal_arr_ext import decimal_division_output_precision_scale
+        from bodo.utils.decimal_utils import decimal_division_output_precision_scale
 
         out_empty = get_output_type(
             left,
