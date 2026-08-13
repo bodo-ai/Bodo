@@ -183,6 +183,51 @@ def fixture_value_not_in(fixture_name, values):
     return condition
 
 
+def get_fixture_id(fixture_name, item):
+    if (
+        hasattr(item, "callspec")
+        and fixture_name in item.callspec.indices
+        and hasattr(item.session, "_fixturemanager")
+    ):
+        fixture_defs = item.session._fixturemanager.getfixturedefs(fixture_name, item)
+        if fixture_defs:
+            fixture_def = fixture_defs[-1]
+            fixture_index = item.callspec.indices[fixture_name]
+            if fixture_def.ids:
+                return fixture_def.ids[fixture_index]
+            elif hasattr(fixture_def, "params"):
+                fixture_param = fixture_def.params[fixture_index]
+                if isinstance(fixture_param, ParameterSet):
+                    return fixture_param.id
+    return None
+
+
+def fixture_id_is_in(fixture_name, included_ids):
+    """Get a condition function that returns True if the
+    id of the fixture `fixture_name` for the input test
+    is in the list of `included_ids`. Mainly intended for
+    use with `mark_bodosql_cpp_if()`."""
+
+    def condition(item):
+        fixture_id = get_fixture_id(fixture_name, item)
+        return fixture_id is not None and fixture_id in included_ids
+
+    return condition
+
+
+def fixture_id_not_in(fixture_name, excluded_ids):
+    """Get a condition function that returns True if the
+    id of the fixture `fixture_name` for the input test
+    is not in the list of `included_ids`. Mainly intended
+    for use with `mark_bodosql_cpp_if()`."""
+
+    def condition(item):
+        fixture_id = get_fixture_id(fixture_name, item)
+        return fixture_id is None or fixture_id not in excluded_ids
+
+    return condition
+
+
 def id_of_test_is_in(included_ids):
     """Get a condition function that returns True if the
     final ID of a test case is in the list of `included_ids`.
@@ -244,7 +289,7 @@ def mark_based_on_param_id(pytest_marker, should_mark):
         marked_params = []
         for i, param in enumerate(params):
             # The ID could be either an attribute of the pytest.param (most common),
-            # of from the `ids` list of pytest.mark.parametrize().
+            # or from the `ids` list of pytest.mark.parametrize().
             if isinstance(param, ParameterSet):
                 param_id = param.id
             else:

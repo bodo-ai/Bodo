@@ -148,6 +148,12 @@ def java_plan_to_python_plan(ctx, java_plan):
     """Convert a BodoSQL Java plan (RelNode) to a DataFrame library plan
     (bodo.pandas.plan.LazyPlan) for execution in the C++ runtime backend.
     """
+    # This is the entry point, so define SqlTypeName and SqlKind global
+    # aliases here to reduce repetition.
+    global SqlTypeName, SqlKind
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
     java_class_name = java_plan.getClass().getSimpleName()
 
     if java_class_name in (
@@ -404,8 +410,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     """
     op = java_call.getOperator()
     operator_class_name = op.getClass().getSimpleName()
-
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
     def timestamp_from_parts(
         year_expr,
@@ -2020,11 +2024,15 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                     float_empty_data, utc_offset_minutes, minutes_per_hour, "__mod__"
                 )
 
-        if func_name in (
-            "EPOCH_SECOND",
-            "EPOCH_MILLISECOND",
-            "EPOCH_MICROSECOND",
-            "EPOCH_NANOSECOND",
+        if (
+            func_name
+            in (
+                "EPOCH_SECOND",
+                "EPOCH_MILLISECOND",
+                "EPOCH_MICROSECOND",
+                "EPOCH_NANOSECOND",
+            )
+            and num_operands == 1
         ):
             timestamp_expr = java_expr_to_python_expr(
                 ctx, java_call.getOperands()[0], input_plan
@@ -2092,7 +2100,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operand = java_call.getOperands()[0]
         operand_type = operand.getType()
         target_type = java_call.getType()
-        SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
         func_name = op.getName().upper()
         in_expr = java_expr_to_python_expr(ctx, operand, input_plan)
         # TODO[BSE-5154]: support all Calcite casts
@@ -2513,7 +2520,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
         ) and not operand_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
             if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
-                # Integers are assumed in seconds in BodoSQL
+                # Integers are assumed in seconds in BodoSQL.
                 cast_empty_data = pd.Series(
                     dtype=pd.ArrowDtype(
                         pa.timestamp("s" if is_int_type(operand_type) else "ns")
@@ -2541,7 +2548,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (0, "half_towards_infinity"),
             )
 
-        # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
+        # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type()).
+        # TODO: Are they actually? Calcite converts the single-argument TO_TIMESTAMP to regular cast to timestamp.
+        # According to Snowflake, if an integer input is given, the unit is seconds unless the second argument for scale is passed.
+        # However this contradicts the BodoSQL docs (https://docs.bodo.ai/latest/api_docs/sql/functions/casting/to_timestamp/)
+        # which say that the unit of the integer depends on its magnitude, similar to when the input is an integer
+        # string (see snowflake_normalize_time_ints()).
         if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
             SqlTypeName.TIMESTAMP
         ):
@@ -2570,7 +2582,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
             )
 
-        # Use bodo_string_cast with emit_null_on_failure=True if
+        # Use bodo_string_cast with emit_null_on_failure=True
         # when the source expression has string dtype
         string_try_cast = False
         if safe_cast:
@@ -2593,7 +2605,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operands = java_call.getOperands()
         input = java_expr_to_python_expr(ctx, operands[0], input_plan)
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
         if kind.equals(SqlKind.IS_NOT_NULL):
             bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
@@ -2622,7 +2633,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     if operator_class_name == "SqlCaseOperator":
         operands = java_call.getOperands()
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
         assert kind.equals(SqlKind.CASE), (
             "Expected CASE operator, got " + kind.toString()
         )
@@ -2633,7 +2643,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operands = java_call.getOperands()
         input = java_expr_to_python_expr(ctx, operands[0], input_plan)
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
         if kind.equals(SqlKind.MINUS_PREFIX):
             out_empty = -input.empty_data.iloc[:, 0]
@@ -3088,6 +3097,151 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 combined_val = pd.Timedelta(nanoseconds=total_nanos)
             dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
             return ConstantExpression(dummy_empty_data, input_plan, combined_val)
+
+        if (
+            func_name
+            in (
+                "TO_TIMESTAMP",
+                "TO_TIMESTAMP_NTZ",
+                "TO_TIMESTAMP_LTZ",
+                "TRY_TO_TIMESTAMP",
+                "TRY_TO_TIMESTAMP_NTZ",
+                "TRY_TO_TIMESTAMP_LTZ",
+            )
+            and not java_call.getOperands()[0]
+            .getType()
+            .getSqlTypeName()
+            .equals(SqlTypeName.VARCHAR)
+            and len(op_exprs) == 2
+        ):
+            # This is for the two-argument form of TO_TIMESTAMP with numeric input.
+            # There is another two-argument version that takes a string timestamp and a format specifier.
+            numeric_timestamp_expr = op_exprs[0]
+            scale_expr = op_exprs[1]
+            ensure_type_of_expr(
+                numeric_timestamp_expr, "numeric_timestamp_expr", (int, float)
+            )
+            ensure_arg_is_const_expr_of_type(scale_expr, "scale_expr", int)
+
+            # Get the timestamp unit to initially convert to. This will be
+            # the final timestamp unit for integer inputs, but nanoseconds
+            # will be the final unit for float input to retain as much
+            # precision as possible.
+            scale_to_unit = {0: "s", 3: "ms", 6: "us", 9: "ns"}
+            timestamp_unit = scale_to_unit[scale_expr.value]
+            if func_name in ("TO_TIMESTAMP_LTZ", "TRY_TO_TIMESTAMP_LTZ"):
+                tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+            else:
+                tz = None
+
+            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+            numeric_timestamp_dtype = get_expr_dtype(numeric_timestamp_expr)
+            if compare_types(numeric_timestamp_dtype, int):
+                # Must be int64 since that is underlying type of Arrow timestamps
+                int64_timestamp_expr = CastExpression(
+                    int64_empty_data, numeric_timestamp_expr
+                )
+                # The integer is relative to the start of the UNIX epoch in UTC,
+                # so we can cast straight to timestamp. For casting to TIMESTAMP_LTZ,
+                # this still works because underlying timestamp values in Arrow
+                # are always in UTC; the timezone of the target type only affects
+                # the metadata added after the cast.
+                return CastExpression(
+                    pd.Series(dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit, tz=tz))),
+                    int64_timestamp_expr,
+                )
+            else:
+                # The float case is trickier because 1. we can only cast ints directly
+                # to timestamps, 2. we are limited by the size of int64. There could be an
+                # arbitrary number of digits after the decimal point, so we are virtually
+                # forced to convert to nanosecond precision, which could easily lead
+                # to overflow for bigger values when the unit is e.g. seconds.
+
+                # Don't support try-casting for float input for now since it is inconvenient
+                # to implement and not well-documented what the error conditions are.
+                # It doesn't look like Snowflake even permits TRY_TO_TIMESTAMP with
+                # numeric input.
+                if func_name in (
+                    "TRY_TO_TIMESTAMP",
+                    "TRY_TO_TIMESTAMP_NTZ",
+                    "TRY_TO_TIMESTAMP_LTZ",
+                ):
+                    raise NotImplementedError(
+                        f"C++ backend does not support two-argument {func_name} with float input yet."
+                    )
+
+                # Minimize lost precision by doing float multiplication on only the
+                # fractional part of the value instead of the full value.
+
+                # Truncate to get the integer portion of the timestamp value
+                int_timestamp_val = UnaryOpExpression(
+                    int64_empty_data, numeric_timestamp_expr, "trunc"
+                )
+                # Make a timestamp from the integer value in the original units - guaranteed to fit
+                int_timestamp = CastExpression(
+                    pd.Series(dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit))),
+                    int_timestamp_val,
+                )
+
+                if timestamp_unit != "ns":
+                    # Subtract to get the fractional portion of the timestamp value
+                    frac_timestamp_val = ArithOpExpression(
+                        numeric_timestamp_expr.empty_data,
+                        numeric_timestamp_expr,
+                        int_timestamp_val,
+                        "__sub__",
+                    )
+
+                    # Get the fractional part as a nanosecond integer.
+                    # We round when the fractional part has more than nine digits after the decimal point;
+                    # truncating could exaggerate floating-point error.
+                    to_nanos_factor = ConstantExpression(
+                        int64_empty_data, input_plan, 10 ** (9 - scale_expr.value)
+                    )
+                    frac_nanos_val = ArithOpExpression(
+                        numeric_timestamp_expr.empty_data,
+                        frac_timestamp_val,
+                        to_nanos_factor,
+                        "__mul__",
+                    )
+                    frac_nanos_trunc = UnaryOpExpression(
+                        int64_empty_data, frac_nanos_val, "round"
+                    )
+
+                    # We want to add the fractional part to the int timestamp, so convert to nanosecond duration
+                    duration_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.duration("ns"))
+                    )
+                    frac_nanos_duration = CastExpression(
+                        duration_empty_data, frac_nanos_trunc
+                    )
+                    # Add a duration[ns] to a timestamp of a longer unit. The result will be timestamp[ns],
+                    # so this is where overflow could happen.
+                    ns_timestamp_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                    )
+                    combined_timestamp = ArithOpExpression(
+                        ns_timestamp_empty_data,
+                        int_timestamp,
+                        frac_nanos_duration,
+                        "__add__",
+                    )
+
+                    if tz is not None:
+                        # Add timezone metadata at the end. If we do this earlier, we run into
+                        # DuckDB limitations related to TZ-aware arithmetic [BSE-5500].
+                        timestamp_ltz_empty_data = pd.Series(
+                            dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+                        )
+                        combined_timestamp = CastExpression(
+                            timestamp_ltz_empty_data, combined_timestamp
+                        )
+                    return combined_timestamp
+                else:
+                    # If the original value was already in units of nanoseconds, the integer part
+                    # is the most precise value we can store.
+                    return int_timestamp
 
         if func_name == "SIGN" and len(op_exprs) == 1:
             inp = op_exprs[0]
@@ -4231,7 +4385,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
             if func_name in ("BITSHIFTLEFT", "BITSHIFTRIGHT"):
                 left_opr_sql_type = operands[0].getType()
-                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
 
                 if left_opr_sql_type.getSqlTypeName().equals(SqlTypeName.BINARY):
                     # Cast right_expr to match the bit width and signedness of left_expr.
@@ -6102,8 +6255,6 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     else:
         right = op_exprs[1]
 
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
-
     if kind.equals(SqlKind.PLUS):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
         # TODO: upcast output to avoid overflow?
@@ -6595,7 +6746,6 @@ def java_filter_to_python_filter(ctx, java_filter):
 
 def _is_interval_type(sql_type_name):
     """Check if a SqlTypeName is any interval subtype."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     return (
         sql_type_name.equals(SqlTypeName.INTERVAL_YEAR)
         or sql_type_name.equals(SqlTypeName.INTERVAL_MONTH)
@@ -6615,7 +6765,6 @@ def _is_interval_type(sql_type_name):
 
 def _is_year_month_interval(sql_type_name):
     """Check if a SqlTypeName is a year/month interval subtype."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     return (
         sql_type_name.equals(SqlTypeName.INTERVAL_YEAR)
         or sql_type_name.equals(SqlTypeName.INTERVAL_MONTH)
@@ -6625,7 +6774,6 @@ def _is_year_month_interval(sql_type_name):
 
 def java_literal_to_python_literal(ctx, java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type = java_literal.getType()
     lit_type_name = lit_type.getSqlTypeName()
 
@@ -6736,7 +6884,6 @@ def get_java_symbol(java_symbol):
         "get_java_symbol: expected RexLiteral but got "
         + java_symbol.getClass().getSimpleName()
     )
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
 
     if java_symbol.getTypeName().equals(SqlTypeName.CHAR):
         return java_symbol.getValue2()
@@ -6766,7 +6913,6 @@ def is_int_type(java_type):
 
 def is_float_type(java_type):
     """Check if a Calcite type is a float type."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     type_name = java_type.getSqlTypeName()
     return type_name.equals(SqlTypeName.FLOAT) or type_name.equals(SqlTypeName.DOUBLE)
 
@@ -6983,7 +7129,6 @@ def java_agg_to_python_agg(ctx, java_plan):
 def _agg_to_func_name(func):
     """Map a Calcite aggregation to a groupby function name."""
     agg = func.getAggregation()
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
     agg_name = agg.getName()
 
@@ -7187,7 +7332,6 @@ def java_field_to_pa_field(ctx, java_field):
 
 def sql_type_to_pa_type(ctx, sql_type):
     """Convert a Calcite SqlTypeName to a PyArrow data type."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     sql_type_name = sql_type.getSqlTypeName()
 
     if sql_type_name.equals(SqlTypeName.TINYINT):
@@ -7358,7 +7502,6 @@ def get_pyiceberg_row_filter(filters, field_names):
         return op_exprs[0]
 
     # AND all filters
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     return java_binop_to_pyiceberg_expr(SqlKind.AND, op_exprs)
 
 
@@ -7401,7 +7544,6 @@ def java_call_to_pyiceberg_call(java_call, field_names):
         operand = java_call.getOperands()[0]
         operand_type = operand.getType()
         target_type = java_call.getType()
-        SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
         # TODO[BSE-5154]: support all Calcite casts
 
         if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
@@ -7424,7 +7566,6 @@ def java_call_to_pyiceberg_call(java_call, field_names):
         operands = java_call.getOperands()
         input = java_expr_to_pyiceberg_expr(operands[0], field_names)
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
         if kind.equals(SqlKind.IS_NOT_NULL):
             return pie.NotNull(input)
@@ -7440,7 +7581,6 @@ def java_call_to_pyiceberg_call(java_call, field_names):
 
     if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
         if kind.equals(SqlKind.NOT):
             operand = java_expr_to_pyiceberg_expr(
                 java_call.getOperands()[0], field_names
@@ -7633,8 +7773,6 @@ def java_binop_to_pyiceberg_expr(kind, op_exprs):
     else:
         right = op_exprs[1]
 
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
-
     # Comparison operators
     if kind.equals(SqlKind.EQUALS):
         return pie.EqualTo(left, right)
@@ -7716,7 +7854,6 @@ def java_literal_to_pyiceberg_literal(java_literal):
     """Convert a BodoSQL Java literal expression to a constant to use in PyIceberg
     expressions.
     """
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
 
