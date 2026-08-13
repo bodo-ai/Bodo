@@ -1,5 +1,9 @@
 import os
 
+# Import bodo first to ensure bodo initialization is done before any other imports
+# (e.g. setting OMPI_MCA_pml in the GPU case)
+import bodo  # isort:skip # noqa #
+
 from bodosql.context import BodoSQLContext
 
 from bodosql.bodosql_types.table_path import TablePath
