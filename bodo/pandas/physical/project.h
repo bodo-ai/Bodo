@@ -93,17 +93,17 @@ class PhysicalProjection : public PhysicalProcessBatch {
                 throw std::runtime_error(
                     "Expression in projection did not result in an array");
             }
+            if (res_as_array->result->length != input_batch->nrows()) {
+                throw std::runtime_error(
+                    "Output column size does not match input size in "
+                    "Projection");
+            }
             out_cols.emplace_back(res_as_array->result);
         }
         this->metrics.expr_eval_time += end_timer(start_process_exprs);
 
         uint64_t out_size =
-            out_cols.size() > 0 ? out_cols[0]->length : input_batch->nrows();
-        if (out_size != input_batch->nrows()) {
-            throw std::runtime_error(
-                "Output size does not match input size in Projection");
-        }
-
+            (out_cols.size() > 0) ? out_cols[0]->length : input_batch->nrows();
         std::shared_ptr<table_info> out_table_info =
             std::make_shared<table_info>(out_cols, out_size, col_names,
                                          input_batch->metadata);

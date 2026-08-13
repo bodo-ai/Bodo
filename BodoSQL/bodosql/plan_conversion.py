@@ -5652,31 +5652,45 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         )
 
 
+def get_decimal_type(atype, expr):
+    if pa.types.is_int64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_int32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_int16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_int8(atype):
+        return pa.decimal128(3, 0)
+    elif pa.types.is_uint64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_uint32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_uint16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_uint8(atype):
+        return pa.decimal128(3, 0)
+    else:
+        raise TypeError(f"Not decimal conversion from {atype} yet")
+
+
 def get_output_type(left, right, non_decimal_func, decimal_func):
     left_empty = left.empty_data
     right_empty = right.empty_data
     left_atype = left_empty.dtypes.iloc[0].pyarrow_dtype
     right_atype = right_empty.dtypes.iloc[0].pyarrow_dtype
-    # Snowflake seems to keep decimal representation if any decimal has
-    # arithmetic operation with non-decimal.
-    if pa.types.is_decimal(left_atype) and pa.types.is_decimal(right_atype):
-        output_leading, output_scale = decimal_func(
-            left_atype.precision - left_atype.scale,
+    if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
+        if not pa.types.is_decimal(left_atype):
+            left_atype = get_decimal_type(left_atype, left)
+        if not pa.types.is_decimal(right_atype):
+            right_atype = get_decimal_type(right_atype, right)
+        output_precision, output_scale = decimal_func(
+            left_atype.precision,
             left_atype.scale,
-            right_atype.precision - right_atype.scale,
+            right_atype.precision,
             right_atype.scale,
         )
-        precision = output_leading + output_scale
         return pd.Series(
-            dtype=pd.ArrowDtype(pa.decimal128(min(38, precision), output_scale))
-        )
-    elif pa.types.is_decimal(left_atype):
-        return pd.Series(
-            dtype=pd.ArrowDtype(pa.decimal128(left_atype.precision, left_atype.scale))
-        )
-    elif pa.types.is_decimal(right_atype):
-        return pd.Series(
-            dtype=pd.ArrowDtype(pa.decimal128(right_atype.precision, right_atype.scale))
+            dtype=pd.ArrowDtype(pa.decimal128(min(38, output_precision), output_scale))
         )
     else:
         return non_decimal_func(left_empty.iloc[:, 0], right_empty.iloc[:, 0])
@@ -5698,11 +5712,15 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.PLUS):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
         # TODO: upcast output to avoid overflow?
+        from bodo.utils.decimal_utils import (
+            decimal_addition_subtraction_output_precision_scale,
+        )
+
         out_empty = get_output_type(
             left,
             right,
             lambda l, r: l + r,
-            lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
+            decimal_addition_subtraction_output_precision_scale,
         )
         expr = ArithOpExpression(out_empty, left, right, "__add__")
         return expr
@@ -5724,32 +5742,43 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             right_cast = CastExpression(out_empty, right) if right_unsigned else right
             expr = ArithOpExpression(out_empty, left_cast, right_cast, "__sub__")
         else:
+            from bodo.utils.decimal_utils import (
+                decimal_addition_subtraction_output_precision_scale,
+            )
+
             out_empty = get_output_type(
                 left,
                 right,
                 lambda l, r: l - r,
-                lambda ll, ls, rl, rs: (max(ll, rl) + 1, max(ls, rs)),
+                decimal_addition_subtraction_output_precision_scale,
             )
             expr = ArithOpExpression(out_empty, left, right, "__sub__")
         return expr
 
     if kind.equals(SqlKind.TIMES):
+        from bodo.utils.decimal_utils import (
+            decimal_multiplication_output_precision_scale,
+        )
+
         out_empty = get_output_type(
             left,
             right,
             lambda l, r: l * r,
-            lambda ll, ls, rl, rs: (ll + rl, ls + rs),
+            decimal_multiplication_output_precision_scale,
         )
         expr = ArithOpExpression(out_empty, left, right, "__mul__")
         return expr
 
     if kind.equals(SqlKind.DIVIDE):
+        from bodo.utils.decimal_utils import decimal_division_output_precision_scale
+
         out_empty = get_output_type(
             left,
             right,
             lambda l, r: l / r,
-            lambda ll, ls, rl, rs: (ll + rs, max(ls, rs + 4)),
+            decimal_division_output_precision_scale,
         )
+
         expr = ArithOpExpression(out_empty, left, right, "__truediv__")
         return expr
 
