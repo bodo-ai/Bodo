@@ -586,13 +586,7 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
         case Bodo_FTypes::percentile_cont:
         case Bodo_FTypes::mean:
             out_array_type = bodo_array_type::NULLABLE_INT_BOOL;
-            if (dtype == Bodo_CTypes::DECIMAL) {
-                // mean, median, percentile functions have dedicated versions
-                // that return decimal
-                out_dtype = Bodo_CTypes::DECIMAL;
-            } else {
-                out_dtype = Bodo_CTypes::FLOAT64;
-            }
+            out_dtype = Bodo_CTypes::FLOAT64;
             break;
         case Bodo_FTypes::listagg:
             out_array_type = bodo_array_type::STRING;

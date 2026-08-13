@@ -638,7 +638,11 @@ def tpch_q17(lineitem, part, pd=bodo.pandas):
 
     jn4 = jn1.merge(agg, left_on="L_PARTKEY", right_on="L_PARTKEY", how="left")
     jn4 = jn4[jn4["L_QUANTITY"] < 0.2 * jn4["L_QUANTITY_AVG"]]
-    total = jn4["L_EXTENDEDPRICE"].sum() / 7.0
+    total = jn4["L_EXTENDEDPRICE"].sum()
+    divisor = 7.0
+    if isinstance(total, decimal.Decimal):
+        divisor = decimal.Decimal(str(divisor))
+    total = total / divisor
 
     result_df = pd.DataFrame({"AVG_YEARLY": [round(total, 2)]})
 
