@@ -1952,6 +1952,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operand_type = operand.getType()
         target_type = java_call.getType()
         SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+        func_name = op.getName().upper()
         in_expr = java_expr_to_python_expr(ctx, operand, input_plan)
         # TODO[BSE-5154]: support all Calcite casts
 
@@ -2037,12 +2038,12 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             )
 
             # If the input represents simply an integer, interpret it as the number of seconds.
-            # For the strings that were times, replace them with 0 so that we don't get an error trying to cast them to integers
+            # For the strings that were times, replace them with NULL so that we don't get an error trying to cast them to integers
             safe_int_strings = CaseExpression(
                 string_empty_data,
                 represents_int,
                 in_expr,
-                ConstantExpression(string_empty_data, input_plan, "0"),
+                NullExpression(string_empty_data, input_plan, 0),
             )
             seconds = CastExpression(int_empty_data, safe_int_strings)
             nanoseconds = ArithOpExpression(
@@ -2075,15 +2076,18 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 (r":(\d)($|\.)", r":0\1\2"),
             )
 
-            # For the strings that were integers, replace them with 00:00:00 so that we don't get an error trying to parse integers as times
+            # For the strings that were integers, replace them with NULL so that we don't get an error trying to parse integers as times
             safe_time_strings = CaseExpression(
                 string_empty_data,
                 represents_int,
-                ConstantExpression(string_empty_data, input_plan, "00:00:00"),
+                NullExpression(string_empty_data, input_plan, 0),
                 cleaned_input,
             )
 
-            # Convert to a timestamp string before casting because Arrow has no way to directly parse as a time.
+            # Convert to a timestamp string before casting because Arrow's Cast can't convert
+            # directly from a string to a time for some reason.
+            # TODO: Arrow's internal ParseValue() function does have this capability, so this plan conversion can be
+            # simplified by calling our new bodo_string_cast compute function instead.
             dummy_date_string = ConstantExpression(
                 string_empty_data, input_plan, "1970-01-01"
             )
