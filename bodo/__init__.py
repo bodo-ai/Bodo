@@ -189,10 +189,9 @@ sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
 
 try:
     from ._build_config import DEFAULT_GPU_ENABLED
-    gpu_build = 1
 except ImportError:
     DEFAULT_GPU_ENABLED = "0"
-    gpu_build = 0
+gpu_build = DEFAULT_GPU_ENABLED != "0"
 
 # Flag to enable Bodo to use GPUs when available.
 gpu_enabled = os.environ.get("BODO_GPU", DEFAULT_GPU_ENABLED) != "0"
