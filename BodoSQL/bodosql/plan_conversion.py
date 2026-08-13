@@ -1771,7 +1771,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
         if func_name == "DATE_TRUNC" and num_operands == 2:
             return convert_date_trunc(
-                ctx, java_call.getOperands[0], op_exprs[1], java_call.getType()
+                ctx, java_call.getOperands()[0], op_exprs[1], java_call.getType()
             )
 
         if func_name == "LAST_DAY" and num_operands in (1, 2):
@@ -1795,7 +1795,11 @@ def java_call_to_python_call(ctx, java_call, input_plan):
                 return convert_dateadd_two_arg(input_plan, *op_exprs)
             elif num_operands == 3:
                 return convert_dateadd_three_arg(
-                    input_plan, func_name, op_exprs[1], op_exprs[2]
+                    input_plan,
+                    func_name,
+                    java_call.getOperands()[0],
+                    op_exprs[1],
+                    op_exprs[2],
                 )
         if func_name in ("DATE_SUB", "SUBDATE"):
             # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
