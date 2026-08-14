@@ -108,7 +108,8 @@ class RootSchema {
                     newSchema
                 }
             // Wrap in a SimpleCalciteSchema
-            // Disable caching because it can be very expensive to initially populate the cache for large schemas
+            // Disable caching because it can be very expensive to initially populate the cache for large schemas.
+            // TODO(BSE-5563): Revisit caching after implementing Lookup API for Schemas.
             val simpleSchema = CalciteSchema.createRootSchema(false, false, rootName, schema)
             return simpleSchema.plus()
         }
