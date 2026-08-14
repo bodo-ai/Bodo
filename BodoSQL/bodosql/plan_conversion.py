@@ -4567,7 +4567,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return convert_startswith_endswith(func_name, *op_exprs)
 
         if func_name == "CONTAINS" and len(op_exprs) == 2:
-            return convert_contains(func_name, *op_exprs)
+            return convert_contains(*op_exprs)
 
         if func_name == "LENGTH" and len(op_exprs) == 1:
             # Snowflake LENGTH() = MySQL CHAR_LENGTH()
