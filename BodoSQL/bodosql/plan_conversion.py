@@ -400,6 +400,41 @@ def adjust_scale(inp_dtype, scale_expr, output_empty_data):
     return output_empty_data
 
 
+def clean_regex_params(regex_params_expr, func_name):
+    """Verify the raw regex parameters passed into functions such as REGEXP_SUBSTR
+    or REGEXP_INSTR and turn them into a standard form."""
+    if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
+        # Both case sensitive and case insensitive params provided; find which appears latest in the string
+        latest_index = max(regex_params_expr.value.rfind(char) for char in ("c", "i"))
+        latest_char = regex_params_expr.value[latest_index]
+        # Remove occurrences of the other parameter so we can check case-sensitivity using the "in" operator
+        regex_params = regex_params_expr.value.replace(
+            "c" if latest_char == "i" else "i", ""
+        )
+    else:
+        if "c" not in regex_params_expr.value and "i" not in regex_params_expr.value:
+            regex_params = regex_params_expr.value + "c"
+        else:
+            regex_params = regex_params_expr.value
+    # Get characters in regex_params that are not in the list of valid regex parameters
+    invalid_regex_params = set(regex_params) - {"c", "i", "m", "e", "s"}
+    if invalid_regex_params:
+        raise ValueError(
+            f"{func_name} invalid regex parameters: {invalid_regex_params}"
+        )
+    return regex_params
+
+
+def regexp_add_mode_modifiers(regexp, regex_params, modes):
+    """
+    Add an inline mode modifer to the start of the input regexp.
+    The activated modes are those that the regex parameters and
+    the passed `modes` have in common.
+    """
+    active_mode_str = "".join(set(regex_params) & set(modes))
+    return f"(?{active_mode_str})" + regexp if active_mode_str else regexp
+
+
 def convert_date_part_funcs(func_name, input):
     if func_name in ("DAYOFWEEK", "DOW"):
         # Default DAYOFWEEK for Bodo/Snowflake is Sunday=0, Monday=1, ..., Saturday=6.
@@ -2452,6 +2487,946 @@ def convert_rand(input_plan):
     )
 
 
+def convert_booland_boolor_boolxor(input_plan, func_name, left_expr, right_expr):
+    ensure_type_of_expr(left_expr, "left_expr", (int, float))
+    ensure_type_of_expr(right_expr, "right_expr", (int, float))
+
+    left_expr_is_int = compare_types(get_expr_dtype(left_expr), int)
+    right_expr_is_int = compare_types(get_expr_dtype(right_expr), int)
+
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+    if not left_expr_is_int:
+        # Round float inputs.
+        # This is required because, according to the docs,
+        # Snowflake interprets floats in BOOLAND as integers
+        # by rounding. Thus, a float like 0.3 should be considered 0
+        # whereas a float like 0.7 would be non-zero.
+
+        left_expr_rounded = ArrowScalarFuncExpression(
+            float_empty_data, [left_expr], "round", ()
+        )
+    else:
+        left_expr_rounded = left_expr
+
+    if not right_expr_is_int:
+        right_expr_rounded = ArrowScalarFuncExpression(
+            float_empty_data, [right_expr], "round", ()
+        )
+    else:
+        right_expr_rounded = right_expr
+
+    # Get nonzero values as True, zero values as False
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    left_zero_expr = ConstantExpression(
+        int_empty_data if left_expr_is_int else float_empty_data, input_plan, 0
+    )
+    left_expr_bool = ComparisonOpExpression(
+        bool_empty_data, left_expr_rounded, left_zero_expr, operator.ne
+    )
+    right_zero_expr = ConstantExpression(
+        int_empty_data if right_expr_is_int else float_empty_data, input_plan, 0
+    )
+    right_expr_bool = ComparisonOpExpression(
+        bool_empty_data, right_expr_rounded, right_zero_expr, operator.ne
+    )
+
+    if func_name == "BOOLAND":
+        return ConjunctionOpExpression(
+            bool_empty_data, left_expr_bool, right_expr_bool, "__and__"
+        )
+    elif func_name == "BOOLOR":
+        return ConjunctionOpExpression(
+            bool_empty_data, left_expr_bool, right_expr_bool, "__or__"
+        )
+    elif func_name == "BOOLXOR":
+        return ComparisonOpExpression(
+            bool_empty_data, left_expr_bool, right_expr_bool, operator.ne
+        )
+
+
+def convert_boolnot(input_plan, expr):
+    ensure_type_of_expr(expr, "expr", (int, float))
+
+    expr_is_int = compare_types(get_expr_dtype(expr), int)
+
+    # Round float inputs (for the same reason as BOOLAND/BOOLOR/BOOLXOR)
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+    if not expr_is_int:
+        expr_rounded = ArrowScalarFuncExpression(float_empty_data, [expr], "round", ())
+    else:
+        expr_rounded = expr
+
+    # Flipped logic: get nonzero values as False, zero values as True
+    zero_expr = ConstantExpression(
+        int_empty_data if expr_is_int else float_empty_data, input_plan, 0
+    )
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    return ComparisonOpExpression(bool_empty_data, expr_rounded, zero_expr, operator.eq)
+
+
+def convert_equal_null(input_plan, left_expr, right_expr):
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    values_equal = ComparisonOpExpression(
+        bool_empty_data, left_expr, right_expr, operator.eq
+    )
+
+    left_is_null = UnaryOpExpression(bool_empty_data, left_expr, "isnull")
+    right_is_null = UnaryOpExpression(bool_empty_data, right_expr, "isnull")
+    both_null = ConjunctionOpExpression(
+        bool_empty_data, left_is_null, right_is_null, "__and__"
+    )
+
+    # CASE WHEN values_equal THEN TRUE ELSE both_null
+    # The case statement interprets nulls as false, so we avoid the coalesce step
+    true_expr = ConstantExpression(bool_empty_data, input_plan, True)
+    return CaseExpression(bool_empty_data, values_equal, true_expr, both_null)
+
+
+def convert_nvl2(expr1, expr2, expr3):
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    expr1_is_null = UnaryOpExpression(bool_empty_data, expr1, "isnull")
+    return make_unified_case_expression("common", expr1_is_null, expr3, expr2)
+
+
+def convert_zeroifnull(input_plan, expr):
+    ensure_type_of_expr(expr, "ZEROIFNULL expr", (int, float))
+
+    zero_expr = ConstantExpression(expr.empty_data, input_plan, 0)
+    return ArrowScalarFuncExpression(expr.empty_data, [expr, zero_expr], "coalesce", ())
+
+
+def convert_regr_valx(y_expr, x_expr):
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    y_is_null = UnaryOpExpression(bool_empty_data, y_expr, "isnull")
+    return make_unified_case_expression(x_expr.empty_data, y_is_null, y_expr, x_expr)
+
+
+def convert_regr_valy(y_expr, x_expr):
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    x_is_null = UnaryOpExpression(bool_empty_data, x_expr, "isnull")
+    return make_unified_case_expression(y_expr.empty_data, x_is_null, x_expr, y_expr)
+
+
+def convert_decode(input_plan, op_exprs):
+    select_expr = op_exprs[0]
+
+    result_exprs = [op_exprs[i] for i in range(2, len(op_exprs), 2)]
+    # Ensure result expression datatypes are compatible. Currently we
+    # only try to unify integer datatypes.
+    result_expr_dtypes = [get_expr_dtype(result_expr) for result_expr in result_exprs]
+    if not all(pd.api.types.is_integer_dtype(dtype) for dtype in result_expr_dtypes):
+        result_type = result_expr_dtypes[0]
+        for result_expr_dtype in result_expr_dtypes[1:]:
+            if not compare_types(result_expr_dtype, result_type):
+                raise ValueError(
+                    f"Incompatible DECODE result expression dtypes: {result_expr_dtype} and {result_type}"
+                )
+
+    # Get unified result type between all result expressions to avoid overflow
+    common_result_type, results_need_cast = get_common_int_type_list(result_exprs)
+    if common_result_type is not None:
+        empty_data = pd.Series(dtype=pd.ArrowDtype(common_result_type))
+    else:
+        empty_data = result_exprs[0].empty_data
+
+    if len(op_exprs) % 2 == 0:
+        # Default specified
+        default_expr = op_exprs[-1]
+    else:
+        # No default specified - NULL should be returned when there is no match
+        default_expr = NullExpression(empty_data, input_plan, 0)
+
+    # Recursively create CaseExpressions for the remaining search expression and result expression pairs
+    # There is guaranteed to be at least one pair
+    def make_ternary_expression(search_result_pair_index):
+        pair_start_index = 1 + 2 * search_result_pair_index
+        search_expr = op_exprs[pair_start_index]
+        result_expr = op_exprs[pair_start_index + 1]
+        if results_need_cast[search_result_pair_index]:
+            result_expr = CastExpression(empty_data, result_expr)
+
+        # Use equal_null for comparison since nulls should match nulls
+        search_expr_match = convert_equal_null(input_plan, select_expr, search_expr)
+        # Get the result expression if select_expr does not match search_expr
+        if len(op_exprs) - pair_start_index > 3:
+            else_ternary_expr = make_ternary_expression(search_result_pair_index + 1)
+        else:
+            else_ternary_expr = (
+                default_expr  # Use the default expression if we have run out of pairs
+            )
+        return CaseExpression(
+            empty_data, search_expr_match, result_expr, else_ternary_expr
+        )
+
+    return make_ternary_expression(0)
+
+
+def convert_char_length(src):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    return ArrowScalarFuncExpression(
+        int_empty_data,
+        [src],
+        "utf8_length",
+        (),
+    )
+
+
+def convert_lower_upper(func_name, src):
+    ensure_type_of_expr(src, "src", str)
+    return ArrowScalarFuncExpression(
+        src.empty_data, [src], f"utf8_{func_name.lower()}", ()
+    )
+
+
+def convert_lpad_rpad(func_name, src, length, pattern=None):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(length, "length", int)
+
+    arrow_func_args = (length.value,)
+
+    if pattern is not None:
+        ensure_arg_is_const_expr_of_type(pattern, "pattern", (str, pa.binary()))
+        arrow_func_args += (pattern.value,)
+
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        [src],
+        f"utf8_{func_name.lower()}",
+        arrow_func_args,
+    )
+
+
+def convert_replace(src, search_expr, replacement_expr=None):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(search_expr, "search_expr", (str, pa.binary()))
+
+    if replacement_expr is not None:
+        ensure_arg_is_const_expr_of_type(
+            replacement_expr, "replacement_expr", (str, pa.binary())
+        )
+        replacement_val = replacement_expr.value
+    else:
+        replacement_val = ""
+
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        [src],
+        "replace_substring",
+        (search_expr.value, replacement_val),
+    )
+
+
+def convert_regexp_substr(
+    src,
+    regexp,
+    start_expr=None,
+    occurrence_expr=None,
+    regex_params_expr=None,
+    group_num_expr=None,
+):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+    if start_expr is not None:
+        ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+        if start_expr.value > 0:
+            start = start_expr.value - 1
+        elif start_expr.value == 0:
+            start = 0
+        else:
+            raise ValueError("Start index must be positive for REGEXP_SUBSTR.")
+    else:
+        start = 0
+
+    if occurrence_expr is not None:
+        # Need to search for the substring that is the occurrence_expr occurrence / regex match
+        ensure_arg_is_const_expr_of_type(occurrence_expr, "occurrence_expr", int)
+        occurrence_num = occurrence_expr.value
+        if occurrence_num < 1:
+            raise ValueError("REGEXP_SUBSTR occurrences argument must be 1 or greater")
+    else:
+        occurrence_num = 1
+
+    if regex_params_expr is not None:
+        ensure_arg_is_const_expr_of_type(regex_params_expr, "regex_params_expr", str)
+        regex_params = clean_regex_params(regex_params_expr, "REGEXP_SUBSTR")
+    else:
+        regex_params = "c"
+
+    if group_num_expr is not None:
+        ensure_arg_is_const_expr_of_type(group_num_expr, "group_num_expr", int)
+        if group_num_expr.value < 0:
+            raise ValueError(
+                "Negative value for group_num argument of REGEXP_SUBSTR is not permitted"
+            )
+        group_num = group_num_expr.value
+        if group_num > 0:
+            group_num -= 1  # Convert from 1-based to 0-based
+        # 'e' is implied if group_num is passed
+        regex_params += "e"
+    else:
+        group_num = 0
+
+    # Use inline mode modifiers if needed since replace_substring_regex
+    # and extract_regex don't expose those options.
+    # This applies to the 'i', 'm', and 's' options.
+    modified_regexp = regexp_add_mode_modifiers(regexp.value, regex_params, "ims")
+
+    # Chop off the start so that searching begins after the provided position
+    if start > 0:
+        without_start_expr = ArrowScalarFuncExpression(
+            src.empty_data,
+            [src],
+            "utf8_slice_codeunits",
+            (start, None, 1),
+        )
+    else:
+        without_start_expr = src
+
+    # Remove earlier occurrences so that extract_regex can find the correct occurrence/substring matching the regexp
+    if occurrence_num > 1:
+        occurrences_replaced_expr = ArrowScalarFuncExpression(
+            src.empty_data,
+            [without_start_expr],
+            "replace_substring_regex",
+            (
+                modified_regexp,
+                "",
+                occurrence_num - 1,
+            ),
+        )
+    else:
+        occurrences_replaced_expr = without_start_expr
+
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        [occurrences_replaced_expr],
+        "regexp_substr",  # Made up function, will redirect to extract_regex with the right group extracted
+        (modified_regexp, "e" in regex_params, group_num),
+    )
+
+
+def convert_strtok(input_plan, src, delim_expr=None, part_num_expr=None):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+    if delim_expr is not None:
+        ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", (str, pa.binary()))
+        delimiter = delim_expr.value
+    else:
+        delimiter = " "
+
+    if part_num_expr is not None:
+        ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
+        part_num = part_num_expr.value
+        if part_num <= 0:
+            raise ValueError("STRTOK part number must be 1 or greater.")
+    else:
+        part_num = 1
+
+    # If delimiter is empty: return NULL if string is also empty, else
+    # return the original string.
+    empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+    if delimiter == "":
+        return ArrowScalarFuncExpression(
+            src.empty_data, [src, empty_string_expr], "nullif", ()
+        )
+
+    # STRTOK counts each character in the delimiter string as a delimiter.
+    # We use regex so any of those characters or combination of characters
+    # are treated as delimiters so we can split into the correct tokens with
+    # a single pass.
+    # Unlike SPLIT_PART, STRTOK never returns empty strings, so we have to
+    # be careful not to let empty strings count as tokens. In our case, it's
+    # easier to prevent empty strings from arising after splitting in the
+    # first place by trimming and using regex.
+
+    # We need to escape the delimiter string in case any of the characters
+    # have a special meaning in regex
+    escaped_delim = re.escape(delimiter)
+    # Wrap escaped delimiter string in brackets to match any of the characters
+    # inside.
+    # The '+' denotes one or more of those characters. This is so we don't
+    # get empty strings after splitting when there are neighboring delimiter
+    # characters.
+    delim_regexp = f"[{escaped_delim}]+"
+
+    # Trim off occurrences of the delimiters from the ends of the string. This helps avoid
+    # empty string tokens after split_pattern_regex.
+    trimmed_str = ArrowScalarFuncExpression(
+        src.empty_data, [src], "utf8_trim", (delimiter,)
+    )
+
+    # If the input string is empty or contains only delimiters, return NULL
+    trimmed_str = ArrowScalarFuncExpression(
+        src.empty_data, [trimmed_str, empty_string_expr], "nullif", ()
+    )
+
+    # Implementation involves fixed_size_list results, so easier
+    # to do it on the C++ side.
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        [trimmed_str],
+        "strtok",
+        (delim_regexp, part_num),
+    )
+
+
+def convert_pi(input_plan):
+    dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+    return ConstantExpression(dummy_empty_data, input_plan, np.pi)
+
+
+def convert_trig_func(func_name, src):
+    # Arrow's Trigonometric functions return float32 for float32 input and
+    # float64 for float64 and decimal input:
+    # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
+    src_dtype = src.empty_data.dtypes.iloc[0]
+    out_dtype = pd.ArrowDtype(
+        pa.float32() if src_dtype.pyarrow_dtype == pa.float32() else pa.float64()
+    )
+    dummy_empty_data = pd.Series(dtype=out_dtype)
+    return ArrowScalarFuncExpression(
+        dummy_empty_data,
+        [src],
+        func_name.lower(),
+        (),
+    )
+
+
+def convert_atan2(src1, src2):
+    src_dtype = src1.empty_data.dtypes.iloc[0]
+    src2_dtype = src2.empty_data.dtypes.iloc[0]
+    out_dtype = pd.ArrowDtype(
+        pa.float32()
+        if (
+            src_dtype.pyarrow_dtype == pa.float32()
+            and src2_dtype.pyarrow_dtype == pa.float32()
+        )
+        else pa.float64()
+    )
+    dummy_empty_data = pd.Series(dtype=out_dtype)
+    return ArrowScalarFuncExpression(
+        dummy_empty_data,
+        [src1, src2],
+        "atan2",
+        (),
+    )
+
+
+def convert_radians_degrees(input_plan, func_name, src):
+    # Return float32 for float32 input and float64 for float64 and decimal input
+    src_dtype = src.empty_data.dtypes.iloc[0]
+    out_dtype = pd.ArrowDtype(
+        pa.float32() if src_dtype.pyarrow_dtype == pa.float32() else pa.float64()
+    )
+    dummy_empty_data = pd.Series(dtype=out_dtype)
+    ceof_expr = ConstantExpression(
+        dummy_empty_data,
+        input_plan,
+        (np.pi / 180.0) if func_name == "RADIANS" else (180.0 / np.pi),
+    )
+    return ArithOpExpression(
+        dummy_empty_data,
+        src,
+        ceof_expr,
+        "__mul__",
+    )
+
+
+def convert_cot(input_plan, src):
+    # Return float32 for float32 input and float64 for float64 and decimal input
+    src_dtype = src.empty_data.dtypes.iloc[0]
+    out_dtype = pd.ArrowDtype(
+        pa.float32() if src_dtype.pyarrow_dtype == pa.float32() else pa.float64()
+    )
+    dummy_empty_data = pd.Series(dtype=out_dtype)
+    # COT is defined as 1 / tan(x):
+    # https://github.com/bodo-ai/Bodo/blob/d8a047024e8cfd12993c8ad4e8d781c4f2723348/BodoSQL/bodosql/kernels/trig_array_kernels.py#L251
+    one_expr = ConstantExpression(
+        dummy_empty_data,
+        input_plan,
+        1.0,
+    )
+    tan_expr = ArrowScalarFuncExpression(
+        dummy_empty_data,
+        [src],
+        "tan",
+        (),
+    )
+    return ArithOpExpression(
+        dummy_empty_data,
+        one_expr,
+        tan_expr,
+        "__truediv__",
+    )
+
+
+def convert_trim(first_java_opr, trim_chars_expr, src):
+    # Snowflake's TRIM accepts 1 or 2 arguments but Calcite will convert it to
+    # a 3-arguments form, including using a space character as the default when
+    # trim characters are not specified.
+    ensure_arg_is_const_expr_of_type(
+        trim_chars_expr, "trim_chars_expr", (str, pa.binary())
+    )
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+    # Get which side of the string to TRIM.
+    # Snowflake's TRIM always trims from both sides.
+    # LTRIM and RTRIM are instead mapped to SqlNullPolicyFunctions.
+    side_str = get_java_symbol(first_java_opr)
+    assert side_str in ("BOTH", "LEADING", "TRAILING")
+
+    # We support LEADING and TRAILING for completeness even
+    # though we don't expect them here.
+    if side_str == "BOTH":
+        arrow_trim_func = "utf8_trim"
+    elif side_str == "LEADING":
+        arrow_trim_func = "utf8_ltrim"
+    elif side_str == "TRAILING":
+        arrow_trim_func = "utf8_rtrim"
+
+    return ArrowScalarFuncExpression(
+        src.empty_data, [src], arrow_trim_func, (trim_chars_expr.value,)
+    )
+
+
+def convert_substring(input_plan, src, start_expr, len_expr=None):
+    # See:
+    # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
+    # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+    # utf8_slice_codeunits / bodo_substr_three will handle the wraparound for negative start index
+    ensure_type_of_expr(start_expr, "start_expr", int)
+
+    # Cast start index to int64 to match the bodo_substr_three kernel definition
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    start_expr = CastExpression(int_empty_data, start_expr)
+
+    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+    one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    # Using gt rather than ge since a start index of 0 is treated the same as start = 1
+    start_is_positive = ComparisonOpExpression(
+        bool_empty_data, start_expr, zero_expr, operator.gt
+    )
+    # Subtract 1 when start index is positive since SQL substring is 1-indexed but Arrow is 0-indexed
+    adjusted_start_expr = ArithOpExpression(
+        int_empty_data, start_expr, one_expr, "__sub__"
+    )
+    start_expr = CaseExpression(
+        int_empty_data, start_is_positive, adjusted_start_expr, start_expr
+    )
+
+    substring_args = [src, start_expr]
+
+    if len_expr is not None:
+        ensure_type_of_expr(len_expr, "len_expr", int)
+
+        # Cast length to int64 to match the bodo_substr_three kernel definition
+        len_expr = CastExpression(int_empty_data, len_expr)
+
+        substring_args.append(len_expr)
+
+    out_empty = src.empty_data.iloc[:, 0]
+    return ArrowScalarFuncExpression(
+        out_empty,
+        substring_args,
+        "bodo_substr_three",
+        (),
+    )
+
+
+def convert_like_ilike(func_name, left, like_expr, escape_expr=None):
+    if escape_expr is not None:
+        ensure_arg_is_const_expr_of_type(escape_expr, "escape_expr", str)
+        escape_val = escape_expr.value
+    else:
+        escape_val = ""
+    ensure_arg_is_const_expr_of_type(like_expr, "like_expr", str)
+
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    import bodo.decorators  # isort:skip # noqa
+
+    converted_like, needs_regex, start_match, end_match, match_anything = (
+        bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
+            like_expr.value, escape_val, False
+        )
+    )
+    if needs_regex:
+        if match_anything:
+            raise NotImplementedError(
+                "LIKE conversion supports nothing else if regex is required."
+            )
+        return ArrowScalarFuncExpression(
+            bool_empty_data,
+            [left],
+            "match_substring_regex",
+            (converted_like, func_name == "ILIKE"),
+        )
+    elif start_match:
+        if end_match or match_anything:
+            raise NotImplementedError(
+                "LIKE conversion supports nothing else if start_match is required."
+            )
+        return ArrowScalarFuncExpression(
+            bool_empty_data,
+            [left],
+            "starts_with",
+            (converted_like, func_name == "ILIKE"),
+        )
+    elif end_match:
+        if match_anything:
+            raise NotImplementedError(
+                "LIKE conversion supports nothing else if end_match is required."
+            )
+        return ArrowScalarFuncExpression(
+            bool_empty_data,
+            [left],
+            "ends_with",
+            (converted_like, func_name == "ILIKE"),
+        )
+    elif match_anything:
+        raise NotImplementedError(
+            "LIKE conversion does not currently support match anything."
+        )
+    else:
+        return ArrowScalarFuncExpression(
+            bool_empty_data,
+            [left],
+            "match_substring",
+            (converted_like, func_name == "ILIKE"),
+        )
+
+
+def convert_search(input_plan, src, search_expr, s_typename):
+    # search_expr is a ConstantExpression with org.apache.calcite.util.Sarg value
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    sarg = search_expr.value
+    nullAs = _get_sarg_null_as(sarg)
+
+    def process_one_search_option(lower, lower_incl, upper, upper_incl):
+        """Generate an expression to check if src satisfies this
+        current possibility from the range set."""
+        # The lower and upper bounds being equal is a special case that does not
+        # involve less-than or greater-than comparison. It can be subdivided
+        # based on whether the lower and upper bounds are inclusive or not.
+        # The typical case is that they will be inclusive, which we can simplify
+        # to an equality check.
+        if lower is not None and upper is not None and lower == upper:
+            if lower_incl and upper_incl:
+                # Range of the form [a..a] - reduce to equality check
+                const_empty_data = arrow_to_empty_df(
+                    pa.schema([pa.field("equal", pa.scalar(lower).type)])
+                )
+                return ComparisonOpExpression(
+                    bool_empty_data,
+                    src,
+                    ConstantExpression(const_empty_data, input_plan, lower),
+                    operator.eq,
+                )
+            elif lower_incl or upper_incl:
+                # Range of the form [a..a) or (a..a] - interpret as empty
+                return ConstantExpression(bool_empty_data, input_plan, False)
+            else:
+                raise ValueError("SEARCH option range form (a..a) is invalid.")
+
+        # Address the standard continuous range case, e.g. BETWEEN
+        in_range = None
+        src_greater = None
+        src_less = None
+        if lower is not None:
+            const_empty_data = arrow_to_empty_df(
+                pa.schema([pa.field("equal", pa.scalar(lower).type)])
+            )
+            src_greater = ComparisonOpExpression(
+                bool_empty_data,
+                src,
+                ConstantExpression(const_empty_data, input_plan, lower),
+                operator.ge if lower_incl else operator.gt,
+            )
+            in_range = src_greater
+        if upper is not None:
+            const_empty_data = arrow_to_empty_df(
+                pa.schema([pa.field("equal", pa.scalar(upper).type)])
+            )
+            src_less = ComparisonOpExpression(
+                bool_empty_data,
+                src,
+                ConstantExpression(const_empty_data, input_plan, upper),
+                operator.le if upper_incl else operator.lt,
+            )
+            in_range = src_less
+
+        if lower is not None and upper is not None:
+            # Assure input is within both bounds
+            in_range = ConjunctionOpExpression(
+                bool_empty_data, src_greater, src_less, "__and__"
+            )
+        elif lower is None and upper is None:
+            # No bounds specified, inputs must be in infinite range
+            in_range = ConstantExpression(bool_empty_data, input_plan, True)
+
+        return in_range
+
+    search_options = list(iter_sarg_ranges(sarg, s_typename))
+    out_expr = process_one_search_option(*search_options[0])
+    # The definition of search is that the value is one of the
+    # possibilities in the range set.  so, "or" in the other
+    # possibilities below.
+    for so in search_options[1:]:
+        out_expr = ConjunctionOpExpression(
+            bool_empty_data, out_expr, process_one_search_option(*so), "__or__"
+        )
+
+    if nullAs != "UNKNOWN":
+        # Replace nulls in the output with True or False depending on the value
+        # of nullAs.
+        out_expr = ArrowScalarFuncExpression(
+            bool_empty_data,
+            [
+                out_expr,
+                ConstantExpression(bool_empty_data, input_plan, nullAs == "TRUE"),
+            ],
+            "coalesce",
+            (),
+        )
+
+    return out_expr
+
+
+def convert_random(input_plan, seed_expr=None):
+    """Generates random 64-bit integers"""
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    # Create a dummy expression from the input plan which will be used on the
+    # C++ side to check the row count (number of random values to generate).
+    row_count_info_expr = ConstantExpression(int_empty_data, input_plan, 0)
+
+    # Get and pass seed if given, else we rely on a system-generated seed
+    # which is set on the C++ side.
+    if seed_expr is not None:
+        # Should be a constant
+        ensure_arg_is_const_expr_of_type(seed_expr, "seed_expr", int)
+        seed_options = (seed_expr.value,)
+    else:
+        seed_options = ()
+
+    # Arrow doesn't have any sort of randint function, so call our own that
+    # has the name random_int64.
+    return ArrowScalarFuncExpression(
+        int_empty_data, [row_count_info_expr], "random_int64", seed_options
+    )
+
+
+def convert_SqlBasicFunction(ctx, java_call, input_plan):
+    # Map Calcite basic functions to Bodo expressions
+    operands = java_call.getOperands()
+    op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+    # function name as string (e.g., "POWER", "SQRT")
+    func_name = java_call.getOperator().getName().upper()
+
+    if func_name in ("UTC_TIMESTAMP", "UTC_DATE"):
+        return convert_utc_timestamp_utc_date(input_plan, func_name)
+
+    if func_name in (
+        "CURRENT_TIMESTAMP",
+        "GETDATE",
+        "LOCALTIMESTAMP",
+        "SYSTIMESTAMP",
+        "NOW",
+    ):
+        return convert_current_timestamp(ctx, input_plan)
+
+    if func_name == "UNIX_TIMESTAMP" and len(op_exprs) in (0, 1):
+        return convert_unix_timestamp(ctx, input_plan, *op_exprs)
+
+    if func_name == "FROM_UNIXTIME" and len(op_exprs) == 1:
+        return convert_from_unixtime(ctx, input_plan, op_exprs[0])
+
+    if func_name == "FROM_DAYS" and len(op_exprs) == 1:
+        return convert_from_days(input_plan, op_exprs[0])
+
+    if func_name == "TO_DAYS" and len(op_exprs) == 1:
+        return convert_to_days(input_plan, op_exprs[0])
+
+    if func_name == "TO_SECONDS" and len(op_exprs) == 1:
+        return convert_to_seconds(input_plan, op_exprs[0])
+
+    if func_name == "COMBINE_INTERVALS":
+        return convert_combine_intervals(input_plan, op_exprs)
+
+    if func_name == "SIGN" and len(op_exprs) == 1:
+        return convert_sign(op_exprs[0])
+
+    if func_name == "POWER" and len(op_exprs) == 2:
+        return convert_power(*op_exprs)
+
+    if func_name == "SQRT" and len(op_exprs) == 1:
+        return convert_sqrt(op_exprs[0])
+
+    if func_name == "CBRT" and len(op_exprs) == 1:
+        return convert_cbrt(op_exprs[0])
+
+    if func_name == "ABS" and len(op_exprs) == 1:
+        return convert_abs(op_exprs[0])
+
+    if func_name == "CEILING" and len(op_exprs) == 1:
+        # Redirect to CEIL below.
+        func_name = "CEIL"
+
+    if func_name in ("FLOOR", "CEIL") and len(op_exprs) == 1:
+        return convert_floor_ceil(func_name, op_exprs[0])
+
+    if func_name == "EXP" and len(op_exprs) == 1:
+        return convert_exp(op_exprs[0])
+
+    if func_name == "LN" and len(op_exprs) == 1:
+        return convert_ln(op_exprs[0])
+
+    elif func_name == "LOG10" and len(op_exprs) == 1:
+        return convert_log10(op_exprs[0])
+
+    if func_name == "ROUND" and len(op_exprs) in (1, 2):
+        return convert_round(*op_exprs)
+
+    if func_name == "TRUNCATE" and len(op_exprs) in (1, 2):
+        return convert_truncate(input_plan, *op_exprs)
+
+    if func_name == "MOD" and len(op_exprs) == 2:
+        return convert_mod(*op_exprs)
+
+    if func_name == "RAND" and len(op_exprs) == 0:
+        return convert_rand(input_plan)
+
+    if func_name in ("BOOLAND", "BOOLOR", "BOOLXOR") and len(op_exprs) == 2:
+        return convert_booland_boolor_boolxor(input_plan, func_name, *op_exprs)
+
+    if func_name == "BOOLNOT" and len(op_exprs) == 1:
+        return convert_boolnot(input_plan, op_exprs[0])
+
+    if func_name == "EQUAL_NULL" and len(op_exprs) == 2:
+        return convert_equal_null(input_plan, *op_exprs)
+
+    if func_name == "IFF" and len(op_exprs) == 3:
+        # IFF is equivalent to CASE with single WHEN
+        return java_case_to_python_case(ctx, operands, input_plan)
+
+    if func_name == "NULLIF" and len(op_exprs) == 2:
+        return ArrowScalarFuncExpression(op_exprs[0].empty_data, op_exprs, "nullif", ())
+
+    if func_name == "NVL2" and len(op_exprs) == 3:
+        return convert_nvl2(*op_exprs)
+
+    if func_name == "ZEROIFNULL" and len(op_exprs) == 1:
+        return convert_zeroifnull(input_plan, op_exprs[0])
+
+    if func_name == "REGR_VALX" and len(op_exprs) == 2:
+        return convert_regr_valx(*op_exprs)
+
+    if func_name == "REGR_VALY" and len(op_exprs) == 2:
+        return convert_regr_valy(*op_exprs)
+
+    if func_name == "DECODE" and len(op_exprs) >= 3:
+        return convert_decode(input_plan, op_exprs)
+
+    if func_name == "CHAR_LENGTH" and len(op_exprs) == 1:
+        return convert_char_length(op_exprs[0])
+
+    if func_name in ("LOWER", "UPPER") and len(op_exprs) == 1:
+        return convert_lower_upper(func_name, op_exprs[0])
+
+    if func_name in ("LPAD", "RPAD") and len(op_exprs) in (2, 3):
+        return convert_lpad_rpad(func_name, *op_exprs)
+
+    if func_name == "REPLACE" and len(op_exprs) in (2, 3):
+        return convert_replace(*op_exprs)
+
+    if func_name == "REGEXP_SUBSTR" and len(op_exprs) in (2, 3, 4, 5, 6):
+        return convert_regexp_substr(*op_exprs)
+
+    elif func_name == "STRTOK" and len(op_exprs) in (1, 2, 3):
+        return convert_strtok(input_plan, *op_exprs)
+
+    if func_name == "PI" and len(op_exprs) == 0:
+        return convert_pi(input_plan)
+
+    if (
+        func_name
+        in (
+            "ACOS",
+            "ACOSH",
+            "ASIN",
+            "ASINH",
+            "COS",
+            "COSH",
+            "SIN",
+            "SINH",
+            "TAN",
+            "TANH",
+            "ATAN",
+            "ATANH",
+        )
+        and len(op_exprs) == 1
+    ):
+        return convert_trig_func(func_name, op_exprs[0])
+
+    if func_name == "ATAN2" and len(op_exprs) == 2:
+        return convert_atan2(*op_exprs)
+
+    if func_name in ("RADIANS", "DEGREES") and len(op_exprs) == 1:
+        return convert_radians_degrees(input_plan, func_name, op_exprs[0])
+
+    if func_name == "COT" and len(op_exprs) == 1:
+        return convert_cot(input_plan, op_exprs[0])
+
+    # If we didn't match a supported basic function, fall through to NotImplemented
+    raise NotImplementedError(
+        f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
+    )
+
+
+def convert_SqlLeastGreatestFunction(ctx, java_call, input_plan):
+    operands = java_call.getOperands()
+    op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
+    func_name = java_call.getOperator().getName().upper()
+    assert func_name in ("LEAST", "GREATEST"), (
+        "Unexpected function name for SqlLeastGreatestFunction: " + func_name
+    )
+    arrow_func = "max_element_wise" if func_name == "GREATEST" else "min_element_wise"
+    # Check for supported data types in Arrow backend
+    has_string = False
+    has_nonstring = False
+    for expr in op_exprs:
+        expr_dtype = get_expr_dtype(expr)
+        if compare_types(expr_dtype, str):
+            has_string = True
+        else:
+            has_nonstring = True
+        if compare_types(expr_dtype, bool):
+            raise ValueError(f"Cannot use boolean types in {func_name} operator")
+        if (
+            isinstance(expr_dtype, pd.ArrowDtype)
+            and pa.types.is_timestamp(expr_dtype.pyarrow_dtype)
+            and expr_dtype.pyarrow_dtype.tz is not None
+        ):
+            raise ValueError(
+                f"Cannot use timezone-aware timestamp types in {func_name} operator"
+            )
+    # TODO(ehsan): cast strings to the datetime data type to match SQL semantics
+    if has_string and has_nonstring:
+        raise ValueError(
+            f"Cannot mix string and non-string types in {func_name} operator"
+        )
+    # TODO(ehsan): get empty_data for the common type of the operands
+    return ArrowScalarFuncExpression(op_exprs[0].empty_data, op_exprs, arrow_func, ())
+
+
 def convert_SqlNullPolicyFunction(ctx, java_call, input_plan):
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
@@ -2646,44 +3621,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
 
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
-    def clean_regex_params(regex_params_expr, func_name):
-        """Verify the raw regex parameters passed into functions such as REGEXP_SUBSTR
-        or REGEXP_INSTR and turn them into a standard form."""
-        if "c" in regex_params_expr.value and "i" in regex_params_expr.value:
-            # Both case sensitive and case insensitive params provided; find which appears latest in the string
-            latest_index = max(
-                regex_params_expr.value.rfind(char) for char in ("c", "i")
-            )
-            latest_char = regex_params_expr.value[latest_index]
-            # Remove occurrences of the other parameter so we can check case-sensitivity using the "in" operator
-            regex_params = regex_params_expr.value.replace(
-                "c" if latest_char == "i" else "i", ""
-            )
-        else:
-            if (
-                "c" not in regex_params_expr.value
-                and "i" not in regex_params_expr.value
-            ):
-                regex_params = regex_params_expr.value + "c"
-            else:
-                regex_params = regex_params_expr.value
-        # Get characters in regex_params that are not in the list of valid regex parameters
-        invalid_regex_params = set(regex_params) - {"c", "i", "m", "e", "s"}
-        if invalid_regex_params:
-            raise ValueError(
-                f"{func_name} invalid regex parameters: {invalid_regex_params}"
-            )
-        return regex_params
-
-    def regexp_add_mode_modifiers(regexp, regex_params, modes):
-        """
-        Add an inline mode modifer to the start of the input regexp.
-        The activated modes are those that the regex parameters and
-        the passed `modes` have in common.
-        """
-        active_mode_str = "".join(set(regex_params) & set(modes))
-        return f"(?{active_mode_str})" + regexp if active_mode_str else regexp
-
     if operator_class_name == "SqlNullPolicyFunction":
         # We'll be able to return convert_SqlNullPolicyFunction() directly once our
         # two groups of SqlNullPolicyFunction plan conversions are merged into one.
@@ -2816,651 +3753,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             return convert_current_time(ctx, input_plan)
 
     if operator_class_name == "SqlBasicFunction":
-        # Map Calcite basic functions to Bodo expressions
-        operands = java_call.getOperands()
-        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
-        # function name as string (e.g., "POWER", "SQRT")
-        func_name = op.getName().upper()
-
-        if func_name in ("UTC_TIMESTAMP", "UTC_DATE"):
-            return convert_utc_timestamp_utc_date(input_plan, func_name)
-
-        if func_name in (
-            "CURRENT_TIMESTAMP",
-            "GETDATE",
-            "LOCALTIMESTAMP",
-            "SYSTIMESTAMP",
-            "NOW",
-        ):
-            return convert_current_timestamp(ctx, input_plan)
-
-        if func_name == "UNIX_TIMESTAMP" and len(op_exprs) in (0, 1):
-            return convert_unix_timestamp(ctx, input_plan, *op_exprs)
-
-        if func_name == "FROM_UNIXTIME" and len(op_exprs) == 1:
-            return convert_from_unixtime(ctx, input_plan, op_exprs[0])
-
-        if func_name == "FROM_DAYS" and len(op_exprs) == 1:
-            return convert_from_days(input_plan, op_exprs[0])
-
-        if func_name == "TO_DAYS" and len(op_exprs) == 1:
-            return convert_to_days(input_plan, op_exprs[0])
-
-        if func_name == "TO_SECONDS" and len(op_exprs) == 1:
-            return convert_to_seconds(input_plan, op_exprs[0])
-
-        if func_name == "COMBINE_INTERVALS":
-            return convert_combine_intervals(input_plan, op_exprs)
-
-        if func_name == "SIGN" and len(op_exprs) == 1:
-            return convert_sign(op_exprs[0])
-
-        if func_name == "POWER" and len(op_exprs) == 2:
-            return convert_power(*op_exprs)
-
-        if func_name == "SQRT" and len(op_exprs) == 1:
-            return convert_sqrt(op_exprs[0])
-
-        if func_name == "CBRT" and len(op_exprs) == 1:
-            return convert_cbrt(op_exprs[0])
-
-        if func_name == "ABS" and len(op_exprs) == 1:
-            return convert_abs(op_exprs[0])
-
-        if func_name == "CEILING" and len(op_exprs) == 1:
-            # Redirect to CEIL below.
-            func_name = "CEIL"
-
-        if func_name in ("FLOOR", "CEIL") and len(op_exprs) == 1:
-            return convert_floor_ceil(func_name, op_exprs[0])
-
-        if func_name == "EXP" and len(op_exprs) == 1:
-            return convert_exp(op_exprs[0])
-
-        if func_name == "LN" and len(op_exprs) == 1:
-            return convert_ln(op_exprs[0])
-
-        elif func_name == "LOG10" and len(op_exprs) == 1:
-            return convert_log10(op_exprs[0])
-
-        if func_name == "ROUND" and len(op_exprs) in (1, 2):
-            return convert_round(*op_exprs)
-
-        if func_name == "TRUNCATE" and len(op_exprs) in (1, 2):
-            return convert_truncate(input_plan, *op_exprs)
-
-        if func_name == "MOD" and len(op_exprs) == 2:
-            return convert_mod(*op_exprs)
-
-        if func_name == "RAND" and len(op_exprs) == 0:
-            return convert_rand(input_plan)
-
-        if func_name in ("BOOLAND", "BOOLOR", "BOOLXOR") and len(op_exprs) == 2:
-            left_expr = op_exprs[0]
-            right_expr = op_exprs[1]
-
-            ensure_type_of_expr(left_expr, "left_expr", (int, float))
-            ensure_type_of_expr(right_expr, "right_expr", (int, float))
-
-            left_expr_is_int = compare_types(get_expr_dtype(left_expr), int)
-            right_expr_is_int = compare_types(get_expr_dtype(right_expr), int)
-
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
-
-            if not left_expr_is_int:
-                # Round float inputs.
-                # This is required because, according to the docs,
-                # Snowflake interprets floats in BOOLAND as integers
-                # by rounding. Thus, a float like 0.3 should be considered 0
-                # whereas a float like 0.7 would be non-zero.
-
-                left_expr_rounded = ArrowScalarFuncExpression(
-                    float_empty_data, [left_expr], "round", ()
-                )
-            else:
-                left_expr_rounded = left_expr
-
-            if not right_expr_is_int:
-                right_expr_rounded = ArrowScalarFuncExpression(
-                    float_empty_data, [right_expr], "round", ()
-                )
-            else:
-                right_expr_rounded = right_expr
-
-            # Get nonzero values as True, zero values as False
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            left_zero_expr = ConstantExpression(
-                int_empty_data if left_expr_is_int else float_empty_data, input_plan, 0
-            )
-            left_expr_bool = ComparisonOpExpression(
-                bool_empty_data, left_expr_rounded, left_zero_expr, operator.ne
-            )
-            right_zero_expr = ConstantExpression(
-                int_empty_data if right_expr_is_int else float_empty_data, input_plan, 0
-            )
-            right_expr_bool = ComparisonOpExpression(
-                bool_empty_data, right_expr_rounded, right_zero_expr, operator.ne
-            )
-
-            if func_name == "BOOLAND":
-                return ConjunctionOpExpression(
-                    bool_empty_data, left_expr_bool, right_expr_bool, "__and__"
-                )
-            elif func_name == "BOOLOR":
-                return ConjunctionOpExpression(
-                    bool_empty_data, left_expr_bool, right_expr_bool, "__or__"
-                )
-            elif func_name == "BOOLXOR":
-                return ComparisonOpExpression(
-                    bool_empty_data, left_expr_bool, right_expr_bool, operator.ne
-                )
-
-        if func_name == "BOOLNOT" and len(op_exprs) == 1:
-            expr = op_exprs[0]
-            ensure_type_of_expr(expr, "expr", (int, float))
-
-            expr_is_int = compare_types(get_expr_dtype(expr), int)
-
-            # Round float inputs (for the same reason as BOOLAND/BOOLOR/BOOLXOR)
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
-
-            if not expr_is_int:
-                expr_rounded = ArrowScalarFuncExpression(
-                    float_empty_data, [expr], "round", ()
-                )
-            else:
-                expr_rounded = expr
-
-            # Flipped logic: get nonzero values as False, zero values as True
-            zero_expr = ConstantExpression(
-                int_empty_data if expr_is_int else float_empty_data, input_plan, 0
-            )
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return ComparisonOpExpression(
-                bool_empty_data, expr_rounded, zero_expr, operator.eq
-            )
-
-        def equal_null(left_expr, right_expr):
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            values_equal = ComparisonOpExpression(
-                bool_empty_data, left_expr, right_expr, operator.eq
-            )
-
-            left_is_null = UnaryOpExpression(bool_empty_data, left_expr, "isnull")
-            right_is_null = UnaryOpExpression(bool_empty_data, right_expr, "isnull")
-            both_null = ConjunctionOpExpression(
-                bool_empty_data, left_is_null, right_is_null, "__and__"
-            )
-
-            # CASE WHEN values_equal THEN TRUE ELSE both_null
-            # The case statement interprets nulls as false, so we avoid the coalesce step
-            true_expr = ConstantExpression(bool_empty_data, input_plan, True)
-            return CaseExpression(bool_empty_data, values_equal, true_expr, both_null)
-
-        if func_name == "EQUAL_NULL" and len(op_exprs) == 2:
-            return equal_null(op_exprs[0], op_exprs[1])
-
-        if func_name == "IFF" and len(op_exprs) == 3:
-            # IFF is equivalent to CASE with single WHEN
-            return java_case_to_python_case(ctx, operands, input_plan)
-
-        if func_name == "NULLIF" and len(op_exprs) == 2:
-            return ArrowScalarFuncExpression(
-                op_exprs[0].empty_data, op_exprs, "nullif", ()
-            )
-
-        if func_name == "NVL2" and len(op_exprs) == 3:
-            expr1 = op_exprs[0]
-            expr2 = op_exprs[1]
-            expr3 = op_exprs[2]
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            expr1_is_null = UnaryOpExpression(bool_empty_data, expr1, "isnull")
-            return make_unified_case_expression("common", expr1_is_null, expr3, expr2)
-
-        if func_name == "ZEROIFNULL" and len(op_exprs) == 1:
-            expr = op_exprs[0]
-            ensure_type_of_expr(expr, "ZEROIFNULL expr", (int, float))
-
-            zero_expr = ConstantExpression(expr.empty_data, input_plan, 0)
-            return ArrowScalarFuncExpression(
-                expr.empty_data, [expr, zero_expr], "coalesce", ()
-            )
-
-        if func_name == "REGR_VALX" and len(op_exprs) == 2:
-            y_expr = op_exprs[0]
-            x_expr = op_exprs[1]
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            y_is_null = UnaryOpExpression(bool_empty_data, y_expr, "isnull")
-            return make_unified_case_expression(
-                x_expr.empty_data, y_is_null, y_expr, x_expr
-            )
-
-        if func_name == "REGR_VALY" and len(op_exprs) == 2:
-            y_expr = op_exprs[0]
-            x_expr = op_exprs[1]
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            x_is_null = UnaryOpExpression(bool_empty_data, x_expr, "isnull")
-            return make_unified_case_expression(
-                y_expr.empty_data, x_is_null, x_expr, y_expr
-            )
-
-        if func_name == "DECODE" and len(op_exprs) >= 3:
-            select_expr = op_exprs[0]
-
-            result_exprs = [op_exprs[i] for i in range(2, len(op_exprs), 2)]
-            # Ensure result expression datatypes are compatible. Currently we
-            # only try to unify integer datatypes.
-            result_expr_dtypes = [
-                get_expr_dtype(result_expr) for result_expr in result_exprs
-            ]
-            if not all(
-                pd.api.types.is_integer_dtype(dtype) for dtype in result_expr_dtypes
-            ):
-                result_type = result_expr_dtypes[0]
-                for result_expr_dtype in result_expr_dtypes[1:]:
-                    if not compare_types(result_expr_dtype, result_type):
-                        raise ValueError(
-                            f"Incompatible DECODE result expression dtypes: {result_expr_dtype} and {result_type}"
-                        )
-
-            # Get unified result type between all result expressions to avoid overflow
-            common_result_type, results_need_cast = get_common_int_type_list(
-                result_exprs
-            )
-            if common_result_type is not None:
-                empty_data = pd.Series(dtype=pd.ArrowDtype(common_result_type))
-            else:
-                empty_data = result_exprs[0].empty_data
-
-            if len(op_exprs) % 2 == 0:
-                # Default specified
-                default_expr = op_exprs[-1]
-            else:
-                # No default specified - NULL should be returned when there is no match
-                default_expr = NullExpression(empty_data, input_plan, 0)
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-
-            # Recursively create CaseExpressions for the remaining search expression and result expression pairs
-            # There is guaranteed to be at least one pair
-            def make_ternary_expression(search_result_pair_index):
-                pair_start_index = 1 + 2 * search_result_pair_index
-                search_expr = op_exprs[pair_start_index]
-                result_expr = op_exprs[pair_start_index + 1]
-                if results_need_cast[search_result_pair_index]:
-                    result_expr = CastExpression(empty_data, result_expr)
-
-                # Use equal_null for comparison since nulls should match nulls
-                search_expr_match = equal_null(select_expr, search_expr)
-                # Get the result expression if select_expr does not match search_expr
-                if len(op_exprs) - pair_start_index > 3:
-                    else_ternary_expr = make_ternary_expression(
-                        search_result_pair_index + 1
-                    )
-                else:
-                    else_ternary_expr = default_expr  # Use the default expression if we have run out of pairs
-                return CaseExpression(
-                    empty_data, search_expr_match, result_expr, else_ternary_expr
-                )
-
-            return make_ternary_expression(0)
-
-        if func_name == "CHAR_LENGTH" and len(op_exprs) == 1:
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(
-                int_empty_data,
-                [src],
-                "utf8_length",
-                (),
-            )
-
-        if func_name == "LOWER" and len(op_exprs) == 1:
-            return ArrowScalarFuncExpression(
-                op_exprs[0].empty_data, op_exprs, "utf8_lower", ()
-            )
-
-        if func_name == "UPPER" and len(op_exprs) == 1:
-            return ArrowScalarFuncExpression(
-                op_exprs[0].empty_data, op_exprs, "utf8_upper", ()
-            )
-
-        if func_name in ("LPAD", "RPAD") and len(op_exprs) in (2, 3):
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            length = op_exprs[1]
-            ensure_arg_is_const_expr_of_type(length, "length", int)
-
-            arrow_func_args = (length.value,)
-
-            if len(op_exprs) == 3:
-                pattern = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(pattern, "pattern", (str, pa.binary()))
-                arrow_func_args += (pattern.value,)
-
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                [src],
-                f"utf8_{func_name.lower()}",
-                arrow_func_args,
-            )
-
-        if func_name == "REPLACE" and len(op_exprs) in (2, 3):
-            src = op_exprs[0]
-            search_expr = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(
-                search_expr, "search_expr", (str, pa.binary())
-            )
-
-            if len(op_exprs) == 3:
-                replacement_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(
-                    replacement_expr, "replacement_expr", (str, pa.binary())
-                )
-                replacement_val = replacement_expr.value
-            else:
-                replacement_val = ""
-
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                [src],
-                "replace_substring",
-                (search_expr.value, replacement_val),
-            )
-
-        if func_name == "REGEXP_SUBSTR" and len(op_exprs) in (2, 3, 4, 5, 6):
-            src = op_exprs[0]
-            regexp = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
-
-            if len(op_exprs) >= 3:
-                start_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
-
-                if start_expr.value > 0:
-                    start = start_expr.value - 1
-                elif start_expr.value == 0:
-                    start = 0
-                else:
-                    raise ValueError("Start index must be positive for REGEXP_SUBSTR.")
-            else:
-                start = 0
-
-            if len(op_exprs) >= 4:
-                # Need to search for the substring that is the op_exprs[3]-th occurrence / regex match
-                occurrence_expr = op_exprs[3]
-                ensure_arg_is_const_expr_of_type(
-                    occurrence_expr, "occurrence_expr", int
-                )
-                occurrence_num = occurrence_expr.value
-                if occurrence_num < 1:
-                    raise ValueError(
-                        f"{func_name} occurrences argument must be 1 or greater"
-                    )
-            else:
-                occurrence_num = 1
-
-            if len(op_exprs) >= 5:
-                regex_params_expr = op_exprs[4]
-                ensure_arg_is_const_expr_of_type(
-                    regex_params_expr, "regex_params_expr", str
-                )
-                regex_params = clean_regex_params(regex_params_expr, func_name)
-            else:
-                regex_params = "c"
-
-            if len(op_exprs) == 6:
-                group_num_expr = op_exprs[5]
-                ensure_arg_is_const_expr_of_type(group_num_expr, "group_num_expr", int)
-                if group_num_expr.value < 0:
-                    raise ValueError(
-                        f"Negative value for group_num argument of {func_name} is not permitted"
-                    )
-                group_num = group_num_expr.value
-                if group_num > 0:
-                    group_num -= 1  # Convert from 1-based to 0-based
-                # 'e' is implied if group_num is passed
-                regex_params += "e"
-            else:
-                group_num = 0
-
-            # Use inline mode modifiers if needed since replace_substring_regex
-            # and extract_regex don't expose those options.
-            # This applies to the 'i', 'm', and 's' options.
-            modified_regexp = regexp_add_mode_modifiers(
-                regexp.value, regex_params, "ims"
-            )
-
-            # Chop off the start so that searching begins after the provided position
-            if start > 0:
-                without_start_expr = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src],
-                    "utf8_slice_codeunits",
-                    (start, None, 1),
-                )
-            else:
-                without_start_expr = src
-
-            # Remove earlier occurrences so that extract_regex can find the correct occurrence/substring matching the regexp
-            if occurrence_num > 1:
-                occurrences_replaced_expr = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [without_start_expr],
-                    "replace_substring_regex",
-                    (
-                        modified_regexp,
-                        "",
-                        occurrence_num - 1,
-                    ),
-                )
-            else:
-                occurrences_replaced_expr = without_start_expr
-
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                [occurrences_replaced_expr],
-                "regexp_substr",  # Made up function, will redirect to extract_regex with the right group extracted
-                (modified_regexp, "e" in regex_params, group_num),
-            )
-
-        elif func_name == "STRTOK" and len(op_exprs) in (1, 2, 3):
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            if len(op_exprs) >= 2:
-                delim_expr = op_exprs[1]
-                ensure_arg_is_const_expr_of_type(
-                    delim_expr, "delim_expr", (str, pa.binary())
-                )
-                delimiter = delim_expr.value
-            else:
-                delimiter = " "
-
-            if len(op_exprs) == 3:
-                part_num_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
-                part_num = part_num_expr.value
-                if part_num <= 0:
-                    raise ValueError("STRTOK part number must be 1 or greater.")
-            else:
-                part_num = 1
-
-            # If delimiter is empty: return NULL if string is also empty, else
-            # return the original string.
-            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
-            if delimiter == "":
-                return ArrowScalarFuncExpression(
-                    src.empty_data, [src, empty_string_expr], "nullif", ()
-                )
-
-            # STRTOK counts each character in the delimiter string as a delimiter.
-            # We use regex so any of those characters or combination of characters
-            # are treated as delimiters so we can split into the correct tokens with
-            # a single pass.
-            # Unlike SPLIT_PART, STRTOK never returns empty strings, so we have to
-            # be careful not to let empty strings count as tokens. In our case, it's
-            # easier to prevent empty strings from arising after splitting in the
-            # first place by trimming and using regex.
-
-            # We need to escape the delimiter string in case any of the characters
-            # have a special meaning in regex
-            escaped_delim = re.escape(delimiter)
-            # Wrap escaped delimiter string in brackets to match any of the characters
-            # inside.
-            # The '+' denotes one or more of those characters. This is so we don't
-            # get empty strings after splitting when there are neighboring delimiter
-            # characters.
-            delim_regexp = f"[{escaped_delim}]+"
-
-            # Trim off occurrences of the delimiters from the ends of the string. This helps avoid
-            # empty string tokens after split_pattern_regex.
-            trimmed_str = ArrowScalarFuncExpression(
-                src.empty_data, [src], "utf8_trim", (delimiter,)
-            )
-
-            # If the input string is empty or contains only delimiters, return NULL
-            trimmed_str = ArrowScalarFuncExpression(
-                src.empty_data, [trimmed_str, empty_string_expr], "nullif", ()
-            )
-
-            # Implementation involves fixed_size_list results, so easier
-            # to do it on the C++ side.
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                [trimmed_str],
-                "strtok",
-                (delim_regexp, part_num),
-            )
-
-        if func_name == "PI" and len(op_exprs) == 0:
-            dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
-            return ConstantExpression(dummy_empty_data, input_plan, np.pi)
-
-        if (
-            func_name
-            in (
-                "ACOS",
-                "ACOSH",
-                "ASIN",
-                "ASINH",
-                "COS",
-                "COSH",
-                "SIN",
-                "SINH",
-                "TAN",
-                "TANH",
-                "ATAN",
-                "ATANH",
-            )
-            and len(op_exprs) == 1
-        ):
-            src = op_exprs[0]
-            # Arrow's Trigonometric functions return float32 for float32 input and
-            # float64 for float64 and decimal input:
-            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
-            src_dtype = src.empty_data.dtypes.iloc[0]
-            out_dtype = pd.ArrowDtype(
-                pa.float32()
-                if src_dtype.pyarrow_dtype == pa.float32()
-                else pa.float64()
-            )
-            dummy_empty_data = pd.Series(dtype=out_dtype)
-            return ArrowScalarFuncExpression(
-                dummy_empty_data,
-                [src],
-                func_name.lower(),
-                (),
-            )
-
-        if func_name == "ATAN2" and len(op_exprs) == 2:
-            src1 = op_exprs[0]
-            src2 = op_exprs[1]
-            src_dtype = src1.empty_data.dtypes.iloc[0]
-            src2_dtype = src2.empty_data.dtypes.iloc[0]
-            out_dtype = pd.ArrowDtype(
-                pa.float32()
-                if (
-                    src_dtype.pyarrow_dtype == pa.float32()
-                    and src2_dtype.pyarrow_dtype == pa.float32()
-                )
-                else pa.float64()
-            )
-            dummy_empty_data = pd.Series(dtype=out_dtype)
-            return ArrowScalarFuncExpression(
-                dummy_empty_data,
-                [src1, src2],
-                "atan2",
-                (),
-            )
-
-        if func_name in ("RADIANS", "DEGREES") and len(op_exprs) == 1:
-            src = op_exprs[0]
-            # Return float32 for float32 input and float64 for float64 and decimal input
-            src_dtype = src.empty_data.dtypes.iloc[0]
-            out_dtype = pd.ArrowDtype(
-                pa.float32()
-                if src_dtype.pyarrow_dtype == pa.float32()
-                else pa.float64()
-            )
-            dummy_empty_data = pd.Series(dtype=out_dtype)
-            ceof_expr = ConstantExpression(
-                dummy_empty_data,
-                input_plan,
-                (np.pi / 180.0) if func_name == "RADIANS" else (180.0 / np.pi),
-            )
-            return ArithOpExpression(
-                dummy_empty_data,
-                src,
-                ceof_expr,
-                "__mul__",
-            )
-
-        if func_name == "COT" and len(op_exprs) == 1:
-            src = op_exprs[0]
-            # Return float32 for float32 input and float64 for float64 and decimal input
-            src_dtype = src.empty_data.dtypes.iloc[0]
-            out_dtype = pd.ArrowDtype(
-                pa.float32()
-                if src_dtype.pyarrow_dtype == pa.float32()
-                else pa.float64()
-            )
-            dummy_empty_data = pd.Series(dtype=out_dtype)
-            # COT is defined as 1 / tan(x):
-            # https://github.com/bodo-ai/Bodo/blob/d8a047024e8cfd12993c8ad4e8d781c4f2723348/BodoSQL/bodosql/kernels/trig_array_kernels.py#L251
-            one_expr = ConstantExpression(
-                dummy_empty_data,
-                input_plan,
-                1.0,
-            )
-            tan_expr = ArrowScalarFuncExpression(
-                dummy_empty_data,
-                [src],
-                "tan",
-                (),
-            )
-            return ArithOpExpression(
-                dummy_empty_data,
-                one_expr,
-                tan_expr,
-                "__truediv__",
-            )
-
-        # If we didn't match a supported basic function, fall through to NotImplemented
-        raise NotImplementedError(
-            f"SqlBasicFunction {func_name} not supported yet: " + java_call.toString()
-        )
+        return convert_SqlBasicFunction(ctx, java_call, input_plan)
 
     if operator_class_name == "SqlNullPolicyFunction":
         operands = java_call.getOperands()
@@ -5188,34 +5481,9 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name == "TRIM" and len(operands) == 3:
-            # Snowflake's TRIM accepts 1 or 2 arguments but Calcite will convert it to
-            # a 3-arguments form, including using a space character as the default when
-            # trim characters are not specified.
             trim_chars_expr = java_expr_to_python_expr(ctx, operands[1], input_plan)
             src = java_expr_to_python_expr(ctx, operands[2], input_plan)
-            ensure_arg_is_const_expr_of_type(
-                trim_chars_expr, "trim_chars_expr", (str, pa.binary())
-            )
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            # Get which side of the string to TRIM.
-            # Snowflake's TRIM always trims from both sides.
-            # LTRIM and RTRIM are instead mapped to SqlNullPolicyFunctions.
-            side_str = get_java_symbol(operands[0])
-            assert side_str in ("BOTH", "LEADING", "TRAILING")
-
-            # We support LEADING and TRAILING for completeness even
-            # though we don't expect them here.
-            if side_str == "BOTH":
-                arrow_trim_func = "utf8_trim"
-            elif side_str == "LEADING":
-                arrow_trim_func = "utf8_ltrim"
-            elif side_str == "TRAILING":
-                arrow_trim_func = "utf8_rtrim"
-
-            return ArrowScalarFuncExpression(
-                src.empty_data, [src], arrow_trim_func, (trim_chars_expr.value,)
-            )
+            return convert_trim(operands[0], trim_chars_expr, src)
 
     if operator_class_name == "SqlSubstringFunction":
         operands = java_call.getOperands()
@@ -5223,53 +5491,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name == "SUBSTRING" and len(op_exprs) in (2, 3):
-            # See:
-            # https://github.com/bodo-ai/Bodo/blob/88f6a82ee1ffedbdf7370a37b7bee7ad93982413/BodoSQL/bodosql/kernels/string_array_kernels.py#L1993
-            # https://docs.bodo.ai/latest/api_docs/sql/functions/string/substring/#substring
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            # utf8_slice_codeunits / bodo_substr_three will handle the wraparound for negative start index
-            start_expr = op_exprs[1]
-            ensure_type_of_expr(start_expr, "start_expr", int)
-
-            # Cast start index to int64 to match the bodo_substr_three kernel definition
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            start_expr = CastExpression(int_empty_data, start_expr)
-
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            # Using gt rather than ge since a start index of 0 is treated the same as start = 1
-            start_is_positive = ComparisonOpExpression(
-                bool_empty_data, start_expr, zero_expr, operator.gt
-            )
-            # Subtract 1 when start index is positive since SQL substring is 1-indexed but Arrow is 0-indexed
-            adjusted_start_expr = ArithOpExpression(
-                int_empty_data, start_expr, one_expr, "__sub__"
-            )
-            start_expr = CaseExpression(
-                int_empty_data, start_is_positive, adjusted_start_expr, start_expr
-            )
-
-            substring_args = [src, start_expr]
-
-            if len(op_exprs) == 3:
-                len_expr = op_exprs[2]
-                ensure_type_of_expr(len_expr, "len_expr", int)
-
-                # Cast length to int64 to match the bodo_substr_three kernel definition
-                len_expr = CastExpression(int_empty_data, len_expr)
-
-                substring_args.append(len_expr)
-
-            out_empty = src.empty_data.iloc[:, 0]
-            return ArrowScalarFuncExpression(
-                out_empty,
-                substring_args,
-                "bodo_substr_three",
-                (),
-            )
+            return convert_substring(input_plan, *op_exprs)
 
     if operator_class_name == "SqlLikeOperator":
         operands = java_call.getOperands()
@@ -5277,67 +5499,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name in ("LIKE", "ILIKE") and len(op_exprs) in (2, 3):
-            left = op_exprs[0]
-            like_expr = op_exprs[1]
-            if len(op_exprs) == 3:
-                ensure_arg_is_const_expr_of_type(op_exprs[2], "escape_expr", str)
-                escape_val = op_exprs[2].value
-            else:
-                escape_val = ""
-            ensure_arg_is_const_expr_of_type(like_expr, "like_expr", str)
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            import bodo.decorators  # isort:skip # noqa
-
-            converted_like, needs_regex, start_match, end_match, match_anything = (
-                bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
-                    like_expr.value, escape_val, False
-                )
-            )
-            if needs_regex:
-                if match_anything:
-                    raise NotImplementedError(
-                        "LIKE conversion supports nothing else if regex is required."
-                    )
-                return ArrowScalarFuncExpression(
-                    bool_empty_data,
-                    [left],
-                    "match_substring_regex",
-                    (converted_like, func_name == "ILIKE"),
-                )
-            elif start_match:
-                if end_match or match_anything:
-                    raise NotImplementedError(
-                        "LIKE conversion supports nothing else if start_match is required."
-                    )
-                return ArrowScalarFuncExpression(
-                    bool_empty_data,
-                    [left],
-                    "starts_with",
-                    (converted_like, func_name == "ILIKE"),
-                )
-            elif end_match:
-                if match_anything:
-                    raise NotImplementedError(
-                        "LIKE conversion supports nothing else if end_match is required."
-                    )
-                return ArrowScalarFuncExpression(
-                    bool_empty_data,
-                    [left],
-                    "ends_with",
-                    (converted_like, func_name == "ILIKE"),
-                )
-            elif match_anything:
-                raise NotImplementedError(
-                    "LIKE conversion does not currently support match anything."
-                )
-            else:
-                return ArrowScalarFuncExpression(
-                    bool_empty_data,
-                    [left],
-                    "match_substring",
-                    (converted_like, func_name == "ILIKE"),
-                )
+            return convert_like_ilike(func_name, *op_exprs)
 
     if operator_class_name == "SqlSearchOperator":
         operands = java_call.getOperands()
@@ -5345,104 +5507,8 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name == "SEARCH" and len(op_exprs) == 2:
-            src = op_exprs[0]
-            # search_expr is a ConstantExpression with org.apache.calcite.util.Sarg value
-            search_expr = op_exprs[1]
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            sarg = search_expr.value
-            nullAs = _get_sarg_null_as(sarg)
             s_typename = operands[1].getType().getSqlTypeName()
-
-            def process_one_search_option(lower, lower_incl, upper, upper_incl):
-                """Generate an expression to check if src satisfies this
-                current possibility from the range set."""
-                # The lower and upper bounds being equal is a special case that does not
-                # involve less-than or greater-than comparison. It can be subdivided
-                # based on whether the lower and upper bounds are inclusive or not.
-                # The typical case is that they will be inclusive, which we can simplify
-                # to an equality check.
-                if lower is not None and upper is not None and lower == upper:
-                    if lower_incl and upper_incl:
-                        # Range of the form [a..a] - reduce to equality check
-                        const_empty_data = arrow_to_empty_df(
-                            pa.schema([pa.field("equal", pa.scalar(lower).type)])
-                        )
-                        return ComparisonOpExpression(
-                            bool_empty_data,
-                            src,
-                            ConstantExpression(const_empty_data, input_plan, lower),
-                            operator.eq,
-                        )
-                    elif lower_incl or upper_incl:
-                        # Range of the form [a..a) or (a..a] - interpret as empty
-                        return ConstantExpression(bool_empty_data, input_plan, False)
-                    else:
-                        raise ValueError("SEARCH option range form (a..a) is invalid.")
-
-                # Address the standard continuous range case, e.g. BETWEEN
-                in_range = None
-                src_greater = None
-                src_less = None
-                if lower is not None:
-                    const_empty_data = arrow_to_empty_df(
-                        pa.schema([pa.field("equal", pa.scalar(lower).type)])
-                    )
-                    src_greater = ComparisonOpExpression(
-                        bool_empty_data,
-                        src,
-                        ConstantExpression(const_empty_data, input_plan, lower),
-                        operator.ge if lower_incl else operator.gt,
-                    )
-                    in_range = src_greater
-                if upper is not None:
-                    const_empty_data = arrow_to_empty_df(
-                        pa.schema([pa.field("equal", pa.scalar(upper).type)])
-                    )
-                    src_less = ComparisonOpExpression(
-                        bool_empty_data,
-                        src,
-                        ConstantExpression(const_empty_data, input_plan, upper),
-                        operator.le if upper_incl else operator.lt,
-                    )
-                    in_range = src_less
-
-                if lower is not None and upper is not None:
-                    # Assure input is within both bounds
-                    in_range = ConjunctionOpExpression(
-                        bool_empty_data, src_greater, src_less, "__and__"
-                    )
-                elif lower is None and upper is None:
-                    # No bounds specified, inputs must be in infinite range
-                    in_range = ConstantExpression(bool_empty_data, input_plan, True)
-
-                return in_range
-
-            search_options = list(iter_sarg_ranges(sarg, s_typename))
-            out_expr = process_one_search_option(*search_options[0])
-            # The definition of search is that the value is one of the
-            # possibilities in the range set.  so, "or" in the other
-            # possibilities below.
-            for so in search_options[1:]:
-                out_expr = ConjunctionOpExpression(
-                    bool_empty_data, out_expr, process_one_search_option(*so), "__or__"
-                )
-
-            if nullAs != "UNKNOWN":
-                # Replace nulls in the output with True or False depending on the value
-                # of nullAs.
-                out_expr = ArrowScalarFuncExpression(
-                    bool_empty_data,
-                    [
-                        out_expr,
-                        ConstantExpression(
-                            bool_empty_data, input_plan, nullAs == "TRUE"
-                        ),
-                    ],
-                    "coalesce",
-                    (),
-                )
-
-            return out_expr
+            return convert_search(input_plan, op_exprs[0], op_exprs[1], s_typename)
 
         raise NotImplementedError(
             f"Function name {func_name} not supported for SEARCH operator yet: "
@@ -5454,70 +5520,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
         func_name = op.getName().upper()
 
-        # NOTE: Calcite maps SQL RANDOM() to RANDOM() which means a random number
-        # between [0.0, 1.0] in Calcite and does not accept a seed argument. For
-        # completeness, to match Snowflake, we support a seed parameter anyway.
+        # NOTE: SQL RANDOM() (random 64-bit integer) is mapped to the RANDOM() Calcite
+        # operator, even though it means a random number between [0.0, 1.0] in standard
+        # Calcite and does not accept a seed argument.
         if func_name == "RANDOM" and len(op_exprs) in (0, 1):
-            """Generates random 64-bit integers"""
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            # Create a dummy expression from the input plan which will be used on the
-            # C++ side to check the row count (number of random values to generate).
-            row_count_info_expr = ConstantExpression(int_empty_data, input_plan, 0)
-
-            # Get and pass seed if given, else we rely on a system-generated seed
-            # which is set on the C++ side.
-            if len(op_exprs) == 1:
-                seed_expr = op_exprs[0]
-                # Should be a constant
-                ensure_arg_is_const_expr_of_type(seed_expr, "seed_expr", int)
-                seed_options = (seed_expr.value,)
-            else:
-                seed_options = ()
-
-            # Arrow doesn't have any sort of randint function, so call our own that
-            # has the name random_int64.
-            return ArrowScalarFuncExpression(
-                int_empty_data, [row_count_info_expr], "random_int64", seed_options
-            )
+            return convert_random(input_plan, *op_exprs)
 
     if operator_class_name == "SqlLeastGreatestFunction":
-        operands = java_call.getOperands()
-        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
-        func_name = op.getName().upper()
-        assert func_name in ("LEAST", "GREATEST"), (
-            "Unexpected function name for SqlLeastGreatestFunction: " + func_name
-        )
-        arrow_func = (
-            "max_element_wise" if func_name == "GREATEST" else "min_element_wise"
-        )
-        # Check for supported data types in Arrow backend
-        has_string = False
-        has_nonstring = False
-        for expr in op_exprs:
-            expr_dtype = get_expr_dtype(expr)
-            if compare_types(expr_dtype, str):
-                has_string = True
-            else:
-                has_nonstring = True
-            if compare_types(expr_dtype, bool):
-                raise ValueError(f"Cannot use boolean types in {func_name} operator")
-            if (
-                isinstance(expr_dtype, pd.ArrowDtype)
-                and pa.types.is_timestamp(expr_dtype.pyarrow_dtype)
-                and expr_dtype.pyarrow_dtype.tz is not None
-            ):
-                raise ValueError(
-                    f"Cannot use timezone-aware timestamp types in {func_name} operator"
-                )
-        # TODO(ehsan): cast strings to the datetime data type to match SQL semantics
-        if has_string and has_nonstring:
-            raise ValueError(
-                f"Cannot mix string and non-string types in {func_name} operator"
-            )
-        # TODO(ehsan): get empty_data for the common type of the operands
-        return ArrowScalarFuncExpression(
-            op_exprs[0].empty_data, op_exprs, arrow_func, ()
-        )
+        return convert_SqlLeastGreatestFunction(ctx, java_call, input_plan)
 
     raise NotImplementedError(
         f"Call operator {operator_class_name} not supported yet: "
