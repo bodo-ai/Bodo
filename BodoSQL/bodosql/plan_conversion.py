@@ -2452,6 +2452,191 @@ def convert_rand(input_plan):
     )
 
 
+def convert_SqlNullPolicyFunction(ctx, java_call, input_plan):
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+    func_name = java_call.getOperator().getName().upper()
+    op_exprs = [
+        java_expr_to_python_expr(ctx, o, input_plan) for o in java_call.getOperands()
+    ]
+    num_operands = len(java_call.getOperands())
+
+    # Date part functions wrapped in SqlNullPolicyFunction (e.g. WEEKDAY($0))
+    if func_name in _DATE_PART_ARROW_FUNCS and num_operands == 1:
+        return convert_date_part_funcs(func_name, op_exprs[0])
+
+    if func_name == "DAYNAME" and num_operands == 1:
+        return convert_dayname(op_exprs[0])
+
+    if func_name in ("MONTHNAME", "MONTH_NAME") and num_operands == 1:
+        return convert_monthname(op_exprs[0])
+
+    if func_name == "DATE_FORMAT" and num_operands == 2:
+        return convert_date_format(op_exprs[0], java_call.getOperands()[1])
+
+    if func_name == "STR_TO_DATE" and num_operands == 2:
+        return convert_str_to_date(op_exprs[0], java_call.getOperands()[1])
+
+    if func_name == "TIMESTAMP_FROM_PARTS":
+        # Redirect to TZ-aware or TZ-naive version depending on whether a timezone is provided
+        if num_operands == 8:
+            func_name = "TIMESTAMP_TZ_FROM_PARTS"
+        elif num_operands in (2, 6, 7):
+            func_name = "TIMESTAMP_NTZ_FROM_PARTS"
+
+    if func_name == "TIMESTAMP_NTZ_FROM_PARTS" and num_operands in (2, 6, 7):
+        if num_operands in (6, 7):
+            # Parts provided individually, with or without nanoseconds
+            return timestamp_from_parts(input_plan, *op_exprs)
+        elif num_operands == 2:
+            # Date expression and time expression provided
+            return convert_timestamp_ntz_from_parts_two_arg(*op_exprs)
+
+    if func_name == "TIMESTAMP_TZ_FROM_PARTS" and num_operands in (6, 7, 8):
+        return convert_timestamp_tz_from_parts(ctx, input_plan, op_exprs, num_operands)
+
+    if func_name == "TIMESTAMP_LTZ_FROM_PARTS" and num_operands in (6, 7):
+        return convert_timestamp_ltz_from_parts(ctx, input_plan, op_exprs, num_operands)
+
+    if func_name == "DATE_FROM_PARTS" and num_operands == 3:
+        return convert_date_from_parts(input_plan, *op_exprs)
+
+    if func_name == "TIME_FROM_PARTS" and num_operands in (3, 4):
+        return convert_time_from_parts(input_plan, *op_exprs)
+
+    if func_name == "MAKEDATE" and num_operands == 2:
+        return convert_makedate(input_plan, *op_exprs)
+
+    if func_name == "DATE_TRUNC" and num_operands == 2:
+        return convert_date_trunc(
+            ctx, java_call.getOperands()[0], op_exprs[1], java_call.getType()
+        )
+
+    if func_name == "LAST_DAY" and num_operands in (1, 2):
+        return convert_last_day(
+            input_plan,
+            op_exprs[0],
+            java_call.getOperands()[1] if num_operands == 2 else None,
+        )
+
+    if func_name in ("NEXT_DAY", "PREVIOUS_DAY") and num_operands == 2:
+        return convert_next_day_prev_day(input_plan, func_name, *op_exprs)
+
+    if func_name == "ADD_MONTHS" and num_operands == 2:
+        return convert_add_months(input_plan, *op_exprs)
+
+    if func_name in ("DATEADD", "DATE_ADD", "ADDDATE", "TIMEADD", "TIMESTAMPADD"):
+        # DATEADD(date, interval) or DATEADD(unit, amount, date)
+        # For 2 operands: (date, interval) → date + interval
+        # For 3 operands: (unit, amount, date) → date + (unit * amount)
+        if num_operands == 2:
+            return convert_dateadd_two_arg(input_plan, *op_exprs)
+        elif num_operands == 3:
+            return convert_dateadd_three_arg(
+                input_plan,
+                func_name,
+                java_call.getOperands()[0],
+                op_exprs[1],
+                op_exprs[2],
+            )
+    if func_name in ("DATE_SUB", "SUBDATE"):
+        # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
+        # or DATE_SUB(date, integer_days) — Snowflake syntax.
+        if num_operands == 2:
+            date_expr = op_exprs[0]
+            amount_expr = op_exprs[1]
+            # Check if the second argument is an integer (number of days)
+            # rather than an INTERVAL literal.
+            amount_type = java_call.getOperands()[1].getType()
+            if is_int_type(amount_type):
+                return convert_datesub_int_days(input_plan, date_expr, amount_expr)
+            # Otherwise DATE_SUB(date, interval) — direct subtraction.
+            return java_binop_to_python_expr(
+                ctx,
+                SqlKind.MINUS,
+                "-",
+                [date_expr, amount_expr],
+            )
+        elif num_operands == 3:
+            return java_binop_to_python_expr(
+                ctx,
+                SqlKind.MINUS,
+                "-",
+                [op_exprs[2], op_exprs[1]],
+            )
+    if func_name == "DATEDIFF" and num_operands in (2, 3):
+        if num_operands == 3:
+            return convert_datediff(
+                op_exprs[2], op_exprs[1], java_call.getOperands()[0]
+            )
+        else:
+            # According to BodoSQL docs, if only two operands are provided,
+            # the order of the dates is reversed compared to the three
+            # argument version (second date is subtracted from first).
+            return convert_datediff(op_exprs[1], op_exprs[2])
+
+    if func_name == "MONTHS_BETWEEN" and num_operands == 2:
+        return convert_months_between(input_plan, *op_exprs)
+
+    if func_name == "TIME_SLICE" and num_operands in (3, 4):
+        return convert_time_slice(
+            input_plan,
+            op_exprs[0],
+            op_exprs[1],
+            java_call.getOperands()[2],
+            java_call.getOperands()[3],
+        )
+
+    if func_name == "YEARWEEK" and num_operands == 1:
+        return convert_yearweek(input_plan, op_exprs[0])
+
+    if func_name in ("TIMEZONE_HOUR", "TIMEZONE_MINUTE") and num_operands == 1:
+        return convert_timezone_hour_timezone_minute(input_plan, func_name, op_exprs[0])
+
+    if func_name in (
+        "EPOCH_SECOND",
+        "EPOCH_MILLISECOND",
+        "EPOCH_MICROSECOND",
+        "EPOCH_NANOSECOND",
+    ):
+        return convert_epoch_second(input_plan, func_name, op_exprs[0])
+
+
+def convert_SqlPostfixOperator(ctx, java_call, input_plan):
+    operands = java_call.getOperands()
+    input = java_expr_to_python_expr(ctx, operands[0], input_plan)
+    kind = java_call.getOperator().getKind()
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
+    if kind.equals(SqlKind.IS_NOT_NULL):
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        return UnaryOpExpression(bool_empty_data, input, "notnull")
+
+    if kind.equals(SqlKind.IS_NULL):
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        return UnaryOpExpression(bool_empty_data, input, "isnull")
+
+    if kind.equals(SqlKind.IS_TRUE):
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        return UnaryOpExpression(bool_empty_data, input, "istrue")
+
+    if kind.equals(SqlKind.IS_NOT_TRUE):
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        return UnaryOpExpression(bool_empty_data, input, "isnottrue")
+
+    if kind.equals(SqlKind.IS_FALSE):
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        return UnaryOpExpression(bool_empty_data, input, "isfalse")
+
+    if kind.equals(SqlKind.IS_NOT_FALSE):
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        return UnaryOpExpression(bool_empty_data, input, "isnotfalse")
+
+    raise NotImplementedError(
+        f"SqlKind {kind} not supported yet for SqlPostfixOperator."
+    )
+
+
 def java_call_to_python_call(ctx, java_call, input_plan):
     """Convert a BodoSQL Java call expression to a DataFrame library expression
     (bodo.pandas.plan.Expression).
@@ -2500,158 +2685,13 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         return f"(?{active_mode_str})" + regexp if active_mode_str else regexp
 
     if operator_class_name == "SqlNullPolicyFunction":
-        func_name = op.getName().upper()
-        op_exprs = [
-            java_expr_to_python_expr(ctx, o, input_plan)
-            for o in java_call.getOperands()
-        ]
-        num_operands = len(java_call.getOperands())
-
-        # Date part functions wrapped in SqlNullPolicyFunction (e.g. WEEKDAY($0))
-        if func_name in _DATE_PART_ARROW_FUNCS and num_operands == 1:
-            return convert_date_part_funcs(func_name, op_exprs[0])
-
-        if func_name == "DAYNAME" and num_operands == 1:
-            return convert_dayname(op_exprs[0])
-
-        if func_name in ("MONTHNAME", "MONTH_NAME") and num_operands == 1:
-            return convert_monthname(op_exprs[0])
-
-        if func_name == "DATE_FORMAT" and num_operands == 2:
-            return convert_date_format(op_exprs[0], java_call.getOperands()[1])
-
-        if func_name == "STR_TO_DATE" and num_operands == 2:
-            return convert_str_to_date(op_exprs[0], java_call.getOperands()[1])
-
-        if func_name == "TIMESTAMP_FROM_PARTS":
-            # Redirect to TZ-aware or TZ-naive version depending on whether a timezone is provided
-            if num_operands == 8:
-                func_name = "TIMESTAMP_TZ_FROM_PARTS"
-            elif num_operands in (2, 6, 7):
-                func_name = "TIMESTAMP_NTZ_FROM_PARTS"
-
-        if func_name == "TIMESTAMP_NTZ_FROM_PARTS" and num_operands in (2, 6, 7):
-            if num_operands in (6, 7):
-                # Parts provided individually, with or without nanoseconds
-                return timestamp_from_parts(input_plan, *op_exprs)
-            elif num_operands == 2:
-                # Date expression and time expression provided
-                return convert_timestamp_ntz_from_parts_two_arg(*op_exprs)
-
-        if func_name == "TIMESTAMP_TZ_FROM_PARTS" and num_operands in (6, 7, 8):
-            return convert_timestamp_tz_from_parts(
-                ctx, input_plan, op_exprs, num_operands
-            )
-
-        if func_name == "TIMESTAMP_LTZ_FROM_PARTS" and num_operands in (6, 7):
-            return convert_timestamp_ltz_from_parts(
-                ctx, input_plan, op_exprs, num_operands
-            )
-
-        if func_name == "DATE_FROM_PARTS" and num_operands == 3:
-            return convert_date_from_parts(input_plan, *op_exprs)
-
-        if func_name == "TIME_FROM_PARTS" and num_operands in (3, 4):
-            return convert_time_from_parts(input_plan, *op_exprs)
-
-        if func_name == "MAKEDATE" and num_operands == 2:
-            return convert_makedate(input_plan, *op_exprs)
-
-        if func_name == "DATE_TRUNC" and num_operands == 2:
-            return convert_date_trunc(
-                ctx, java_call.getOperands()[0], op_exprs[1], java_call.getType()
-            )
-
-        if func_name == "LAST_DAY" and num_operands in (1, 2):
-            return convert_last_day(
-                input_plan,
-                op_exprs[0],
-                java_call.getOperands()[1] if num_operands == 2 else None,
-            )
-
-        if func_name in ("NEXT_DAY", "PREVIOUS_DAY") and num_operands == 2:
-            return convert_next_day_prev_day(input_plan, func_name, *op_exprs)
-
-        if func_name == "ADD_MONTHS" and num_operands == 2:
-            return convert_add_months(input_plan, *op_exprs)
-
-        if func_name in ("DATEADD", "DATE_ADD", "ADDDATE", "TIMEADD", "TIMESTAMPADD"):
-            # DATEADD(date, interval) or DATEADD(unit, amount, date)
-            # For 2 operands: (date, interval) → date + interval
-            # For 3 operands: (unit, amount, date) → date + (unit * amount)
-            if num_operands == 2:
-                return convert_dateadd_two_arg(input_plan, *op_exprs)
-            elif num_operands == 3:
-                return convert_dateadd_three_arg(
-                    input_plan,
-                    func_name,
-                    java_call.getOperands()[0],
-                    op_exprs[1],
-                    op_exprs[2],
-                )
-        if func_name in ("DATE_SUB", "SUBDATE"):
-            # DATE_SUB(date, interval) or DATE_SUB(unit, amount, date)
-            # or DATE_SUB(date, integer_days) — Snowflake syntax.
-            if num_operands == 2:
-                date_expr = op_exprs[0]
-                amount_expr = op_exprs[1]
-                # Check if the second argument is an integer (number of days)
-                # rather than an INTERVAL literal.
-                amount_type = java_call.getOperands()[1].getType()
-                if is_int_type(amount_type):
-                    return convert_datesub_int_days(input_plan, date_expr, amount_expr)
-                # Otherwise DATE_SUB(date, interval) — direct subtraction.
-                return java_binop_to_python_expr(
-                    ctx,
-                    SqlKind.MINUS,
-                    "-",
-                    [date_expr, amount_expr],
-                )
-            elif num_operands == 3:
-                return java_binop_to_python_expr(
-                    ctx,
-                    SqlKind.MINUS,
-                    "-",
-                    [op_exprs[2], op_exprs[1]],
-                )
-        if func_name == "DATEDIFF" and num_operands in (2, 3):
-            if num_operands == 3:
-                return convert_datediff(
-                    op_exprs[2], op_exprs[1], java_call.getOperands()[0]
-                )
-            else:
-                # According to BodoSQL docs, if only two operands are provided,
-                # the order of the dates is reversed compared to the three
-                # argument version (second date is subtracted from first).
-                return convert_datediff(op_exprs[1], op_exprs[2])
-
-        if func_name == "MONTHS_BETWEEN" and num_operands == 2:
-            return convert_months_between(input_plan, *op_exprs)
-
-        if func_name == "TIME_SLICE" and num_operands in (3, 4):
-            return convert_time_slice(
-                input_plan,
-                op_exprs[0],
-                op_exprs[1],
-                java_call.getOperands()[2],
-                java_call.getOperands()[3],
-            )
-
-        if func_name == "YEARWEEK" and num_operands == 1:
-            return convert_yearweek(input_plan, op_exprs[0])
-
-        if func_name in ("TIMEZONE_HOUR", "TIMEZONE_MINUTE") and num_operands == 1:
-            return convert_timezone_hour_timezone_minute(
-                input_plan, func_name, op_exprs[0]
-            )
-
-        if func_name in (
-            "EPOCH_SECOND",
-            "EPOCH_MILLISECOND",
-            "EPOCH_MICROSECOND",
-            "EPOCH_NANOSECOND",
-        ):
-            return convert_epoch_second(input_plan, func_name, op_exprs[0])
+        # We'll be able to return convert_SqlNullPolicyFunction() directly once our
+        # two groups of SqlNullPolicyFunction plan conversions are merged into one.
+        converted_SqlNullPolicyFunction = convert_SqlNullPolicyFunction(
+            ctx, java_call, input_plan
+        )
+        if converted_SqlNullPolicyFunction:
+            return converted_SqlNullPolicyFunction
 
     if operator_class_name in (
         "SqlMonotonicBinaryOperator",
@@ -2677,34 +2717,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operator_class_name == "SqlPostfixOperator"
         and len(java_call.getOperands()) == 1
     ):
-        operands = java_call.getOperands()
-        input = java_expr_to_python_expr(ctx, operands[0], input_plan)
-        kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
-
-        if kind.equals(SqlKind.IS_NOT_NULL):
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return UnaryOpExpression(bool_empty_data, input, "notnull")
-
-        if kind.equals(SqlKind.IS_NULL):
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return UnaryOpExpression(bool_empty_data, input, "isnull")
-
-        if kind.equals(SqlKind.IS_TRUE):
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return UnaryOpExpression(bool_empty_data, input, "istrue")
-
-        if kind.equals(SqlKind.IS_NOT_TRUE):
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return UnaryOpExpression(bool_empty_data, input, "isnottrue")
-
-        if kind.equals(SqlKind.IS_FALSE):
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return UnaryOpExpression(bool_empty_data, input, "isfalse")
-
-        if kind.equals(SqlKind.IS_NOT_FALSE):
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return UnaryOpExpression(bool_empty_data, input, "isnotfalse")
+        return convert_SqlPostfixOperator(ctx, java_call, input_plan)
 
     if operator_class_name == "SqlCaseOperator":
         operands = java_call.getOperands()
