@@ -1482,6 +1482,42 @@ public class RelBuilder {
   }
 
   /** Creates a call to an aggregate function with all applicable operands. */
+  @Deprecated // to be removed before 2.0
+  public AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
+      RexNode filter, @Nullable String alias, RexNode... operands) {
+    return aggregateCall(aggFunction, distinct, false, false, filter, null,
+        RelCollations.EMPTY, alias, ImmutableList.of(),
+        ImmutableList.copyOf(operands));
+  }
+
+  @Deprecated // to be removed before 2.0
+  public AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
+      boolean approximate, RexNode filter, @Nullable String alias,
+      RexNode... operands) {
+    return aggregateCall(aggFunction, distinct, approximate, false, filter,
+        null, RelCollations.EMPTY, alias, ImmutableList.of(),
+        ImmutableList.copyOf(operands));
+  }
+
+  @Deprecated // to be removed before 2.0
+  public AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
+      RexNode filter, @Nullable String alias,
+      Iterable<? extends RexNode> operands) {
+    return aggregateCall(aggFunction, distinct, false, false, filter, null,
+        RelCollations.EMPTY, alias, ImmutableList.of(),
+        ImmutableList.copyOf(operands));
+  }
+
+  @Deprecated // to be removed before 2.0
+  public AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
+      boolean approximate, RexNode filter, @Nullable String alias,
+      Iterable<? extends RexNode> operands) {
+    return aggregateCall(aggFunction, distinct, approximate, false, filter,
+        null, RelCollations.EMPTY, alias, ImmutableList.of(),
+        ImmutableList.copyOf(operands));
+  }
+
+  /** Creates a call to an aggregate function with all applicable operands. */
   protected AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
       boolean approximate, boolean ignoreNulls, @Nullable RexNode filter,
       @Nullable ImmutableList<RexNode> distinctKeys,

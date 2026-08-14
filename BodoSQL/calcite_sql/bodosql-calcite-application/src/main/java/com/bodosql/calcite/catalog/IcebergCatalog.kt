@@ -5,7 +5,9 @@ import com.bodosql.calcite.schema.InlineViewMetadata
 import com.bodosql.calcite.table.BodoSQLColumn
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
 import com.bodosql.calcite.table.BodoSQLColumnImpl
+import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.ColumnDataTypeInfo
+import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.util.Util
@@ -16,6 +18,7 @@ import org.apache.iceberg.catalog.Namespace
 import org.apache.iceberg.catalog.SupportsNamespaces
 import org.apache.iceberg.catalog.TableIdentifier
 import org.apache.iceberg.catalog.ViewCatalog
+import org.apache.iceberg.exceptions.NoSuchTableException
 import org.apache.iceberg.exceptions.NoSuchViewException
 import org.apache.iceberg.types.Type
 import org.apache.iceberg.types.Types.DecimalType
@@ -195,6 +198,25 @@ abstract class IcebergCatalog<T>(
         schemaPath: ImmutableList<String>,
         schemaName: String,
     ): CatalogSchema = CatalogSchema(schemaName, schemaPath.size + 1, schemaPath, this)
+
+    /**
+     * Returns a table with the given name and found in the given schema.
+     *
+     * @param schemaPath The list of schemas to traverse before finding the table.
+     * @param tableName Name of the table.
+     * @return The table object or null.
+     */
+    override fun getTable(
+        schemaPath: ImmutableList<String>,
+        tableName: String,
+    ): CatalogTable? {
+        try {
+            val columns = getIcebergTableColumns(schemaPath, tableName)
+            return IcebergCatalogTable(tableName, schemaPath, columns, this)
+        } catch (_: NoSuchTableException) {
+            return null
+        }
+    }
 
     override fun tryGetViewMetadata(names: MutableList<String>): InlineViewMetadata? =
         if (icebergConnection is ViewCatalog) {

@@ -77,6 +77,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
 
@@ -1476,6 +1477,10 @@ public class RexBuilder {
      */
     public RexLiteral makeSearchArgumentLiteral(Sarg s, RelDataType type) {
         return makeLiteral(requireNonNull(s, "s"), type, SqlTypeName.SARG);
+    }
+
+    public RexLiteral makeUuidLiteral(@Nullable UUID uuid) {
+        return new RexLiteral(uuid, typeFactory.createSqlType(SqlTypeName.UUID), SqlTypeName.UUID);
     }
 
     /**
