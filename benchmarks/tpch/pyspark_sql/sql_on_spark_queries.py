@@ -42,12 +42,12 @@ def load_tables(spark, base, use_parquet: bool):
         is_catalog_style = "." in base
         for name in table_names:
             if is_catalog_style:
-                iceberg_identifier = f"{base}.{name}"
+                iceberg_identifier = f"{base}.{name.upper()}"
             else:
                 # treat base as a path prefix
-                iceberg_identifier = f"{base}/{name}"
+                iceberg_identifier = f"{base}/{name.upper()}"
             df = spark.read.format("iceberg").load(iceberg_identifier)
-            tables[name] = df
+            tables[name.upper()] = df
 
     # Make table names recognizable from spark.sql queries.
     for name, df in tables.items():
@@ -95,6 +95,7 @@ def {func_name}(spark):
             + """
     df = spark.sql(tpch_query)
     df.collect()
+    return df
 """
         )
 
@@ -108,6 +109,7 @@ def run_queries(
     scale_factor: float = 1.0,
     sql_dir: str = "../sql",
     use_parquet: bool = False,
+    store_output: bool = False,
 ):
     load_tables(spark, data_folder, use_parquet)
     create_queries(spark, queries, scale_factor, sql_dir)
@@ -115,6 +117,7 @@ def run_queries(
     t1 = time.time()
 
     for query in queries:
+        print("Running query", query)
         query_func = globals().get(f"tpch_q{query:02}")
 
         if query_func is None:
@@ -122,8 +125,10 @@ def run_queries(
             continue
 
         t2 = time.time()
-        query_func(spark)  # run the query
+        output_df = query_func(spark)  # run the query
         print(f"Query {query:02} took {time.time() - t2:.2f} seconds")
+        if store_output:
+            output_df.coalesce(1).write.parquet(f"q{query:02}_output")
         spark.catalog.clearCache()
         gc.collect()
 
@@ -168,11 +173,22 @@ def main():
         action="store_true",
         help="Read data from Parquet files instead of Iceberg (default: False).",
     )
+    parser.add_argument(
+        "--store_output",
+        action="store_true",
+        help="Write the output for each query to a file (default: False).",
+    )
     args = parser.parse_args()
     folder = args.folder
     scale_factor = args.scale_factor
     run_on_gpu = args.gpu
     use_parquet = args.use_parquet
+    store_output = args.store_output
+
+    iceberg_version = "1.11.0"  # or your preferred Iceberg version
+    spark_version = "4.0"  # match your Spark major.minor version
+    scala_version = "2.13"
+    catalog_name = "local"  # arbitrary catalog identifier
 
     if run_on_gpu:
         spark = (
@@ -192,10 +208,24 @@ def main():
             .getOrCreate()
         )
     else:
+        packages = f"org.apache.iceberg:iceberg-spark-runtime-{spark_version}_{scala_version}:{iceberg_version},org.apache.hadoop:hadoop-aws:3.4.1,software.amazon.awssdk:bundle:2.24.6"
         spark = (
             SparkSession.builder.appName("SQL Queries with Spark")
+            .appName("IcebergTPCH")
+            .config("spark.jars.packages", packages)
             .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-            .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.4.1,")
+            # Enable Iceberg Spark extensions
+            .config(
+                "spark.sql.extensions",
+                "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+            )
+            # Register a Spark catalog backed by Iceberg (Hadoop catalog)
+            .config(
+                f"spark.sql.catalog.{catalog_name}",
+                "org.apache.iceberg.spark.SparkCatalog",
+            )
+            .config(f"spark.sql.catalog.{catalog_name}.type", "hadoop")
+            .config(f"spark.sql.catalog.{catalog_name}.warehouse", folder)
             .config("spark.driver.memory", "12g")  # driver JVM heap
             .config("spark.executor.memory", "8g")  # executor JVM heap (cluster mode)
             .config(
@@ -209,7 +239,9 @@ def main():
 
     warnings.filterwarnings("ignore")
 
-    run_queries(spark, folder, queries, scale_factor, args.sql_dir, use_parquet)
+    run_queries(
+        spark, folder, queries, scale_factor, args.sql_dir, use_parquet, store_output
+    )
 
 
 if __name__ == "__main__":

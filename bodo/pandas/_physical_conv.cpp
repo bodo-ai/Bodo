@@ -895,43 +895,13 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
-    // Create pipelines for the duplicate side of the CTE.
-    this->Visit(*op.children[0]);
-    std::shared_ptr<bodo::Schema> in_table_schema =
-        this->active_pipeline->getPrevOpOutputSchema();
-    std::shared_ptr<Pipeline> done_pipeline;
-#ifdef USE_CUDF
-    std::variant<std::shared_ptr<PhysicalCTE>, std::shared_ptr<PhysicalGPUCTE>>
-        physical_cte;
+    // Store the LogicalCTE node in the global structure so that CTERef's on the
+    // non-duplicate side can find it.
+    // The physical node and pipeline root will be filled in
+    // the first time the CTE is referenced and reused afterwards.
+    ctes.insert({op.table_index,
+                 {.cte_pipeline_root = nullptr, .cte_logical_node = op}});
 
-    if (node_run_on_gpu(op)) {
-        physical_cte = std::make_shared<PhysicalGPUCTE>(in_table_schema);
-    } else {
-        physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
-    }
-
-    std::visit(
-        [&](auto& vop) {
-            done_pipeline = this->active_pipeline->Build(vop);
-            ctes.insert(
-                {op.table_index,
-                 {.physical_node = vop, .cte_pipeline_root = done_pipeline}});
-        },
-        physical_cte);
-#else   // USE_CUDF
-    std::shared_ptr<PhysicalCTE> physical_cte =
-        std::make_shared<PhysicalCTE>(in_table_schema);
-    done_pipeline = this->active_pipeline->Build(physical_cte);
-    // Save the physical_cte node away so that cte ref's on the non-duplicate
-    // side can find it.
-    ctes.insert(
-        {op.table_index,
-         {.physical_node = physical_cte, .cte_pipeline_root = done_pipeline}});
-#endif  // USE_CUDF
-
-    // The active pipeline finishes after the duplicate side.
-    this->active_pipeline = nullptr;
-    // Create pipelines for the side that uses the duplicate side.
     this->Visit(*op.children[1]);
 }
 
@@ -944,6 +914,39 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
             "LogicalCTERef couldn't find matching table_index.");
     }
     CTEInfo& cte_index_info = table_index_iter->second;
+
+    if (cte_index_info.cte_pipeline_root == nullptr) {
+        this->Visit(*cte_index_info.cte_logical_node.children[0]);
+        std::shared_ptr<bodo::Schema> in_table_schema =
+            this->active_pipeline->getPrevOpOutputSchema();
+        std::shared_ptr<Pipeline> done_pipeline;
+#ifdef USE_CUDF
+        std::variant<std::shared_ptr<PhysicalCTE>,
+                     std::shared_ptr<PhysicalGPUCTE>>
+            physical_cte;
+
+        if (node_run_on_gpu(cte_index_info.cte_logical_node)) {
+            physical_cte = std::make_shared<PhysicalGPUCTE>(in_table_schema);
+        } else {
+            physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
+        }
+
+        std::visit(
+            [&](auto& vop) {
+                done_pipeline = this->active_pipeline->Build(vop);
+                cte_index_info.physical_node = vop;
+                cte_index_info.cte_pipeline_root = done_pipeline;
+            },
+            physical_cte);
+#else   // USE_CUDF
+        std::shared_ptr<PhysicalCTE> physical_cte =
+            std::make_shared<PhysicalCTE>(in_table_schema);
+        done_pipeline = this->active_pipeline->Build(physical_cte);
+        cte_index_info.physical_node = physical_cte;
+        cte_index_info.cte_pipeline_root = done_pipeline;
+#endif  // USE_CUDF
+    }
+
 #ifdef USE_CUDF
     std::variant<std::shared_ptr<PhysicalCTERef>,
                  std::shared_ptr<PhysicalGPUCTERef>>
