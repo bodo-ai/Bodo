@@ -1,7 +1,6 @@
 # Original from https://gist.githubusercontent.com/UranusSeven/55817bf0f304cc24f5eb63b2f1c3e2cd/raw/796dbd2fce6441821fc0b5bc51491edb49639c55/tpch.py
 import argparse
 import datetime
-import decimal
 import functools
 import inspect
 import os
@@ -462,10 +461,7 @@ def tpch_q11(partsupp, supplier, nation, scale_factor=1.0, pd=bodo.pandas):
 
     jn2 = jn2[jn2["N_NAME"] == var1]
 
-    threshold = (jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]).sum()
-    if isinstance(threshold, decimal.Decimal):
-        var2 = decimal.Decimal(str(var2))
-    threshold = threshold * var2
+    threshold = (jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]).sum() * var2
 
     jn2["VALUE"] = jn2["PS_SUPPLYCOST"] * jn2["PS_AVAILQTY"]
 
@@ -549,11 +545,7 @@ def tpch_q14(lineitem, part, pd=bodo.pandas):
     total_revenue = (jn1["L_EXTENDEDPRICE"] * (1 - jn1["L_DISCOUNT"])).sum()
 
     # aggregate promo revenue calculation
-    multiplier = 100.00
-    ratio = total_promo_revenue / total_revenue
-    if isinstance(ratio, decimal.Decimal):
-        multiplier = decimal.Decimal(str(multiplier))
-    ratio = multiplier * ratio
+    ratio = 100.00 * total_promo_revenue / total_revenue
     result_df = pd.DataFrame({"PROMO_REVENUE": [round(ratio, 2)]})
 
     return result_df
@@ -638,11 +630,7 @@ def tpch_q17(lineitem, part, pd=bodo.pandas):
 
     jn4 = jn1.merge(agg, left_on="L_PARTKEY", right_on="L_PARTKEY", how="left")
     jn4 = jn4[jn4["L_QUANTITY"] < 0.2 * jn4["L_QUANTITY_AVG"]]
-    total = jn4["L_EXTENDEDPRICE"].sum()
-    divisor = 7.0
-    if isinstance(total, decimal.Decimal):
-        divisor = decimal.Decimal(str(divisor))
-    total = total / divisor
+    total = jn4["L_EXTENDEDPRICE"].sum() / 7.0
 
     result_df = pd.DataFrame({"AVG_YEARLY": [round(total, 2)]})
 

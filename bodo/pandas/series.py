@@ -2745,7 +2745,7 @@ def validate_reduce(func_name, pa_type):
             return pa.uint64()
         elif pa.types.is_integer(pa_type):
             return pa.int64()
-        elif pa.types.is_floating(pa_type):
+        elif pa.types.is_floating(pa_type) or pa.types.is_decimal(pa_type):
             return pa.float64()
         else:
             raise BodoLibNotImplementedException(
