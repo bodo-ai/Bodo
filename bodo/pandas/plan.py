@@ -11,6 +11,7 @@ import pyarrow as pa
 from pandas._libs import lib
 
 import bodo
+from bodo.ext import plan_optimizer
 from bodo.pandas.utils import (
     BODO_NONE_DUMMY,
     arrow_to_empty_df,
@@ -1017,12 +1018,96 @@ class CaseExpression(Expression):
 
 
 class CastExpression(Expression):
-    """Expression representing a type cast in the query plan."""
+    """
+    Expression representing a type cast in the query plan.
+    The `empty_data` type is used as the target type.
 
-    def __init__(self, empty_data, source_expr):
+    `cast_opts` is an instance of `pyarrow.compute.FunctionOptions`,
+    either `CastOptions` or `BodoStringOptions` to signify
+    which cast compute function shoud be called.
+    """
+
+    class CastOptions(plan_optimizer._CastOptions):
+        """
+        A subclass of _CastOptions for easier construction.
+        The target type cannot be set through this Python
+        wrapper. This is to avoid accidental discrepancies
+        between to_type in CastOptions and schema type.
+
+        The allow_int_overflow and allow_float_truncate options are
+        also set to True by default, which differs from Arrow's
+        CastOptions.
+        """
+
+        def __init__(
+            self,
+            *,
+            allow_int_overflow=True,
+            allow_time_truncate=None,
+            allow_time_overflow=None,
+            allow_decimal_truncate=None,
+            allow_float_truncate=True,
+            allow_invalid_utf8=None,
+        ):
+            super().__init__()
+            if allow_int_overflow is not None:
+                self.allow_int_overflow = allow_int_overflow
+            if allow_time_truncate is not None:
+                self.allow_time_truncate = allow_time_truncate
+            if allow_time_overflow is not None:
+                self.allow_time_overflow = allow_time_overflow
+            if allow_decimal_truncate is not None:
+                self.allow_decimal_truncate = allow_decimal_truncate
+            if allow_float_truncate is not None:
+                self.allow_float_truncate = allow_float_truncate
+            if allow_invalid_utf8 is not None:
+                self.allow_invalid_utf8 = allow_invalid_utf8
+
+        @classmethod
+        def safe(cls):
+            instance = cls()
+            instance._set_safe()
+            return instance
+
+        @classmethod
+        def unsafe(cls):
+            instance = cls()
+            instance._set_unsafe()
+            return instance
+
+    class BodoStringCastOptions(plan_optimizer._BodoStringCastOptions):
+        """
+        Options class for `bodo_string_cast`.
+        Set `emit_null_on_failure=True` if an error when parsing an element
+        should be coerced to null. If `emit_null_on_failure=False` (the
+        default), a single malformed element will result in a failure
+        for the whole operation.
+        """
+
+        def __init__(self, emit_null_on_failure=None):
+            super().__init__()
+            if emit_null_on_failure is not None:
+                self.emit_null_on_failure = emit_null_on_failure
+
+    def __init__(self, empty_data, source_expr, cast_opts=None):
         self.empty_data = empty_data
         self.source_expr = source_expr
-        super().__init__(empty_data, source_expr)
+
+        if cast_opts:
+            if not isinstance(cast_opts, CastExpression.CastOptions) and not isinstance(
+                cast_opts, CastExpression.BodoStringCastOptions
+            ):
+                raise TypeError(
+                    "Expected cast_opts to be an instance of CastExpression.CastOptions or CastExpression.BodoStringCastOptions"
+                )
+        else:
+            # Use regular Arrow casting if no cast options are given
+            cast_opts = CastExpression.CastOptions()
+
+        # target type is assigned in make_cast_expr in _plan.cpp
+
+        self.cast_opts = cast_opts
+        super().__init__(empty_data, source_expr, cast_opts)
 
     @property
     def source(self):
