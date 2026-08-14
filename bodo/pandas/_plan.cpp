@@ -784,7 +784,7 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
                             key_idx));
         }
         duckdb::LogicalType col_type = source_duck->types[key_idx];
-        group_exprs.push_back(
+        group_exprs.emplace_back(
             duckdb::make_uniq<duckdb::BoundColumnRefExpression>(
                 col_type, source_cols[key_idx]));
     }

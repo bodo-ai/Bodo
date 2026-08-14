@@ -202,10 +202,12 @@ OperatorResult PhysicalReduce::ConsumeBatch(
             } else if (func_name == "min") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionMin>(input_col_idx));
-            } else if (func_name == "sum") {
+            } else if (func_name == "sum" || func_name == "sum0") {
+                bool initialize_to_null =
+                    func_name == "sum0" ? false : use_sql_rules;
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionSum>(
-                        input_col_idx, use_sql_rules,
+                        input_col_idx, initialize_to_null,
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "product") {
                 reduction_functions.push_back(

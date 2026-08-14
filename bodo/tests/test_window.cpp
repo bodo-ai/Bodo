@@ -110,6 +110,7 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::transform,
             Bodo_FTypes::shift,
             Bodo_FTypes::sum,
+            Bodo_FTypes::sum0,
             Bodo_FTypes::nunique,
             Bodo_FTypes::median,
             Bodo_FTypes::cumsum,

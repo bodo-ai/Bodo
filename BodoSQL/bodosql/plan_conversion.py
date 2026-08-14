@@ -6465,6 +6465,7 @@ def java_agg_to_python_agg(ctx, java_plan):
             out_type = pa.int64()
         elif func_name in [
             "sum",
+            "sum0",
             "max",
             "min",
             "std",
@@ -6612,9 +6613,11 @@ def _agg_to_func_name(func):
 
     argList = func.getArgList()
 
-    # TODO[BSE-5163]: support SUM0 initialization properly
-    if kind.equals(SqlKind.SUM) or kind.equals(SqlKind.SUM0):
+    if kind.equals(SqlKind.SUM):
         return "sum"
+
+    if kind.equals(SqlKind.SUM0):
+        return "sum0"
 
     if kind.equals(SqlKind.COUNT) and len(argList) == 0:
         return "size"

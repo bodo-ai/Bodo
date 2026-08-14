@@ -81,6 +81,7 @@ inline bool gpu_capable(duckdb::LogicalAggregate& logical_aggregate) {
         }
 
         if (agg_expr.function.name != "sum" &&
+            agg_expr.function.name != "sum0" &&
             agg_expr.function.name != "count" &&
             agg_expr.function.name != "mean" &&
             agg_expr.function.name != "min" &&
@@ -171,7 +172,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
                 agg_expr.bind_info->Cast<BodoAggFunctionData>();
 
             auto ftype = function_to_ftype.at(agg_expr.function.name);
-            column_agg_funcs.push_back({col_idx, ftype});
+            column_agg_funcs.emplace_back(col_idx, ftype);
             std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
                 output_dtype = get_groupby_output_dtype(
                     ftype, in_table_schema->column_types[col_idx]->array_type,
