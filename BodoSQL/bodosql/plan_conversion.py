@@ -1700,246 +1700,69 @@ def convert_epoch_second(input_plan, func_name, timestamp_expr):
         return epoch_time
 
 
-def cast_string_to_date(in_expr):
-    string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-
-    # Replace any slashes with dashes since this is the format Arrow expects by default
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data, [in_expr], "replace_substring", ("/", "-")
+def convert_convert_timezone(ctx, str_timezone, src):
+    ensure_arg_is_const_expr_of_type(str_timezone, "str_timezone", (str, pa.binary()))
+    ensure_type_of_expr_custom(
+        src,
+        "src",
+        lambda dtype: is_any_pa_date_or_timestamp(normalize_to_pa_type(dtype)),
+        get_const_val_type=False,
     )
+    timestamp_pa_type = src.empty_data.iloc[:, 0].dtype.pyarrow_dtype
+    target_res = "ns"
+    # We figure out the right resolution to use.
+    if pa.types.is_date(timestamp_pa_type):
+        target_res = "s"
+    elif pa.types.is_timestamp(timestamp_pa_type):
+        target_res = timestamp_pa_type.unit
 
-    # Add zeroes before the month and day if they are single digits
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data,
-        [cleaned_input],
-        "replace_substring_regex",
-        (r"-(\d)-", r"-0\1-"),
-    )
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data,
-        [cleaned_input],
-        "replace_substring_regex",
-        (r"-(\d)($|[ T])", r"-0\1\2"),
-    )
-
-    # Cast to a timestamp first so we can parse string timestamps
-    # before truncating to a date at the end (in `convert_cast`).
-    return CastExpression(
-        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))),
-        cleaned_input,
-    )
-
-
-def cast_string_to_time(input_plan, in_expr, target_empty_data):
-    string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-
-    represents_int = ArrowScalarFuncExpression(
-        pd.Series(dtype=pd.ArrowDtype(pa.bool_())),
-        [in_expr],
-        "utf8_is_digit",
-        (),
-    )
-
-    # If the input represents simply an integer, interpret it as the number of seconds.
-    # For the strings that were times, replace them with 0 so that we don't get an error trying to cast them to integers
-    safe_int_strings = CaseExpression(
-        string_empty_data,
-        represents_int,
-        in_expr,
-        ConstantExpression(string_empty_data, input_plan, "0"),
-    )
-    seconds = CastExpression(int_empty_data, safe_int_strings)
-    nanoseconds = ArithOpExpression(
-        int_empty_data,
-        seconds,
-        ConstantExpression(int_empty_data, input_plan, 1_000_000_000),
-        "__mul__",
-    )
-    nanoseconds_time = CastExpression(target_empty_data, nanoseconds)
-
-    # Otherwise, we proceed with the usual parsing if the input string is formatted as a time
-
-    # Add zeroes before the hour, minute, and second if they are single digits
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data,
-        [in_expr],
-        "replace_substring_regex",
-        (r"^(\d):", r"0\1:"),
-    )
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data,
-        [cleaned_input],
-        "replace_substring_regex",
-        (r":(\d):", r":0\1:"),
-    )
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data,
-        [cleaned_input],
-        "replace_substring_regex",
-        (r":(\d)($|\.)", r":0\1\2"),
-    )
-
-    # For the strings that were integers, replace them with 00:00:00 so that we don't get an error trying to parse integers as times
-    safe_time_strings = CaseExpression(
-        string_empty_data,
-        represents_int,
-        ConstantExpression(string_empty_data, input_plan, "00:00:00"),
-        cleaned_input,
-    )
-
-    # Convert to a timestamp string before casting because Arrow has no way to directly parse as a time.
-    dummy_date_string = ConstantExpression(string_empty_data, input_plan, "1970-01-01")
-    separator = ConstantExpression(string_empty_data, input_plan, " ")
-    timestamp_string = ArrowScalarFuncExpression(
-        string_empty_data,
-        [dummy_date_string, safe_time_strings, separator],
-        "binary_join_element_wise",
-        (),
-    )
-    # Parse as timestamp
-    timestamp_expr = CastExpression(
-        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))), timestamp_string
-    )
-    # Casting to time64 will strip off the dummy date part of the timestamp
-    timestamp_time = CastExpression(target_empty_data, timestamp_expr)
-
-    # Return the final time64 array, selecting the result based on whether each input was an integer string or time string
-    return CaseExpression(
-        target_empty_data, represents_int, nanoseconds_time, timestamp_time
-    )
-
-
-def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
-    # TODO[BSE-5154]: support all Calcite casts
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-
-    # No-op casts
-    if operand_type.getSqlTypeName().equals(target_type.getSqlTypeName()):
-        return in_expr
-
-    if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
-        operand_type
-    ):
-        # Cast of int to DECIMAL is unnecessary in C++ backend
-        return in_expr
-
-    if operand_type.getSqlTypeName().equals(
-        SqlTypeName.VARCHAR
-    ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
-        # No-op cast of VARCHAR (could be different lengths but sometimes equal
-        # which seems like a Calcite gap)
-        return in_expr
-
-    if operand_type.getSqlTypeName().equals(
-        SqlTypeName.DATE
-    ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
-        # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
-        return in_expr
-
-    empty_data = pd.Series(dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type)))
-
-    if operand_type.getSqlTypeName().equals(
-        SqlTypeName.VARCHAR
-    ) and target_type.getSqlTypeName().equals(SqlTypeName.DATE):
-        # Casts to timestamp and reassigns to in_expr; truncation
-        # will happen in the CastExpression at the end.
-        in_expr = cast_string_to_date(in_expr)
-
-    if pa.types.is_decimal(
-        in_expr.empty_data.dtypes.iloc[0].pyarrow_dtype
-    ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
-        dscale = in_expr.empty_data.dtypes.iloc[0].pyarrow_dtype.scale
-        if dscale < 0:
-            in_expr = CastExpression(
-                pd.Series(dtype=pd.ArrowDtype(pa.int64())),
-                in_expr,
+    if target_res == "ns":
+        # The definition of this operation is to convert a time from one
+        # timezone to a different one.
+        # The general algorithm is that we get to a timestamp that has a timezone
+        # and then use a cast to a different timezone which will actually perform
+        # the conversion.  However, some input types don't have a timezone to
+        # work with.  The check below find such cases and then uses the
+        # assume_timezone kernel to apply the BodoSQL context's default_timezone
+        # if it has one else use UTC.  One final wrinkle is that assume_timezone
+        # can't operate on all possible input types so we convert the input
+        # date/time type to a format that we know it can handle.
+        if pa.types.is_date(timestamp_pa_type) or (
+            pa.types.is_timestamp(timestamp_pa_type) and timestamp_pa_type.tz is None
+        ):
+            tz = get_session_tz(ctx)
+            local_timestamp_empty_data = pd.Series(
+                dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=tz))
             )
-
-    if operand_type.getSqlTypeName().equals(
-        SqlTypeName.VARCHAR
-    ) and target_type.getSqlTypeName().equals(SqlTypeName.TIME):
-        return cast_string_to_time(input_plan, in_expr, empty_data)
-
-    # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
-    # local_timestamp() function of Arrow (not cast)
-    if (
-        operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
-        or operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP_TZ)
-    ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
-        return ArrowScalarFuncExpression(
-            empty_data,
-            [in_expr],
-            "local_timestamp",
-            (),
-        )
-
-    # TO_TIMESTAMP_LTZ adds local time zone which is same as assume_timezone()
-    # function of Arrow (not cast)
-    if target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE):
-        if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
-            # Integers are assumed in seconds in BodoSQL
-            cast_empty_data = pd.Series(
-                dtype=pd.ArrowDtype(
-                    pa.timestamp("s" if is_int_type(operand_type) else "ns")
+            # For date input, we first need to cast to timestamp so we can
+            # call assume_timezone().
+            if pa.types.is_date(timestamp_pa_type):
+                timestamp_empty_data_no_tz = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp(target_res))
                 )
-            )
-            in_expr = CastExpression(
-                cast_empty_data,
-                in_expr,
-            )
-
-        tz = get_session_tz(ctx)
-        empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz)))
-        return ArrowScalarFuncExpression(
-            empty_data,
-            [in_expr],
-            "assume_timezone",
-            (tz,),
-        )
-
-    if is_float_type(operand_type) and is_int_type(target_type):
-        # CastExpression truncates instead of rounds.
-        in_expr = ArrowScalarFuncExpression(
-            in_expr.empty_data,
-            [in_expr],
-            "round",
-            (0, "half_towards_infinity"),
-        )
-
-    # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
-    if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
-        SqlTypeName.TIMESTAMP
-    ):
-        # Arrow's cast_timestamp only accepts int64 input, so convert other integer types to int64 first.
-        # This likely won't work for uint64 where the input is greater than the max value of int64,
-        # but the timestamp itself is backed by signed int64 anyway
-        in_expr_dtype = get_expr_dtype(in_expr)
-        if not compare_types(in_expr_dtype, "int64"):
-            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            in_expr = CastExpression(
-                int64_empty_data,
-                in_expr,
+                src = CastExpression(timestamp_empty_data_no_tz, src)
+            # We use the context default_tz to make the timezone explicit.
+            src = ArrowScalarFuncExpression(
+                local_timestamp_empty_data,
+                [src],
+                "assume_timezone",
+                (tz,),
             )
 
-        cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
-        in_expr = CastExpression(
-            cast_empty_data,
-            in_expr,
+        target_timestamp_empty_data = pd.Series(
+            dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=str_timezone.value))
         )
-
-    # Parsing strings to binary not supported yet
-    if operand_type.getSqlTypeName().equals(
-        SqlTypeName.VARCHAR
-    ) and target_type.getSqlTypeName().equals(SqlTypeName.VARBINARY):
+        # We use cast to convert timezones.
+        target_timestamp_expr = CastExpression(target_timestamp_empty_data, src)
+        return target_timestamp_expr
+    else:
+        # For now, if the resolution isn't our default, baked-in nanosecond
+        # resolution then don't convert the operation because otherwise
+        # tests will fail related to formatting the answer as a string.
+        # See: test_snowflake_date_conversion_fns.py::test_convert_timezone
         raise NotImplementedError(
-            "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
+            "C++ backend currently only accepts nanosecond resolution in CONVERT_TIMEZONE"
         )
-
-    return CastExpression(
-        empty_data,
-        in_expr,
-    )
 
 
 def convert_dayofweekiso(input):
@@ -1955,33 +1778,6 @@ def convert_dayofweek(input):
     arrow_func = _DATE_PART_ARROW_FUNCS["DAYOFWEEK"]
     # Pass week_start = 7 which corresponds to Sunday, so we have Sunday=0, Monday=1, ..., Saturday=6.
     return ArrowScalarFuncExpression(empty_data, [input], arrow_func, (True, 7))
-
-
-def convert_coalesce(op_exprs):
-    # Unify data types to match output type of coalesce (e.g. int8 + int32 -> int32)
-    out_col_name = op_exprs[0].empty_data.columns[0]
-    in_schemas = [
-        pa.Schema.from_pandas(e.empty_data.set_axis([out_col_name], axis=1))
-        for e in op_exprs
-    ]
-    # If some but not all inputs are timestamps, promote all to timestamps to
-    # avoid errors in C++ backend
-    if any(pa.types.is_timestamp(s.field(0).type) for s in in_schemas) and not all(
-        pa.types.is_timestamp(s.field(0).type) for s in in_schemas
-    ):
-        t = next(
-            s.field(0).type
-            for s in in_schemas
-            if pa.types.is_timestamp(s.field(0).type)
-        )
-        out_schema = pa.schema([pa.field(out_col_name, t)])
-    else:
-        out_schema = pa.unify_schemas(
-            in_schemas,
-            promote_options="permissive",
-        )
-    empty_data = arrow_to_empty_df(out_schema)
-    return ArrowScalarFuncExpression(empty_data, op_exprs, "coalesce", ())
 
 
 def convert_current_date(ctx, input_plan):
@@ -2308,6 +2104,275 @@ def convert_combine_intervals(input_plan, op_exprs):
         combined_val = pd.Timedelta(nanoseconds=total_nanos)
     dummy_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
     return ConstantExpression(dummy_empty_data, input_plan, combined_val)
+
+
+def cast_string_to_date(in_expr):
+    string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+
+    # Replace any slashes with dashes since this is the format Arrow expects by default
+    cleaned_input = ArrowScalarFuncExpression(
+        string_empty_data, [in_expr], "replace_substring", ("/", "-")
+    )
+
+    # Add zeroes before the month and day if they are single digits
+    cleaned_input = ArrowScalarFuncExpression(
+        string_empty_data,
+        [cleaned_input],
+        "replace_substring_regex",
+        (r"-(\d)-", r"-0\1-"),
+    )
+    cleaned_input = ArrowScalarFuncExpression(
+        string_empty_data,
+        [cleaned_input],
+        "replace_substring_regex",
+        (r"-(\d)($|[ T])", r"-0\1\2"),
+    )
+
+    # Cast to a timestamp first so we can parse string timestamps
+    # before truncating to a date at the end (in `convert_cast`).
+    return CastExpression(
+        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))),
+        cleaned_input,
+    )
+
+
+def cast_string_to_time(input_plan, in_expr, target_empty_data):
+    string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+    represents_int = ArrowScalarFuncExpression(
+        pd.Series(dtype=pd.ArrowDtype(pa.bool_())),
+        [in_expr],
+        "utf8_is_digit",
+        (),
+    )
+
+    # If the input represents simply an integer, interpret it as the number of seconds.
+    # For the strings that were times, replace them with 0 so that we don't get an error trying to cast them to integers
+    safe_int_strings = CaseExpression(
+        string_empty_data,
+        represents_int,
+        in_expr,
+        ConstantExpression(string_empty_data, input_plan, "0"),
+    )
+    seconds = CastExpression(int_empty_data, safe_int_strings)
+    nanoseconds = ArithOpExpression(
+        int_empty_data,
+        seconds,
+        ConstantExpression(int_empty_data, input_plan, 1_000_000_000),
+        "__mul__",
+    )
+    nanoseconds_time = CastExpression(target_empty_data, nanoseconds)
+
+    # Otherwise, we proceed with the usual parsing if the input string is formatted as a time
+
+    # Add zeroes before the hour, minute, and second if they are single digits
+    cleaned_input = ArrowScalarFuncExpression(
+        string_empty_data,
+        [in_expr],
+        "replace_substring_regex",
+        (r"^(\d):", r"0\1:"),
+    )
+    cleaned_input = ArrowScalarFuncExpression(
+        string_empty_data,
+        [cleaned_input],
+        "replace_substring_regex",
+        (r":(\d):", r":0\1:"),
+    )
+    cleaned_input = ArrowScalarFuncExpression(
+        string_empty_data,
+        [cleaned_input],
+        "replace_substring_regex",
+        (r":(\d)($|\.)", r":0\1\2"),
+    )
+
+    # For the strings that were integers, replace them with 00:00:00 so that we don't get an error trying to parse integers as times
+    safe_time_strings = CaseExpression(
+        string_empty_data,
+        represents_int,
+        ConstantExpression(string_empty_data, input_plan, "00:00:00"),
+        cleaned_input,
+    )
+
+    # Convert to a timestamp string before casting because Arrow has no way to directly parse as a time.
+    dummy_date_string = ConstantExpression(string_empty_data, input_plan, "1970-01-01")
+    separator = ConstantExpression(string_empty_data, input_plan, " ")
+    timestamp_string = ArrowScalarFuncExpression(
+        string_empty_data,
+        [dummy_date_string, safe_time_strings, separator],
+        "binary_join_element_wise",
+        (),
+    )
+    # Parse as timestamp
+    timestamp_expr = CastExpression(
+        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))), timestamp_string
+    )
+    # Casting to time64 will strip off the dummy date part of the timestamp
+    timestamp_time = CastExpression(target_empty_data, timestamp_expr)
+
+    # Return the final time64 array, selecting the result based on whether each input was an integer string or time string
+    return CaseExpression(
+        target_empty_data, represents_int, nanoseconds_time, timestamp_time
+    )
+
+
+def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
+    # TODO[BSE-5154]: support all Calcite casts
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+
+    # No-op casts
+    if operand_type.getSqlTypeName().equals(target_type.getSqlTypeName()):
+        return in_expr
+
+    if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
+        operand_type
+    ):
+        # Cast of int to DECIMAL is unnecessary in C++ backend
+        return in_expr
+
+    if operand_type.getSqlTypeName().equals(
+        SqlTypeName.VARCHAR
+    ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
+        # No-op cast of VARCHAR (could be different lengths but sometimes equal
+        # which seems like a Calcite gap)
+        return in_expr
+
+    if operand_type.getSqlTypeName().equals(
+        SqlTypeName.DATE
+    ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+        # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
+        return in_expr
+
+    empty_data = pd.Series(dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type)))
+
+    if operand_type.getSqlTypeName().equals(
+        SqlTypeName.VARCHAR
+    ) and target_type.getSqlTypeName().equals(SqlTypeName.DATE):
+        # Casts to timestamp and reassigns to in_expr; truncation
+        # will happen in the CastExpression at the end.
+        in_expr = cast_string_to_date(in_expr)
+
+    if pa.types.is_decimal(
+        in_expr.empty_data.dtypes.iloc[0].pyarrow_dtype
+    ) and target_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
+        dscale = in_expr.empty_data.dtypes.iloc[0].pyarrow_dtype.scale
+        if dscale < 0:
+            in_expr = CastExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int64())),
+                in_expr,
+            )
+
+    if operand_type.getSqlTypeName().equals(
+        SqlTypeName.VARCHAR
+    ) and target_type.getSqlTypeName().equals(SqlTypeName.TIME):
+        return cast_string_to_time(input_plan, in_expr, empty_data)
+
+    # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
+    # local_timestamp() function of Arrow (not cast)
+    if (
+        operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
+        or operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP_TZ)
+    ) and target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+        return ArrowScalarFuncExpression(
+            empty_data,
+            [in_expr],
+            "local_timestamp",
+            (),
+        )
+
+    # TO_TIMESTAMP_LTZ adds local time zone which is same as assume_timezone()
+    # function of Arrow (not cast)
+    if target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE):
+        if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+            # Integers are assumed in seconds in BodoSQL
+            cast_empty_data = pd.Series(
+                dtype=pd.ArrowDtype(
+                    pa.timestamp("s" if is_int_type(operand_type) else "ns")
+                )
+            )
+            in_expr = CastExpression(
+                cast_empty_data,
+                in_expr,
+            )
+
+        tz = get_session_tz(ctx)
+        empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz)))
+        return ArrowScalarFuncExpression(
+            empty_data,
+            [in_expr],
+            "assume_timezone",
+            (tz,),
+        )
+
+    if is_float_type(operand_type) and is_int_type(target_type):
+        # CastExpression truncates instead of rounds.
+        in_expr = ArrowScalarFuncExpression(
+            in_expr.empty_data,
+            [in_expr],
+            "round",
+            (0, "half_towards_infinity"),
+        )
+
+    # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
+    if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
+        SqlTypeName.TIMESTAMP
+    ):
+        # Arrow's cast_timestamp only accepts int64 input, so convert other integer types to int64 first.
+        # This likely won't work for uint64 where the input is greater than the max value of int64,
+        # but the timestamp itself is backed by signed int64 anyway
+        in_expr_dtype = get_expr_dtype(in_expr)
+        if not compare_types(in_expr_dtype, "int64"):
+            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+            in_expr = CastExpression(
+                int64_empty_data,
+                in_expr,
+            )
+
+        cast_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("s")))
+        in_expr = CastExpression(
+            cast_empty_data,
+            in_expr,
+        )
+
+    # Parsing strings to binary not supported yet
+    if operand_type.getSqlTypeName().equals(
+        SqlTypeName.VARCHAR
+    ) and target_type.getSqlTypeName().equals(SqlTypeName.VARBINARY):
+        raise NotImplementedError(
+            "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
+        )
+
+    return CastExpression(
+        empty_data,
+        in_expr,
+    )
+
+
+def convert_coalesce(op_exprs):
+    # Unify data types to match output type of coalesce (e.g. int8 + int32 -> int32)
+    out_col_name = op_exprs[0].empty_data.columns[0]
+    in_schemas = [
+        pa.Schema.from_pandas(e.empty_data.set_axis([out_col_name], axis=1))
+        for e in op_exprs
+    ]
+    # If some but not all inputs are timestamps, promote all to timestamps to
+    # avoid errors in C++ backend
+    if any(pa.types.is_timestamp(s.field(0).type) for s in in_schemas) and not all(
+        pa.types.is_timestamp(s.field(0).type) for s in in_schemas
+    ):
+        t = next(
+            s.field(0).type
+            for s in in_schemas
+            if pa.types.is_timestamp(s.field(0).type)
+        )
+        out_schema = pa.schema([pa.field(out_col_name, t)])
+    else:
+        out_schema = pa.unify_schemas(
+            in_schemas,
+            promote_options="permissive",
+        )
+    empty_data = arrow_to_empty_df(out_schema)
+    return ArrowScalarFuncExpression(empty_data, op_exprs, "coalesce", ())
 
 
 def convert_sign(inp):
@@ -3725,6 +3790,684 @@ def convert_strcmp(input_plan, str1_expr, str2_expr):
     )
 
 
+def convert_charindex(input_plan, src, match_expr, start_expr=None):
+    # NOTE: POSITION/CHARINDEX in Snowflake has `match_expr`
+    # as the first parameter instead of the second parameter
+
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(match_expr, "match_expr", (str, pa.binary()))
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    if len(match_expr.value) == 0:
+        return ConstantExpression(int_empty_data, input_plan, 1)
+
+    if start_expr is not None:
+        ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+        if start_expr.value > 0:
+            start = start_expr.value - 1
+        else:
+            start = start_expr.value
+    else:
+        start = 0
+
+    if start > 0:
+        # If start index is beyond the length of the string, we expect this to return an empty string
+        without_start_expr = ArrowScalarFuncExpression(
+            src.empty_data,
+            [src],
+            "utf8_slice_codeunits",
+            (start, None, 1),
+        )
+    else:
+        without_start_expr = src
+
+    # Find the first occurrence of the substring in the sliced string
+    substring_pos_expr = ArrowScalarFuncExpression(
+        int_empty_data,
+        [without_start_expr],
+        "find_substring",
+        (match_expr.value,),
+    )
+
+    # find_substring emits -1 when the substring is not found.
+    # We need to return 0 in this case
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+    substring_not_found = ComparisonOpExpression(
+        bool_empty_data, substring_pos_expr, negative_one_expr, operator.eq
+    )
+
+    # Add the ignored start index to the result only if substring was found
+    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+    start_expr = ConstantExpression(int_empty_data, input_plan, start)
+    offset_expr = CaseExpression(
+        int_empty_data, substring_not_found, zero_expr, start_expr
+    )
+    adjusted_substring_pos_expr = ArithOpExpression(
+        int_empty_data, substring_pos_expr, offset_expr, "__add__"
+    )
+
+    # Add 1 to find_substring expression since Arrow's find_substring is 0-indexed instead of 1-based like INSTR/CHARINDEX
+    # If adjusted_substring_pos_expr is -1 then this will give the correct output of 0
+    one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+    return ArithOpExpression(
+        int_empty_data, adjusted_substring_pos_expr, one_expr, "__add__"
+    )
+
+
+def convert_regexp_instr(
+    input_plan,
+    src,
+    regexp,
+    start_expr=None,
+    occurrence_expr=None,
+    start_or_end_index_expr=None,
+    regex_params_expr=None,
+    group_num_expr=None,
+):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+    if start_expr is not None:
+        ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+        if start_expr.value > 0:
+            start = start_expr.value - 1
+        elif start_expr.value == 0:
+            start = 0
+        else:
+            raise ValueError("Start index must be positive for REGEXP_INSTR.")
+    else:
+        start = 0
+
+    if occurrence_expr is not None:
+        # Need to search for the substring that is the occurrence_expr occurrence / regex match
+        ensure_arg_is_const_expr_of_type(occurrence_expr, "occurrence_expr", int)
+        occurrence_num = occurrence_expr.value
+        if occurrence_num < 1:
+            raise ValueError("REGEXP_INSTR occurrences argument must be 1 or greater")
+    else:
+        occurrence_num = 1
+
+    # The "option" parameter specifies whether to return the offset of the first character of the match (0) or the offset of the first character following the end of the match (1).
+    if start_or_end_index_expr is not None:
+        ensure_arg_is_const_expr_of_type(
+            start_or_end_index_expr, "start_or_end_index_expr", int
+        )
+        start_or_end_index = start_or_end_index_expr.value
+        assert start_or_end_index in (0, 1), "The 'option' parameter must be 0 or 1."
+    else:
+        start_or_end_index = 0
+
+    if regex_params_expr is not None:
+        ensure_arg_is_const_expr_of_type(regex_params_expr, "regex_params_expr", str)
+        regex_params = clean_regex_params(regex_params_expr, "REGEXP_INSTR")
+    else:
+        regex_params = "c"
+
+    if group_num_expr is not None:
+        ensure_arg_is_const_expr_of_type(group_num_expr, "group_num_expr", int)
+        if group_num_expr.value < 0:
+            raise ValueError(
+                "Negative value for group_num argument of REGEXP_INSTR is not permitted"
+            )
+        group_num = group_num_expr.value
+        if group_num > 0:
+            group_num -= 1  # Convert from 1-based to 0-based
+        # 'e' is implied if group_num is passed
+        regex_params += "e"
+    else:
+        group_num = 0
+
+    # Use inline mode modifiers if needed since replace_substring_regex
+    # and extract_regex_span don't expose those options.
+    # This applies to the 'i', 'm', and 's' options.
+    modified_regexp = regexp_add_mode_modifiers(regexp.value, regex_params, "ims")
+
+    # Chop off the start so that searching begins after the provided position
+    if start > 0:
+        without_start_expr = ArrowScalarFuncExpression(
+            src.empty_data,
+            [src],
+            "utf8_slice_codeunits",
+            (start, None, 1),
+        )
+    else:
+        without_start_expr = src
+
+    # Remove earlier occurrences so that extract_regex_span can find the correct occurrence/substring matching the regexp
+    if occurrence_num > 1:
+        occurrences_replaced_expr = ArrowScalarFuncExpression(
+            src.empty_data,
+            [without_start_expr],
+            "replace_substring_regex",
+            (
+                modified_regexp,
+                "",
+                occurrence_num - 1,
+            ),
+        )
+    else:
+        occurrences_replaced_expr = without_start_expr
+
+    # 0-based index of the match in the shortened string with earlier occurrences removed.
+    # If index = -1, no match was found.
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    zero_based_index = ArrowScalarFuncExpression(
+        int_empty_data,
+        [occurrences_replaced_expr],
+        "regexp_instr",  # Bodo function implemented using Arrow's extract_regex_span
+        (
+            modified_regexp,
+            start_or_end_index == 0,
+            "e" in regex_params,
+            group_num,
+        ),
+    )
+    # Add 1 to convert to 1-based index. -1 also becomes 0 which is what Snowflake returns for the invalid cases
+    index = ArithOpExpression(
+        int_empty_data,
+        zero_based_index,
+        ConstantExpression(int_empty_data, input_plan, 1),
+        "__add__",
+    )
+
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+
+    # We need to compensate for the lengths of the occurrences that were removed (as well as the start_expr-1 characters that were cut off at the beginning).
+    if start > 0 or occurrence_num > 1:
+        if occurrence_num > 1:
+            # We can find the total lost length by subtracting the current string length from the original string length.
+            cur_length = ArrowScalarFuncExpression(
+                int_empty_data, [occurrences_replaced_expr], "utf8_length", ()
+            )
+            original_length = ArrowScalarFuncExpression(
+                int_empty_data, [src], "utf8_length", ()
+            )
+            lost_length = ArithOpExpression(
+                int_empty_data, original_length, cur_length, "__sub__"
+            )
+        else:
+            # If occurrence_num = 1, we know in advance how many characters were removed
+            lost_length = ConstantExpression(int_empty_data, input_plan, start)
+
+        # Add back the lost length to the index
+        compensated_index = ArithOpExpression(
+            int_empty_data, index, lost_length, "__add__"
+        )
+
+        # Only return the compensated index if a match was found, because we want to return 0 otherwise
+        match_found = ComparisonOpExpression(
+            bool_empty_data,
+            index,
+            ConstantExpression(int_empty_data, input_plan, 0),
+            operator.ne,
+        )
+        new_index = CaseExpression(
+            int_empty_data, match_found, compensated_index, index
+        )
+    else:
+        # Nothing was removed from the string so we can just return the raw index
+        new_index = index
+
+    # Make sure we return NULL for NULL strings instead of 0
+    string_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
+    return CaseExpression(
+        int_empty_data,
+        string_is_null,
+        NullExpression(int_empty_data, input_plan, 0),
+        new_index,
+    )
+
+
+def convert_substring_index(src, delim_expr, count_expr):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(count_expr, "count_expr", int)
+
+    # Implementation involves fixed_size_list results, so easier
+    # to do it on the C++ side.
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        [src],
+        "substring_index",
+        (delim_expr.value, count_expr.value),
+    )
+
+
+def convert_split_part(src, delim_expr, part_num_expr):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
+
+    # Snowflake treats a part number of 0 the same as 1.
+    # part_num is 1-based.
+    part_num = part_num_expr.value if part_num_expr.value != 0 else 1
+
+    # Implementation involves fixed_size_list results, so easier
+    # to do it on the C++ side.
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        [src],
+        "split_part",
+        (delim_expr.value, part_num),
+    )
+
+
+def convert_strtok_to_array(input_plan, src, delim_expr=None):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+    if delim_expr is not None:
+        ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", (str, pa.binary()))
+        delimiter = delim_expr.value
+    else:
+        delimiter = " "
+
+    src_pa_type = get_expr_dtype(
+        src, "STRTOK_TO_ARRAY src", get_const_val_type=False
+    ).pyarrow_dtype
+    list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
+
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+    empty_list = ConstantExpression(list_empty_data, input_plan, [])
+
+    # If delimiter is empty: return an empty list if string is also empty, else
+    # return a list containing only the original string. If original string is
+    # null, the result should be a null list rather than a list containing NULL.
+    if delimiter == "":
+        string_is_empty = ComparisonOpExpression(
+            bool_empty_data, src, empty_string_expr, operator.eq
+        )
+        wrapped_src = ArrowScalarFuncExpression(list_empty_data, [src], "zip", ())
+        src_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
+        wrapped_src = CaseExpression(
+            list_empty_data,
+            src_is_null,
+            NullExpression(list_empty_data, input_plan, 0),
+            wrapped_src,
+        )
+        return CaseExpression(list_empty_data, string_is_empty, empty_list, wrapped_src)
+
+    # STRTOK_TO_ARRAY counts each character in the delimiter string as a delimiter.
+    # We use regex so any of those characters or combination of characters
+    # are treated as delimiters so we can split into the correct tokens with
+    # a single pass.
+    # Unlike SPLIT, STRTOK_TO_ARRAY never returns empty strings in the
+    # list of tokens. In our case, it's easier to prevent empty strings from
+    # arising after splitting in the first place by trimming and using regex.
+
+    # We need to escape the delimiter string in case any of the characters
+    # have a special meaning in regex
+    escaped_delim = re.escape(delimiter)
+    # Wrap escaped delimiter string in brackets to match any of the characters
+    # inside.
+    # The '+' denotes one or more of those characters. This is so we don't
+    # get empty strings after splitting when there are neighboring delimiter
+    # characters.
+    delim_regexp = f"[{escaped_delim}]+"
+
+    # Trim off occurrences of the delimiters from the ends of the string. This helps avoid
+    # empty string tokens after split_pattern_regex.
+    trimmed_str = ArrowScalarFuncExpression(
+        src.empty_data, [src], "utf8_trim", (delimiter,)
+    )
+
+    # The only situation where the result has an empty string token is when the
+    # original string is empty or contains only delimiters
+    result_token_is_empty = ComparisonOpExpression(
+        bool_empty_data, trimmed_str, empty_string_expr, operator.eq
+    )
+
+    token_list = ArrowScalarFuncExpression(
+        list_empty_data,
+        [trimmed_str],
+        "split_pattern_regex",
+        (delim_regexp,),
+    )
+
+    # Ensure we are never left with a list containing only an empty string
+    return CaseExpression(
+        list_empty_data, result_token_is_empty, empty_list, token_list
+    )
+
+
+def convert_split(input_plan, src, delim_expr):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", (str, pa.binary()))
+
+    src_pa_type = get_expr_dtype(
+        src, "SPLIT src", get_const_val_type=False
+    ).pyarrow_dtype
+    list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
+
+    # If delimiter is empty: return a list containing only the original string.
+    # If original string is null, the result should be a null list rather than
+    # a list containing NULL.
+    if delim_expr.value == "":
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        src_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
+        wrapped_src = ArrowScalarFuncExpression(list_empty_data, [src], "zip", ())
+        return CaseExpression(
+            list_empty_data,
+            src_is_null,
+            NullExpression(list_empty_data, input_plan, 0),
+            wrapped_src,
+        )
+
+    return ArrowScalarFuncExpression(
+        list_empty_data, [src], "split_pattern", (delim_expr.value,)
+    )
+
+
+def convert_regexp_replace(
+    input_plan,
+    src,
+    regexp,
+    replacement_expr=None,
+    start_expr=None,
+    occurrence_expr=None,
+    regex_params_expr=None,
+):
+    ensure_type_of_expr(src, "src", str)
+    ensure_arg_is_const_expr_of_type(regexp, "regexp", str)
+
+    if replacement_expr is not None:
+        ensure_arg_is_const_expr_of_type(replacement_expr, "replacement_expr", str)
+        replacement_val = replacement_expr.value
+    else:
+        replacement_val = ""
+
+    if start_expr is not None:
+        ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+        if start_expr.value > 0:
+            start = start_expr.value - 1
+        elif start_expr.value == 0:
+            start = 0
+        else:
+            raise ValueError("Start index must be positive for REGEXP_REPLACE.")
+    else:
+        start = 0
+
+    if occurrence_expr is not None:
+        # Need to replace the substring that is the op_exprs[4]-th occurrence / regex match
+        ensure_arg_is_const_expr_of_type(occurrence_expr, "occurrence_expr", int)
+        occurrence_num = occurrence_expr.value
+        if occurrence_num < 0:
+            raise ValueError("REGEXP_REPLACE occurrences argument must be 0 or greater")
+        elif occurrence_num == 0:
+            # If occurrence_num is 0, all occurrences should be replaced.
+            # For replace_substring_regex, this is signified by passing max_replacements = -1.
+            occurrence_num = -1
+    else:
+        # Default is to replace all occurrences
+        occurrence_num = -1
+
+    if regex_params_expr is not None:
+        ensure_arg_is_const_expr_of_type(regex_params_expr, "regex_params_expr", str)
+        regex_params = clean_regex_params(regex_params_expr, "REGEXP_REPLACE")
+    else:
+        regex_params = "c"
+
+    # Use inline mode modifiers if needed since replace_substring_regex
+    # and split_pattern_regex don't expose those options.
+    # This applies to the 'i', 'm', and 's' options.
+    modified_regexp = regexp_add_mode_modifiers(regexp.value, regex_params, "ims")
+
+    # Chop off the start so that searching begins after the provided position
+    if start > 0:
+        without_start_expr = ArrowScalarFuncExpression(
+            src.empty_data,
+            [src],
+            "utf8_slice_codeunits",
+            (start, None, 1),
+        )
+    else:
+        without_start_expr = src
+
+    if occurrence_num in (-1, 1):
+        # Replace all occurrences or the first occurrence of a substring matching the regexp.
+        # Arrow has no way to replace the n-th occurrence only, so if occurrence_num > 1
+        # we have a custom solution.
+        replace_substring_regex_func = "replace_substring_regex"
+    else:
+        # If we need to replace a specific occurrence, use our custom function called
+        # replace_substring_regex_single.
+        replace_substring_regex_func = "replace_substring_regex_single"
+
+    # Replace all occurrences or a specific occurrence of a substring matching the regexp.
+    occurrences_replaced_expr = ArrowScalarFuncExpression(
+        src.empty_data,
+        [without_start_expr],
+        replace_substring_regex_func,
+        (
+            modified_regexp,
+            replacement_val,
+            occurrence_num,
+        ),
+    )
+
+    # Now that the replacing is done, we need to concatenate the start of the string back onto it
+    if start > 0:
+        src_start = ArrowScalarFuncExpression(
+            src.empty_data,
+            [src],
+            "utf8_slice_codeunits",
+            (0, start, 1),
+        )
+        separator = ConstantExpression(src.empty_data, input_plan, "")
+        return ArrowScalarFuncExpression(
+            src.empty_data,
+            [src_start, occurrences_replaced_expr, separator],
+            "binary_join_element_wise",
+            (),
+        )
+    else:
+        return occurrences_replaced_expr
+
+
+def convert_regexp_count(src, regexp, start_expr=None, regex_params_expr=None):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+    if start_expr is not None:
+        ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+
+        if start_expr.value > 0:
+            start = start_expr.value - 1
+        elif start_expr.value == 0:
+            start = 0
+        else:
+            raise ValueError("Start index must be positive for REGEXP_COUNT.")
+    else:
+        start = 0
+
+    if regex_params_expr is not None:
+        ensure_arg_is_const_expr_of_type(regex_params_expr, "regex_params_expr", str)
+        regex_params = clean_regex_params(regex_params_expr, "REGEXP_COUNT")
+    else:
+        regex_params = "c"
+
+    # Use inline mode modifiers if needed since count_substring_regex
+    # doesn't expose those options apart from 'i' (ignore case).
+    # This applies to the 'm' and 's' options.
+    modified_regexp = regexp_add_mode_modifiers(regexp.value, regex_params, "ms")
+
+    # Chop off the start so that searching begins after the provided position
+    if start > 0:
+        without_start_expr = ArrowScalarFuncExpression(
+            src.empty_data,
+            [src],
+            "utf8_slice_codeunits",
+            (start, None, 1),
+        )
+    else:
+        without_start_expr = src
+
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    return ArrowScalarFuncExpression(
+        int_empty_data,
+        [without_start_expr],
+        "count_substring_regex",
+        (modified_regexp, "i" in regex_params),
+    )
+
+
+def convert_regexp_like(src, regexp, regex_params_expr=None):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
+
+    if regex_params_expr is not None:
+        ensure_arg_is_const_expr_of_type(regex_params_expr, "regex_params_expr", str)
+        regex_params = clean_regex_params(regex_params_expr, "REGEXP_LIKE")
+    else:
+        regex_params = "c"
+
+    # REGEXP_LIKE implicitly anchors the regex pattern at both ends
+    anchored_regexp = f"^({regexp.value})$"
+
+    # Use inline mode modifiers if needed since match_substring_regex
+    # doesn't expose those options apart from 'i' (ignore case).
+    # This applies to the 'm' and 's' options.
+    modified_regexp = regexp_add_mode_modifiers(anchored_regexp, regex_params, "ms")
+
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    return ArrowScalarFuncExpression(
+        bool_empty_data,
+        [src],
+        "match_substring_regex",
+        (modified_regexp, "i" in regex_params),
+    )
+
+
+def convert_initcap(src, delim_expr=None):
+    ensure_type_of_expr(src, "src", str)
+    if delim_expr is not None:
+        ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", str)
+        raise ValueError("Delimiter argument to INITCAP not yet supported")
+    # Note that Arrow's utf8_title considers numbers to be delimiters, which may differ from some implementations of INITCAP
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        [src],
+        "utf8_title",
+        (),
+    )
+
+
+def convert_concat(input_plan, src, strings_to_concat):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+    if len(strings_to_concat) == 0:
+        # Nothing to concatenate, just return the input string
+        return src
+
+    separator = ConstantExpression(
+        src.empty_data,
+        input_plan,
+        "",  # empty separator to concat without anything in between
+    )
+
+    input_exprs = [src]
+
+    for other_string in strings_to_concat[1:]:
+        ensure_type_of_expr(other_string, "other_str_src", (str, pa.binary()))
+        input_exprs.append(other_string)
+
+    input_exprs.append(separator)
+
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        input_exprs,
+        "binary_join_element_wise",
+        (),
+    )
+
+
+def convert_concat_ws(separator, src, strings_to_concat):
+    ensure_type_of_expr(separator, "separator", (str, pa.binary()))
+
+    if len(strings_to_concat) == 0:
+        # Nothing to concatenate, just return the input string
+        return src
+
+    input_exprs = [src]
+    for other_string in strings_to_concat[1:]:
+        ensure_type_of_expr(other_string, "other_str_src", (str, pa.binary()))
+        input_exprs.append(other_string)
+    input_exprs.append(separator)
+
+    # Join the strings. The default null-handling option "emit_null"
+    # is used because CONCAT_WS in Snowflake specifically does not
+    # skip null values.
+    return ArrowScalarFuncExpression(
+        src.empty_data, input_exprs, "binary_join_element_wise", ()
+    )
+
+
+def convert_repeat(src, num_repeats_expr):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
+
+    return ArrowScalarFuncExpression(
+        src.empty_data, [src], "binary_repeat", (num_repeats_expr.value,)
+    )
+
+
+def convert_space(input_plan, num_repeats_expr):
+    ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
+
+    str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+    space_expr = ConstantExpression(str_empty_data, input_plan, " ")
+
+    return ArrowScalarFuncExpression(
+        str_empty_data, [space_expr], "binary_repeat", (num_repeats_expr.value,)
+    )
+
+
+def convert_insert(src, start_expr, len_expr, inserted_str_expr):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
+    ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+    ensure_arg_is_const_expr_of_type(inserted_str_expr, "inserted_str_expr", str)
+
+    return ArrowScalarFuncExpression(
+        src.empty_data,
+        [src],
+        "utf8_replace_slice",
+        (
+            start_expr.value - 1,
+            start_expr.value - 1 + len_expr.value,
+            inserted_str_expr.value,
+        ),
+    )
+
+
+def convert_rtrimmed_length(src):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    # Use utf8_rtrim instead of utf8_rtrim_whitespace so that only regular space characters are removed
+    rtrimmed_expr = ArrowScalarFuncExpression(
+        src.empty_data, [src], "utf8_rtrim", (" ",)
+    )
+    return ArrowScalarFuncExpression(int_empty_data, [rtrimmed_expr], "utf8_length", ())
+
+
+def convert_ltrim_rtrim(func_name, src, trim_chars_expr=None):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+
+    if trim_chars_expr is not None:
+        ensure_arg_is_const_expr_of_type(
+            trim_chars_expr, "trim_chars_expr", (str, pa.binary())
+        )
+        trim_chars = trim_chars_expr.value
+    else:
+        trim_chars = " "
+    return ArrowScalarFuncExpression(
+        src.empty_data, [src], f"utf8_{func_name.lower()}", (trim_chars,)
+    )
+
+
 def convert_trim(first_java_opr, trim_chars_expr, src):
     # Snowflake's TRIM accepts 1 or 2 arguments but Calcite will convert it to
     # a 3-arguments form, including using a space character as the default when
@@ -4258,7 +5001,13 @@ def convert_SqlNullPolicyFunction(ctx, java_call, input_plan):
     if func_name == "ADD_MONTHS" and num_operands == 2:
         return convert_add_months(input_plan, *op_exprs)
 
-    if func_name in ("DATEADD", "DATE_ADD", "ADDDATE", "TIMEADD", "TIMESTAMPADD"):
+    if func_name in (
+        "DATEADD",
+        "DATE_ADD",
+        "ADDDATE",
+        "TIMEADD",
+        "TIMESTAMPADD",
+    ) and num_operands in (2, 3):
         # DATEADD(date, interval) or DATEADD(unit, amount, date)
         # For 2 operands: (date, interval) → date + interval
         # For 3 operands: (unit, amount, date) → date + (unit * amount)
@@ -4334,6 +5083,157 @@ def convert_SqlNullPolicyFunction(ctx, java_call, input_plan):
     ):
         return convert_epoch_second(input_plan, func_name, op_exprs[0])
 
+    if func_name == "CONVERT_TIMEZONE" and num_operands == 2:
+        # 3-argument form of CONVERT_TIMEZONE not supported yet
+        return convert_convert_timezone(ctx, *op_exprs)
+
+    if func_name in ("FLOOR", "CEIL") and num_operands in (1, 2):
+        return convert_floor_ceil(input_plan, func_name, *op_exprs)
+
+    if func_name == "POW" and num_operands == 2:
+        return convert_pow(*op_exprs)
+
+    if func_name == "SQUARE" and num_operands == 1:
+        return convert_square(op_exprs[0])
+
+    if func_name == "LOG2" and num_operands == 1:
+        return convert_log2(op_exprs[0])
+
+    if func_name == "LOG" and num_operands in (1, 2):
+        return convert_log(input_plan, *op_exprs)
+
+    if (
+        func_name
+        in (
+            "ACOS",
+            "ACOSH",
+            "ASIN",
+            "ASINH",
+            "COS",
+            "COSH",
+            "SIN",
+            "SINH",
+            "TAN",
+            "TANH",
+            "ATAN",
+            "ATANH",
+        )
+        and num_operands == 1
+    ):
+        return convert_trig_func(func_name, op_exprs[0])
+
+    if func_name in ("DIV0", "DIV0NULL") and num_operands == 2:
+        return convert_div0_div0null(input_plan, func_name, *op_exprs)
+
+    if func_name == "WIDTH_BUCKET" and num_operands == 4:
+        return convert_width_bucket(input_plan, *op_exprs)
+
+    if func_name in ("BITAND", "BITOR", "BITXOR") and num_operands == 2:
+        return convert_bitand_bitor_bitxor(func_name, *op_exprs)
+
+    if func_name == "BITSHIFTLEFT" and num_operands == 2:
+        return convert_bitshiftleft(*op_exprs)
+
+    if func_name == "BITSHIFTRIGHT" and num_operands == 2:
+        return convert_bitshiftright(*op_exprs)
+
+    if func_name == "BITNOT" and num_operands == 1:
+        return convert_bitnot(op_exprs[0])
+
+    if func_name == "GETBIT" and num_operands == 2:
+        return convert_getbit(input_plan, *op_exprs)
+
+    if func_name == "FORMAT" and num_operands == 2:
+        return convert_format(input_plan, *op_exprs)
+
+    if func_name == "LEFT" and num_operands == 2:
+        return convert_left(input_plan, *op_exprs)
+
+    if func_name == "RIGHT" and num_operands == 2:
+        return convert_right(input_plan, *op_exprs)
+
+    if func_name in ("STARTSWITH", "ENDSWITH") and num_operands == 2:
+        return convert_startswith_endswith(func_name, *op_exprs)
+
+    if func_name == "CONTAINS" and num_operands == 2:
+        return convert_contains(*op_exprs)
+
+    if func_name == "LENGTH" and num_operands == 1:
+        # Snowflake LENGTH() = MySQL CHAR_LENGTH()
+        return convert_char_length(op_exprs[0])
+
+    if func_name == "STRCMP" and num_operands == 2:
+        return convert_strcmp(input_plan, *op_exprs)
+
+    if func_name == "INSTR" and num_operands == 2:
+        # POSITION/CHARINDEX has an optional start index argument, whereas
+        # INSTR does not. (INSTR in stock Calcite has it, but not in BodoSQL).
+        return convert_charindex(input_plan, src=op_exprs[0], match_expr=op_exprs[1])
+
+    if func_name == "CHARINDEX" and num_operands in (2, 3):
+        # Substring to search for is the first parameter for POSITION/CHARINDEX
+        return convert_charindex(
+            input_plan, src=op_exprs[1], match_expr=op_exprs[0], *op_exprs[2:]
+        )
+
+    if func_name == "REGEXP_INSTR" and num_operands in (2, 3, 4, 5, 6, 7):
+        return convert_regexp_instr(input_plan, *op_exprs)
+
+    if func_name == "SUBSTRING_INDEX" and num_operands == 3:
+        return convert_substring_index(*op_exprs)
+
+    if func_name == "SPLIT_PART" and num_operands == 3:
+        return convert_split_part(*op_exprs)
+
+    if func_name == "STRTOK_TO_ARRAY" and num_operands in (1, 2):
+        return convert_strtok_to_array(input_plan, *op_exprs)
+
+    if func_name == "SPLIT" and num_operands == 2:
+        return convert_split(input_plan, *op_exprs)
+
+    if func_name == "REGEXP_REPLACE" and num_operands in (2, 3, 4, 5, 6):
+        return convert_regexp_replace(input_plan, *op_exprs)
+
+    if func_name == "REGEXP_COUNT" and num_operands in (2, 3, 4):
+        return convert_regexp_count(*op_exprs)
+
+    if func_name == "REGEXP_LIKE" and num_operands in (2, 3):
+        return convert_regexp_like(*op_exprs)
+
+    if func_name == "INITCAP" and num_operands in (1, 2):
+        raise ValueError("INITCAP currently disabled on C++ backend")
+        return convert_initcap(*op_exprs)
+
+    if func_name == "CONCAT" and num_operands > 0:
+        return convert_concat(input_plan, op_exprs[0], op_exprs[1:])
+
+    if func_name == "CONCAT_WS" and num_operands > 1:
+        return convert_concat_ws(op_exprs[0], op_exprs[1], op_exprs[2:])
+
+    if func_name == "REPEAT" and num_operands == 2:
+        return convert_repeat(*op_exprs)
+
+    if func_name == "SPACE" and num_operands == 1:
+        return convert_space(input_plan, op_exprs[0])
+
+    if func_name == "REVERSE" and num_operands == 1:
+        src = op_exprs[0]
+        ensure_type_of_expr(src, "src", (str, pa.binary()))
+        return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
+
+    if func_name == "RTRIMMED_LENGTH" and len(op_exprs) == 1:
+        return convert_rtrimmed_length(op_exprs[0])
+
+    if func_name in ("LTRIM", "RTRIM") and len(op_exprs) in (1, 2):
+        return convert_ltrim_rtrim(func_name, *op_exprs)
+
+    if func_name == "INSERT" and len(op_exprs) == 4:
+        return convert_insert(*op_exprs)
+
+    raise NotImplementedError(
+        f"SqlNullPolicyFunction {func_name} not supported yet: " + java_call.toString()
+    )
+
 
 def convert_SqlPostfixOperator(ctx, java_call, input_plan):
     operands = java_call.getOperands()
@@ -4380,13 +5280,7 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
     if operator_class_name == "SqlNullPolicyFunction":
-        # We'll be able to return convert_SqlNullPolicyFunction() directly once our
-        # two groups of SqlNullPolicyFunction plan conversions are merged into one.
-        converted_SqlNullPolicyFunction = convert_SqlNullPolicyFunction(
-            ctx, java_call, input_plan
-        )
-        if converted_SqlNullPolicyFunction:
-            return converted_SqlNullPolicyFunction
+        return convert_SqlNullPolicyFunction(ctx, java_call, input_plan)
 
     if operator_class_name in (
         "SqlMonotonicBinaryOperator",
@@ -4497,11 +5391,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         if func_name in ("DAYOFWEEK", "DOW"):
             return convert_dayofweek(input)
 
-    if operator_class_name == "SqlCoalesceFunction":
-        operands = java_call.getOperands()
-        op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
-        return convert_coalesce(op_exprs)
-
     if operator_class_name == "SqlCurrentDateFunction":
         return convert_current_date(ctx, input_plan)
 
@@ -4513,923 +5402,10 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     if operator_class_name == "SqlBasicFunction":
         return convert_SqlBasicFunction(ctx, java_call, input_plan)
 
-    if operator_class_name == "SqlNullPolicyFunction":
+    if operator_class_name == "SqlCoalesceFunction":
         operands = java_call.getOperands()
         op_exprs = [java_expr_to_python_expr(ctx, o, input_plan) for o in operands]
-        func_name = op.getName().upper()
-
-        if func_name in ("FLOOR", "CEIL") and len(op_exprs) in (1, 2):
-            return convert_floor_ceil(input_plan, func_name, *op_exprs)
-
-        if func_name == "POW" and len(op_exprs) == 2:
-            return convert_pow(*op_exprs)
-
-        if func_name == "SQUARE" and len(op_exprs) == 1:
-            return convert_square(op_exprs[0])
-
-        if func_name == "LOG2" and len(op_exprs) == 1:
-            return convert_log2(op_exprs[0])
-
-        if func_name == "LOG" and len(op_exprs) in (1, 2):
-            return convert_log(input_plan, *op_exprs)
-
-        if func_name in ("DIV0", "DIV0NULL") and len(op_exprs) == 2:
-            return convert_div0_div0null(input_plan, func_name, *op_exprs)
-
-        if func_name == "WIDTH_BUCKET" and len(op_exprs) == 4:
-            return convert_width_bucket(input_plan, *op_exprs)
-
-        if func_name in ("BITAND", "BITOR", "BITXOR") and len(op_exprs) == 2:
-            return convert_bitand_bitor_bitxor(func_name, *op_exprs)
-
-        if func_name == "BITSHIFTLEFT" and len(op_exprs) == 2:
-            return convert_bitshiftleft(*op_exprs)
-
-        if func_name == "BITSHIFTRIGHT" and len(op_exprs) == 2:
-            return convert_bitshiftright(*op_exprs)
-
-        if func_name == "BITNOT" and len(op_exprs) == 1:
-            return convert_bitnot(op_exprs[0])
-
-        if func_name == "GETBIT" and len(op_exprs) == 2:
-            return convert_getbit(input_plan, *op_exprs)
-
-        if func_name == "FORMAT" and len(op_exprs) == 2:
-            return convert_format(input_plan, *op_exprs)
-
-        if func_name == "LEFT" and len(op_exprs) == 2:
-            return convert_left(input_plan, *op_exprs)
-
-        if func_name == "RIGHT" and len(op_exprs) == 2:
-            return convert_right(input_plan, *op_exprs)
-
-        if func_name in ("STARTSWITH", "ENDSWITH") and len(op_exprs) == 2:
-            return convert_startswith_endswith(func_name, *op_exprs)
-
-        if func_name == "CONTAINS" and len(op_exprs) == 2:
-            return convert_contains(*op_exprs)
-
-        if func_name == "LENGTH" and len(op_exprs) == 1:
-            # Snowflake LENGTH() = MySQL CHAR_LENGTH()
-            return convert_char_length(op_exprs[0])
-
-        if func_name == "STRCMP" and len(op_exprs) == 2:
-            return convert_strcmp(input_plan, *op_exprs)
-
-        elif func_name in ("INSTR", "CHARINDEX") and len(op_exprs) in (2, 3):
-            if func_name == "INSTR":
-                src = op_exprs[0]
-                match_expr = op_exprs[1]
-            else:
-                # Substring to search for is the first parameter for POSITION/CHARINDEX
-                src = op_exprs[1]
-                match_expr = op_exprs[0]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(
-                match_expr, "match_expr", (str, pa.binary())
-            )
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            if len(match_expr.value) == 0:
-                return ConstantExpression(int_empty_data, input_plan, 1)
-
-            if len(op_exprs) == 3:
-                start_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
-
-                if start_expr.value > 0:
-                    start = start_expr.value - 1
-                else:
-                    start = start_expr.value
-            else:
-                start = 0
-
-            if start > 0:
-                # If start index is beyond the length of the string, we expect this to return an empty string
-                without_start_expr = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src],
-                    "utf8_slice_codeunits",
-                    (start, None, 1),
-                )
-            else:
-                without_start_expr = src
-
-            # Find the first occurrence of the substring in the sliced string
-            substring_pos_expr = ArrowScalarFuncExpression(
-                int_empty_data,
-                [without_start_expr],
-                "find_substring",
-                (match_expr.value,),
-            )
-
-            # find_substring emits -1 when the substring is not found.
-            # We need to return 0 in this case
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
-            substring_not_found = ComparisonOpExpression(
-                bool_empty_data, substring_pos_expr, negative_one_expr, operator.eq
-            )
-
-            # Add the ignored start index to the result only if substring was found
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-            start_expr = ConstantExpression(int_empty_data, input_plan, start)
-            offset_expr = CaseExpression(
-                int_empty_data, substring_not_found, zero_expr, start_expr
-            )
-            adjusted_substring_pos_expr = ArithOpExpression(
-                int_empty_data, substring_pos_expr, offset_expr, "__add__"
-            )
-
-            # Add 1 to find_substring expression since Arrow's find_substring is 0-indexed instead of 1-based like INSTR/CHARINDEX
-            # If adjusted_substring_pos_expr is -1 then this will give the correct output of 0
-            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
-            return ArithOpExpression(
-                int_empty_data, adjusted_substring_pos_expr, one_expr, "__add__"
-            )
-
-        elif func_name == "REGEXP_INSTR" and len(op_exprs) in (2, 3, 4, 5, 6, 7):
-            src = op_exprs[0]
-            regexp = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
-
-            if len(op_exprs) >= 3:
-                start_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
-
-                if start_expr.value > 0:
-                    start = start_expr.value - 1
-                elif start_expr.value == 0:
-                    start = 0
-                else:
-                    raise ValueError("Start index must be positive for REGEXP_INSTR.")
-            else:
-                start = 0
-
-            if len(op_exprs) >= 4:
-                # Need to search for the substring that is the op_exprs[3]-th occurrence / regex match
-                occurrence_expr = op_exprs[3]
-                ensure_arg_is_const_expr_of_type(
-                    occurrence_expr, "occurrence_expr", int
-                )
-                occurrence_num = occurrence_expr.value
-                if occurrence_num < 1:
-                    raise ValueError(
-                        f"{func_name} occurrences argument must be 1 or greater"
-                    )
-            else:
-                occurrence_num = 1
-
-            # The "option" parameter specifies whether to return the offset of the first character of the match (0) or the offset of the first character following the end of the match (1).
-            if len(op_exprs) >= 5:
-                start_or_end_index_expr = op_exprs[4]
-                ensure_arg_is_const_expr_of_type(
-                    start_or_end_index_expr, "start_or_end_index_expr", int
-                )
-                start_or_end_index = start_or_end_index_expr.value
-                assert start_or_end_index in (0, 1), (
-                    "The 'option' parameter must be 0 or 1."
-                )
-            else:
-                start_or_end_index = 0
-
-            if len(op_exprs) >= 6:
-                regex_params_expr = op_exprs[5]
-                ensure_arg_is_const_expr_of_type(
-                    regex_params_expr, "regex_params_expr", str
-                )
-                regex_params = clean_regex_params(regex_params_expr, func_name)
-            else:
-                regex_params = "c"
-
-            if len(op_exprs) == 7:
-                group_num_expr = op_exprs[6]
-                ensure_arg_is_const_expr_of_type(group_num_expr, "group_num_expr", int)
-                if group_num_expr.value < 0:
-                    raise ValueError(
-                        f"Negative value for group_num argument of {func_name} is not permitted"
-                    )
-                group_num = group_num_expr.value
-                if group_num > 0:
-                    group_num -= 1  # Convert from 1-based to 0-based
-                # 'e' is implied if group_num is passed
-                regex_params += "e"
-            else:
-                group_num = 0
-
-            # Use inline mode modifiers if needed since replace_substring_regex
-            # and extract_regex_span don't expose those options.
-            # This applies to the 'i', 'm', and 's' options.
-            modified_regexp = regexp_add_mode_modifiers(
-                regexp.value, regex_params, "ims"
-            )
-
-            # Chop off the start so that searching begins after the provided position
-            if start > 0:
-                without_start_expr = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src],
-                    "utf8_slice_codeunits",
-                    (start, None, 1),
-                )
-            else:
-                without_start_expr = src
-
-            # Remove earlier occurrences so that extract_regex_span can find the correct occurrence/substring matching the regexp
-            if occurrence_num > 1:
-                occurrences_replaced_expr = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [without_start_expr],
-                    "replace_substring_regex",
-                    (
-                        modified_regexp,
-                        "",
-                        occurrence_num - 1,
-                    ),
-                )
-            else:
-                occurrences_replaced_expr = without_start_expr
-
-            # 0-based index of the match in the shortened string with earlier occurrences removed.
-            # If index = -1, no match was found.
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            zero_based_index = ArrowScalarFuncExpression(
-                int_empty_data,
-                [occurrences_replaced_expr],
-                "regexp_instr",  # Bodo function implemented using Arrow's extract_regex_span
-                (
-                    modified_regexp,
-                    start_or_end_index == 0,
-                    "e" in regex_params,
-                    group_num,
-                ),
-            )
-            # Add 1 to convert to 1-based index. -1 also becomes 0 which is what Snowflake returns for the invalid cases
-            index = ArithOpExpression(
-                int_empty_data,
-                zero_based_index,
-                ConstantExpression(int_empty_data, input_plan, 1),
-                "__add__",
-            )
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-
-            # We need to compensate for the lengths of the occurrences that were removed (as well as the start_expr-1 characters that were cut off at the beginning).
-            if start > 0 or occurrence_num > 1:
-                if occurrence_num > 1:
-                    # We can find the total lost length by subtracting the current string length from the original string length.
-                    cur_length = ArrowScalarFuncExpression(
-                        int_empty_data, [occurrences_replaced_expr], "utf8_length", ()
-                    )
-                    original_length = ArrowScalarFuncExpression(
-                        int_empty_data, [src], "utf8_length", ()
-                    )
-                    lost_length = ArithOpExpression(
-                        int_empty_data, original_length, cur_length, "__sub__"
-                    )
-                else:
-                    # If occurrence_num = 1, we know in advance how many characters were removed
-                    lost_length = ConstantExpression(int_empty_data, input_plan, start)
-
-                # Add back the lost length to the index
-                compensated_index = ArithOpExpression(
-                    int_empty_data, index, lost_length, "__add__"
-                )
-
-                # Only return the compensated index if a match was found, because we want to return 0 otherwise
-                match_found = ComparisonOpExpression(
-                    bool_empty_data,
-                    index,
-                    ConstantExpression(int_empty_data, input_plan, 0),
-                    operator.ne,
-                )
-                new_index = CaseExpression(
-                    int_empty_data, match_found, compensated_index, index
-                )
-            else:
-                # Nothing was removed from the string so we can just return the raw index
-                new_index = index
-
-            # Make sure we return NULL for NULL strings instead of 0
-            string_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
-            return CaseExpression(
-                int_empty_data,
-                string_is_null,
-                NullExpression(int_empty_data, input_plan, 0),
-                new_index,
-            )
-
-        elif func_name == "SUBSTRING_INDEX" and len(op_exprs) == 3:
-            src = op_exprs[0]
-            delim_expr = op_exprs[1]
-            count_expr = op_exprs[2]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(
-                delim_expr, "delim_expr", (str, pa.binary())
-            )
-            ensure_arg_is_const_expr_of_type(count_expr, "count_expr", int)
-
-            # Implementation involves fixed_size_list results, so easier
-            # to do it on the C++ side.
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                [src],
-                "substring_index",
-                (delim_expr.value, count_expr.value),
-            )
-
-        elif func_name == "SPLIT_PART" and len(op_exprs) == 3:
-            src = op_exprs[0]
-            delim_expr = op_exprs[1]
-            part_num_expr = op_exprs[2]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(
-                delim_expr, "delim_expr", (str, pa.binary())
-            )
-            ensure_arg_is_const_expr_of_type(part_num_expr, "part_num_expr", int)
-
-            # Snowflake treats a part number of 0 the same as 1.
-            # part_num is 1-based.
-            part_num = part_num_expr.value if part_num_expr.value != 0 else 1
-
-            # Implementation involves fixed_size_list results, so easier
-            # to do it on the C++ side.
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                [src],
-                "split_part",
-                (delim_expr.value, part_num),
-            )
-
-        elif func_name == "STRTOK_TO_ARRAY" and len(op_exprs) in (1, 2):
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            if len(op_exprs) == 2:
-                delim_expr = op_exprs[1]
-                ensure_arg_is_const_expr_of_type(
-                    delim_expr, "delim_expr", (str, pa.binary())
-                )
-                delimiter = delim_expr.value
-            else:
-                delimiter = " "
-
-            src_pa_type = get_expr_dtype(
-                src, "STRTOK_TO_ARRAY src", get_const_val_type=False
-            ).pyarrow_dtype
-            list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
-            empty_list = ConstantExpression(list_empty_data, input_plan, [])
-
-            # If delimiter is empty: return an empty list if string is also empty, else
-            # return a list containing only the original string. If original string is
-            # null, the result should be a null list rather than a list containing NULL.
-            if delimiter == "":
-                string_is_empty = ComparisonOpExpression(
-                    bool_empty_data, src, empty_string_expr, operator.eq
-                )
-                wrapped_src = ArrowScalarFuncExpression(
-                    list_empty_data, [src], "zip", ()
-                )
-                src_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
-                wrapped_src = CaseExpression(
-                    list_empty_data,
-                    src_is_null,
-                    NullExpression(list_empty_data, input_plan, 0),
-                    wrapped_src,
-                )
-                return CaseExpression(
-                    list_empty_data, string_is_empty, empty_list, wrapped_src
-                )
-
-            # STRTOK_TO_ARRAY counts each character in the delimiter string as a delimiter.
-            # We use regex so any of those characters or combination of characters
-            # are treated as delimiters so we can split into the correct tokens with
-            # a single pass.
-            # Unlike SPLIT, STRTOK_TO_ARRAY never returns empty strings in the
-            # list of tokens. In our case, it's easier to prevent empty strings from
-            # arising after splitting in the first place by trimming and using regex.
-
-            # We need to escape the delimiter string in case any of the characters
-            # have a special meaning in regex
-            escaped_delim = re.escape(delimiter)
-            # Wrap escaped delimiter string in brackets to match any of the characters
-            # inside.
-            # The '+' denotes one or more of those characters. This is so we don't
-            # get empty strings after splitting when there are neighboring delimiter
-            # characters.
-            delim_regexp = f"[{escaped_delim}]+"
-
-            # Trim off occurrences of the delimiters from the ends of the string. This helps avoid
-            # empty string tokens after split_pattern_regex.
-            trimmed_str = ArrowScalarFuncExpression(
-                src.empty_data, [src], "utf8_trim", (delimiter,)
-            )
-
-            # The only situation where the result has an empty string token is when the
-            # original string is empty or contains only delimiters
-            result_token_is_empty = ComparisonOpExpression(
-                bool_empty_data, trimmed_str, empty_string_expr, operator.eq
-            )
-
-            token_list = ArrowScalarFuncExpression(
-                list_empty_data,
-                [trimmed_str],
-                "split_pattern_regex",
-                (delim_regexp,),
-            )
-
-            # Ensure we are never left with a list containing only an empty string
-            return CaseExpression(
-                list_empty_data, result_token_is_empty, empty_list, token_list
-            )
-
-        elif func_name == "SPLIT" and len(op_exprs) == 2:
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            delim_expr = op_exprs[1]
-            ensure_arg_is_const_expr_of_type(
-                delim_expr, "delim_expr", (str, pa.binary())
-            )
-
-            src_pa_type = get_expr_dtype(
-                src, "SPLIT src", get_const_val_type=False
-            ).pyarrow_dtype
-            list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
-
-            # If delimiter is empty: return a list containing only the original string.
-            # If original string is null, the result should be a null list rather than
-            # a list containing NULL.
-            if delim_expr.value == "":
-                bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-                src_is_null = UnaryOpExpression(bool_empty_data, src, "isnull")
-                wrapped_src = ArrowScalarFuncExpression(
-                    list_empty_data, [src], "zip", ()
-                )
-                return CaseExpression(
-                    list_empty_data,
-                    src_is_null,
-                    NullExpression(list_empty_data, input_plan, 0),
-                    wrapped_src,
-                )
-
-            return ArrowScalarFuncExpression(
-                list_empty_data, [src], "split_pattern", (delim_expr.value,)
-            )
-
-        elif func_name == "REGEXP_REPLACE" and len(op_exprs) in (2, 3, 4, 5, 6):
-            src = op_exprs[0]
-            regexp = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", str)
-            ensure_arg_is_const_expr_of_type(regexp, "regexp", str)
-
-            if len(op_exprs) >= 3:
-                replacement_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(
-                    replacement_expr, "replacement_expr", str
-                )
-                replacement_val = replacement_expr.value
-            else:
-                replacement_val = ""
-
-            if len(op_exprs) >= 4:
-                start_expr = op_exprs[3]
-                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
-
-                if start_expr.value > 0:
-                    start = start_expr.value - 1
-                elif start_expr.value == 0:
-                    start = 0
-                else:
-                    raise ValueError("Start index must be positive for REGEXP_REPLACE.")
-            else:
-                start = 0
-
-            if len(op_exprs) >= 5:
-                # Need to replace the substring that is the op_exprs[4]-th occurrence / regex match
-                occurrence_expr = op_exprs[4]
-                ensure_arg_is_const_expr_of_type(
-                    occurrence_expr, "occurrence_expr", int
-                )
-                occurrence_num = occurrence_expr.value
-                if occurrence_num < 0:
-                    raise ValueError(
-                        f"{func_name} occurrences argument must be 0 or greater"
-                    )
-                elif occurrence_num == 0:
-                    # If occurrence_num is 0, all occurrences should be replaced.
-                    # For replace_substring_regex, this is signified by passing max_replacements = -1.
-                    occurrence_num = -1
-            else:
-                # Default is to replace all occurrences
-                occurrence_num = -1
-
-            if len(op_exprs) >= 6:
-                regex_params_expr = op_exprs[5]
-                ensure_arg_is_const_expr_of_type(
-                    regex_params_expr, "regex_params_expr", str
-                )
-                regex_params = clean_regex_params(regex_params_expr, func_name)
-            else:
-                regex_params = "c"
-
-            # Use inline mode modifiers if needed since replace_substring_regex
-            # and split_pattern_regex don't expose those options.
-            # This applies to the 'i', 'm', and 's' options.
-            modified_regexp = regexp_add_mode_modifiers(
-                regexp.value, regex_params, "ims"
-            )
-
-            # Chop off the start so that searching begins after the provided position
-            if start > 0:
-                without_start_expr = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src],
-                    "utf8_slice_codeunits",
-                    (start, None, 1),
-                )
-            else:
-                without_start_expr = src
-
-            if occurrence_num in (-1, 1):
-                # Replace all occurrences or the first occurrence of a substring matching the regexp.
-                # Arrow has no way to replace the n-th occurrence only, so if occurrence_num > 1
-                # we have a custom solution.
-                replace_substring_regex_func = "replace_substring_regex"
-            else:
-                # If we need to replace a specific occurrence, use our custom function called
-                # replace_substring_regex_single.
-                replace_substring_regex_func = "replace_substring_regex_single"
-
-            # Replace all occurrences or a specific occurrence of a substring matching the regexp.
-            occurrences_replaced_expr = ArrowScalarFuncExpression(
-                src.empty_data,
-                [without_start_expr],
-                replace_substring_regex_func,
-                (
-                    modified_regexp,
-                    replacement_val,
-                    occurrence_num,
-                ),
-            )
-
-            # Now that the replacing is done, we need to concatenate the start of the string back onto it
-            if start > 0:
-                src_start = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src],
-                    "utf8_slice_codeunits",
-                    (0, start, 1),
-                )
-                separator = ConstantExpression(src.empty_data, input_plan, "")
-                return ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src_start, occurrences_replaced_expr, separator],
-                    "binary_join_element_wise",
-                    (),
-                )
-            else:
-                return occurrences_replaced_expr
-
-        elif func_name == "REGEXP_COUNT" and len(op_exprs) in (2, 3, 4):
-            src = op_exprs[0]
-            regexp = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
-
-            if len(op_exprs) >= 3:
-                start_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
-
-                if start_expr.value > 0:
-                    start = start_expr.value - 1
-                elif start_expr.value == 0:
-                    start = 0
-                else:
-                    raise ValueError("Start index must be positive for REGEXP_COUNT.")
-            else:
-                start = 0
-
-            if len(op_exprs) == 4:
-                regex_params_expr = op_exprs[3]
-                ensure_arg_is_const_expr_of_type(
-                    regex_params_expr, "regex_params_expr", str
-                )
-                regex_params = clean_regex_params(regex_params_expr, func_name)
-            else:
-                regex_params = "c"
-
-            # Use inline mode modifiers if needed since count_substring_regex
-            # doesn't expose those options apart from 'i' (ignore case).
-            # This applies to the 'm' and 's' options.
-            modified_regexp = regexp_add_mode_modifiers(
-                regexp.value, regex_params, "ms"
-            )
-
-            # Chop off the start so that searching begins after the provided position
-            if start > 0:
-                without_start_expr = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src],
-                    "utf8_slice_codeunits",
-                    (start, None, 1),
-                )
-            else:
-                without_start_expr = src
-
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(
-                int_empty_data,
-                [without_start_expr],
-                "count_substring_regex",
-                (modified_regexp, "i" in regex_params),
-            )
-
-        elif func_name == "REGEXP_LIKE" and len(op_exprs) in (2, 3):
-            src = op_exprs[0]
-            regexp = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(regexp, "regexp", (str, pa.binary()))
-
-            if len(op_exprs) == 3:
-                regex_params_expr = op_exprs[2]
-                ensure_arg_is_const_expr_of_type(
-                    regex_params_expr, "regex_params_expr", str
-                )
-                regex_params = clean_regex_params(regex_params_expr, func_name)
-            else:
-                regex_params = "c"
-
-            # REGEXP_LIKE implicitly anchors the regex pattern at both ends
-            anchored_regexp = f"^({regexp.value})$"
-
-            # Use inline mode modifiers if needed since match_substring_regex
-            # doesn't expose those options apart from 'i' (ignore case).
-            # This applies to the 'm' and 's' options.
-            modified_regexp = regexp_add_mode_modifiers(
-                anchored_regexp, regex_params, "ms"
-            )
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return ArrowScalarFuncExpression(
-                bool_empty_data,
-                [src],
-                "match_substring_regex",
-                (modified_regexp, "i" in regex_params),
-            )
-
-        elif func_name == "INITCAP" and len(op_exprs) in (1, 2):
-            raise ValueError("INITCAP currently disabled on C++ backend")
-
-            src = op_exprs[0]
-            if len(op_exprs) == 2:
-                delim_expr = op_exprs[1]
-                ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", str)
-                raise ValueError("Delimiter argument to INITCAP not yet supported")
-            # Note that Arrow's utf8_title considers numbers to be delimiters, which may differ from some implementations of INITCAP
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                [src],
-                "utf8_title",
-                (),
-            )
-        elif func_name == "CONCAT" and len(op_exprs) > 0:
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            if len(op_exprs) == 1:
-                # Nothing to concatenate, just return the input string
-                return src
-
-            separator = bd.plan.ConstantExpression(
-                src.empty_data,
-                src.source,
-                "",  # empty separator to concat without anything in between
-            )
-
-            input_exprs = [src]
-
-            if len(op_exprs) > 1:
-                for other_str_src in op_exprs[1:]:
-                    ensure_type_of_expr(
-                        other_str_src, "other_str_src", (str, pa.binary())
-                    )
-                    input_exprs.append(other_str_src)
-
-            input_exprs.append(separator)
-
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                input_exprs,
-                "binary_join_element_wise",
-                (),
-            )
-        elif func_name == "CONCAT_WS" and len(op_exprs) > 1:
-            separator = op_exprs[0]
-            ensure_type_of_expr(separator, "separator", (str, pa.binary()))
-
-            if len(op_exprs) == 2:
-                # Nothing to concatenate, just return the input string
-                return op_exprs[1]
-
-            input_exprs = []
-            for str_src in op_exprs[1:]:
-                ensure_type_of_expr(str_src, "str_src", (str, pa.binary()))
-                input_exprs.append(str_src)
-            input_exprs.append(separator)
-
-            return ArrowScalarFuncExpression(
-                input_exprs[0].empty_data,
-                input_exprs,
-                "binary_join_element_wise",
-                (
-                    "skip",
-                ),  # Ensure null string arguments are treated as empty / skipped
-            )
-        elif func_name == "REPEAT" and len(op_exprs) == 2:
-            src = op_exprs[0]
-            num_repeats_expr = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
-
-            return ArrowScalarFuncExpression(
-                src.empty_data, [src], "binary_repeat", (num_repeats_expr.value,)
-            )
-        elif func_name == "SPACE" and len(op_exprs) == 1:
-            num_repeats_expr = op_exprs[0]
-            ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
-
-            str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-
-            space_expr = bd.plan.ConstantExpression(str_empty_data, input_plan, " ")
-
-            return ArrowScalarFuncExpression(
-                str_empty_data, [space_expr], "binary_repeat", (num_repeats_expr.value,)
-            )
-        elif func_name == "REVERSE" and len(op_exprs) == 1:
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            return ArrowScalarFuncExpression(src.empty_data, [src], "utf8_reverse", ())
-        elif (
-            func_name
-            in (
-                "ACOS",
-                "ACOSH",
-                "ASIN",
-                "ASINH",
-                "COS",
-                "COSH",
-                "SIN",
-                "SINH",
-                "TAN",
-                "TANH",
-                "ATAN",
-                "ATANH",
-            )
-            and len(op_exprs) == 1
-        ):
-            src = op_exprs[0]
-            # Arrow's Trigonometric functions return float32 for float32 input and
-            # float64 for float64 and decimal input:
-            # https://arrow.apache.org/docs/cpp/compute.html#trigonometric-functions
-            src_dtype = src.empty_data.dtypes.iloc[0]
-            out_dtype = pd.ArrowDtype(
-                pa.float32()
-                if src_dtype.pyarrow_dtype == pa.float32()
-                else pa.float64()
-            )
-            dummy_empty_data = pd.Series(dtype=out_dtype)
-            return ArrowScalarFuncExpression(
-                dummy_empty_data,
-                [src],
-                func_name.lower(),
-                (),
-            )
-        elif func_name == "RTRIMMED_LENGTH" and len(op_exprs) == 1:
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            # Use utf8_rtrim instead of utf8_rtrim_whitespace so that only regular space characters are removed
-            rtrimmed_expr = ArrowScalarFuncExpression(
-                src.empty_data, [src], "utf8_rtrim", (" ",)
-            )
-            return ArrowScalarFuncExpression(
-                int_empty_data, [rtrimmed_expr], "utf8_length", ()
-            )
-        elif func_name in ("LTRIM", "RTRIM") and len(op_exprs) in (1, 2):
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-
-            if len(op_exprs) == 2:
-                trim_chars_expr = op_exprs[1]
-                ensure_arg_is_const_expr_of_type(
-                    trim_chars_expr, "trim_chars_expr", (str, pa.binary())
-                )
-                trim_chars = trim_chars_expr.value
-            else:
-                trim_chars = " "
-            return ArrowScalarFuncExpression(
-                src.empty_data, [src], f"utf8_{func_name.lower()}", (trim_chars,)
-            )
-        elif func_name == "INSERT" and len(op_exprs) == 4:
-            src = op_exprs[0]
-            start_expr = op_exprs[1]
-            len_expr = op_exprs[2]
-            inserted_str_expr = op_exprs[3]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(start_expr, "start_expr", int)
-            ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
-            ensure_arg_is_const_expr_of_type(
-                inserted_str_expr, "inserted_str_expr", str
-            )
-
-            return ArrowScalarFuncExpression(
-                src.empty_data,
-                [src],
-                "utf8_replace_slice",
-                (
-                    start_expr.value - 1,
-                    start_expr.value - 1 + len_expr.value,
-                    inserted_str_expr.value,
-                ),
-            )
-        elif func_name == "CONVERT_TIMEZONE" and len(op_exprs) == 2:
-            str_timezone = op_exprs[0]
-            src = op_exprs[1]
-
-            ensure_arg_is_const_expr_of_type(
-                str_timezone, "str_timezone", (str, pa.binary())
-            )
-            ensure_type_of_expr(
-                src,
-                "src",
-                (
-                    pd._libs.tslibs.timestamps.Timestamp,
-                    pd.ArrowDtype(pa.timestamp("ns")),
-                ),
-            )
-            timestamp_pa_type = src.empty_data.iloc[:, 0].dtype.pyarrow_dtype
-            target_res = "ns"
-            # We figure out the right resolution to use.
-            if pa.types.is_date(timestamp_pa_type):
-                target_res = "s"
-            elif pa.types.is_timestamp(timestamp_pa_type):
-                target_res = timestamp_pa_type.unit
-
-            # For now, if the resolution isn't our default, baked-in nanosecond
-            # resolution then don't convert the operation because otherwise
-            # tests will fail.
-            if target_res == "ns":
-                # The definition of this operation is to convert a time from one
-                # timezone to a different one.
-                # The general algorithm is that we get to a timestamp that has a timezone
-                # and then use a cast to a different timezone which will actually perform
-                # the conversion.  However, some input types don't have a timezone to
-                # work with.  The check below find such cases and then uses the
-                # assume_timezone kernel to apply the BodoSQL context's default_timezone
-                # if it has one else use UTC.  One final wrinkle is that assume_timezone
-                # can't operate on all possible input types so we convert the input
-                # date/time type to a format that we know it can handle.
-                if pa.types.is_date(timestamp_pa_type) or (
-                    pa.types.is_timestamp(timestamp_pa_type)
-                    and timestamp_pa_type.tz is None
-                ):
-                    tz = get_session_tz(ctx)
-                    local_timestamp_empty_data = pd.Series(
-                        dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=tz))
-                    )
-                    timestamp_empty_data_no_tz = pd.Series(
-                        dtype=pd.ArrowDtype(pa.timestamp(target_res))
-                    )
-                    # We first cast to a data type that assume_timezone can work with.
-                    src = CastExpression(timestamp_empty_data_no_tz, src)
-                    # We use the context default_tz to make the timezone explicit.
-                    src = ArrowScalarFuncExpression(
-                        local_timestamp_empty_data,
-                        [src],
-                        "assume_timezone",
-                        (tz,),
-                    )
-
-                target_timestamp_empty_data = pd.Series(
-                    dtype=pd.ArrowDtype(pa.timestamp(target_res, tz=str_timezone.value))
-                )
-                # We use cast to convert timezones.
-                target_timestamp_expr = CastExpression(target_timestamp_empty_data, src)
-                return target_timestamp_expr
+        return convert_coalesce(op_exprs)
 
     if operator_class_name == "SqlTrimFunction":
         operands = java_call.getOperands()
@@ -5553,27 +5529,6 @@ def compare_types(obj_type, expected_type):
     return False
 
 
-def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype):
-    if not isinstance(expr, bodo.pandas.plan.ConstantExpression):
-        raise ValueError(
-            f"{expr_name} should be ConstantExpression but instead was {type(expr)}"
-        )
-
-    if not isinstance(dtype, (list, tuple, set)):
-        dtype = (dtype,)
-    for dtype_alternative in dtype:
-        if compare_types(type(expr.value), dtype_alternative):
-            return
-    if len(dtype) > 1:
-        raise ValueError(
-            f"{expr_name}.value should be one of {str(dtype)} but instead was {type(expr.value)}"
-        )
-    else:
-        raise ValueError(
-            f"{expr_name}.value should be {str(dtype[0])} but instead was {type(expr.value)}"
-        )
-
-
 def get_expr_dtype(expr, expr_name="Expression", get_const_val_type=True):
     """
     Get the type of the input `bodo.pandas.plan.Expression`.
@@ -5601,8 +5556,19 @@ def get_expr_dtype(expr, expr_name="Expression", get_const_val_type=True):
             )
 
 
-def ensure_type_of_expr(expr, expr_name, dtype):
-    expr_dtype = get_expr_dtype(expr, expr_name)
+def ensure_arg_is_const_expr_of_type(expr, expr_name, dtype, get_const_val_type=True):
+    """Equivalent to ensure_type_of_expr() but also requires that `expr` be a
+    ConstantExpression."""
+    if not isinstance(expr, bodo.pandas.plan.ConstantExpression):
+        raise ValueError(
+            f"{expr_name} should be ConstantExpression but instead was {type(expr)}"
+        )
+
+    ensure_type_of_expr(expr, expr_name, dtype, get_const_val_type)
+
+
+def ensure_type_of_expr(expr, expr_name, dtype, get_const_val_type=True):
+    expr_dtype = get_expr_dtype(expr, expr_name, get_const_val_type)
 
     if not isinstance(dtype, (list, tuple, set)):
         dtype = (dtype,)
@@ -5610,14 +5576,71 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         if compare_types(expr_dtype, dtype_alternative):
             return
 
+    is_constant = isinstance(expr, bodo.pandas.plan.ConstantExpression)
+
     if len(dtype) > 1:
-        raise ValueError(
-            f"Expected {expr_name} ({type(expr)}) to hold one of the datatypes {str(dtype)}, instead was {expr_dtype}"
-        )
+        if is_constant and get_const_val_type:
+            raise ValueError(
+                f"{expr_name}.value should be one of {str(dtype)} but instead was {type(expr.value)}"
+            )
+        else:
+            raise ValueError(
+                f"Expected {expr_name} ({type(expr)}) to hold one of the datatypes {str(dtype)}, instead was {expr_dtype}"
+            )
     else:
+        if is_constant and get_const_val_type:
+            raise ValueError(
+                f"{expr_name}.value should be {str(dtype[0])} but instead was {type(expr.value)}"
+            )
+        else:
+            raise ValueError(
+                f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype[0])}, instead was {expr_dtype}"
+            )
+
+
+def ensure_arg_is_const_expr_of_type_custom(
+    expr, expr_name, is_approved_type, get_const_val_type=True
+):
+    """Equivalent to ensure_type_of_expr_custom() but also requires that
+    `expr` be a ConstantExpression."""
+    if not isinstance(expr, bodo.pandas.plan.ConstantExpression):
         raise ValueError(
-            f"Expected {expr_name} ({type(expr)}) to hold datatype {str(dtype[0])}, instead was {expr_dtype}"
+            f"{expr_name} should be ConstantExpression but instead was {type(expr)}"
         )
+
+    ensure_type_of_expr(expr, expr_name, is_approved_type, get_const_val_type)
+
+
+def ensure_type_of_expr_custom(
+    expr, expr_name, is_approved_type, get_const_val_type=True
+):
+    """
+    Throws an error if the callable `is_approved_type` returns False when it is
+    passed the datatype of `expr`.
+    """
+    expr_dtype = get_expr_dtype(expr, expr_name, get_const_val_type)
+    if not is_approved_type(expr_dtype):
+        if isinstance(expr, bodo.pandas.plan.ConstantExpression):
+            raise ValueError(
+                f"ensure_type_of_expr_custom: {expr_name}.value has datatype {expr_dtype}, which is not approved"
+            )
+        else:
+            raise ValueError(
+                f"ensure_type_of_expr_custom: {expr_name} holds datatype {expr_dtype}, which is not approved"
+            )
+
+
+def normalize_to_pa_type(dtype):
+    if isinstance(dtype, pa.DataType):
+        return dtype
+    if isinstance(dtype, pd.ArrowDtype):
+        return dtype.pyarrow_dtype
+
+    raise ValueError(f"normalize_to_pa_type: Unhandled input type {type(dtype)}")
+
+
+def is_any_pa_date_or_timestamp(pa_type):
+    return pa.types.is_date(pa_type) or pa.types.is_timestamp(pa_type)
 
 
 def get_binop_output_type(left, right, non_decimal_func, decimal_func):
