@@ -218,14 +218,21 @@ MeanColSet::~MeanColSet() = default;
 void MeanColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    if (running_value_schema == nullptr || running_value_schema->ncols() != 2) {
+        throw std::runtime_error(
+            "running_column_datatypes not set before "
+            "MeanColSet::alloc_running_value_columns");
+    }
+    auto& ct0 = running_value_schema->column_types[0];
+    auto& ct1 = running_value_schema->column_types[1];
     std::shared_ptr<array_info> c1 = alloc_array_top_level(
-        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
-        mm);  // for sum and result
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL, ct0->c_type, -1,
+        0, 0, false, false, false, pool, mm, "", ct0->precision,
+        ct0->scale);  // for sum and result
     std::shared_ptr<array_info> c2 = alloc_array_top_level(
-        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-        Bodo_CTypes::UINT64, -1, 0, 0, false, false, false, pool,
-        std::move(mm));  // for counts
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL, ct1->c_type, -1,
+        0, 0, false, false, false, pool, std::move(mm), "", ct1->precision,
+        ct1->scale);  // for counts
     out_cols.push_back(c1);
     out_cols.push_back(c2);
 }
@@ -236,12 +243,15 @@ void MeanColSet::update(const std::vector<grouping_info>& grp_infos,
     std::vector<std::shared_ptr<array_info>> aux_cols = {this->update_cols[1]};
     aggfunc_output_initialize(this->update_cols[0], this->ftype, use_sql_rules);
     aggfunc_output_initialize(this->update_cols[1], this->ftype, use_sql_rules);
+    std::cout << "MeanColSet::update 0 " << in_col->dtype << " "
+              << update_cols[0]->dtype << std::endl;
     do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
                        grp_infos[0], this->ftype, pool, std::move(mm));
 }
 
 void MeanColSet::combine(const grouping_info& grp_info,
                          int64_t init_start_row) {
+    std::cout << "MeanColSet::combine 0" << std::endl;
     std::vector<std::shared_ptr<array_info>> aux_cols;
     aggfunc_output_initialize(this->combine_cols[0], this->ftype, use_sql_rules,
                               init_start_row);
@@ -259,11 +269,14 @@ void MeanColSet::eval(const grouping_info& grp_info,
                       bodo::IBufferPool* const pool,
                       std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> aux_cols;
+    std::cout << "MeanColSet::eval 0" << std::endl;
     if (this->combine_step) {
+        std::cout << "MeanColSet::eval 1" << std::endl;
         do_apply_to_column(this->combine_cols[1], this->combine_cols[0],
                            aux_cols, grp_info, Bodo_FTypes::mean_eval, pool,
                            std::move(mm));
     } else {
+        std::cout << "MeanColSet::eval 2" << std::endl;
         do_apply_to_column(this->update_cols[1], this->update_cols[0], aux_cols,
                            grp_info, Bodo_FTypes::mean_eval, pool,
                            std::move(mm));

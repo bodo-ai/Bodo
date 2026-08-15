@@ -178,5 +178,13 @@ class PhysicalPlanBuilder {
                 "type " +
                 std::to_string(static_cast<int>(op.type)));
         }
+        std::cout << "Visit" << std::endl;
+        if (active_pipeline) {
+            std::cout << active_pipeline->getPrevOpOutputSchema()->ToString(
+                             true)
+                      << std::endl;
+            ;
+        }
+        std::cout << op.ToString() << std::endl;
     }
 };

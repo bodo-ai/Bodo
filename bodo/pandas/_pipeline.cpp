@@ -550,6 +550,8 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(PhysicalCpuGpuSink sink) {
 std::shared_ptr<Pipeline> PipelineBuilder::BuildEnd(
     std::shared_ptr<bodo::Schema> in_schema,
     std::shared_ptr<bodo::Schema> out_schema) {
+    std::cout << "BuildEnd " << in_schema->ToString(true) << " "
+              << out_schema->ToString(true) << std::endl;
     auto sink =
         std::make_shared<PhysicalResultCollector>(in_schema, out_schema);
     return Build(sink);
