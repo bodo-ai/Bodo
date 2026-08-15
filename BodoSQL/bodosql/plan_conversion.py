@@ -4369,11 +4369,9 @@ def convert_concat(input_plan, src, strings_to_concat):
     )
 
     input_exprs = [src]
-
-    for other_string in strings_to_concat[1:]:
-        ensure_type_of_expr(other_string, "other_str_src", (str, pa.binary()))
+    for other_string in strings_to_concat:
+        ensure_type_of_expr(other_string, "other_string", (str, pa.binary()))
         input_exprs.append(other_string)
-
     input_exprs.append(separator)
 
     return ArrowScalarFuncExpression(
@@ -4386,14 +4384,15 @@ def convert_concat(input_plan, src, strings_to_concat):
 
 def convert_concat_ws(separator, src, strings_to_concat):
     ensure_type_of_expr(separator, "separator", (str, pa.binary()))
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
 
     if len(strings_to_concat) == 0:
         # Nothing to concatenate, just return the input string
         return src
 
     input_exprs = [src]
-    for other_string in strings_to_concat[1:]:
-        ensure_type_of_expr(other_string, "other_str_src", (str, pa.binary()))
+    for other_string in strings_to_concat:
+        ensure_type_of_expr(other_string, "other_string", (str, pa.binary()))
         input_exprs.append(other_string)
     input_exprs.append(separator)
 
