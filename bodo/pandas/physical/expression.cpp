@@ -1423,14 +1423,16 @@ PhysicalArrowExpression::get_unique_func_data() {
             scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
             get_py_object_as_bool);
 
-        arrow::compute::ElementWiseAggregateOptions opts;
+        auto opts =
+            std::make_unique<arrow::compute::ElementWiseAggregateOptions>();
         if (skip_nulls.has_value()) {
-            opts.skip_nulls = *skip_nulls;
+            opts->skip_nulls = *skip_nulls;
         } else {
             // Avoid skipping nulls to match SQL semantics.
             // This is True by default in Arrow.
-            opts.skip_nulls = false;
+            opts->skip_nulls = false;
         }
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
     } else if (scalar_func_data.arrow_func_name == "day_of_week") {
         auto [count_from_zero, week_start] = get_var_py_args_as_types<0, 1, 2>(
             scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
