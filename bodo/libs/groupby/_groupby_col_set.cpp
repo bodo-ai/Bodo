@@ -2207,6 +2207,12 @@ std::unique_ptr<BasicColSet> makeColSet(
     stream_udf_t* udf_cfunc) {
     BasicColSet* colset;
 
+    // Sum0 is the same as sum but initializes output to 0 instead of NULL.
+    if (ftype == Bodo_FTypes::sum0) {
+        use_sql_rules = false;
+        ftype = Bodo_FTypes::sum;
+    }
+
     if (ftype != Bodo_FTypes::size && ftype != Bodo_FTypes::window &&
         in_cols.size() == 0) {
         throw std::runtime_error(fmt::format(
