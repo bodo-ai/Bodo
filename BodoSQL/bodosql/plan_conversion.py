@@ -5306,22 +5306,63 @@ def java_call_to_python_call(ctx, java_call, input_plan):
             num_repeats_expr = op_exprs[1]
 
             ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
+            ensure_type_of_expr(num_repeats_expr, "num_repeats_expr", int)
 
-            return ArrowScalarFuncExpression(
-                src.empty_data, [src], "binary_repeat", (num_repeats_expr.value,)
+            # If num_repeats_expr <= 0, return an empty string.
+            # binary_repeat requires num_repeats >= 0.
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            zero_expr = ConstantExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int64())), input_plan, 0
             )
+            return_empty = ComparisonOpExpression(
+                bool_empty_data, num_repeats_expr, zero_expr, operator.le
+            )
+
+            # Set negative elements to null to avoid errors in binary_repeat
+            num_repeats_expr = CaseExpression(
+                num_repeats_expr.empty_data,
+                return_empty,
+                NullExpression(num_repeats_expr.empty_data, input_plan, 0),
+                num_repeats_expr,
+            )
+
+            repeated = ArrowScalarFuncExpression(
+                src.empty_data, [src, num_repeats_expr], "binary_repeat", ()
+            )
+
+            empty_string = ConstantExpression(src.empty_data, input_plan, "")
+            return CaseExpression(src.empty_data, return_empty, empty_string, repeated)
         elif func_name == "SPACE" and len(op_exprs) == 1:
             num_repeats_expr = op_exprs[0]
-            ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
+            ensure_type_of_expr(num_repeats_expr, "num_repeats_expr", int)
 
             str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-
             space_expr = bd.plan.ConstantExpression(str_empty_data, input_plan, " ")
 
-            return ArrowScalarFuncExpression(
-                str_empty_data, [space_expr], "binary_repeat", (num_repeats_expr.value,)
+            # If num_repeats_expr <= 0, return an empty string.
+            # binary_repeat requires num_repeats >= 0.
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            zero_expr = ConstantExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.int64())), input_plan, 0
             )
+            return_empty = ComparisonOpExpression(
+                bool_empty_data, num_repeats_expr, zero_expr, operator.le
+            )
+
+            # Set negative elements to null to avoid errors in binary_repeat
+            num_repeats_expr = CaseExpression(
+                num_repeats_expr.empty_data,
+                return_empty,
+                NullExpression(num_repeats_expr.empty_data, input_plan, 0),
+                num_repeats_expr,
+            )
+
+            repeated = ArrowScalarFuncExpression(
+                str_empty_data, [space_expr, num_repeats_expr], "binary_repeat", ()
+            )
+
+            empty_string = ConstantExpression(str_empty_data, input_plan, "")
+            return CaseExpression(str_empty_data, return_empty, empty_string, repeated)
         elif func_name == "REVERSE" and len(op_exprs) == 1:
             src = op_exprs[0]
             ensure_type_of_expr(src, "src", (str, pa.binary()))
