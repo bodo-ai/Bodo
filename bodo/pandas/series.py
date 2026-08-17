@@ -378,6 +378,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             # Compute schema of new series.
             try:
                 empty_data = getattr(zero_size_self, op)(zero_size_other)
+            # Pandas decimal binops may fail with Arrow's "Decimal precision out of
+            # range" error. We apply the same logic as BodoSQL to get the output
+            # precision and scale for decimal binops.
             except Exception:
                 if type(other) in (BodoSeries, BodoScalar):
                     left_atype = zero_size_self.dtype.pyarrow_dtype
