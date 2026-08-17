@@ -1708,7 +1708,7 @@ PANDAS_ARROW_TYPE_MAP = {
 }
 
 
-def get_decimal_type(atype, expr):
+def get_decimal_type(atype):
     if pa.types.is_int64(atype):
         return pa.decimal128(19, 0)
     elif pa.types.is_int32(atype):
@@ -1730,10 +1730,8 @@ def get_decimal_type(atype, expr):
 
 
 def get_output_type(
-    left,
     left_empty,
     left_atype,
-    right,
     right_empty,
     right_atype,
     non_decimal_func,
@@ -1741,9 +1739,9 @@ def get_output_type(
 ):
     if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
         if not pa.types.is_decimal(left_atype):
-            left_atype = get_decimal_type(left_atype, left)
+            left_atype = get_decimal_type(left_atype)
         if not pa.types.is_decimal(right_atype):
-            right_atype = get_decimal_type(right_atype, right)
+            right_atype = get_decimal_type(right_atype)
         output_precision, output_scale = decimal_func(
             left_atype.precision,
             left_atype.scale,

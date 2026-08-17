@@ -416,10 +416,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                             )
 
                         empty_data = get_output_type(
-                            self,
                             zero_size_self,
                             left_atype,
-                            other,
                             zero_size_other,
                             right_atype,
                             None,

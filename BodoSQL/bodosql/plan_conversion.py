@@ -5671,10 +5671,8 @@ def get_output_type(left, right, non_decimal_func, decimal_func):
     left_atype = left_empty.dtypes.iloc[0].pyarrow_dtype
     right_atype = right_empty.dtypes.iloc[0].pyarrow_dtype
     return bd.utils.get_output_type(
-        left,
         left_empty,
         left_atype,
-        right,
         right_empty,
         right_atype,
         non_decimal_func,
