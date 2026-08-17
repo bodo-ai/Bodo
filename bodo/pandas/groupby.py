@@ -983,7 +983,7 @@ def _get_agg_output_type(
     func_name = func.func_name
 
     # TODO: Enable more fallbacks where the operation is supported in Pandas and not in Bodo
-    if func_name in ("sum",):
+    if func_name in ("sum", "sum0"):
         if pa.types.is_signed_integer(pa_type) or pa.types.is_boolean(pa_type):
             new_type = pa.int64()
         elif pa.types.is_unsigned_integer(pa_type):

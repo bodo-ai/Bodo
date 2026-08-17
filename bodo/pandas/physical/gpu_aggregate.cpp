@@ -12,6 +12,8 @@ const std::map<std::string, int32_t> PhysicalGPUAggregate::function_to_ftype = {
     {"skew", Bodo_FTypes::skew},
     {"std", Bodo_FTypes::std},
     {"sum", Bodo_FTypes::sum},
+    // TODO(BSE-5576): Support Pandas-style/sum0 initialization for GPU.
+    {"sum0", Bodo_FTypes::sum},
     {"var", Bodo_FTypes::var},
     {"std_pop", Bodo_FTypes::std_pop},
     {"var_pop", Bodo_FTypes::var_pop},

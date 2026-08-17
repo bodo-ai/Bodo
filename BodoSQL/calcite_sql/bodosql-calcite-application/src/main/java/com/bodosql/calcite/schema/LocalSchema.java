@@ -41,16 +41,14 @@ public class LocalSchema extends BodoSqlSchema {
    * addTable.
    *
    * @param name Name of the table.
-   * @return A table object.
+   * @return A table object or null.
    */
   @Override
   public Table getTable(String name) {
     if (tables.containsKey(name)) {
       return tables.get(name);
-    } else {
-      throw new RuntimeException(
-          String.format("Table %s not found in Schema %s.", name, this.getName()));
     }
+    return null;
   }
 
   /**
