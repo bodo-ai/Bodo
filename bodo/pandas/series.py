@@ -84,9 +84,9 @@ from bodo.pandas.utils import (
     check_args_fallback,
     fallback_warn,
     fallback_wrapper,
+    get_binop_output_type,
     get_lazy_single_manager_class,
     get_n_index_arrays,
-    get_output_type,
     get_scalar_udf_result_type,
     insert_bodo_scalar,
     scalarOutputNACheck,
@@ -415,7 +415,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                                 f"Series _numeric_binop decimal fallback didn't handle operation {op}"
                             )
 
-                        empty_data = get_output_type(
+                        empty_data = get_binop_output_type(
                             zero_size_self,
                             left_atype,
                             zero_size_other,
