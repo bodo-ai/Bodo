@@ -332,7 +332,6 @@ duckdb::unique_ptr<duckdb::Expression> make_const_number_expr(
 /**
  * @brief Create an expression from a constant arrow decimal.
  *
- * @param out_schema_py output data type (e.g. float32 vs float64)
  * @param arrow_scalar_py - the constant decimal from Python arrow scalar
  * @return duckdb::unique_ptr<duckdb::Expression> - the const number expr
  */
