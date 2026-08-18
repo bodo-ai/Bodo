@@ -378,6 +378,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             empty_data = zero_size_self
         else:
             left_atype = zero_size_self.dtype.pyarrow_dtype
+            # Pandas decimal binops may fail with Arrow's "Decimal precision out of
+            # range" error. We apply the same logic as BodoSQL to get the output
+            # precision and scale for decimal binops.
             if pa.types.is_decimal(left_atype):
                 if type(other) in (BodoSeries, BodoScalar):
                     right_atype = zero_size_other.dtype.pyarrow_dtype
@@ -422,10 +425,8 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                         )
 
                     empty_data = get_binop_output_type(
-                        self,
                         None,  # not needed if guaranteed decimal
                         left_atype,
-                        other,
                         None,  # not needed if guaranteed decimal
                         right_atype,
                         None,
