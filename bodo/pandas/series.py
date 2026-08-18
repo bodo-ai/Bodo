@@ -382,8 +382,10 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
             # range" error. We apply the same logic as BodoSQL to get the output
             # precision and scale for decimal binops.
             if pa.types.is_decimal(left_atype):
-                if type(other) in (BodoSeries, BodoScalar):
+                if type(other) is BodoSeries:
                     right_atype = zero_size_other.dtype.pyarrow_dtype
+                elif type(other) is BodoScalar:
+                    right_atype = pa.scalar(zero_size_other).type
                 elif isinstance(other, numbers.Number):
                     other_dec = Decimal(str(other))
                     other_pa_dec = pa.scalar(other_dec)
