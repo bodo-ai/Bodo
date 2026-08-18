@@ -424,8 +424,6 @@ std::shared_ptr<table_info> eval_groupby_funcs_helper(
                  col_ind++) {
                 out_update_cols.push_back(build_table->columns[col_ind]);
             }
-            std::cout << "eval_groupby_funcs_helper setUpdateCols "
-                      << std::endl;
             col_set->setUpdateCols(out_update_cols);
         } else {
             // In the AGG case, we call eval on running values that have been
@@ -1442,7 +1440,6 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
         // Call eval on these running values to get the final output.
         this->metrics.finalize_eval_nrows += update_table->nrows();
         ScopedTimer eval_timer(this->metrics.finalize_eval_time);
-        std::cout << "GroupbyPartition::Finalize 0" << std::endl;
         out_table = eval_groupby_funcs_helper</*is_acc_case*/ true>(
             this->f_running_value_offsets, this->col_sets, update_table,
             this->n_keys, this->separate_out_cols->data_table,
@@ -1474,7 +1471,6 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
             this->build_table_buffer->data_table;
         this->metrics.finalize_eval_nrows += combine_data->nrows();
         time_pt start_eval = start_timer();
-        std::cout << "GroupbyPartition::Finalize 1" << std::endl;
         out_table = eval_groupby_funcs_helper</*is_acc_case*/ false>(
             this->f_running_value_offsets, this->col_sets, combine_data,
             this->n_keys, this->separate_out_cols->data_table);

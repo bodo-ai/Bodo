@@ -10,8 +10,6 @@
 #include "_groupby_eval.h"
 #include "_groupby_ftypes.h"
 
-#include <iostream>
-
 // From
 // https://github.com/dcleblanc/SafeInt/blob/1c94d38fe4c19fe17792de5e0f6619258c94bb30/safe_math_impl.h#L686
 // We were using arrow/vendored/portable-snippets/safe-math.h, but Arrow removed
@@ -907,7 +905,6 @@ void apply_to_column_numpy(std::shared_ptr<array_info> in_col,
             break;
         }
         case Bodo_FTypes::mean_eval: {
-            std::cout << "apply_to_column_numpy mean_eval" << std::endl;
             for (size_t i = 0; i < in_col->length; i++) {
                 // TODO XXX The getv call needs to be templated on the arr type.
                 mean_eval(getv<double>(out_col, i),
@@ -1507,8 +1504,6 @@ void apply_to_column_nullable(
     std::shared_ptr<array_info> in_col, std::shared_ptr<array_info> out_col,
     std::vector<std::shared_ptr<array_info>>& aux_cols,
     const grouping_info& grp_info) {
-    std::cout << "apply_to_column_nullable " << in_col->dtype << " "
-              << out_col->dtype << std::endl;
     assert(in_col->arr_type == ArrType);
 // macros to reduce code duplication
 
@@ -1676,8 +1671,6 @@ void apply_to_column_nullable(
             out_col->set_null_bit(i, true);                                                                                                 \
             break;                                                                                                                          \
         case Bodo_FTypes::mean_eval:                                                                                                        \
-            std::cout << "apply_to_column_regular_case mean_eval"                                                                           \
-                      << std::endl;                                                                                                         \
             mean_eval(getv<double>(out_col, i),                                                                                             \
                       getv<uint64_t, ArrType>(in_col, i));                                                                                  \
             out_col->set_null_bit(i, true);                                                                                                 \
@@ -2174,14 +2167,11 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
 #ifndef APPLY_TO_COLUMN_CALL
 #define APPLY_TO_COLUMN_CALL(FTYPE, CTYPE)                                 \
     if (ftype == FTYPE && in_col->dtype == CTYPE) {                        \
-        std::cout << "in macro " << in_col->dtype << std::endl;            \
         return apply_to_column<typename dtype_to_type<CTYPE>::type, FTYPE, \
                                CTYPE>(in_col, out_col, aux_cols, grp_info, \
                                       pool, std::move(mm));                \
     }
 #endif
-    std::cout << "start do_apply_to_column " << in_col->dtype << " "
-              << out_col->dtype << std::endl;
 
     if (ftype == Bodo_FTypes::size) {
         // SIZE
@@ -2447,7 +2437,6 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             break;
         case Bodo_FTypes::mean:
             // MEAN
-            std::cout << "do_apply_to_column mean start" << std::endl;
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::mean, Bodo_CTypes::INT8)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::mean, Bodo_CTypes::UINT8)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::mean, Bodo_CTypes::INT16)
@@ -2463,7 +2452,6 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::mean, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::mean, Bodo_CTypes::FLOAT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::mean, Bodo_CTypes::DECIMAL)
-            std::cout << "do_apply_to_column mean end" << std::endl;
             break;
         case Bodo_FTypes::var_pop:
             // VAR
@@ -2771,7 +2759,6 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // hard coded.
             // TODO: Move elsewhere? Every row is processed instead of reduce
             // to groups.
-            std::cout << "do_apply_to_column mean_eval" << std::endl;
             return apply_to_column<double, Bodo_FTypes::mean_eval,
                                    Bodo_CTypes::FLOAT64>(
                 in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
