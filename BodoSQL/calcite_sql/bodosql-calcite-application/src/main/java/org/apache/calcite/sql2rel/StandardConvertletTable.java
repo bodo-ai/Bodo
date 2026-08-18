@@ -92,6 +92,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -1167,14 +1168,61 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
 
     // Expand 'ROW (x0, x1, ...) = ROW (y0, y1, ...)'
     // to 'x0 = y0 AND x1 = y1 AND ...'
+    // If there are casts to ROW, apply them fieldwise:
+    // 'CAST(ROW(x0, x1) AS (t0, t1)) = ROW(y0, y1)' becomes
+    // 'CAST(x0 as t0) = y0 AND CAST(x1 as t1) = y1'
     if (op.kind == SqlKind.EQUALS) {
-      final RexNode expr0 = RexUtil.removeCast(exprs.get(0));
-      final RexNode expr1 = RexUtil.removeCast(exprs.get(1));
+      // For every cast one list with the types of all fields
+      ArrayDeque<List<RelDataTypeField>> leftTypes = new ArrayDeque<>();
+      ArrayDeque<List<RelDataTypeField>> rightTypes = new ArrayDeque<>();
+      RexNode expr0 = exprs.get(0);
+      RexNode expr1 = exprs.get(1);
+      while (expr0.getKind() == SqlKind.CAST) {
+        RexCall cast = (RexCall) expr0;
+        if (cast.type.getSqlTypeName() == SqlTypeName.ROW) {
+          expr0 = ((RexCall) expr0).operands.get(0);
+          leftTypes.add(cast.type.getFieldList());
+        } else {
+          break;
+        }
+      }
+      while (expr1.getKind() == SqlKind.CAST) {
+        RexCall cast = (RexCall) expr1;
+        if (cast.type.getSqlTypeName() == SqlTypeName.ROW) {
+          expr1 = ((RexCall) expr1).operands.get(0);
+          rightTypes.add(cast.type.getFieldList());
+        } else {
+          break;
+        }
+      }
       if (expr0.getKind() == SqlKind.ROW && expr1.getKind() == SqlKind.ROW) {
         final RexCall call0 = (RexCall) expr0;
         final RexCall call1 = (RexCall) expr1;
+
+        List<RexNode> expr0Operands = call0.getOperands();
+        // Insert the casts in reverse order
+        while (!leftTypes.isEmpty()) {
+          List<RexNode> converted = new ArrayList<>();
+          List<RelDataTypeField> types = leftTypes.removeLast();
+          Pair.forEach(types, expr0Operands, (x, y) ->
+              converted.add(
+                  rexBuilder.makeAbstractCast(
+                      call.getParserPosition(), x.getType(), y, false)));
+          expr0Operands = converted;
+        }
+        List<RexNode> expr1Operands = call1.getOperands();
+        while (!rightTypes.isEmpty()) {
+          List<RexNode> converted = new ArrayList<>();
+          List<RelDataTypeField> types = rightTypes.removeLast();
+          Pair.forEach(types, expr1Operands, (x, y) ->
+              converted.add(
+                  rexBuilder.makeAbstractCast(
+                      call.getParserPosition(), x.getType(), y, false)));
+          expr1Operands = converted;
+        }
+
         final List<RexNode> eqList = new ArrayList<>();
-        Pair.forEach(call0.getOperands(), call1.getOperands(), (x, y) ->
+        Pair.forEach(expr0Operands, expr1Operands, (x, y) ->
             eqList.add(rexBuilder.makeCall(call.getParserPosition(), op, x, y)));
         return RexUtil.composeConjunction(rexBuilder, eqList);
       }

@@ -120,6 +120,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   // The maximum number of retries for connecting to snowflake before succeeding.
   private static final int maxRetries = 5;
 
+  private static final int OBJECT_DOES_NOT_EXIST = 2003;
+
   // The initial time to wait when retrying connections. This will be done with
   // an exponential backoff so this is just the base wait time.
   private static final int backoffMilliseconds = 100;
@@ -442,7 +444,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @param schemaName The name of the schema to use to load the table.
    * @param tableName Name of the table.
    * @param shouldRetry Should we retry the connection if we see an exception?
-   * @return The table object.
+   * @return The table object or null.
    */
   private SnowflakeCatalogTable getTableImpl(
       String databaseName, String schemaName, String tableName, boolean shouldRetry) {
@@ -489,7 +491,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               "Unable to get table '%s' for Schema '%s.%s' from Snowflake account. Error message:"
                   + " %s",
               tableName, databaseName, schemaName, e);
-      if (shouldRetry) {
+      if (e.getErrorCode() == OBJECT_DOES_NOT_EXIST) {
+        return null;
+      } else if (shouldRetry) {
         VERBOSE_LEVEL_THREE_LOGGER.warning(errorMsg);
         closeConnections();
         return getTableImpl(databaseName, schemaName, tableName, false);
