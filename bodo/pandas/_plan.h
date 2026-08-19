@@ -6,6 +6,7 @@
 #include <Python.h>
 #include <arrow/type.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <cstdint>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
