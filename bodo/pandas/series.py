@@ -10,6 +10,7 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 
 import numpy
 import numpy as np
@@ -372,64 +373,70 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         zero_size_other = (
             _empty_like(other) if type(other) in (BodoSeries, BodoScalar) else other
         )
+        empty_data = None
         if op in ("__mod__", "__rmod__"):
             empty_data = zero_size_self
         else:
-            # Compute schema of new series.
-            try:
-                empty_data = getattr(zero_size_self, op)(zero_size_other)
+            left_atype = zero_size_self.dtype.pyarrow_dtype
             # Pandas decimal binops may fail with Arrow's "Decimal precision out of
             # range" error. We apply the same logic as BodoSQL to get the output
             # precision and scale for decimal binops.
-            except Exception:
-                if type(other) in (BodoSeries, BodoScalar):
-                    left_atype = zero_size_self.dtype.pyarrow_dtype
+            if pa.types.is_decimal(left_atype):
+                if type(other) is BodoSeries:
                     right_atype = zero_size_other.dtype.pyarrow_dtype
-                    decimal_precision_scale_func = None
-                    if pa.types.is_decimal(left_atype) and pa.types.is_decimal(
-                        right_atype
-                    ):
-                        if op in ("__add__", "__radd__", "__sub__", "__rsub__"):
-                            from bodo.utils.decimal_utils import (
-                                decimal_addition_subtraction_output_precision_scale,
-                            )
-
-                            decimal_precision_scale_func = (
-                                decimal_addition_subtraction_output_precision_scale
-                            )
-                        elif op in ("__mul__", "__rmul__"):
-                            from bodo.utils.decimal_utils import (
-                                decimal_multiplication_output_precision_scale,
-                            )
-
-                            decimal_precision_scale_func = (
-                                decimal_multiplication_output_precision_scale
-                            )
-                        elif op in ("__truediv__", "__rtruediv__"):
-                            from bodo.utils.decimal_utils import (
-                                decimal_division_output_precision_scale,
-                            )
-
-                            decimal_precision_scale_func = (
-                                decimal_division_output_precision_scale
-                            )
-                        if decimal_precision_scale_func is None:
-                            raise BodoLibNotImplementedException(
-                                f"Series _numeric_binop decimal fallback didn't handle operation {op}"
-                            )
-
-                        empty_data = get_binop_output_type(
-                            zero_size_self,
-                            left_atype,
-                            zero_size_other,
-                            right_atype,
-                            None,
-                            decimal_precision_scale_func,
-                        )
-                    else:
-                        raise
+                elif type(other) is BodoScalar:
+                    right_atype = pa.scalar(zero_size_other).type
+                elif isinstance(other, numbers.Number) and not isinstance(other, (bool, complex)):
+                    other_dec = Decimal(str(other))
+                    other_pa_dec = pa.scalar(other_dec)
+                    right_atype = other_pa_dec.type
                 else:
-                    raise
+                    raise BodoLibNotImplementedException(
+                        f"Series _numeric_binop decimal fallback didn't handle other {other}"
+                    )
+
+                decimal_precision_scale_func = None
+                if pa.types.is_decimal(right_atype):
+                    if op in ("__add__", "__radd__", "__sub__", "__rsub__"):
+                        from bodo.utils.decimal_utils import (
+                            decimal_addition_subtraction_output_precision_scale,
+                        )
+
+                        decimal_precision_scale_func = (
+                            decimal_addition_subtraction_output_precision_scale
+                        )
+                    elif op in ("__mul__", "__rmul__"):
+                        from bodo.utils.decimal_utils import (
+                            decimal_multiplication_output_precision_scale,
+                        )
+
+                        decimal_precision_scale_func = (
+                            decimal_multiplication_output_precision_scale
+                        )
+                    elif op in ("__truediv__", "__rtruediv__"):
+                        from bodo.utils.decimal_utils import (
+                            decimal_division_output_precision_scale,
+                        )
+
+                        decimal_precision_scale_func = (
+                            decimal_division_output_precision_scale
+                        )
+                    if decimal_precision_scale_func is None:
+                        raise BodoLibNotImplementedException(
+                            f"Series _numeric_binop decimal fallback didn't handle operation {op}"
+                        )
+
+                    empty_data = get_binop_output_type(
+                        None,  # not needed if guaranteed decimal
+                        left_atype,
+                        None,  # not needed if guaranteed decimal
+                        right_atype,
+                        None,
+                        decimal_precision_scale_func,
+                    )
+            # Compute schema of new series.
+            if empty_data is None:
+                empty_data = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(empty_data, pd.Series), (
             "_numeric_binop: empty_data is not a Series"
         )
