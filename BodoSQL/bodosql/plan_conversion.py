@@ -2350,7 +2350,7 @@ def convert_abs(inp):
     return UnaryOpExpression(out_empty, inp, "abs")
 
 
-def convert_floor_ceil(func_name, inp):
+def convert_floor_ceil_unary(func_name, inp):
     ensure_type_of_expr(inp, func_name + " input", (int, float, pa.Decimal128Type))
 
     inp_dtype = get_expr_dtype(inp, func_name + " input")
@@ -2360,6 +2360,108 @@ def convert_floor_ceil(func_name, inp):
     else:
         # If input is a float, return FLOOR(inp) or CEIL(inp) as normal
         return UnaryOpExpression(inp.empty_data, inp, func_name.lower())
+
+
+def convert_floor_ceil(input_plan, func_name, inp, scale_expr=None):
+    if scale_expr is None:
+        return convert_floor_ceil_unary(func_name, inp)
+    else:
+        ensure_type_of_expr(inp, func_name + " input", (int, float, pa.Decimal128Type))
+
+        # Snowflake / BodoSQL has a scale option that dictates how many digits
+        # after the decimal point the input should be raised or lowered to.
+        # DuckDB and Arrow have no such option, so we have to emulate it.
+        ensure_type_of_expr(scale_expr, "scale_expr", int)
+
+        int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+        float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+        ten_expr = ConstantExpression(int_empty_data, input_plan, 10)
+
+        inp_dtype = get_expr_dtype(inp, func_name + " input")
+        if compare_types(inp_dtype, int):
+            # If input is an int, we don't need to do anything for scale >= 0.
+            # If scale < 0, we can use a formula that allows us to retain
+            # the integer type throughout the calculation.
+            # Division is not ideal for ints because __floordiv__ truncates
+            # towards zero, and __truediv__ could result in loss of precision.
+
+            # For FLOOR, result = inp - (inp % 10^abs(scale)), minus 10^abs(scale)
+            #   if inp % 10^abs(scale) is negative.
+            # For CEIL, result = inp - (inp % 10^abs(scale)), plus 10^abs(scale)
+            #   if inp % 10^abs(scale) is positive.
+
+            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+            scale_negative = ComparisonOpExpression(
+                bool_empty_data, scale_expr, zero_expr, operator.lt
+            )
+
+            # Calculate inp % 10^abs(scale)
+            scale_magnitude = UnaryOpExpression(
+                scale_expr.empty_data, scale_expr, "abs"
+            )
+            power_of_10 = ArithOpExpression(
+                int_empty_data, ten_expr, scale_magnitude, "__pow__"
+            )
+            inp_remainder = ArithOpExpression(
+                inp.empty_data, inp, power_of_10, "__mod__"
+            )
+
+            # inp - inp % 10^abs(scale)
+            inp_minus_remainder = ArithOpExpression(
+                inp.empty_data, inp, inp_remainder, "__sub__"
+            )
+
+            if func_name == "FLOOR":
+                # FLOOR: Subtract power of 10 if remainder is negative (not including 0)
+                should_add_remainder = ComparisonOpExpression(
+                    bool_empty_data, inp_remainder, zero_expr, operator.lt
+                )
+                adjusted_inp_minus_remainder = ArithOpExpression(
+                    inp.empty_data, inp_minus_remainder, power_of_10, "__sub__"
+                )
+            else:
+                # CEIL: Add power of 10 if remainder is positive (not including 0)
+                should_add_remainder = ComparisonOpExpression(
+                    bool_empty_data, inp_remainder, zero_expr, operator.gt
+                )
+                adjusted_inp_minus_remainder = ArithOpExpression(
+                    inp.empty_data, inp_minus_remainder, power_of_10, "__add__"
+                )
+
+            # Final result for the scale < 0 case
+            negative_scale_result = CaseExpression(
+                inp.empty_data,
+                should_add_remainder,
+                adjusted_inp_minus_remainder,
+                inp_minus_remainder,
+            )
+
+            # For 0 or positive scale, we don't have to do anything.
+            return CaseExpression(
+                inp.empty_data, scale_negative, negative_scale_result, inp
+            )
+        else:
+            # If input is a float or decimal, we do:
+            # result = [FLOOR/CEIL](inp * 10^scale) / 10^scale
+            power_of_10 = ArithOpExpression(
+                float_empty_data, ten_expr, scale_expr, "__pow__"
+            )
+            scaled_inp = ArithOpExpression(
+                float_empty_data, inp, power_of_10, "__mul__"
+            )
+            scaled_inp_rounded = UnaryOpExpression(
+                float_empty_data, scaled_inp, func_name.lower()
+            )
+            output_empty_data = adjust_scale(inp_dtype, scale_expr, inp.empty_data)
+
+            return ArithOpExpression(
+                output_empty_data,
+                scaled_inp_rounded,
+                power_of_10,
+                "__truediv__",
+            )
 
 
 def convert_exp(inp):
@@ -2468,6 +2570,228 @@ def convert_mod(inp, modulus_expr):
     ensure_type_of_expr(inp, "MOD inp", int)
     ensure_type_of_expr(modulus_expr, "modulus_expr", int)
     return ArithOpExpression(inp.empty_data, inp, modulus_expr, "__mod__")
+
+
+def convert_pow(left, right):
+    out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
+    return ArithOpExpression(out_empty, left, right, "__pow__")
+
+
+def convert_square(inp):
+    ensure_type_of_expr(inp, "SQUARE input", (int, float))
+    out_empty = inp.empty_data.iloc[:, 0] * inp.empty_data.iloc[:, 0]
+    return ArithOpExpression(out_empty, inp, inp, "__mul__")
+
+
+def convert_log2(inp):
+    ensure_type_of_expr(inp, "LOG2 input", (int, float))
+
+    # Retain current float output type if input is a float,
+    # otherwise use float64.
+    inp_dtype = get_expr_dtype(inp, "LOG2 input")
+    if compare_types(inp_dtype, int):
+        out_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+    else:
+        out_empty = inp.empty_data
+
+    return UnaryOpExpression(out_empty, inp, "log2")
+
+
+def convert_log(input_plan, inp, base_expr=None):
+    # We read the first argument as the operand and
+    # the second argument as the base, which is different
+    # than e.g. Snowflake.
+    ensure_type_of_expr(inp, "LOG input", (int, float))
+
+    if base_expr is not None:
+        ensure_type_of_expr(base_expr, "LOG base", (int, float))
+
+    float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+
+    # Retain current float output type if input is a float,
+    # otherwise use float64.
+    inp_dtype = get_expr_dtype(inp, "LOG input")
+    if compare_types(inp_dtype, int):
+        out_empty = float_empty_data
+    else:
+        out_empty = inp.empty_data
+
+    if base_expr is None:
+        return UnaryOpExpression(out_empty, inp, "log10")
+    else:
+        if isinstance(base_expr, ConstantExpression):
+            # If the base is a constant, we can use shortcuts.
+
+            # Use dedicated log functions for special bases (e, 10, 2)
+            if base_expr.value == 10:
+                return UnaryOpExpression(out_empty, inp, "log10")
+            elif base_expr.value == 2:
+                return UnaryOpExpression(out_empty, inp, "log2")
+            elif np.isclose(base_expr.value, np.e):
+                return UnaryOpExpression(out_empty, inp, "ln")
+
+            # If not a special base, calculate scalar ln(base)
+            log_of_base_expr = ConstantExpression(
+                float_empty_data, input_plan, np.log(base_expr.value)
+            )
+        else:
+            # Calculate ln(base)
+            log_of_base_expr = UnaryOpExpression(float_empty_data, base_expr, "ln")
+
+    # Use change of base formula: log_base_(x) = log(x) / log(base)
+    log_of_inp = UnaryOpExpression(out_empty, inp, "ln")
+    return ArithOpExpression(out_empty, log_of_inp, log_of_base_expr, "__truediv__")
+
+
+def convert_div0_div0null(input_plan, func_name, dividend_expr, divisor_expr):
+    ensure_type_of_expr(dividend_expr, "dividend_expr", (int, float))
+    ensure_type_of_expr(divisor_expr, "divisor_expr", (int, float))
+
+    float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+    quotient_expr = ArithOpExpression(
+        float_empty_data, dividend_expr, divisor_expr, "__truediv__"
+    )
+
+    # Return 0 if divisor is 0 (or NULL, for DIV0NULL);
+    # otherwise, return the standard quotient.
+
+    zero_expr = ConstantExpression(float_empty_data, input_plan, 0.0)
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    divisor_is_zero = ComparisonOpExpression(
+        bool_empty_data, divisor_expr, zero_expr, operator.eq
+    )
+
+    if func_name == "DIV0NULL":
+        divisor_is_null = UnaryOpExpression(bool_empty_data, divisor_expr, "isnull")
+        invalid_divisor = ConjunctionOpExpression(
+            bool_empty_data, divisor_is_zero, divisor_is_null, "__or__"
+        )
+    else:
+        invalid_divisor = divisor_is_zero
+
+    div0_quotient = CaseExpression(
+        float_empty_data, invalid_divisor, zero_expr, quotient_expr
+    )
+
+    # Ensure NULL is always returned if the dividend is NULL
+    dividend_is_null = UnaryOpExpression(bool_empty_data, dividend_expr, "isnull")
+    return CaseExpression(
+        float_empty_data,
+        dividend_is_null,
+        NullExpression(float_empty_data, input_plan, 0),
+        div0_quotient,
+    )
+
+
+def convert_width_bucket(
+    input_plan, numeric_expr, min_val_expr, max_val_expr, num_buckets_expr
+):
+    """Get the bucket the input number would be in if we had a histogram with a certain contiguous value range and number of buckets"""
+    ensure_type_of_expr(numeric_expr, "numeric_expr", (int, float))
+    # min_val_expr is inclusive
+    ensure_type_of_expr(min_val_expr, "min_val_expr", (int, float))
+    # max_val_expr is exclusive
+    ensure_type_of_expr(max_val_expr, "max_val_expr", (int, float))
+    ensure_type_of_expr(num_buckets_expr, "num_buckets_expr", int)
+
+    # The min value of the range must be strictly less than the max value
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    min_max_valid = ComparisonOpExpression(
+        bool_empty_data, min_val_expr, max_val_expr, operator.lt
+    )
+
+    # The number of buckets must be 1 or more
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+    num_buckets_valid = ComparisonOpExpression(
+        bool_empty_data, num_buckets_expr, zero_expr, operator.gt
+    )
+
+    valid_inputs = ConjunctionOpExpression(
+        bool_empty_data, min_max_valid, num_buckets_valid, "__and__"
+    )
+
+    # Custom logic for get_common_int_type to ensure the result is signed after subtraction.
+    # Technically this isn't necessary here since we won't be getting any negative
+    # results, but it's a good example for future situations where this might be needed.
+    def get_common_signed(expr1_width, expr2_width, expr1_is_signed, expr2_is_signed):
+        return True
+
+    float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+    # Calculate the length of the range between min_val_expr and max_value_expr.
+    # Note that we first determine the common integer type so that we can get the
+    # appropriate empty_data for the operation.
+    common_int_type = get_common_int_type(
+        max_val_expr, min_val_expr, get_common_signed=get_common_signed
+    )[0]
+    range_length = ArithOpExpression(
+        pd.Series(dtype=pd.ArrowDtype(common_int_type))
+        if common_int_type is not None
+        else float_empty_data,
+        max_val_expr,
+        min_val_expr,
+        "__sub__",
+    )
+
+    # By doing numeric_expr - min_val_expr, we normalize the input to the range [0, max_val_expr - min_val_expr).
+    # We can assume this since we check earlier for numeric_expr being less than min_val_expr or greater than max_val_expr.
+    common_int_type = get_common_int_type(
+        numeric_expr, min_val_expr, get_common_signed=get_common_signed
+    )[0]
+    normalized_input = ArithOpExpression(
+        pd.Series(dtype=pd.ArrowDtype(common_int_type))
+        if common_int_type is not None
+        else float_empty_data,
+        numeric_expr,
+        min_val_expr,
+        "__sub__",
+    )
+
+    # Get the position of numeric_expr in the range as a float in [0.0, 1.0).
+    range_position = ArithOpExpression(
+        float_empty_data, normalized_input, range_length, "__truediv__"
+    )
+    # Multiply by the number of buckets to scale to the range [0.0, num_buckets)
+    scaled_range_position = ArithOpExpression(
+        float_empty_data, range_position, num_buckets_expr, "__mul__"
+    )
+
+    # Get the 1-based integer bucket number.
+    # We use floor(scaled_range_position) + 1 instead of ceil() so that 0.0 is mapped to a bucket number of 1.
+    # Note that scaled_range_position cannot equal num_buckets_expr.
+    bucket_number = UnaryOpExpression(int_empty_data, scaled_range_position, "floor")
+    one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+    bucket_number = ArithOpExpression(
+        int_empty_data, bucket_number, one_expr, "__add__"
+    )
+
+    # Check if numeric_expr is outside of [min_val_expr, max_val_expr)
+    val_below_range = ComparisonOpExpression(
+        bool_empty_data, numeric_expr, min_val_expr, operator.lt
+    )
+    val_above_range = ComparisonOpExpression(
+        bool_empty_data, numeric_expr, max_val_expr, operator.ge
+    )
+    # If numeric_expr < min_val_expr, return bucket number of 0.
+    # If numeric_expr >= max_val_expr, return bucket number of num_buckets + 1.
+    num_buckets_plus_one = ArithOpExpression(
+        int_empty_data, num_buckets_expr, one_expr, "__add__"
+    )
+    final_bucket_number = CaseExpression(
+        int_empty_data,
+        val_below_range,
+        zero_expr,
+        CaseExpression(
+            int_empty_data, val_above_range, num_buckets_plus_one, bucket_number
+        ),
+    )
+
+    return CaseExpression(
+        int_empty_data,
+        valid_inputs,
+        final_bucket_number,
+        NullExpression(int_empty_data, input_plan, 0),
+    )
 
 
 def convert_rand(input_plan):
@@ -2967,6 +3291,440 @@ def convert_cot(input_plan, src):
     )
 
 
+def convert_bitand_bitor_bitxor(func_name, left_expr, right_expr):
+    # NOTE: BodoSQL doesn't support bitwise operations with BINARY input
+    ensure_type_of_expr(left_expr, "left_expr", int)
+    ensure_type_of_expr(right_expr, "right_expr", int)
+
+    if func_name == "BITAND":
+        arrow_equivalent_func = "bit_wise_and"
+    elif func_name == "BITOR":
+        arrow_equivalent_func = "bit_wise_or"
+    elif func_name == "BITXOR":
+        arrow_equivalent_func = "bit_wise_xor"
+
+    # Make sure the type of empty_data has the larger bit width of the two inputs.
+    # The output should be signed if at least one of the inputs is signed.
+    # We manually unify the input types to the desired output type before doing
+    # the operation to work around a quirk of Arrow's type unification.
+    def get_common_signed(expr1_width, expr2_width, expr1_is_signed, expr2_is_signed):
+        return expr1_is_signed or expr2_is_signed
+
+    target_pa_type, left_cast_needed, right_cast_needed = get_common_int_type(
+        left_expr, right_expr, get_common_signed=get_common_signed
+    )
+    empty_data = pd.Series(dtype=pd.ArrowDtype(target_pa_type))
+    if left_cast_needed:
+        left_expr = CastExpression(empty_data, left_expr)
+    if right_cast_needed:
+        right_expr = CastExpression(empty_data, right_expr)
+
+    return ArrowScalarFuncExpression(
+        empty_data, [left_expr, right_expr], arrow_equivalent_func, ()
+    )
+
+
+def convert_bitshiftleft(left_expr, nbits_expr):
+    # NOTE: BodoSQL doesn't support bitwise operations with BINARY input
+    ensure_type_of_expr(left_expr, "left_expr", int)
+    ensure_type_of_expr(nbits_expr, "nbits_expr", int)
+
+    int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    # Ensure arguments are int64.
+    # We don't want shift_left to be limited by the precision of the
+    # input.
+    # If one argument is uint64, this can help avoid a mismatch that will cause an error coming from the Arrow compute function.
+    left_expr = CastExpression(int64_empty_data, left_expr)
+    # (Arrow can take care of casting nbits_expr in this case.)
+    # For bitshifting, result type should be INT64 to match Snowflake and output on C++ side.
+    return ArrowScalarFuncExpression(
+        int64_empty_data, [left_expr, nbits_expr], "shift_left", ()
+    )
+
+
+def convert_bitshiftright(left_expr, nbits_expr):
+    # NOTE: BodoSQL doesn't support bitwise operations with BINARY input
+    ensure_type_of_expr(left_expr, "left_expr", int)
+    ensure_type_of_expr(nbits_expr, "nbits_expr", int)
+
+    # For shift_right, we have to be careful that left_expr keeps the original
+    # signedness so the proper right shift (logical or arithmetic) is performed.
+
+    # Make nbits_expr's type match left_expr so that Arrow's type unification doesn't
+    # inadvertently change the signedness of left_expr, or otherwise fail to cast
+    # when left_expr is too large.
+    nbits_expr = CastExpression(left_expr.empty_data, nbits_expr)
+
+    result = ArrowScalarFuncExpression(
+        left_expr.empty_data, [left_expr, nbits_expr], "shift_right", ()
+    )
+
+    # To be consistent with Snowflake, we ensure that the result is returned
+    # as a signed integer with maximum bit width.
+    int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    return CastExpression(int64_empty_data, result)
+
+
+def convert_bitnot(src):
+    ensure_type_of_expr(src, "src", int)
+    return ArrowScalarFuncExpression(src.empty_data, [src], "bit_wise_not", ())
+
+
+def convert_getbit(input_plan, src, bit_num):
+    ensure_type_of_expr(src, "src", int)
+    ensure_type_of_expr(bit_num, "bit_num", int)
+
+    # Do a bitwise AND on `src` and a bitmask that is only set on the requested bit position.
+    # If the result is nonzero, the requested bit is 1, else it is 0.
+
+    # We should operate on uint64.
+    # We want Arrow's shift_left to set the most significant bit when
+    # shifting 1 63 positions to the left, but this only happens when 1 is unsigned.
+
+    uint64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.uint64()))
+
+    one_expr = ConstantExpression(uint64_empty_data, input_plan, 1)
+    bit_num = CastExpression(uint64_empty_data, bit_num)
+    bitmask = ArrowScalarFuncExpression(
+        uint64_empty_data, [one_expr, bit_num], "shift_left", ()
+    )
+
+    # Cast `src` to uint64 to avoid problematic type unification in bit_wise_and.
+    src = CastExpression(uint64_empty_data, src)
+    src_with_mask = ArrowScalarFuncExpression(
+        uint64_empty_data, [src, bitmask], "bit_wise_and", ()
+    )
+
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    zero_expr = ConstantExpression(uint64_empty_data, input_plan, 0)
+    is_bit_set = ComparisonOpExpression(
+        bool_empty_data, src_with_mask, zero_expr, operator.ne
+    )
+
+    # Use if_else instead of case_when so that nulls in is_bit_set propagate to the result
+    return ArrowScalarFuncExpression(
+        uint64_empty_data, [is_bit_set, one_expr, zero_expr], "if_else", ()
+    )
+
+
+def convert_format(input_plan, src, precision_digits):
+    """
+    Returns a formatted string representation of a number.
+    The number is rounded to the specified precision and printed
+    with enough zeros to demonstrate that precision.
+    Commas are also inserted as thousands separators.
+    """
+
+    ensure_type_of_expr(src, "src", (int, float))
+    ensure_type_of_expr(precision_digits, "precision_digits", int)
+
+    # MySQL treats any precision digits < 0 as 0
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+    precision_digits = ArrowScalarFuncExpression(
+        int_empty_data,
+        [precision_digits, zero_expr],
+        "max_element_wise",
+        (),
+    )
+
+    # Round the number to the specified precision
+    rounded = ArithOpExpression(src.empty_data, src, precision_digits, "round")
+
+    # Get the string representation of the number
+    str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+    rounded_str = CastExpression(str_empty_data, rounded)
+
+    # Get the character index of the decimal point in the string. Returns -1 if not found.
+    decimal_point_pos = ArrowScalarFuncExpression(
+        int_empty_data, [rounded_str], "find_substring", (".",)
+    )
+    # Get full character length of string
+    rounded_str_length = ArrowScalarFuncExpression(
+        int_empty_data, [rounded_str], "utf8_length", ()
+    )
+
+    # Get whether the number has a nonzero fractional component
+    negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    has_no_dot = ComparisonOpExpression(
+        bool_empty_data, decimal_point_pos, negative_one_expr, operator.eq
+    )
+
+    # First, we will deal with inserting commas to separate thousands in the integer part.
+
+    # Slice to obtain the integer part of the number.
+    is_negative = ArrowScalarFuncExpression(
+        bool_empty_data, [rounded_str], "match_substring", ("-",)
+    )
+    one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+    start_index = CaseExpression(int_empty_data, is_negative, one_expr, zero_expr)
+    end_index = CaseExpression(
+        int_empty_data, has_no_dot, rounded_str_length, decimal_point_pos
+    )
+    integer_part = ArrowScalarFuncExpression(
+        str_empty_data,
+        [rounded_str, start_index, end_index],
+        "utf8_slice_codeunits",
+        (),
+    )
+
+    # Figure out how many characters (spaces) we should add to the left side to make the length
+    # of the integer part a multiple of 3 (so we can insert commas in the right places).
+    # Note that if the length is already a multiple of 3, we end up adding 3 spaces anyway,
+    # but it doesn't matter since we'll trim them off.
+    integer_part_len = ArrowScalarFuncExpression(
+        int_empty_data, [integer_part], "utf8_length", ()
+    )
+    three_expr = ConstantExpression(int_empty_data, input_plan, 3)
+    len_mod_3 = ArithOpExpression(
+        int_empty_data, integer_part_len, three_expr, "__mod__"
+    )
+    num_to_offset = ArithOpExpression(int_empty_data, three_expr, len_mod_3, "__sub__")
+
+    # Get space characters of the desired length to offset
+    space_str = ConstantExpression(str_empty_data, input_plan, " ")
+    space_offset_str = ArrowScalarFuncExpression(
+        str_empty_data, [space_str, num_to_offset], "binary_repeat", ()
+    )
+    separator = ConstantExpression(str_empty_data, input_plan, "")
+    offset_integer_part = ArrowScalarFuncExpression(
+        str_empty_data,
+        [space_offset_str, integer_part, separator],
+        "binary_join_element_wise",
+        (),
+    )
+
+    # Use regex to add commas every three digits (or spaces)
+    integer_part_with_commas = ArrowScalarFuncExpression(
+        str_empty_data,
+        [offset_integer_part],
+        "replace_substring_regex",
+        (r"([0-9 ]{3})", r"\1,"),
+    )
+    # Clean up result by trimming off spaces and commas
+    integer_part_with_commas = ArrowScalarFuncExpression(
+        str_empty_data, [integer_part_with_commas], "utf8_trim", (" ,",)
+    )
+
+    # Add back the negative sign if needed
+    negative_sign_expr = ConstantExpression(str_empty_data, input_plan, "-")
+    negative_comma_integer_part = ArrowScalarFuncExpression(
+        str_empty_data,
+        [negative_sign_expr, integer_part_with_commas, separator],
+        "binary_join_element_wise",
+        (),
+    )
+    integer_part_with_commas = CaseExpression(
+        str_empty_data,
+        is_negative,
+        negative_comma_integer_part,
+        integer_part_with_commas,
+    )
+
+    # Combine the integer and fractional part to get the number with proper comma-formatting
+    fractional_part = ArrowScalarFuncExpression(
+        str_empty_data,
+        [rounded_str, decimal_point_pos],
+        "bodo_substr_three",
+        (),
+    )
+    num_with_commas = ArrowScalarFuncExpression(
+        str_empty_data,
+        [integer_part_with_commas, fractional_part, separator],
+        "binary_join_element_wise",
+        (),
+    )
+    num_with_commas = CaseExpression(
+        str_empty_data, has_no_dot, integer_part_with_commas, num_with_commas
+    )
+
+    # Now we need to make sure that the formatted number has enough decimal digits.
+
+    # Calculate length of the fractional part of the number
+    frac_length = ArithOpExpression(
+        int_empty_data, rounded_str_length, decimal_point_pos, "__sub__"
+    )
+    # Subtract 1 to exclude the decimal point itself from the fractional length
+    frac_length = ArithOpExpression(int_empty_data, frac_length, one_expr, "__sub__")
+    # The fractional length is simply 0 if the string form of the number has no decimal point
+    frac_length = CaseExpression(int_empty_data, has_no_dot, zero_expr, frac_length)
+
+    # Calculate the number of zeros we need to add so there are precision_digits decimal places.
+    # Note that due to the round, it's impossible for the string form of the number to have more than precision_digits decimal places.
+    # It could have fewer than precision_digits decimal places if it had fewer than that many to start with.
+    num_missing_zeros = ArithOpExpression(
+        int_empty_data, precision_digits, frac_length, "__sub__"
+    )
+    zero_str = ConstantExpression(str_empty_data, input_plan, "0")
+    extra_zeros_str = ArrowScalarFuncExpression(
+        str_empty_data, [zero_str, num_missing_zeros], "binary_repeat", ()
+    )
+
+    # Ensure we add a dot before the extra zeros if the number doesn't have a decimal point
+    dot_expr = ConstantExpression(str_empty_data, input_plan, ".")
+    dot_and_extra_zeros = ArrowScalarFuncExpression(
+        str_empty_data,
+        [dot_expr, extra_zeros_str, separator],
+        "binary_join_element_wise",
+        (),
+    )
+    padding = CaseExpression(
+        str_empty_data, has_no_dot, dot_and_extra_zeros, extra_zeros_str
+    )
+
+    # Append extra zeros
+    num_padded = ArrowScalarFuncExpression(
+        str_empty_data,
+        [num_with_commas, padding, separator],
+        "binary_join_element_wise",
+        (),
+    )
+
+    # If precision_digits is 0, the initial round and cast to string removes the decimal point even for float input.
+    # Therefore, we can just use the string form directly in that case, no need to worry about removing decimal
+    # points from the string.
+    zero_precision_digits = ComparisonOpExpression(
+        bool_empty_data, precision_digits, zero_expr, operator.eq
+    )
+    return CaseExpression(
+        str_empty_data, zero_precision_digits, rounded_str, num_padded
+    )
+
+
+def convert_left(input_plan, src, len_expr):
+    # Implement LEFT as substr(0,...)
+
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    src_dtype = get_expr_dtype(src, "src")
+
+    if compare_types(src_dtype, str):
+        ensure_type_of_expr(len_expr, "len_expr", int)
+
+        # Cast length to int64 to match the bodo_substr_three kernel definition
+        int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+        len_expr = CastExpression(int_empty_data, len_expr)
+
+        zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+        return ArrowScalarFuncExpression(
+            src.empty_data, [src, zero_expr, len_expr], "bodo_substr_three", ()
+        )
+    else:
+        # bodo_substr_three doesn't support binary for now, so we use Arrow's binary_slice as
+        # a fallback for scalar length input in the binary case.
+        ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+        # Note: utf8_slice_codeunits redirects to binary_slice on the C++ side if the input is binary
+        return ArrowScalarFuncExpression(
+            src.empty_data,
+            [src],
+            "utf8_slice_codeunits",
+            (0, len_expr.value, 1),
+        )
+
+
+def convert_right(input_plan, src, len_expr):
+    # Implement RIGHT as substr(-len,...)
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    src_dtype = get_expr_dtype(src, "src")
+
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+    if compare_types(src_dtype, str):
+        ensure_type_of_expr(len_expr, "len_expr", int)
+
+        # Cast length to int64 to match the bodo_substr_three kernel definition
+
+        len_expr = CastExpression(int_empty_data, len_expr)
+
+        # Multiply by negative one to get a start index `len_expr` characters from the right
+        negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+        negative_len_expr = ArithOpExpression(
+            int_empty_data, len_expr, negative_one_expr, "__mul__"
+        )
+
+        # Not passing a third argument means substring stops at end of string
+        right_substring = ArrowScalarFuncExpression(
+            src.empty_data, [src, negative_len_expr], "bodo_substr_three", ()
+        )
+    else:
+        # bodo_substr_three doesn't support binary for now, so we use Arrow's binary_slice as
+        # a fallback for scalar length input in the binary case.
+        ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
+        # Note: utf8_slice_codeunits redirects to binary_slice on the C++ side if the input is binary
+        right_substring = ArrowScalarFuncExpression(
+            src.empty_data,
+            [src],
+            "utf8_slice_codeunits",
+            (-len_expr.value, None, 1),
+        )
+
+    # Always return an empty string if the length was 0 or negative to start with
+    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    len_is_negative = ComparisonOpExpression(
+        bool_empty_data, len_expr, zero_expr, operator.le
+    )
+    src_is_not_null = UnaryOpExpression(bool_empty_data, src, "notnull")
+    return_empty_string = ConjunctionOpExpression(
+        bool_empty_data, len_is_negative, src_is_not_null, "__and__"
+    )
+    empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
+    return CaseExpression(
+        src.empty_data, return_empty_string, empty_string_expr, right_substring
+    )
+
+
+def convert_startswith_endswith(func_name, src, match_expr):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(match_expr, "match_expr", (str, pa.binary()))
+
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    return ArrowScalarFuncExpression(
+        bool_empty_data,
+        [src],
+        "starts_with" if func_name == "STARTSWITH" else "ends_with",
+        (match_expr.value,),
+    )
+
+
+def convert_contains(src, match_expr):
+    ensure_type_of_expr(src, "src", (str, pa.binary()))
+    ensure_arg_is_const_expr_of_type(match_expr, "match_expr", (str, pa.binary()))
+
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    return ArrowScalarFuncExpression(
+        bool_empty_data,
+        [src],
+        "match_substring",
+        (match_expr.value,),
+    )
+
+
+def convert_strcmp(input_plan, str1_expr, str2_expr):
+    ensure_type_of_expr(str1_expr, "str1_expr", (str, pa.binary()))
+    ensure_type_of_expr(str2_expr, "str2_expr", (str, pa.binary()))
+
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    str1_greater = ComparisonOpExpression(
+        bool_empty_data, str1_expr, str2_expr, operator.gt
+    )
+    strings_equal = ComparisonOpExpression(
+        bool_empty_data, str1_expr, str2_expr, operator.eq
+    )
+
+    # Using lexicographical comparison, return 1 if str1 > str2, -1 if str1 < str2, 0 if str1 == str2.
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    one_expr = ConstantExpression(int_empty_data, input_plan, 1)
+    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
+    negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
+    return CaseExpression(
+        int_empty_data,
+        strings_equal,
+        zero_expr,
+        CaseExpression(int_empty_data, str1_greater, one_expr, negative_one_expr),
+    )
+
+
 def convert_trim(first_java_opr, trim_chars_expr, src):
     # Snowflake's TRIM accepts 1 or 2 arguments but Calcite will convert it to
     # a 3-arguments form, including using a space character as the default when
@@ -3281,7 +4039,7 @@ def convert_SqlBasicFunction(ctx, java_call, input_plan):
         func_name = "CEIL"
 
     if func_name in ("FLOOR", "CEIL") and len(op_exprs) == 1:
-        return convert_floor_ceil(func_name, op_exprs[0])
+        return convert_floor_ceil_unary(func_name, op_exprs[0])
 
     if func_name == "EXP" and len(op_exprs) == 1:
         return convert_exp(op_exprs[0])
@@ -3761,866 +4519,63 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         func_name = op.getName().upper()
 
         if func_name in ("FLOOR", "CEIL") and len(op_exprs) in (1, 2):
-            inp = op_exprs[0]
-            ensure_type_of_expr(
-                inp, func_name + " input", (int, float, pa.Decimal128Type)
-            )
+            return convert_floor_ceil(input_plan, func_name, *op_exprs)
 
-            inp_dtype = get_expr_dtype(inp, func_name + " input")
+        if func_name == "POW" and len(op_exprs) == 2:
+            return convert_pow(*op_exprs)
 
-            if len(op_exprs) == 1:
-                if compare_types(inp_dtype, int):
-                    # If input is an integer, FLOOR/CEIL is a no-op
-                    return inp
-                else:
-                    # If input is a float, return FLOOR(inp) or CEIL(inp) as normal
-                    return UnaryOpExpression(inp.empty_data, inp, func_name.lower())
-            else:
-                # Snowflake / BodoSQL has a scale option that dictates how many digits
-                # after the decimal point the input should be raised or lowered to.
-                # DuckDB and Arrow have no such option, so we have to emulate it.
-                scale_expr = op_exprs[1]
-                ensure_type_of_expr(scale_expr, "scale_expr", int)
+        if func_name == "SQUARE" and len(op_exprs) == 1:
+            return convert_square(op_exprs[0])
 
-                int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-                float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+        if func_name == "LOG2" and len(op_exprs) == 1:
+            return convert_log2(op_exprs[0])
 
-                ten_expr = ConstantExpression(int_empty_data, input_plan, 10)
+        if func_name == "LOG" and len(op_exprs) in (1, 2):
+            return convert_log(input_plan, *op_exprs)
 
-                if compare_types(inp_dtype, int):
-                    # If input is an int, we don't need to do anything for scale >= 0.
-                    # If scale < 0, we can use a formula that allows us to retain
-                    # the integer type throughout the calculation.
-                    # Division is not ideal for ints because __floordiv__ truncates
-                    # towards zero, and __truediv__ could result in loss of precision.
+        if func_name in ("DIV0", "DIV0NULL") and len(op_exprs) == 2:
+            return convert_div0_div0null(input_plan, func_name, *op_exprs)
 
-                    # For FLOOR, result = inp - (inp % 10^abs(scale)), minus 10^abs(scale)
-                    #   if inp % 10^abs(scale) is negative.
-                    # For CEIL, result = inp - (inp % 10^abs(scale)), plus 10^abs(scale)
-                    #   if inp % 10^abs(scale) is positive.
+        if func_name == "WIDTH_BUCKET" and len(op_exprs) == 4:
+            return convert_width_bucket(input_plan, *op_exprs)
 
-                    zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-                    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-                    scale_negative = ComparisonOpExpression(
-                        bool_empty_data, scale_expr, zero_expr, operator.lt
-                    )
+        if func_name in ("BITAND", "BITOR", "BITXOR") and len(op_exprs) == 2:
+            return convert_bitand_bitor_bitxor(func_name, *op_exprs)
 
-                    # Calculate inp % 10^abs(scale)
-                    scale_magnitude = UnaryOpExpression(
-                        scale_expr.empty_data, scale_expr, "abs"
-                    )
-                    power_of_10 = ArithOpExpression(
-                        int_empty_data, ten_expr, scale_magnitude, "__pow__"
-                    )
-                    inp_remainder = ArithOpExpression(
-                        inp.empty_data, inp, power_of_10, "__mod__"
-                    )
+        if func_name == "BITSHIFTLEFT" and len(op_exprs) == 2:
+            return convert_bitshiftleft(*op_exprs)
 
-                    # inp - inp % 10^abs(scale)
-                    inp_minus_remainder = ArithOpExpression(
-                        inp.empty_data, inp, inp_remainder, "__sub__"
-                    )
+        if func_name == "BITSHIFTRIGHT" and len(op_exprs) == 2:
+            return convert_bitshiftright(*op_exprs)
 
-                    if func_name == "FLOOR":
-                        # FLOOR: Subtract power of 10 if remainder is negative (not including 0)
-                        should_add_remainder = ComparisonOpExpression(
-                            bool_empty_data, inp_remainder, zero_expr, operator.lt
-                        )
-                        adjusted_inp_minus_remainder = ArithOpExpression(
-                            inp.empty_data, inp_minus_remainder, power_of_10, "__sub__"
-                        )
-                    else:
-                        # CEIL: Add power of 10 if remainder is positive (not including 0)
-                        should_add_remainder = ComparisonOpExpression(
-                            bool_empty_data, inp_remainder, zero_expr, operator.gt
-                        )
-                        adjusted_inp_minus_remainder = ArithOpExpression(
-                            inp.empty_data, inp_minus_remainder, power_of_10, "__add__"
-                        )
+        if func_name == "BITNOT" and len(op_exprs) == 1:
+            return convert_bitnot(op_exprs[0])
 
-                    # Final result for the scale < 0 case
-                    negative_scale_result = CaseExpression(
-                        inp.empty_data,
-                        should_add_remainder,
-                        adjusted_inp_minus_remainder,
-                        inp_minus_remainder,
-                    )
+        if func_name == "GETBIT" and len(op_exprs) == 2:
+            return convert_getbit(input_plan, *op_exprs)
 
-                    # For 0 or positive scale, we don't have to do anything.
-                    return CaseExpression(
-                        inp.empty_data, scale_negative, negative_scale_result, inp
-                    )
-                else:
-                    # If input is a float or decimal, we do:
-                    # result = [FLOOR/CEIL](inp * 10^scale) / 10^scale
-                    power_of_10 = ArithOpExpression(
-                        float_empty_data, ten_expr, scale_expr, "__pow__"
-                    )
-                    scaled_inp = ArithOpExpression(
-                        float_empty_data, inp, power_of_10, "__mul__"
-                    )
-                    scaled_inp_rounded = UnaryOpExpression(
-                        float_empty_data, scaled_inp, func_name.lower()
-                    )
-                    output_empty_data = adjust_scale(
-                        inp_dtype, scale_expr, inp.empty_data
-                    )
+        if func_name == "FORMAT" and len(op_exprs) == 2:
+            return convert_format(input_plan, *op_exprs)
 
-                    return ArithOpExpression(
-                        output_empty_data,
-                        scaled_inp_rounded,
-                        power_of_10,
-                        "__truediv__",
-                    )
-        elif func_name == "POW" and len(op_exprs) == 2:
-            left = op_exprs[0]
-            right = op_exprs[1]
-            out_empty = left.empty_data.iloc[:, 0] ** right.empty_data.iloc[:, 0]
-            return ArithOpExpression(out_empty, left, right, "__pow__")
-        elif func_name == "SQUARE" and len(op_exprs) == 1:
-            inp = op_exprs[0]
-            ensure_type_of_expr(inp, "SQUARE input", (int, float))
-            out_empty = inp.empty_data.iloc[:, 0] * inp.empty_data.iloc[:, 0]
-            return ArithOpExpression(out_empty, inp, inp, "__mul__")
-        elif func_name == "LOG2" and len(op_exprs) == 1:
-            inp = op_exprs[0]
-            ensure_type_of_expr(inp, "LOG2 input", (int, float))
+        if func_name == "LEFT" and len(op_exprs) == 2:
+            return convert_left(input_plan, *op_exprs)
 
-            # Retain current float output type if input is a float,
-            # otherwise use float64.
-            inp_dtype = get_expr_dtype(inp, "LOG2 input")
-            if compare_types(inp_dtype, int):
-                out_empty = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
-            else:
-                out_empty = inp.empty_data
+        if func_name == "RIGHT" and len(op_exprs) == 2:
+            return convert_right(input_plan, *op_exprs)
 
-            return UnaryOpExpression(out_empty, inp, "log2")
-        elif func_name == "LOG" and len(op_exprs) in (1, 2):
-            # We read the first argument as the operand and
-            # the second argument as the base, which is different
-            # than e.g. Snowflake.
-            inp = op_exprs[0]
-            ensure_type_of_expr(inp, "LOG input", (int, float))
+        if func_name in ("STARTSWITH", "ENDSWITH") and len(op_exprs) == 2:
+            return convert_startswith_endswith(func_name, *op_exprs)
 
-            if len(op_exprs) == 2:
-                base_expr = op_exprs[1]
-                ensure_type_of_expr(base_expr, "LOG base", (int, float))
+        if func_name == "CONTAINS" and len(op_exprs) == 2:
+            return convert_contains(*op_exprs)
 
-            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+        if func_name == "LENGTH" and len(op_exprs) == 1:
+            # Snowflake LENGTH() = MySQL CHAR_LENGTH()
+            return convert_char_length(op_exprs[0])
 
-            # Retain current float output type if input is a float,
-            # otherwise use float64.
-            inp_dtype = get_expr_dtype(inp, "LOG input")
-            if compare_types(inp_dtype, int):
-                out_empty = float_empty_data
-            else:
-                out_empty = inp.empty_data
+        if func_name == "STRCMP" and len(op_exprs) == 2:
+            return convert_strcmp(input_plan, *op_exprs)
 
-            if len(op_exprs) == 1:
-                return UnaryOpExpression(out_empty, inp, "log10")
-            else:
-                if isinstance(base_expr, ConstantExpression):
-                    # If the base is a constant, we can use shortcuts.
-
-                    # Use dedicated log functions for special bases (e, 10, 2)
-                    if base_expr.value == 10:
-                        return UnaryOpExpression(out_empty, inp, "log10")
-                    elif base_expr.value == 2:
-                        return UnaryOpExpression(out_empty, inp, "log2")
-                    elif np.isclose(base_expr.value, np.e):
-                        return UnaryOpExpression(out_empty, inp, "ln")
-
-                    # If not a special base, calculate scalar ln(base)
-                    log_of_base_expr = ConstantExpression(
-                        float_empty_data, input_plan, np.log(base_expr.value)
-                    )
-                else:
-                    # Calculate ln(base)
-                    log_of_base_expr = UnaryOpExpression(
-                        float_empty_data, base_expr, "ln"
-                    )
-
-            # Use change of base formula: log_base_(x) = log(x) / log(base)
-            log_of_inp = UnaryOpExpression(out_empty, inp, "ln")
-            return ArithOpExpression(
-                out_empty, log_of_inp, log_of_base_expr, "__truediv__"
-            )
-
-        elif func_name in ("DIV0", "DIV0NULL") and len(op_exprs) == 2:
-            dividend_expr = op_exprs[0]
-            divisor_expr = op_exprs[1]
-            ensure_type_of_expr(dividend_expr, "dividend_expr", (int, float))
-            ensure_type_of_expr(divisor_expr, "divisor_expr", (int, float))
-
-            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
-            quotient_expr = ArithOpExpression(
-                float_empty_data, dividend_expr, divisor_expr, "__truediv__"
-            )
-
-            # Return 0 if divisor is 0 (or NULL, for DIV0NULL);
-            # otherwise, return the standard quotient.
-
-            zero_expr = ConstantExpression(float_empty_data, input_plan, 0.0)
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            divisor_is_zero = ComparisonOpExpression(
-                bool_empty_data, divisor_expr, zero_expr, operator.eq
-            )
-
-            if func_name == "DIV0NULL":
-                divisor_is_null = UnaryOpExpression(
-                    bool_empty_data, divisor_expr, "isnull"
-                )
-                invalid_divisor = ConjunctionOpExpression(
-                    bool_empty_data, divisor_is_zero, divisor_is_null, "__or__"
-                )
-            else:
-                invalid_divisor = divisor_is_zero
-
-            div0_quotient = CaseExpression(
-                float_empty_data, invalid_divisor, zero_expr, quotient_expr
-            )
-
-            # Ensure NULL is always returned if the dividend is NULL
-            dividend_is_null = UnaryOpExpression(
-                bool_empty_data, dividend_expr, "isnull"
-            )
-            return CaseExpression(
-                float_empty_data,
-                dividend_is_null,
-                NullExpression(float_empty_data, input_plan, 0),
-                div0_quotient,
-            )
-        elif func_name == "WIDTH_BUCKET" and len(op_exprs) == 4:
-            """Get the bucket the input number would be in if we had a histogram with a certain contiguous value range and number of buckets"""
-            numeric_expr = op_exprs[0]
-            min_val_expr = op_exprs[1]  # inclusive
-            max_val_expr = op_exprs[2]  # exclusive
-            num_buckets_expr = op_exprs[3]
-
-            ensure_type_of_expr(numeric_expr, "numeric_expr", (int, float))
-            ensure_type_of_expr(min_val_expr, "min_val_expr", (int, float))
-            ensure_type_of_expr(max_val_expr, "max_val_expr", (int, float))
-            ensure_type_of_expr(num_buckets_expr, "num_buckets_expr", int)
-
-            # The min value of the range must be strictly less than the max value
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            min_max_valid = ComparisonOpExpression(
-                bool_empty_data, min_val_expr, max_val_expr, operator.lt
-            )
-
-            # The number of buckets must be 1 or more
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-            num_buckets_valid = ComparisonOpExpression(
-                bool_empty_data, num_buckets_expr, zero_expr, operator.gt
-            )
-
-            valid_inputs = ConjunctionOpExpression(
-                bool_empty_data, min_max_valid, num_buckets_valid, "__and__"
-            )
-
-            # Custom logic for get_common_int_type to ensure the result is signed after subtraction.
-            # Technically this isn't necessary here since we won't be getting any negative
-            # results, but it's a good example for future situations where this might be needed.
-            def get_common_signed(
-                expr1_width, expr2_width, expr1_is_signed, expr2_is_signed
-            ):
-                return True
-
-            float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
-            # Calculate the length of the range between min_val_expr and max_value_expr.
-            # Note that we first determine the common integer type so that we can get the
-            # appropriate empty_data for the operation.
-            common_int_type = get_common_int_type(
-                max_val_expr, min_val_expr, get_common_signed=get_common_signed
-            )[0]
-            range_length = ArithOpExpression(
-                pd.Series(dtype=pd.ArrowDtype(common_int_type))
-                if common_int_type is not None
-                else float_empty_data,
-                max_val_expr,
-                min_val_expr,
-                "__sub__",
-            )
-
-            # By doing numeric_expr - min_val_expr, we normalize the input to the range [0, max_val_expr - min_val_expr).
-            # We can assume this since we check earlier for numeric_expr being less than min_val_expr or greater than max_val_expr.
-            common_int_type = get_common_int_type(
-                numeric_expr, min_val_expr, get_common_signed=get_common_signed
-            )[0]
-            normalized_input = ArithOpExpression(
-                pd.Series(dtype=pd.ArrowDtype(common_int_type))
-                if common_int_type is not None
-                else float_empty_data,
-                numeric_expr,
-                min_val_expr,
-                "__sub__",
-            )
-
-            # Get the position of numeric_expr in the range as a float in [0.0, 1.0).
-            range_position = ArithOpExpression(
-                float_empty_data, normalized_input, range_length, "__truediv__"
-            )
-            # Multiply by the number of buckets to scale to the range [0.0, num_buckets)
-            scaled_range_position = ArithOpExpression(
-                float_empty_data, range_position, num_buckets_expr, "__mul__"
-            )
-
-            # Get the 1-based integer bucket number.
-            # We use floor(scaled_range_position) + 1 instead of ceil() so that 0.0 is mapped to a bucket number of 1.
-            # Note that scaled_range_position cannot equal num_buckets_expr.
-            bucket_number = UnaryOpExpression(
-                int_empty_data, scaled_range_position, "floor"
-            )
-            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
-            bucket_number = ArithOpExpression(
-                int_empty_data, bucket_number, one_expr, "__add__"
-            )
-
-            # Check if numeric_expr is outside of [min_val_expr, max_val_expr)
-            val_below_range = ComparisonOpExpression(
-                bool_empty_data, numeric_expr, min_val_expr, operator.lt
-            )
-            val_above_range = ComparisonOpExpression(
-                bool_empty_data, numeric_expr, max_val_expr, operator.ge
-            )
-            # If numeric_expr < min_val_expr, return bucket number of 0.
-            # If numeric_expr >= max_val_expr, return bucket number of num_buckets + 1.
-            num_buckets_plus_one = ArithOpExpression(
-                int_empty_data, num_buckets_expr, one_expr, "__add__"
-            )
-            final_bucket_number = CaseExpression(
-                int_empty_data,
-                val_below_range,
-                zero_expr,
-                CaseExpression(
-                    int_empty_data, val_above_range, num_buckets_plus_one, bucket_number
-                ),
-            )
-
-            return CaseExpression(
-                int_empty_data,
-                valid_inputs,
-                final_bucket_number,
-                NullExpression(int_empty_data, input_plan, 0),
-            )
-
-        elif (
-            func_name in ("BITAND", "BITOR", "BITXOR", "BITSHIFTLEFT", "BITSHIFTRIGHT")
-            and len(op_exprs) == 2
-        ):
-            left_expr = op_exprs[0]
-            right_expr = op_exprs[1]
-
-            ensure_type_of_expr(left_expr, "left_expr", int)
-            ensure_type_of_expr(right_expr, "right_expr", int)
-
-            empty_data = left_expr.empty_data
-            cast_empty_data = None
-            int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-
-            if func_name == "BITAND":
-                arrow_equivalent_func = "bit_wise_and"
-            elif func_name == "BITOR":
-                arrow_equivalent_func = "bit_wise_or"
-            elif func_name == "BITXOR":
-                arrow_equivalent_func = "bit_wise_xor"
-            elif func_name == "BITSHIFTLEFT":
-                arrow_equivalent_func = "shift_left"
-            elif func_name == "BITSHIFTRIGHT":
-                arrow_equivalent_func = "shift_right"
-
-            if func_name in ("BITSHIFTLEFT", "BITSHIFTRIGHT"):
-                left_opr_sql_type = operands[0].getType()
-                SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-
-                if left_opr_sql_type.getSqlTypeName().equals(SqlTypeName.BINARY):
-                    # Cast right_expr to match the bit width and signedness of left_expr.
-                    # This minimizes cast operations necessary, since if the types of left_expr and right_expr match, the final result will have the type of left_expr.
-                    # This is what we want to retain the original bit width after shifting, for BINARY input.
-                    # Effectively we discard bits that were shifted past the left end of the original precision input.
-                    right_expr = CastExpression(left_expr.empty_data, right_expr)
-                else:
-                    # For INTEGER input:
-                    # Ensure arguments are int64.
-                    # We don't want shift_left to be limited by the precision of the
-                    # input (at least for INTEGER input).
-                    # If one argument is uint64, this can help avoid a mismatch that will cause an error coming from the Arrow compute function.
-                    # We do the same for shift_right to be consistent with Snowflake (max bit width signed output).
-                    if func_name == "BITSHIFTLEFT":
-                        left_expr = CastExpression(int64_empty_data, left_expr)
-                        # (Arrow can take care of casting right_expr in this case.)
-                        # For bitshifting, result type should be INT64 to match Snowflake and output on C++ side.
-                        empty_data = int64_empty_data
-                    else:
-                        # For shift_right, we have to be careful that left_expr keeps the original
-                        # signedness so the proper right shift (logical or arithmetic) is performed.
-                        if pa.types.is_signed_integer(
-                            left_expr.empty_data.dtypes[
-                                left_expr.empty_data.columns[0]
-                            ].pyarrow_dtype
-                        ):
-                            shift_right_empty_data = int64_empty_data
-                        else:
-                            shift_right_empty_data = pd.Series(
-                                dtype=pd.ArrowDtype(pa.uint64())
-                            )
-                        left_expr = CastExpression(shift_right_empty_data, left_expr)
-                        # Make right_expr's type match left_expr so that Arrow's type unification doesn't
-                        # make int64 the common type when left_expr is uint64, causing a cast failure
-                        right_expr = CastExpression(shift_right_empty_data, right_expr)
-                        empty_data = shift_right_empty_data
-                        # Ensure result is signed if input was unsigned
-                        cast_empty_data = int64_empty_data
-            else:
-                # For BITAND/BITOR/BIXOR:
-                # Make sure the type of empty_data has the larger bit width of the two inputs.
-                # Also unify the types of the inputs to that type.
-                left_expr_dtype = left_expr.empty_data.dtypes[
-                    left_expr.empty_data.columns[0]
-                ].pyarrow_dtype
-                right_expr_dtype = right_expr.empty_data.dtypes[
-                    right_expr.empty_data.columns[0]
-                ].pyarrow_dtype
-                left_expr_signed = pa.types.is_signed_integer(left_expr_dtype)
-                right_expr_signed = pa.types.is_signed_integer(right_expr_dtype)
-
-                # Cast inputs to unsigned before doing the operation if at least one is unsigned.
-                # Again, this is to work around a quirk of Arrow's type unification.
-                empty_data_bit_width = max(
-                    left_expr_dtype.bit_width, right_expr_dtype.bit_width
-                )
-                empty_data_signed = left_expr_signed and right_expr_signed
-                target_dtype = pd.ArrowDtype(
-                    eval(
-                        f"pa.{'' if empty_data_signed else 'u'}int{empty_data_bit_width}()"
-                    )
-                )
-                empty_data = pd.Series(dtype=target_dtype)
-                left_expr = CastExpression(empty_data, left_expr)
-                right_expr = CastExpression(empty_data, right_expr)
-                # Return signed if at least one of the inputs are signed
-                if left_expr_signed is not right_expr_signed:
-                    cast_empty_data = pd.Series(
-                        dtype=pd.ArrowDtype(eval(f"pa.int{empty_data_bit_width}()"))
-                    )
-
-            result = ArrowScalarFuncExpression(
-                empty_data, [left_expr, right_expr], arrow_equivalent_func, ()
-            )
-
-            # Cast the result to the desired type if (for one reason or another)
-            # the input types could not be aligned with the proper output type
-            if cast_empty_data is not None:
-                result = CastExpression(cast_empty_data, result)
-
-            return result
-        elif func_name == "BITNOT" and len(op_exprs) == 1:
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", int)
-            return ArrowScalarFuncExpression(src.empty_data, [src], "bit_wise_not", ())
-        elif func_name == "GETBIT" and len(op_exprs) == 2:
-            src = op_exprs[0]
-            bit_num = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", int)
-            ensure_type_of_expr(bit_num, "bit_num", int)
-
-            # Do a bitwise AND on `src` and a bitmask that is only set on the requested bit position.
-            # If the result is nonzero, the requested bit is 1, else it is 0.
-
-            # We should operate on uint64.
-            # We want Arrow's shift_left to set the most significant bit when
-            # shifting 1 63 positions to the left, but this only happens when 1 is unsigned.
-
-            uint64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.uint64()))
-
-            one_expr = ConstantExpression(uint64_empty_data, input_plan, 1)
-            bit_num = CastExpression(uint64_empty_data, bit_num)
-            bitmask = ArrowScalarFuncExpression(
-                uint64_empty_data, [one_expr, bit_num], "shift_left", ()
-            )
-
-            # Cast `src` to uint64 to avoid problematic type unification in bit_wise_and.
-            src = CastExpression(uint64_empty_data, src)
-            src_with_mask = ArrowScalarFuncExpression(
-                uint64_empty_data, [src, bitmask], "bit_wise_and", ()
-            )
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            zero_expr = ConstantExpression(uint64_empty_data, input_plan, 0)
-            is_bit_set = ComparisonOpExpression(
-                bool_empty_data, src_with_mask, zero_expr, operator.ne
-            )
-
-            # Use if_else instead of case_when so that nulls in is_bit_set propagate to the result
-            return ArrowScalarFuncExpression(
-                uint64_empty_data, [is_bit_set, one_expr, zero_expr], "if_else", ()
-            )
-        elif func_name == "FORMAT" and len(op_exprs) == 2:
-            """
-            Returns a formatted string representation of a number.
-            The number is rounded to the specified precision and printed
-            with enough zeros to demonstrate that precision.
-            Commas are also inserted as thousands separators.
-            """
-
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (int, float))
-
-            precision_digits = op_exprs[1]
-            ensure_type_of_expr(precision_digits, "precision_digits", int)
-
-            # MySQL treats any precision digits < 0 as 0
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-            precision_digits = ArrowScalarFuncExpression(
-                int_empty_data,
-                [precision_digits, zero_expr],
-                "max_element_wise",
-                (),
-            )
-
-            # Round the number to the specified precision
-            rounded = ArithOpExpression(src.empty_data, src, precision_digits, "round")
-
-            # Get the string representation of the number
-            str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
-            rounded_str = CastExpression(str_empty_data, rounded)
-
-            # Get the character index of the decimal point in the string. Returns -1 if not found.
-            decimal_point_pos = ArrowScalarFuncExpression(
-                int_empty_data, [rounded_str], "find_substring", (".",)
-            )
-            # Get full character length of string
-            rounded_str_length = ArrowScalarFuncExpression(
-                int_empty_data, [rounded_str], "utf8_length", ()
-            )
-
-            # Get whether the number has a nonzero fractional component
-            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            has_no_dot = ComparisonOpExpression(
-                bool_empty_data, decimal_point_pos, negative_one_expr, operator.eq
-            )
-
-            # First, we will deal with inserting commas to separate thousands in the integer part.
-
-            # Slice to obtain the integer part of the number.
-            is_negative = ArrowScalarFuncExpression(
-                bool_empty_data, [rounded_str], "match_substring", ("-",)
-            )
-            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
-            start_index = CaseExpression(
-                int_empty_data, is_negative, one_expr, zero_expr
-            )
-            end_index = CaseExpression(
-                int_empty_data, has_no_dot, rounded_str_length, decimal_point_pos
-            )
-            integer_part = ArrowScalarFuncExpression(
-                str_empty_data,
-                [rounded_str, start_index, end_index],
-                "utf8_slice_codeunits",
-                (),
-            )
-
-            # Figure out how many characters (spaces) we should add to the left side to make the length
-            # of the integer part a multiple of 3 (so we can insert commas in the right places).
-            # Note that if the length is already a multiple of 3, we end up adding 3 spaces anyway,
-            # but it doesn't matter since we'll trim them off.
-            integer_part_len = ArrowScalarFuncExpression(
-                int_empty_data, [integer_part], "utf8_length", ()
-            )
-            three_expr = ConstantExpression(int_empty_data, input_plan, 3)
-            len_mod_3 = ArithOpExpression(
-                int_empty_data, integer_part_len, three_expr, "__mod__"
-            )
-            num_to_offset = ArithOpExpression(
-                int_empty_data, three_expr, len_mod_3, "__sub__"
-            )
-
-            # Get space characters of the desired length to offset
-            space_str = ConstantExpression(str_empty_data, input_plan, " ")
-            space_offset_str = ArrowScalarFuncExpression(
-                str_empty_data, [space_str, num_to_offset], "binary_repeat", ()
-            )
-            separator = ConstantExpression(str_empty_data, input_plan, "")
-            offset_integer_part = ArrowScalarFuncExpression(
-                str_empty_data,
-                [space_offset_str, integer_part, separator],
-                "binary_join_element_wise",
-                (),
-            )
-
-            # Use regex to add commas every three digits (or spaces)
-            integer_part_with_commas = ArrowScalarFuncExpression(
-                str_empty_data,
-                [offset_integer_part],
-                "replace_substring_regex",
-                (r"([0-9 ]{3})", r"\1,"),
-            )
-            # Clean up result by trimming off spaces and commas
-            integer_part_with_commas = ArrowScalarFuncExpression(
-                str_empty_data, [integer_part_with_commas], "utf8_trim", (" ,",)
-            )
-
-            # Add back the negative sign if needed
-            negative_sign_expr = ConstantExpression(str_empty_data, input_plan, "-")
-            negative_comma_integer_part = ArrowScalarFuncExpression(
-                str_empty_data,
-                [negative_sign_expr, integer_part_with_commas, separator],
-                "binary_join_element_wise",
-                (),
-            )
-            integer_part_with_commas = CaseExpression(
-                str_empty_data,
-                is_negative,
-                negative_comma_integer_part,
-                integer_part_with_commas,
-            )
-
-            # Combine the integer and fractional part to get the number with proper comma-formatting
-            fractional_part = ArrowScalarFuncExpression(
-                str_empty_data,
-                [rounded_str, decimal_point_pos],
-                "bodo_substr_three",
-                (),
-            )
-            num_with_commas = ArrowScalarFuncExpression(
-                str_empty_data,
-                [integer_part_with_commas, fractional_part, separator],
-                "binary_join_element_wise",
-                (),
-            )
-            num_with_commas = CaseExpression(
-                str_empty_data, has_no_dot, integer_part_with_commas, num_with_commas
-            )
-
-            # Now we need to make sure that the formatted number has enough decimal digits.
-
-            # Calculate length of the fractional part of the number
-            frac_length = ArithOpExpression(
-                int_empty_data, rounded_str_length, decimal_point_pos, "__sub__"
-            )
-            # Subtract 1 to exclude the decimal point itself from the fractional length
-            frac_length = ArithOpExpression(
-                int_empty_data, frac_length, one_expr, "__sub__"
-            )
-            # The fractional length is simply 0 if the string form of the number has no decimal point
-            frac_length = CaseExpression(
-                int_empty_data, has_no_dot, zero_expr, frac_length
-            )
-
-            # Calculate the number of zeros we need to add so there are precision_digits decimal places.
-            # Note that due to the round, it's impossible for the string form of the number to have more than precision_digits decimal places.
-            # It could have fewer than precision_digits decimal places if it had fewer than that many to start with.
-            num_missing_zeros = ArithOpExpression(
-                int_empty_data, precision_digits, frac_length, "__sub__"
-            )
-            zero_str = ConstantExpression(str_empty_data, input_plan, "0")
-            extra_zeros_str = ArrowScalarFuncExpression(
-                str_empty_data, [zero_str, num_missing_zeros], "binary_repeat", ()
-            )
-
-            # Ensure we add a dot before the extra zeros if the number doesn't have a decimal point
-            dot_expr = ConstantExpression(str_empty_data, input_plan, ".")
-            dot_and_extra_zeros = ArrowScalarFuncExpression(
-                str_empty_data,
-                [dot_expr, extra_zeros_str, separator],
-                "binary_join_element_wise",
-                (),
-            )
-            padding = CaseExpression(
-                str_empty_data, has_no_dot, dot_and_extra_zeros, extra_zeros_str
-            )
-
-            # Append extra zeros
-            num_padded = ArrowScalarFuncExpression(
-                str_empty_data,
-                [num_with_commas, padding, separator],
-                "binary_join_element_wise",
-                (),
-            )
-
-            # If precision_digits is 0, the initial round and cast to string removes the decimal point even for float input.
-            # Therefore, we can just use the string form directly in that case, no need to worry about removing decimal
-            # points from the string.
-            zero_precision_digits = ComparisonOpExpression(
-                bool_empty_data, precision_digits, zero_expr, operator.eq
-            )
-            return CaseExpression(
-                str_empty_data, zero_precision_digits, rounded_str, num_padded
-            )
-
-        elif func_name == "LEFT" and len(op_exprs) == 2:
-            # Implement LEFT as substr(0,...)
-            src = op_exprs[0]
-            len_expr = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            src_dtype = get_expr_dtype(src, "src")
-
-            if compare_types(src_dtype, str):
-                ensure_type_of_expr(len_expr, "len_expr", int)
-
-                # Cast length to int64 to match the bodo_substr_three kernel definition
-                int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-                len_expr = CastExpression(int_empty_data, len_expr)
-
-                zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-                return ArrowScalarFuncExpression(
-                    src.empty_data, [src, zero_expr, len_expr], "bodo_substr_three", ()
-                )
-            else:
-                # bodo_substr_three doesn't support binary for now, so we use Arrow's binary_slice as
-                # a fallback for scalar length input in the binary case.
-                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
-                # Note: utf8_slice_codeunits redirects to binary_slice on the C++ side if the input is binary
-                return ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src],
-                    "utf8_slice_codeunits",
-                    (0, len_expr.value, 1),
-                )
-        elif func_name == "RIGHT" and len(op_exprs) == 2:
-            # Implement RIGHT as substr(-len,...)
-            src = op_exprs[0]
-            len_expr = op_exprs[1]
-
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            src_dtype = get_expr_dtype(src, "src")
-
-            if compare_types(src_dtype, str):
-                ensure_type_of_expr(len_expr, "len_expr", int)
-
-                # Cast length to int64 to match the bodo_substr_three kernel definition
-
-                len_expr = CastExpression(int_empty_data, len_expr)
-
-                # Multiply by negative one to get a start index `len_expr` characters from the right
-                negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
-                negative_len_expr = ArithOpExpression(
-                    int_empty_data, len_expr, negative_one_expr, "__mul__"
-                )
-
-                # Not passing a third argument means substring stops at end of string
-                right_substring = ArrowScalarFuncExpression(
-                    src.empty_data, [src, negative_len_expr], "bodo_substr_three", ()
-                )
-            else:
-                # bodo_substr_three doesn't support binary for now, so we use Arrow's binary_slice as
-                # a fallback for scalar length input in the binary case.
-                ensure_arg_is_const_expr_of_type(len_expr, "len_expr", int)
-                # Note: utf8_slice_codeunits redirects to binary_slice on the C++ side if the input is binary
-                right_substring = ArrowScalarFuncExpression(
-                    src.empty_data,
-                    [src],
-                    "utf8_slice_codeunits",
-                    (-len_expr.value, None, 1),
-                )
-
-            # Always return an empty string if the length was 0 or negative to start with
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            len_is_negative = ComparisonOpExpression(
-                bool_empty_data, len_expr, zero_expr, operator.le
-            )
-            src_is_not_null = UnaryOpExpression(bool_empty_data, src, "notnull")
-            return_empty_string = ConjunctionOpExpression(
-                bool_empty_data, len_is_negative, src_is_not_null, "__and__"
-            )
-            empty_string_expr = ConstantExpression(src.empty_data, input_plan, "")
-            return CaseExpression(
-                src.empty_data, return_empty_string, empty_string_expr, right_substring
-            )
-
-        elif func_name == "STARTSWITH" and len(op_exprs) == 2:
-            src = op_exprs[0]
-            match_expr = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(
-                match_expr, "match_expr", (str, pa.binary())
-            )
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return ArrowScalarFuncExpression(
-                bool_empty_data,
-                [src],
-                "starts_with",
-                (match_expr.value,),
-            )
-        elif func_name == "ENDSWITH" and len(op_exprs) == 2:
-            src = op_exprs[0]
-            match_expr = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(
-                match_expr, "match_expr", (str, pa.binary())
-            )
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return ArrowScalarFuncExpression(
-                bool_empty_data,
-                [src],
-                "ends_with",
-                (match_expr.value,),
-            )
-        elif func_name == "CONTAINS" and len(op_exprs) == 2:
-            src = op_exprs[0]
-            match_expr = op_exprs[1]
-
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            ensure_arg_is_const_expr_of_type(
-                match_expr, "match_expr", (str, pa.binary())
-            )
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            return ArrowScalarFuncExpression(
-                bool_empty_data,
-                [src],
-                "match_substring",
-                (match_expr.value,),
-            )
-        elif func_name == "LENGTH" and len(op_exprs) == 1:
-            src = op_exprs[0]
-            ensure_type_of_expr(src, "src", (str, pa.binary()))
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            return ArrowScalarFuncExpression(
-                int_empty_data,
-                [src],
-                "utf8_length",
-                (),
-            )
-        elif func_name == "STRCMP" and len(op_exprs) == 2:
-            str1_expr = op_exprs[0]
-            str2_expr = op_exprs[1]
-            ensure_type_of_expr(str1_expr, "str1_expr", (str, pa.binary()))
-            ensure_type_of_expr(str2_expr, "str2_expr", (str, pa.binary()))
-
-            bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
-            str1_greater = ComparisonOpExpression(
-                bool_empty_data, str1_expr, str2_expr, operator.gt
-            )
-            strings_equal = ComparisonOpExpression(
-                bool_empty_data, str1_expr, str2_expr, operator.eq
-            )
-
-            # Using lexicographical comparison, return 1 if str1 > str2, -1 if str1 < str2, 0 if str1 == str2.
-            int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
-            one_expr = ConstantExpression(int_empty_data, input_plan, 1)
-            zero_expr = ConstantExpression(int_empty_data, input_plan, 0)
-            negative_one_expr = ConstantExpression(int_empty_data, input_plan, -1)
-            return CaseExpression(
-                int_empty_data,
-                strings_equal,
-                zero_expr,
-                CaseExpression(
-                    int_empty_data, str1_greater, one_expr, negative_one_expr
-                ),
-            )
         elif func_name in ("INSTR", "CHARINDEX") and len(op_exprs) in (2, 3):
             if func_name == "INSTR":
                 src = op_exprs[0]
