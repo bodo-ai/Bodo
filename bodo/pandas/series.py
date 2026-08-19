@@ -386,7 +386,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     right_atype = zero_size_other.dtype.pyarrow_dtype
                 elif type(other) is BodoScalar:
                     right_atype = pa.scalar(zero_size_other).type
-                elif isinstance(other, numbers.Number):
+                elif isinstance(other, numbers.Number) and not isinstance(other, (bool, complex)):
                     other_dec = Decimal(str(other))
                     other_pa_dec = pa.scalar(other_dec)
                     right_atype = other_pa_dec.type
