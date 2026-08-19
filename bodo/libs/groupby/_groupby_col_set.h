@@ -7,8 +7,6 @@
 #include "_groupby_ftypes.h"
 #include "_groupby_udf.h"
 
-#include <iostream>
-
 /**
  * This file declares the functions used to create "col sets"
  * in the groupby infrastructure. A col set is the explicit
@@ -100,9 +98,6 @@ class BasicColSet {
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager()) {
-        std::cout << "alloc_update_columns " << out_cols.size()
-                  << (out_cols.size() > 0 ? out_cols[0]->dtype : -1)
-                  << std::endl;
         this->alloc_running_value_columns(num_groups, out_cols, pool,
                                           std::move(mm));
         this->update_cols = out_cols;
@@ -271,7 +266,6 @@ class BasicColSet {
      */
     virtual void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) {
-        std::cout << "inside setUpdateCols" << std::endl;
         update_cols = update_cols_;
     }
 
@@ -336,7 +330,6 @@ class BasicColSet {
         update_cols;  // columns for update step
     std::vector<std::shared_ptr<array_info>>
         combine_cols;  // columns for combine step
-    mutable std::unique_ptr<bodo::Schema> running_value_schema;
 };
 
 /**
@@ -457,21 +450,11 @@ class MeanColSet : public BasicColSet {
         // count data. See MeanColSet::alloc_update_columns()
 
         std::vector<std::unique_ptr<bodo::DataType>> datatypes;
-        std::cout << "getRunning 0 " << std::endl;
-        std::cout << in_schema->ToString(true) << std::endl;
-        if (in_schema->column_types[0]->c_type == Bodo_CTypes::DECIMAL) {
-            std::cout << "getRunning 1" << std::endl;
-            datatypes.push_back(in_schema->column_types[0]->copy());
-        } else {
-            std::cout << "getRunning 2" << std::endl;
-            datatypes.push_back(std::make_unique<bodo::DataType>(
-                bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
-        }
+        datatypes.push_back(std::make_unique<bodo::DataType>(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
         datatypes.push_back(std::make_unique<bodo::DataType>(
             bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::UINT64));
-        running_value_schema =
-            std::make_unique<bodo::Schema>(std::move(datatypes));
-        return running_value_schema->copy();
+        return std::make_unique<bodo::Schema>(std::move(datatypes));
     }
 };
 
