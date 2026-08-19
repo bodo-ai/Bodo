@@ -398,7 +398,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                 decimal_precision_scale_func = None
                 if pa.types.is_decimal(right_atype):
                     if op in ("__add__", "__radd__", "__sub__", "__rsub__"):
-                        from bodo.libs.decimal_arr_ext import (
+                        from bodo.utils.decimal_utils import (
                             decimal_addition_subtraction_output_precision_scale,
                         )
 
@@ -406,7 +406,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                             decimal_addition_subtraction_output_precision_scale
                         )
                     elif op in ("__mul__", "__rmul__"):
-                        from bodo.libs.decimal_arr_ext import (
+                        from bodo.utils.decimal_utils import (
                             decimal_multiplication_output_precision_scale,
                         )
 
@@ -414,7 +414,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                             decimal_multiplication_output_precision_scale
                         )
                     elif op in ("__truediv__", "__rtruediv__"):
-                        from bodo.libs.decimal_arr_ext import (
+                        from bodo.utils.decimal_utils import (
                             decimal_division_output_precision_scale,
                         )
 
