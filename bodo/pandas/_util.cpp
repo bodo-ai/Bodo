@@ -390,6 +390,19 @@ duckdb::Value ArrowScalarToDuckDBValue(
         case arrow::Type::DOUBLE:
             return duckdb::Value::DOUBLE(
                 std::static_pointer_cast<arrow::DoubleScalar>(scalar)->value);
+        case arrow::Type::DECIMAL: {
+            auto dec_scalar =
+                std::static_pointer_cast<arrow::Decimal128Scalar>(scalar);
+            arrow::Decimal128 dec_value = dec_scalar->value;
+            auto dec_type = std::static_pointer_cast<arrow::Decimal128Type>(
+                dec_scalar->type);
+            int32_t precision = dec_type->precision();
+            int32_t scale = dec_type->scale();
+            int64_t high_bits = dec_value.high_bits();
+            int64_t low_bits = dec_value.low_bits();
+            duckdb::hugeint_t hugeint_value(high_bits, low_bits);
+            return duckdb::Value::DECIMAL(hugeint_value, precision, scale);
+        } break;
         case arrow::Type::BOOL:
             return duckdb::Value::BOOLEAN(
                 std::static_pointer_cast<arrow::BooleanScalar>(scalar)->value);
@@ -1202,6 +1215,18 @@ PyObject *_duckdbFilterToPyicebergFilter(
                     Py_DECREF(original_py_expr);
                     Py_DECREF(child_expr);
                 }
+            }
+        } break;
+        case duckdb::TableFilterType::OPTIONAL_FILTER: {
+            duckdb::unique_ptr<duckdb::OptionalFilter> optionalFilter =
+                dynamic_cast_unique_ptr<duckdb::OptionalFilter>(std::move(tf));
+            try {
+                py_expr = _duckdbFilterToPyicebergFilter(
+                    std::move(optionalFilter->child_filter), field_name,
+                    pyiceberg_expression_mod);
+            } catch (...) {
+                py_expr = PyObject_CallMethod(pyiceberg_expression_mod.get(),
+                                              "AlwaysTrue", nullptr);
             }
         } break;
         default:

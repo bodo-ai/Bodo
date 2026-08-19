@@ -5665,48 +5665,19 @@ def ensure_type_of_expr(expr, expr_name, dtype):
         )
 
 
-def get_decimal_type(atype, expr):
-    if pa.types.is_int64(atype):
-        return pa.decimal128(19, 0)
-    elif pa.types.is_int32(atype):
-        return pa.decimal128(10, 0)
-    elif pa.types.is_int16(atype):
-        return pa.decimal128(5, 0)
-    elif pa.types.is_int8(atype):
-        return pa.decimal128(3, 0)
-    elif pa.types.is_uint64(atype):
-        return pa.decimal128(19, 0)
-    elif pa.types.is_uint32(atype):
-        return pa.decimal128(10, 0)
-    elif pa.types.is_uint16(atype):
-        return pa.decimal128(5, 0)
-    elif pa.types.is_uint8(atype):
-        return pa.decimal128(3, 0)
-    else:
-        raise TypeError(f"Not decimal conversion from {atype} yet")
-
-
-def get_output_type(left, right, non_decimal_func, decimal_func):
+def get_binop_output_type(left, right, non_decimal_func, decimal_func):
     left_empty = left.empty_data
     right_empty = right.empty_data
     left_atype = left_empty.dtypes.iloc[0].pyarrow_dtype
     right_atype = right_empty.dtypes.iloc[0].pyarrow_dtype
-    if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
-        if not pa.types.is_decimal(left_atype):
-            left_atype = get_decimal_type(left_atype, left)
-        if not pa.types.is_decimal(right_atype):
-            right_atype = get_decimal_type(right_atype, right)
-        output_precision, output_scale = decimal_func(
-            left_atype.precision,
-            left_atype.scale,
-            right_atype.precision,
-            right_atype.scale,
-        )
-        return pd.Series(
-            dtype=pd.ArrowDtype(pa.decimal128(min(38, output_precision), output_scale))
-        )
-    else:
-        return non_decimal_func(left_empty.iloc[:, 0], right_empty.iloc[:, 0])
+    return bd.utils.get_binop_output_type(
+        left_empty,
+        left_atype,
+        right_empty,
+        right_atype,
+        non_decimal_func,
+        decimal_func,
+    )
 
 
 def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
@@ -5729,7 +5700,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             decimal_addition_subtraction_output_precision_scale,
         )
 
-        out_empty = get_output_type(
+        out_empty = get_binop_output_type(
             left,
             right,
             lambda l, r: l + r,
@@ -5759,7 +5730,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
                 decimal_addition_subtraction_output_precision_scale,
             )
 
-            out_empty = get_output_type(
+            out_empty = get_binop_output_type(
                 left,
                 right,
                 lambda l, r: l - r,
@@ -5773,7 +5744,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             decimal_multiplication_output_precision_scale,
         )
 
-        out_empty = get_output_type(
+        out_empty = get_binop_output_type(
             left,
             right,
             lambda l, r: l * r,
@@ -5785,7 +5756,7 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
     if kind.equals(SqlKind.DIVIDE):
         from bodo.utils.decimal_utils import decimal_division_output_precision_scale
 
-        out_empty = get_output_type(
+        out_empty = get_binop_output_type(
             left,
             right,
             lambda l, r: l / r,
