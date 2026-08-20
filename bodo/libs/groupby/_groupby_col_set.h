@@ -451,8 +451,16 @@ class MeanColSet : public BasicColSet {
         // count data. See MeanColSet::alloc_update_columns()
 
         std::vector<std::unique_ptr<bodo::DataType>> datatypes;
+        Bodo_CTypes::CTypeEnum sum_dtype = Bodo_CTypes::FLOAT64;
+        int8_t precision = -1, scale = -1;
+        assert(in_schema->ncols() > 0);
+        if (in_schema->column_types[0]->c_type == Bodo_CTypes::DECIMAL) {
+            sum_dtype = Bodo_CTypes::DECIMAL;
+            precision = DECIMAL128_MAX_PRECISION;
+            scale = in_schema->column_types[0]->scale;
+        }
         datatypes.push_back(std::make_unique<bodo::DataType>(
-            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64));
+            bodo_array_type::NULLABLE_INT_BOOL, sum_dtype, precision, scale));
         datatypes.push_back(std::make_unique<bodo::DataType>(
             bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::UINT64));
         return std::make_unique<bodo::Schema>(std::move(datatypes));
