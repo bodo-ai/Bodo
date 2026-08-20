@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../_bodo_common.h"
+#include "../_decimal_ext.h"
 #include "../_dict_builder.h"
 #include "_groupby.h"
 #include "_groupby_common.h"
@@ -246,7 +247,7 @@ class BasicColSet {
             scale = in_schema->column_types[0]->scale;
             timezone = in_schema->column_types[0]->timezone;
             if (ftype == Bodo_FTypes::sum || ftype == Bodo_FTypes::sum0) {
-                precision = 38;
+                precision = DECIMAL128_MAX_PRECISION;
             }
         }
 
@@ -538,7 +539,7 @@ class WindowColSet : public BasicColSet {
         return this->window_funcs;
     }
 
-    virtual void clear() override {
+    void clear() override {
         BasicColSet::clear();
         this->input_cols.clear();
     }
@@ -717,7 +718,7 @@ class IdxMinMaxColSet : public BasicColSet {
         throw std::runtime_error(
             "IdxMinMaxColSet not implemented for streaming groupby");
     }
-    virtual void clear() override {
+    void clear() override {
         throw std::runtime_error(
             "IdxMinMaxColSet not implemented for streaming groupby");
     }
@@ -808,7 +809,7 @@ class VarStdColSet : public BasicColSet {
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         const std::shared_ptr<bodo::Schema>& in_schema) const override;
 
-    virtual void clear() override {
+    void clear() override {
         BasicColSet::clear();
         this->out_col.reset();
     }
@@ -888,7 +889,7 @@ class SkewColSet : public BasicColSet {
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         const std::shared_ptr<bodo::Schema>& in_schema) const override;
 
-    virtual void clear() override {
+    void clear() override {
         BasicColSet::clear();
         this->out_col.reset();
     }
@@ -961,7 +962,7 @@ class ListAggColSet : public BasicColSet {
         throw std::runtime_error(
             "ListAggColSet not implemented for streaming groupby");
     }
-    virtual void clear() override {
+    void clear() override {
         throw std::runtime_error(
             "ListAggColSet not implemented for streaming groupby");
     }
@@ -1021,7 +1022,7 @@ class KurtColSet : public BasicColSet {
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         const std::shared_ptr<bodo::Schema>& in_schema) const override;
 
-    virtual void clear() override {
+    void clear() override {
         BasicColSet::clear();
         this->out_col.reset();
     }
@@ -1234,7 +1235,7 @@ class PercentileColSet : public BasicColSet {
         throw std::runtime_error(
             "PercentileColSet not implemented for streaming groupby");
     }
-    virtual void clear() override {
+    void clear() override {
         throw std::runtime_error(
             "PercentileColSet not implemented for streaming groupby");
     }
@@ -1312,22 +1313,22 @@ class ArrayAggColSet : public BasicColSet {
                     bodo::default_buffer_memory_manager()) override;
 
     const std::vector<std::shared_ptr<array_info>> getOutputColumns() override;
-    virtual void setUpdateCols(
+    void setUpdateCols(
         std::vector<std::shared_ptr<array_info>> update_cols_) override {
         throw std::runtime_error(
             "ArrayAggColSet not implemented for streaming groupby");
     }
-    virtual void setCombineCols(
+    void setCombineCols(
         std::vector<std::shared_ptr<array_info>> combine_cols_) override {
         throw std::runtime_error(
             "ArrayAggColSet not implemented for streaming groupby");
     }
-    virtual void setInCol(
+    void setInCol(
         std::vector<std::shared_ptr<array_info>> new_in_cols) override {
         throw std::runtime_error(
             "ArrayAggColSet not implemented for streaming groupby");
     }
-    virtual void clear() override {
+    void clear() override {
         throw std::runtime_error(
             "ArrayAggColSet not implemented for streaming groupby");
     }
@@ -1378,7 +1379,7 @@ class ObjectAggColSet : public BasicColSet {
         throw std::runtime_error(
             "ObjectAggColSet not implemented for streaming groupby");
     }
-    virtual void clear() override {
+    void clear() override {
         throw std::runtime_error(
             "ObjectAggColSet not implemented for streaming groupby");
     }
@@ -1406,7 +1407,7 @@ class NUniqueColSet : public BasicColSet {
                 std::shared_ptr<::arrow::MemoryManager> mm =
                     bodo::default_buffer_memory_manager()) override;
 
-    virtual void clear() override {
+    void clear() override {
         BasicColSet::clear();
         this->my_nunique_table.reset();
     }
@@ -1454,7 +1455,7 @@ class CumOpColSet : public BasicColSet {
         throw std::runtime_error(
             "CumOpColSet not implemented for streaming groupby");
     }
-    virtual void clear() override {
+    void clear() override {
         throw std::runtime_error(
             "CumOpColSet not implemented for streaming groupby");
     }
@@ -1500,7 +1501,7 @@ class ShiftColSet : public BasicColSet {
         throw std::runtime_error(
             "ShiftColSet not implemented for streaming groupby");
     }
-    virtual void clear() override {
+    void clear() override {
         throw std::runtime_error(
             "ShiftColSet not implemented for streaming groupby");
     }
@@ -1563,7 +1564,7 @@ class TransformColSet : public BasicColSet {
         throw std::runtime_error(
             "TransformColSet not implemented for streaming groupby");
     }
-    virtual void clear() override {
+    void clear() override {
         throw std::runtime_error(
             "TransformColSet not implemented for streaming groupby");
     }
@@ -1599,7 +1600,7 @@ class HeadColSet : public BasicColSet {
 
     void set_head_row_list(bodo::vector<int64_t>& row_list);
 
-    virtual void clear() override {
+    void clear() override {
         BasicColSet::clear();
         this->head_row_list.clear();
     }
