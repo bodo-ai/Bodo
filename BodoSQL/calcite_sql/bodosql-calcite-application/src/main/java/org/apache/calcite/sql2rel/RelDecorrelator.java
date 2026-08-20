@@ -1412,6 +1412,11 @@ public class RelDecorrelator implements ReflectiveVisitor {
             }
             final int newLeftPos = requireNonNull(leftFrame.oldToNewOutputs.get(corDef.field));
             final int newRightPos = rightOutput.getValue();
+            // Bodo Change: Upstream 1.40 added IS NOT DISTINCT FROM for
+            // nullable fields, but Bodo's join runtime does not support
+            // null-safe equality in join conditions. Keep `equals` (which is
+            // always safe for non-nullable fields and matches Bodo's join
+            // contract).
             conditions.add(
                     relBuilder.equals(RexInputRef.of(newLeftPos, newLeftOutput),
                             new RexInputRef(newLeftFieldCount + newRightPos,
