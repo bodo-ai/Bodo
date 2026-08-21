@@ -2726,7 +2726,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             // to groups.
             // Decimal types are handled directly while double is used for all
             // other types.
-            if (in_col->dtype == Bodo_CTypes::DECIMAL) {
+            if (out_col->dtype == Bodo_CTypes::DECIMAL) {
                 return apply_to_column<double, Bodo_FTypes::mean_eval,
                                        Bodo_CTypes::DECIMAL>(
                     in_col, out_col, aux_cols, grp_info, pool, std::move(mm));
