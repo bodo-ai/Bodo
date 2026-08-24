@@ -8,6 +8,7 @@ import time
 import types as pytypes
 import typing as pt
 import warnings
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -1708,7 +1709,27 @@ PANDAS_ARROW_TYPE_MAP = {
 }
 
 
-def to_decimal_type(atype):
+def float_to_precision_scale(x):
+    # Convert through Decimal(str(x)) to avoid binary float artifacts
+    d = Decimal(str(x))
+    tup = d.as_tuple()
+
+    digits = tup.digits
+    exponent = tup.exponent  # negative exponent → digits after decimal
+
+    if exponent >= 0:
+        # No fractional part
+        scale = 0
+        precision = len(digits) + exponent
+    else:
+        # Fractional part exists
+        scale = -exponent
+        precision = len(digits)
+
+    return precision, scale
+
+
+def to_decimal_type(atype, val):
     """Converts Arrow type to equivalent Arrow decimal type
     (currently only supports integer types)
     """
@@ -1728,6 +1749,11 @@ def to_decimal_type(atype):
         return pa.decimal128(5, 0)
     elif pa.types.is_uint8(atype):
         return pa.decimal128(3, 0)
+    elif pa.types.is_float64(atype):
+        if isinstance(val, bodo.pandas.plan.ConstantExpression):
+            return pa.decimal128(*float_to_precision_scale(val.value))
+        else:
+            raise TypeError(f"No decimal conversion from double {type(val)} yet")
     else:
         raise TypeError(f"No decimal conversion from {atype} yet")
 
@@ -1735,8 +1761,10 @@ def to_decimal_type(atype):
 def get_binop_output_type(
     left_empty,
     left_atype,
+    left,
     right_empty,
     right_atype,
+    right,
     non_decimal_func,
     decimal_func,
 ):
@@ -1755,9 +1783,9 @@ def get_binop_output_type(
     """
     if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
         if not pa.types.is_decimal(left_atype):
-            left_atype = to_decimal_type(left_atype)
+            left_atype = to_decimal_type(left_atype, left)
         if not pa.types.is_decimal(right_atype):
-            right_atype = to_decimal_type(right_atype)
+            right_atype = to_decimal_type(right_atype, right)
         output_precision, output_scale = decimal_func(
             left_atype.precision,
             left_atype.scale,

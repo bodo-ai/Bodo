@@ -432,7 +432,9 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                         None,  # not needed if guaranteed decimal
                         left_atype,
                         None,  # not needed if guaranteed decimal
+                        None,  # not needed if guaranteed decimal
                         right_atype,
+                        None,  # not needed if guaranteed decimal
                         None,
                         decimal_precision_scale_func,
                     )
