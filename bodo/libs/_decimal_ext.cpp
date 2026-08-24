@@ -3273,6 +3273,30 @@ std::shared_ptr<arrow::Scalar> arrow_scalar_decimal_arithmetic(
     return std::make_shared<arrow::Decimal128Scalar>(result128, dtype);
 }
 
+template <auto Op>
+std::shared_ptr<arrow::Scalar> arrow_scalar_boolean_op(
+    std::shared_ptr<arrow::Decimal128Scalar> left_scalar, int left_precision,
+    int left_scale, std::shared_ptr<arrow::Decimal128Scalar> right_scalar,
+    int right_precision, int right_scale, int result_precision,
+    int result_scale) {
+    arrow::Status status;
+    bool overflow = false;
+
+    auto dtype = std::make_shared<arrow::BooleanType>();
+    if (!left_scalar->is_valid || !right_scalar->is_valid) {
+        return arrow::MakeNullScalar(dtype);
+    }
+
+    arrow::Decimal128 left_val = left_scalar->value;
+    arrow::Decimal128 right_val = right_scalar->value;
+
+    bool result = compare_decimal_scalars_util<Op>(
+        left_val, left_precision, left_scale, right_val, right_precision,
+        right_scale, result_precision, result_scale, &overflow);
+
+    return arrow::MakeScalar(result);
+}
+
 std::shared_ptr<arrow::Scalar> arrow_scalar_decimal_arithmetic_util(
     std::shared_ptr<arrow::Decimal128Scalar> left_val, int left_precision,
     int left_scale, std::shared_ptr<arrow::Decimal128Scalar> right_val,
@@ -3292,6 +3316,30 @@ std::shared_ptr<arrow::Scalar> arrow_scalar_decimal_arithmetic_util(
             right_scale, result_precision, result_scale);
     } else if (op == "divide") {
         return arrow_scalar_decimal_arithmetic<"divide">(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "equal") {
+        return arrow_scalar_boolean_op<std::equal_to<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "not_equal") {
+        return arrow_scalar_boolean_op<std::not_equal_to<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "less") {
+        return arrow_scalar_boolean_op<std::less<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "greater") {
+        return arrow_scalar_boolean_op<std::greater<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "less_equal") {
+        return arrow_scalar_boolean_op<std::less_equal<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "greater_equal") {
+        return arrow_scalar_boolean_op<std::greater_equal<>{}>(
             left_val, left_precision, left_scale, right_val, right_precision,
             right_scale, result_precision, result_scale);
     } else {
