@@ -1215,6 +1215,33 @@ def test_decimal_sum():
         bodo.jit(impl)(df)
 
 
+@pytest.mark.df_lib
+def test_decimal_mean():
+    """Test groupby mean on decimal input"""
+
+    def impl(df):
+        return df.groupby("A", as_index=False)["B"].mean()
+
+    B = pd.array(
+        pa.array(["0.01", "0.03", "0.04", None] * 10).cast(pa.decimal128(38, 4)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 4)),
+    )
+    df = pd.DataFrame({"A": [1, 2, 2, 1] * 10, "B": B})
+    B_out = pd.array(
+        pa.array(["0.0100", "0.0350"]).cast(pa.decimal128(38, 4)),
+        dtype=pd.ArrowDtype(pa.decimal128(38, 4)),
+    )
+    py_output = pd.DataFrame({"A": [1, 2], "B": B_out})
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_output,
+    )
+
+
 def test_random_string_sum_min_max_first_last(memory_leak_check):
     def impl1(df):
         A = df.groupby("A").sum()
