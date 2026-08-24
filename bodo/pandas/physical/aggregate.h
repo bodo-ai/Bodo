@@ -389,6 +389,7 @@ const std::map<std::string, int32_t> PhysicalAggregate::function_to_ftype = {
     {"kurtosis", Bodo_FTypes::kurtosis},
     {"std", Bodo_FTypes::std},
     {"sum", Bodo_FTypes::sum},
+    {"sum0", Bodo_FTypes::sum0},
     {"var", Bodo_FTypes::var},
     {"std_pop", Bodo_FTypes::std_pop},
     {"var_pop", Bodo_FTypes::var_pop},

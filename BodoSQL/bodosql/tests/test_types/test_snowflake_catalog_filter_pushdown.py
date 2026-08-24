@@ -110,7 +110,7 @@ def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['mycol', 'mycol2']")
         # This should be included in the pushed down SQL query if it
         # succeeds.
-        check_logger_msg(stream, "FETCH NEXT 5 ROWS ONLY")
+        check_logger_msg(stream, "LIMIT 5")
 
 
 def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
@@ -395,7 +395,7 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
 
         # This should be included in the pushed down SQL query if it
         # succeeds.
-        check_logger_msg(stream, "FETCH NEXT 5 ROWS ONLY")
+        check_logger_msg(stream, "LIMIT 5")
 
 
 """

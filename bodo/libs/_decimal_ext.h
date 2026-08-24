@@ -73,10 +73,35 @@ arrow::Decimal128 multiply_decimal_scalars_util(
  * @param result_precision Output precision
  * @param result_scale Output scale
  * @param op Arithmetic operation either add, subtract, or multiply.
- * @return arrow::Array
+ * @return std::shared_ptr<arrow::Array>
  */
 std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic_util(
     std::shared_ptr<arrow::Decimal128Array> left_arr, int left_precision,
     int left_scale, std::shared_ptr<arrow::Decimal128Array> right_arr,
     int right_precision, int right_scale, int length, int result_precision,
+    int result_scale, const std::string& op);
+
+/**
+ * @brief Perform arithmetic operation on two Decimal arrow scalars
+ * with the given precision and scale and return the output.
+ * The output should have its scale truncated to
+ * the provided output scale. If overflow is detected, then nullptr is
+ * returned.
+ *
+ * @param left_arr First decimal scalar
+ * @param left_precision Precision of first decimal scalar
+ * @param left_scale Scale of first decimal scalar
+ * @param right_arr First decimal scalar
+ * @param right_precision Precision of first decimal scalar
+ * @param right_scale Scale of first decimal scalar
+ * @param length Length of both scalars
+ * @param result_precision Output precision
+ * @param result_scale Output scale
+ * @param op Arithmetic operation either add, subtract, or multiply.
+ * @return std::shared_ptr<arrow::Scalar>
+ */
+std::shared_ptr<arrow::Scalar> arrow_scalar_decimal_arithmetic_util(
+    std::shared_ptr<arrow::Decimal128Scalar> left_val, int left_precision,
+    int left_scale, std::shared_ptr<arrow::Decimal128Scalar> right_val,
+    int right_precision, int right_scale, int result_precision,
     int result_scale, const std::string& op);

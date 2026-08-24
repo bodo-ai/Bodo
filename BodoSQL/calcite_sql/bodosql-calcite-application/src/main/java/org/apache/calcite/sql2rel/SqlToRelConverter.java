@@ -72,6 +72,7 @@ import org.apache.calcite.rel.logical.LogicalTargetTableScan;
 import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.rel.logical.LogicalValues;
 import org.apache.calcite.rel.metadata.RelColumnMapping;
+import org.apache.calcite.rel.metadata.RelMdUtil;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rel2sql.SqlImplementor;
 import org.apache.calcite.rel.stream.Delta;
@@ -1529,12 +1530,11 @@ public class SqlToRelConverter {
       final Blackboard seekBb = createBlackboard(seekScope, null, false);
       final RelNode seekRel = convertQueryOrInList(seekBb, query, null);
       requireNonNull(seekRel, () -> "seekRel is null for query " + query);
-      // An EXIST sub-query whose inner child has at least 1 tuple
+      // An EXIST sub-query whose inner child guaranteed never empty
       // (e.g. an Aggregate with no grouping columns or non-empty Values
       // node) should be simplified to a Boolean constant expression.
       final RelMetadataQuery mq = seekRel.getCluster().getMetadataQuery();
-      final Double minRowCount = mq.getMinRowCount(seekRel);
-      if (minRowCount != null && minRowCount >= 1D) {
+      if (RelMdUtil.isRelDefinitelyNotEmpty(mq, seekRel)) {
         subQuery.expr = rexBuilder.makeLiteral(true);
         return;
       }
@@ -3798,7 +3798,9 @@ public class SqlToRelConverter {
     final SqlNameMatcher nameMatcher = catalogReader.nameMatcher();
     final List<RexNode> list = new ArrayList<>();
     for (String name : nameList) {
-      List<RexNode> operands = new ArrayList<>();
+      // For each field joined on we compare the types from the left and right relation
+      List<RexNode> operands = new ArrayList<>(2);
+      List<RelDataType> comparedTypes = new ArrayList<>(2);
       int offset = 0;
       for (SqlValidatorNamespace n : ImmutableList.of(leftNamespace,
           rightNamespace)) {
@@ -3808,12 +3810,33 @@ public class SqlToRelConverter {
           throw new AssertionError("field " + name + " is not found in "
               + rowType + " with " + nameMatcher);
         }
+
+        comparedTypes.add(field.getType());
         operands.add(
             rexBuilder.makeInputRef(field.getType(),
                 offset + field.getIndex()));
         offset += rowType.getFieldList().size();
       }
-      list.add(rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, operands));
+
+      RelDataType resultType =
+          validator().getTypeCoercion().commonTypeForBinaryComparison(
+              comparedTypes.get(0), comparedTypes.get(1));
+      if (resultType == null) {
+        // Leave call unchanged (as it happens in TypeCoercionImpl#binaryComparisonCoercion)
+        list.add(rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, operands));
+      } else {
+        List<RexNode> castedOperands = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+          RexNode operand = operands.get(i);
+          RelDataType fieldType = comparedTypes.get(i);
+          RexNode expr = operand;
+          if (!fieldType.equals(resultType)) {
+            expr = rexBuilder.makeCast(resultType, operand, true, false);
+          }
+          castedOperands.add(expr);
+        }
+        list.add(rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, castedOperands));
+      }
     }
     return RexUtil.composeConjunction(rexBuilder, list);
   }
@@ -4349,7 +4372,11 @@ public class SqlToRelConverter {
         }
       }
     }
-    return LogicalUnion.create(ImmutableList.of(left, right), all);
+    return relBuilder
+        .push(left)
+        .push(right)
+        .union(all, 2)
+        .build();
   }
 
   /**
@@ -4480,6 +4507,10 @@ public class SqlToRelConverter {
 
   private RelOptTable.ToRelContext createToRelContext(List<RelHint> hints) {
     return ViewExpanders.toRelContext(viewExpander, cluster, hints);
+  }
+
+  public RelNode toRel(final RelOptTable table, final List<RelHint> hints) {
+    return toRel(table, hints, false);
   }
 
   public RelNode toRel(final RelOptTable table, final List<RelHint> hints, boolean isTargetTable) {

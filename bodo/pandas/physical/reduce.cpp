@@ -69,13 +69,48 @@ void ReductionFunction::CombineResults(const arrow::ScalarVector& other) {
             continue;
         }
 
-        arrow::Result<arrow::Datum> cmp_res_scalar =
-            arrow::compute::CallFunction(scalar_cmp_names,
-                                         {other_result, result});
-        CHECK_ARROW(cmp_res_scalar.status(),
-                    "Error in Arrow compute scalar comparison");
-        const std::shared_ptr<arrow::Scalar> cmp_scalar =
-            cmp_res_scalar.ValueOrDie().scalar();
+        bool left_is_decimal =
+            other_result->type &&
+            other_result->type->id() == arrow::Type::DECIMAL128;
+        bool right_is_decimal =
+            result->type && result->type->id() == arrow::Type::DECIMAL128;
+
+        std::shared_ptr<arrow::Scalar> cmp_scalar = nullptr;
+        if (left_is_decimal && right_is_decimal) {
+            int p1, s1, l1, p2, s2, l2;
+            bool other_scalar, result_scalar;
+            std::tie(other_scalar, p1, s1, l1) =
+                getDatumPrecisionScale(arrow::Datum(other_result));
+            std::tie(result_scalar, p2, s2, l2) =
+                getDatumPrecisionScale(arrow::Datum(result));
+            int result_precision = 0;
+            int result_scale = 0;
+
+            std::tie(result_precision, result_scale) =
+                getOpPrecisionScale(scalar_cmp_names, p1, s1, l1, p2, s2, l2);
+
+            if (result_precision > 38) {
+                std::shared_ptr<arrow::Decimal128Scalar> other_dec_scalar =
+                    std::dynamic_pointer_cast<arrow::Decimal128Scalar>(
+                        other_result);
+                std::shared_ptr<arrow::Decimal128Scalar> result_dec_scalar =
+                    std::dynamic_pointer_cast<arrow::Decimal128Scalar>(result);
+
+                cmp_scalar = arrow_scalar_decimal_arithmetic_util(
+                    other_dec_scalar, p1, s1, result_dec_scalar, p2, s2, 38,
+                    result_scale, scalar_cmp_names);
+            }
+        }
+
+        if (cmp_scalar == nullptr) {
+            arrow::Result<arrow::Datum> cmp_res_scalar =
+                arrow::compute::CallFunction(scalar_cmp_names,
+                                             {other_result, result});
+            CHECK_ARROW(
+                cmp_res_scalar.status(),
+                "Error in Arrow compute scalar comparison " + scalar_cmp_names);
+            cmp_scalar = cmp_res_scalar.ValueOrDie().scalar();
+        }
 
         if (reduction_type == ReductionType::COMPARISON) {
             if (cmp_scalar->Equals(arrow::BooleanScalar(true))) {
@@ -167,10 +202,12 @@ OperatorResult PhysicalReduce::ConsumeBatch(
             } else if (func_name == "min") {
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionMin>(input_col_idx));
-            } else if (func_name == "sum") {
+            } else if (func_name == "sum" || func_name == "sum0") {
+                bool initialize_to_null =
+                    func_name == "sum0" ? false : use_sql_rules;
                 reduction_functions.push_back(
                     std::make_unique<ReductionFunctionSum>(
-                        input_col_idx, use_sql_rules,
+                        input_col_idx, initialize_to_null,
                         this->out_schema->column_types[i]->ToArrowDataType()));
             } else if (func_name == "product") {
                 reduction_functions.push_back(

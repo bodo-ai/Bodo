@@ -38,6 +38,7 @@ import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.metadata.RelMdUtil;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.TransformationRule;
@@ -194,6 +195,11 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
    */
   private static RexNode rewriteSome(
       RexSubQuery e, Set<CorrelationId> variablesSet, RelBuilder builder, int subQueryIndex) {
+    // If the sub-query is guaranteed empty, just return FALSE.
+    final RelMetadataQuery mq = e.rel.getCluster().getMetadataQuery();
+    if (RelMdUtil.isRelDefinitelyEmpty(mq, e.rel)) {
+      return builder.getRexBuilder().makeLiteral(Boolean.FALSE, e.getType(), true);
+    }
     // Most general case, where the left and right keys might have nulls, and
     // caller requires 3-valued logic return.
     //
@@ -497,15 +503,12 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
    */
   private static RexNode rewriteExists(
       RexSubQuery e, Set<CorrelationId> variablesSet, RelOptUtil.Logic logic, RelBuilder builder) {
-    // If the sub-query is guaranteed to produce at least one row, just return
-    // TRUE.
+    // If the sub-query is guaranteed never empty, just return TRUE.
     final RelMetadataQuery mq = e.rel.getCluster().getMetadataQuery();
-    final Double minRowCount = mq.getMinRowCount(e.rel);
-    if (minRowCount != null && minRowCount >= 1D) {
+    if (RelMdUtil.isRelDefinitelyNotEmpty(mq, e.rel)) {
       return builder.literal(true);
     }
-    final Double maxRowCount = mq.getMaxRowCount(e.rel);
-    if (maxRowCount != null && maxRowCount < 1D) {
+    if (RelMdUtil.isRelDefinitelyEmpty(mq, e.rel)) {
       return builder.literal(false);
     }
     builder.push(e.rel);
@@ -597,6 +600,11 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
       RelBuilder builder,
       int offset,
       int subQueryIndex) {
+    // If the sub-query is guaranteed empty, just return FALSE.
+    final RelMetadataQuery mq = e.rel.getCluster().getMetadataQuery();
+    if (RelMdUtil.isRelDefinitelyEmpty(mq, e.rel)) {
+      return builder.getRexBuilder().makeLiteral(Boolean.FALSE, e.getType(), true);
+    }
     // Most general case, where the left and right keys might have nulls, and
     // caller requires 3-valued logic return.
     //
@@ -720,15 +728,14 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
 
           if (variablesSet.isEmpty()) {
             builder.aggregate(builder.groupKey(builder.field("cs")), builder.count(false, "c"));
-
-            // sorts input with desc order since we are interested
-            // only in the case when one of the values is true.
-            // When true value is absent then we are interested
-            // only in false value.
-            builder.sortLimit(0, 1, ImmutableList.of(builder.desc(builder.field("cs"))));
           } else {
             builder.distinct();
           }
+          // sorts input with desc order since we are interested
+          // only in the case when one of the values is true.
+          // When true value is absent then we are interested
+          // only in false value.
+          builder.sortLimit(0, 1, ImmutableList.of(builder.desc(builder.field("cs"))));
       }
       // clears expressionOperands and fields lists since
       // all expressions were used in the filter

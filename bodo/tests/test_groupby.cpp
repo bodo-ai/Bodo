@@ -81,6 +81,7 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::percentile_cont,
             Bodo_FTypes::percentile_disc,
             Bodo_FTypes::object_agg,
+            Bodo_FTypes::sum0,
         };
         std::set<size_t> untested_groupby_function_ftypes = {
             // These ftypes have bugs when run with all

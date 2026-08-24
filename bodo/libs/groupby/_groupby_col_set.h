@@ -245,7 +245,7 @@ class BasicColSet {
             precision = in_schema->column_types[0]->precision;
             scale = in_schema->column_types[0]->scale;
             timezone = in_schema->column_types[0]->timezone;
-            if (ftype == Bodo_FTypes::sum) {
+            if (ftype == Bodo_FTypes::sum || ftype == Bodo_FTypes::sum0) {
                 precision = 38;
             }
         }
