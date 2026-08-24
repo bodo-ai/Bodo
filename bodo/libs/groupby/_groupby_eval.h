@@ -23,6 +23,17 @@
 inline void mean_eval(double& result, uint64_t count) { result /= count; }
 
 /**
+ * Final evaluation step for mean, which calculates the mean based on the
+ * sum of observed values and the number of values.
+ *
+ * @param[in,out] sum of observed values, will be modified to contain the mean
+ * @param count: number of observations
+ */
+inline void mean_eval_decimal(arrow::Decimal128& result, uint64_t count) {
+    result /= count;
+}
+
+/**
  * Perform final evaluation step for population std, which calculates the
  * standard deviation based on the count and m2 values. See
  * https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
