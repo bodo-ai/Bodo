@@ -30,6 +30,7 @@ import org.apache.calcite.rel.type.RelDataTypePrecedenceList;
 import org.apache.calcite.runtime.CalciteContextException;
 import org.apache.calcite.runtime.CalciteException;
 import org.apache.calcite.runtime.Resources;
+import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.fun.SqlInOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
@@ -883,6 +884,12 @@ public abstract class SqlUtil {
       final SqlCall row = call.operand(0);
       assert row.operandCount() > i : "VALUES has too few columns";
       return row.operand(i);
+
+    case EXCEPT:
+    case INTERSECT:
+    case UNION:
+      final List<SqlNode> operandList = ((SqlBasicCall) query).getOperandList();
+      return getSelectListItem(operandList.get(0), i);
 
     default:
       // Unexpected type of query.

@@ -1,5 +1,6 @@
 #include "_javascript_udf.h"
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <iostream>
 #include <random>
 #include <stdexcept>

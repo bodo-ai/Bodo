@@ -1706,3 +1706,66 @@ PANDAS_ARROW_TYPE_MAP = {
     "date32": pa.date32(),
     "date64": pa.date64(),
 }
+
+
+def to_decimal_type(atype):
+    """Converts Arrow type to equivalent Arrow decimal type
+    (currently only supports integer types)
+    """
+    if pa.types.is_int64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_int32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_int16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_int8(atype):
+        return pa.decimal128(3, 0)
+    elif pa.types.is_uint64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_uint32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_uint16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_uint8(atype):
+        return pa.decimal128(3, 0)
+    else:
+        raise TypeError(f"No decimal conversion from {atype} yet")
+
+
+def get_binop_output_type(
+    left_empty,
+    left_atype,
+    right_empty,
+    right_atype,
+    non_decimal_func,
+    decimal_func,
+):
+    """Get the output of binary operation considering decimal input cases
+
+    Args:
+        left_empty (DataFrame/Series): Empty dataframe/series with type of left hand side
+        left_atype (ArrowType): Arrow type of left hand side
+        right_empty (DataFrame/Series): Empty dataframe/series with type of right hand side
+        right_atype (ArrowType): Arrow type of right hand side
+        non_decimal_func (function): function to find output type for non-decimal input
+        decimal_func (function): function to find output type for decimal input
+
+    Returns:
+        DataFrame/Series: Empty dataframe/series with type of output
+    """
+    if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
+        if not pa.types.is_decimal(left_atype):
+            left_atype = to_decimal_type(left_atype)
+        if not pa.types.is_decimal(right_atype):
+            right_atype = to_decimal_type(right_atype)
+        output_precision, output_scale = decimal_func(
+            left_atype.precision,
+            left_atype.scale,
+            right_atype.precision,
+            right_atype.scale,
+        )
+        return pd.Series(
+            dtype=pd.ArrowDtype(pa.decimal128(min(38, output_precision), output_scale))
+        )
+    else:
+        return non_decimal_func(left_empty.iloc[:, 0], right_empty.iloc[:, 0])

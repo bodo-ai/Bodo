@@ -10,6 +10,7 @@ import typing as pt
 import warnings
 from collections.abc import Callable, Hashable
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 
 import numpy
 import numpy as np
@@ -84,6 +85,7 @@ from bodo.pandas.utils import (
     check_args_fallback,
     fallback_warn,
     fallback_wrapper,
+    get_binop_output_type,
     get_lazy_single_manager_class,
     get_n_index_arrays,
     get_scalar_udf_result_type,
@@ -371,12 +373,72 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
         zero_size_other = (
             _empty_like(other) if type(other) in (BodoSeries, BodoScalar) else other
         )
-
+        empty_data = None
         if op in ("__mod__", "__rmod__"):
             empty_data = zero_size_self
         else:
+            left_atype = zero_size_self.dtype.pyarrow_dtype
+            # Pandas decimal binops may fail with Arrow's "Decimal precision out of
+            # range" error. We apply the same logic as BodoSQL to get the output
+            # precision and scale for decimal binops.
+            if pa.types.is_decimal(left_atype):
+                if type(other) is BodoSeries:
+                    right_atype = zero_size_other.dtype.pyarrow_dtype
+                elif type(other) is BodoScalar:
+                    right_atype = pa.scalar(zero_size_other).type
+                elif isinstance(other, numbers.Number) and not isinstance(
+                    other, (bool, complex)
+                ):
+                    other_dec = Decimal(str(other))
+                    other_pa_dec = pa.scalar(other_dec)
+                    right_atype = other_pa_dec.type
+                else:
+                    raise BodoLibNotImplementedException(
+                        f"Series _numeric_binop decimal fallback didn't handle other {other}"
+                    )
+
+                decimal_precision_scale_func = None
+                if pa.types.is_decimal(right_atype):
+                    if op in ("__add__", "__radd__", "__sub__", "__rsub__"):
+                        from bodo.utils.decimal_utils import (
+                            decimal_addition_subtraction_output_precision_scale,
+                        )
+
+                        decimal_precision_scale_func = (
+                            decimal_addition_subtraction_output_precision_scale
+                        )
+                    elif op in ("__mul__", "__rmul__"):
+                        from bodo.utils.decimal_utils import (
+                            decimal_multiplication_output_precision_scale,
+                        )
+
+                        decimal_precision_scale_func = (
+                            decimal_multiplication_output_precision_scale
+                        )
+                    elif op in ("__truediv__", "__rtruediv__"):
+                        from bodo.utils.decimal_utils import (
+                            decimal_division_output_precision_scale,
+                        )
+
+                        decimal_precision_scale_func = (
+                            decimal_division_output_precision_scale
+                        )
+                    if decimal_precision_scale_func is None:
+                        raise BodoLibNotImplementedException(
+                            f"Series _numeric_binop decimal fallback didn't handle operation {op}"
+                        )
+
+                    empty_data = get_binop_output_type(
+                        None,  # not needed if guaranteed decimal
+                        left_atype,
+                        None,  # not needed if guaranteed decimal
+                        right_atype,
+                        None,
+                        decimal_precision_scale_func,
+                    )
             # Compute schema of new series.
-            empty_data = getattr(zero_size_self, op)(zero_size_other)
+            if empty_data is None:
+                empty_data = getattr(zero_size_self, op)(zero_size_other)
         assert isinstance(empty_data, pd.Series), (
             "_numeric_binop: empty_data is not a Series"
         )
@@ -2695,6 +2757,8 @@ def validate_reduce(func_name, pa_type):
             return pa.int64()
         elif pa.types.is_floating(pa_type):
             return pa.float64()
+        elif pa.types.is_decimal(pa_type):
+            return pa_type
         else:
             raise BodoLibNotImplementedException(
                 f"{func_name}() not implemented for BodoSeries reduction."
