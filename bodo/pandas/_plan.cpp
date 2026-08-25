@@ -1,4 +1,5 @@
 #include "_plan.h"
+#include <arrow/compute/kernel.h>
 #include <arrow/python/pyarrow.h>
 #include <arrow/type.h>
 #include <fmt/format.h>
@@ -47,6 +48,7 @@
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/operator/logical_sample.hpp"
 #include "duckdb/planner/operator/logical_top_n.hpp"
+#include "physical/expression.h"
 
 #include "../libs/gpu_utils.h"
 
@@ -510,7 +512,8 @@ static duckdb::BoundCastInfo BindCastFunction(
 }
 
 std::unique_ptr<duckdb::Expression> make_cast_expr(
-    std::unique_ptr<duckdb::Expression> &source, PyObject *out_schema_py) {
+    std::unique_ptr<duckdb::Expression> &source, PyObject *out_schema_py,
+    std::unique_ptr<arrow::compute::FunctionOptions> cast_opts) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     std::shared_ptr<arrow::Schema> out_schema = unwrap_schema(out_schema_py);
@@ -523,9 +526,23 @@ std::unique_ptr<duckdb::Expression> make_cast_expr(
     auto res = duckdb::make_uniq<duckdb::BoundCastExpression>(
         std::move(source_duck), out_type,
         BindCastFunction(source_duck->return_type, out_type));
-    // Store the Arrow type in the cast info to have full type information (e.g.
+
+    // Fill in the cast options target type with the schema field type.
+    // We expect the existing to_type to be null.
+    arrow::compute::CastOptions *as_cast_options =
+        dynamic_cast<arrow::compute::CastOptions *>(cast_opts.get());
+    if (as_cast_options) {
+        as_cast_options->to_type = field->type();
+    }
+    BodoStringCastOptions *as_bodo_string_cast_options =
+        dynamic_cast<BodoStringCastOptions *>(cast_opts.get());
+    if (as_bodo_string_cast_options) {
+        as_bodo_string_cast_options->to_type = field->type();
+    }
+    // Store the Arrow cast options in the cast info. This also helps
+    // track the original Arrow type to have full type information (e.g.
     // interval precision).
-    res->bound_cast.arrow_type = field->type();
+    res->bound_cast.arrow_cast_opts = std::move(cast_opts);
     return res;
 }
 

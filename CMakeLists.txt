@@ -816,6 +816,15 @@ if (NOT WIN32)
     COMPILE_FLAGS "-Wno-unused-function"
   )
 
+  # plan_optimizer.pyx cimports from pyarrow.lib and the compiler complains
+  # that many of the PyArrow wrap/unwrap functions automatically included
+  # are unused
+  SET_SOURCE_FILES_PROPERTIES(
+    "bodo/pandas/plan_optimizer.cpp"
+    PROPERTIES
+    COMPILE_FLAGS "-Wno-unused-variable"
+  )
+
   target_compile_options(
     ext
     PRIVATE
