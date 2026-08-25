@@ -5653,8 +5653,10 @@ def get_binop_output_type(left, right, non_decimal_func, decimal_func):
     return bd.utils.get_binop_output_type(
         left_empty,
         left_atype,
+        left,
         right_empty,
         right_atype,
+        right,
         non_decimal_func,
         decimal_func,
     )
