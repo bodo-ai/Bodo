@@ -4466,7 +4466,6 @@ def test_mean_median_other_supported_types(memory_leak_check):
     check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
     check_func(impl2, (df_mix,), sort_output=True, check_dtype=False)
     # Decimal
-    # Pandas with Decimal throws: DataError: No numeric types to aggregate
     df_decimal = pd.DataFrame(
         {
             "A": [2, 1, 1, 2, 2],
