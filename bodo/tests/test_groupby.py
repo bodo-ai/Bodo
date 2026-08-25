@@ -4477,7 +4477,8 @@ def test_mean_median_other_supported_types(memory_leak_check):
                     Decimal("44.2"),
                     None,
                     Decimal("0"),
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 4)),
             ),
         }
     )
@@ -4487,7 +4488,6 @@ def test_mean_median_other_supported_types(memory_leak_check):
         (df_decimal,),
         sort_output=True,
         reset_index=True,
-        py_output=impl1(df_decimal.astype({"B": "float64"})),
         check_dtype=False,
     )
 
