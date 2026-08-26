@@ -80,8 +80,7 @@ import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.apache.calcite.sql.validate.SqlModality;
 import org.apache.calcite.sql2rel.AuxiliaryConverter;
 import org.apache.calcite.util.Litmus;
-import org.apache.calcite.util.Optionality;
-import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.Optionality;import org.apache.calcite.util.Pair;
 
 import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
@@ -304,6 +303,19 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     OperandTypes.DIVISION_OPERATOR);
 
     /**
+     * Checked version of arithmetic division operator, '<code>/</code>'.
+     */
+    public static final SqlBinaryOperator CHECKED_DIVIDE =
+        new SqlBinaryOperator(
+            "/",
+            SqlKind.CHECKED_DIVIDE,
+            60,
+            true,
+            ReturnTypes.QUOTIENT_NULLABLE,
+            InferTypes.FIRST_KNOWN,
+            OperandTypes.DIVISION_OPERATOR);
+
+    /**
      * Arithmetic remainder operator, '<code>%</code>',
      * an alternative to {@link #MOD} allowed if under certain conformance levels.
      *
@@ -348,6 +360,19 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     ReturnTypes.INTEGER_QUOTIENT_NULLABLE,
                     InferTypes.FIRST_KNOWN,
                     OperandTypes.DIVISION_OPERATOR);
+
+    /**
+     * Checked version of integer division.  @see DIVIDE_INTEGER.
+     */
+    public static final SqlBinaryOperator CHECKED_DIVIDE_INTEGER =
+        new SqlBinaryOperator(
+            "/INT",
+            SqlKind.CHECKED_DIVIDE,
+            60,
+            true,
+            ReturnTypes.INTEGER_QUOTIENT_NULLABLE,
+            InferTypes.FIRST_KNOWN,
+            OperandTypes.DIVISION_OPERATOR);
 
     /**
      * Dot operator, '<code>.</code>', used for referencing fields of records.
@@ -557,6 +582,21 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     InferTypes.FIRST_KNOWN,
                     BodoOperandTypes.MINUS_OPERATOR);
 
+    /**
+     * Checked version of infix arithmetic minus operator, '<code>-</code>'.
+     */
+    public static final SqlBinaryOperator CHECKED_MINUS =
+        new SqlBinaryOperator(
+            "-",
+            SqlKind.CHECKED_MINUS,
+            40,
+            true,
+
+            // Same type inference strategy as sum
+            ReturnTypes.NULLABLE_SUM,
+            InferTypes.FIRST_KNOWN,
+            OperandTypes.MINUS_OPERATOR);
+
     // Bodo Change: Replace Multiply.
     /**
      * Implementation of multiplication that casts any decimal inputs to float if the operator is a mix
@@ -615,6 +655,19 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
             );
 
     /**
+     * Checked version of arithmetic multiplication operator, '<code>*</code>'.
+     */
+    public static final SqlBinaryOperator CHECKED_MULTIPLY =
+        new SqlBinaryOperator(
+            "*",
+            SqlKind.CHECKED_TIMES,
+            60,
+            true,
+            ReturnTypes.PRODUCT_NULLABLE,
+            InferTypes.FIRST_KNOWN,
+            OperandTypes.MULTIPLY_OPERATOR);
+
+    /**
      * Logical not-equals operator, '<code>&lt;&gt;</code>'.
      */
     public static final SqlBinaryOperator NOT_EQUALS =
@@ -653,6 +706,19 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     BodoReturnTypes.NULLABLE_SUM,
                     InferTypes.FIRST_KNOWN,
                     BodoOperandTypes.PLUS_OPERATOR);
+
+    /**
+     * Checked version of infix arithmetic plus operator, '<code>+</code>'.
+     */
+    public static final SqlBinaryOperator CHECKED_PLUS =
+        new SqlBinaryOperator(
+            "+",
+            SqlKind.CHECKED_PLUS,
+            40,
+            true,
+            ReturnTypes.NULLABLE_SUM,
+            InferTypes.FIRST_KNOWN,
+            OperandTypes.PLUS_OPERATOR);
 
     /**
      * Infix datetime plus operator, '<code>DATETIME + INTERVAL</code>'.
@@ -1005,6 +1071,18 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     ReturnTypes.ARG0,
                     InferTypes.RETURN_TYPE,
                     OperandTypes.NUMERIC_OR_INTERVAL);
+
+    /**
+     * Checked version of prefix arithmetic minus operator, '<code>-</code>'.
+     */
+    public static final SqlPrefixOperator CHECKED_UNARY_MINUS =
+        new SqlPrefixOperator(
+            "-",
+            SqlKind.CHECKED_MINUS_PREFIX,
+            80,
+            ReturnTypes.ARG0,
+            InferTypes.RETURN_TYPE,
+            OperandTypes.NUMERIC_OR_INTERVAL);
 
     /**
      * Prefix arithmetic plus operator, '<code>+</code>'.
@@ -1931,6 +2009,16 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                             SqlFunctionCategory.NUMERIC)
                     .withSyntax(SqlSyntax.FUNCTION_ID);
 
+    /** The {@code TYPEOF} function. */
+    public static final SqlFunction TYPEOF =
+        SqlBasicFunction.create("TYPEOF", ReturnTypes.VARCHAR, OperandTypes.VARIANT,
+                SqlFunctionCategory.STRING);
+
+    /** The {@code VARIANTNULL} function. */
+    public static final SqlFunction VARIANTNULL =
+        SqlBasicFunction.create("VARIANTNULL", ReturnTypes.VARIANT, OperandTypes.NILADIC,
+            SqlFunctionCategory.SYSTEM);
+
     /** {@code FIRST} function to be used within {@code MATCH_RECOGNIZE}. */
     public static final SqlFunction FIRST =
             SqlBasicFunction.create(SqlKind.FIRST,
@@ -2829,6 +2917,17 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
             return floor ? SqlLibraryOperators.FLOOR_BIG_QUERY : SqlLibraryOperators.CEIL_BIG_QUERY;
         } else {
             return floor ? SqlStdOperatorTable.FLOOR : SqlStdOperatorTable.CEIL;
+        }
+    }
+
+    /** Returns the operator for standard {@code CONVERT} and Oracle's {@code CONVERT}
+     * with the given library. */
+    public static SqlOperator getConvertFuncByConformance(SqlConformance conformance) {
+        if (SqlConformanceEnum.ORACLE_10 == conformance
+            || SqlConformanceEnum.ORACLE_12 == conformance) {
+            return SqlLibraryOperators.CONVERT_ORACLE;
+        } else {
+            return SqlStdOperatorTable.CONVERT;
         }
     }
 }

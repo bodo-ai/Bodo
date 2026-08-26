@@ -377,6 +377,10 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         # overflows.
         out_dtype = Decimal128Type(DECIMAL128_MAX_PRECISION, in_dtype.scale)
         return dtype_to_array_type(out_dtype), "ok"
+    elif func_name == "mean" and isinstance(in_dtype, Decimal128Type):
+        # Matching Arrow's approach of using the same precision and scale for mean as
+        # the input.
+        return arr_type, "ok"
     elif (
         (func_name == "sum")
         and isinstance(in_dtype, types.Integer)

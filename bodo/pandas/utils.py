@@ -8,6 +8,7 @@ import time
 import types as pytypes
 import typing as pt
 import warnings
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -1706,3 +1707,93 @@ PANDAS_ARROW_TYPE_MAP = {
     "date32": pa.date32(),
     "date64": pa.date64(),
 }
+
+
+def float_to_precision_scale(x):
+    # Convert through Decimal(str(x)) to avoid binary float artifacts
+    d = Decimal(str(x))
+    tup = d.as_tuple()
+
+    digits = tup.digits
+    exponent = tup.exponent  # negative exponent → digits after decimal
+
+    if exponent >= 0:
+        # No fractional part
+        scale = 0
+        precision = len(digits) + exponent
+    else:
+        # Fractional part exists
+        scale = -exponent
+        precision = len(digits)
+
+    return precision, scale
+
+
+def to_decimal_type(atype, val):
+    """Converts Arrow type to equivalent Arrow decimal type
+    (currently only supports integer types)
+    """
+    if pa.types.is_int64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_int32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_int16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_int8(atype):
+        return pa.decimal128(3, 0)
+    elif pa.types.is_uint64(atype):
+        return pa.decimal128(19, 0)
+    elif pa.types.is_uint32(atype):
+        return pa.decimal128(10, 0)
+    elif pa.types.is_uint16(atype):
+        return pa.decimal128(5, 0)
+    elif pa.types.is_uint8(atype):
+        return pa.decimal128(3, 0)
+    elif pa.types.is_float64(atype):
+        if isinstance(val, bodo.pandas.plan.ConstantExpression):
+            return pa.decimal128(*float_to_precision_scale(val.value))
+        else:
+            raise TypeError(f"No decimal conversion from double {type(val)} yet")
+    else:
+        raise TypeError(f"No decimal conversion from {atype} yet")
+
+
+def get_binop_output_type(
+    left_empty,
+    left_atype,
+    left,
+    right_empty,
+    right_atype,
+    right,
+    non_decimal_func,
+    decimal_func,
+):
+    """Get the output of binary operation considering decimal input cases
+
+    Args:
+        left_empty (DataFrame/Series): Empty dataframe/series with type of left hand side
+        left_atype (ArrowType): Arrow type of left hand side
+        right_empty (DataFrame/Series): Empty dataframe/series with type of right hand side
+        right_atype (ArrowType): Arrow type of right hand side
+        non_decimal_func (function): function to find output type for non-decimal input
+        decimal_func (function): function to find output type for decimal input
+
+    Returns:
+        DataFrame/Series: Empty dataframe/series with type of output
+    """
+    if pa.types.is_decimal(left_atype) or pa.types.is_decimal(right_atype):
+        if not pa.types.is_decimal(left_atype):
+            left_atype = to_decimal_type(left_atype, left)
+        if not pa.types.is_decimal(right_atype):
+            right_atype = to_decimal_type(right_atype, right)
+        output_precision, output_scale = decimal_func(
+            left_atype.precision,
+            left_atype.scale,
+            right_atype.precision,
+            right_atype.scale,
+        )
+        return pd.Series(
+            dtype=pd.ArrowDtype(pa.decimal128(min(38, output_precision), output_scale))
+        )
+    else:
+        return non_decimal_func(left_empty.iloc[:, 0], right_empty.iloc[:, 0])

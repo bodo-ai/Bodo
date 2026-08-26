@@ -708,77 +708,16 @@ arrow::Datum do_arrow_compute_binary(
         right_res.type() && right_res.type()->id() == arrow::Type::DECIMAL128;
 
     if (left_is_decimal || right_is_decimal) {
-        if (left_res.is_scalar()) {
-            throw std::runtime_error(
-                "do_arrow_compute_binary decimal operator not supported with "
-                "scalar yet for left arg");
-        }
-        if (right_res.is_scalar()) {
-            throw std::runtime_error(
-                "do_arrow_compute_binary decimal operator not supported with "
-                "scalar yet for right arg");
-        }
         int p1, s1, l1, p2, s2, l2;
-        if (left_is_decimal) {
-            auto left_dec_type =
-                std::static_pointer_cast<arrow::Decimal128Type>(
-                    left_res.type());
-            p1 = left_dec_type->precision();
-            s1 = left_dec_type->scale();
-        } else {
-            std::tie(p1, s1) = getPrecisionScaleNonDecimal(left_res);
-        }
-        if (right_is_decimal) {
-            auto right_dec_type =
-                std::static_pointer_cast<arrow::Decimal128Type>(
-                    right_res.type());
-            p2 = right_dec_type->precision();
-            s2 = right_dec_type->scale();
-        } else {
-            std::tie(p2, s2) = getPrecisionScaleNonDecimal(right_res);
-        }
+        bool left_scalar, right_scalar;
 
-        l1 = p1 - s1;
-        l2 = p2 - s2;
-
+        std::tie(left_scalar, p1, s1, l1) = getDatumPrecisionScale(left_res);
+        std::tie(right_scalar, p2, s2, l2) = getDatumPrecisionScale(right_res);
         int result_precision = 0;
         int result_scale = 0;
 
-        // Map comparator to operation name used in Snowflake rules
-        // We handle add, subtract, multiply, divide
-        std::string op = comparator;  // assume comparator is
-                                      // "add","subtract","multiply","divide"
-        // If comparator is an Arrow function name like "multiply", "add", etc.,
-        // adapt accordingly.
-
-        if (op == "add" || op == "subtract") {
-            // Snowflake rule:
-            // scale = max(s1, s2)
-            // precision = max(p1 - s1, p2 - s2) + scale + 1
-            result_scale = std::max(s1, s2);
-            result_precision = std::max(l1, l2) + result_scale + 1;
-        } else if (op == "multiply") {
-            // Snowflake rule:
-            // precision = p1 + p2
-            // scale = s1 + s2
-            result_precision = p1 + p2;
-            result_scale = s1 + s2;
-        } else if (op == "divide") {
-            // Snowflake rule (one common variant):
-            // scale = max(6, s1 + p2 + 1)
-            // precision = p1 - s1 + s2 + scale
-            result_scale = std::max(6, s1 + p2 + 1);
-            result_precision = l1 + s2 + result_scale;
-        } else if (op == "equal" || op == "not_equal" || op == "less" ||
-                   op == "greater" || op == "less_equal" ||
-                   op == "greater_equal") {
-            result_scale = std::max(s1, s2);
-            result_precision = std::max(l1, l2) + result_scale;
-        } else {
-            // Not a decimal arithmetic op we know; fall back to normal
-            // CallFunction (or you can throw) fall through to normal path below
-            result_precision = -1;
-        }
+        std::tie(result_precision, result_scale) =
+            getOpPrecisionScale(comparator, p1, s1, l1, p2, s2, l2);
 
         if (result_precision > 38) {
             if (!left_is_decimal) {
@@ -790,8 +729,8 @@ arrow::Datum do_arrow_compute_binary(
                     do_arrow_compute_cast(right_res, arrow::decimal128(p2, s2));
             }
             // Use decimal_arithmetic elementwise with overflow checking
-            return decimal_arithmetic(left_res, right_res, op, 38, result_scale,
-                                      p1, s1, p2, s2);
+            return decimal_arithmetic(left_res, right_res, comparator, 38,
+                                      result_scale, p1, s1, p2, s2);
         }
     }
 
@@ -2195,6 +2134,7 @@ struct BodoStringCastVisitor {
             } else if (len == 5) {
                 // "false"
                 if ((data[0] == 'f' || data[0] == 'F') &&
+
                     (data[1] == 'a' || data[1] == 'A') &&
                     (data[2] == 'l' || data[2] == 'L') &&
                     (data[3] == 's' || data[3] == 'S') &&

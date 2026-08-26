@@ -24,8 +24,8 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
         <org.slf4j-version>1.7.36</org.slf4j-version>
-        <org.apache.calcite-version>1.38.0</org.apache.calcite-version>
-        <org.apache.calcite.avatica-version>1.23.0</org.apache.calcite.avatica-version>
+        <org.apache.calcite-version>1.40.0</org.apache.calcite-version>
+        <org.apache.calcite.avatica-version>1.26.0</org.apache.calcite.avatica-version>
         <com.google.protobuf-version>3.21.5</com.google.protobuf-version>
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
         <snowflake-jdbc-version>3.13.33</snowflake-jdbc-version>
@@ -34,7 +34,7 @@
         <iceberg.version>1.5.2</iceberg.version>
         <hadoop.version>3.3.3</hadoop.version>
         <aws.version>2.29.26</aws.version>
-        <janino.version>3.1.10</janino.version>
+        <janino.version>3.1.12</janino.version>
         <!-- End Iceberg Dependencies -->
     </properties>
 

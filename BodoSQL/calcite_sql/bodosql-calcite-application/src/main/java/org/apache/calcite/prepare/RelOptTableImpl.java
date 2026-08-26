@@ -45,6 +45,7 @@ import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.SchemaVersion;
 import org.apache.calcite.schema.Schemas;
+import org.apache.calcite.schema.lookup.Lookup;
 import org.apache.calcite.schema.StreamableTable;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.TemporalTable;
@@ -481,6 +482,10 @@ public class RelOptTableImpl extends Prepare.AbstractPreparingTable {
     @Override public @Nullable SchemaPlus getSubSchema(String name) {
       final Schema subSchema = schema.getSubSchema(name);
       return subSchema == null ? null : new MySchemaPlus(this, name, subSchema);
+    }
+
+    @Override public Lookup<? extends SchemaPlus> subSchemas() {
+      return schema.subSchemas().map((s, n) -> new MySchemaPlus(this, n, s));
     }
 
     @Override public SchemaPlus add(String name, Schema schema) {

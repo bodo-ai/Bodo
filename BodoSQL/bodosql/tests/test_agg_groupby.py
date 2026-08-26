@@ -9,8 +9,10 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+import bodo.pandas as bd
 import bodosql
-from bodo.tests.utils import pytest_slow_unless_groupby
+from bodo.pandas.plan import AggregateExpression, LogicalAggregate, execute_plan
+from bodo.tests.utils import _test_equal, pytest_slow_unless_groupby
 from bodo.types import Time
 from bodosql.tests.utils import check_query
 
@@ -2091,4 +2093,48 @@ def test_groupby_agg_on_key_col(memory_leak_check):
         None,
         check_dtype=False,
         use_duckdb=True,
+    )
+
+
+@pytest.mark.cpp_backend
+def test_sum0_in_lazy_plan():
+    """
+    Test that SUM0 returns 0 initialized output when used in a lazy plan because
+    there is currently not a meaningful way to distinguish between SUM and SUM0 using
+    SQL queries.
+    """
+    pdf = pd.DataFrame(
+        {
+            "A": pd.array([1, 1, 2], dtype=pd.ArrowDtype(pa.int64())),
+            "B": pd.array([None, None, None], dtype=pd.ArrowDtype(pa.int64())),
+        }
+    )
+
+    bdf = bd.from_pandas(pdf)
+
+    expr = AggregateExpression(
+        pdf.iloc[:0, 1],
+        bdf._plan,
+        "sum0",
+        None,  # cfunc
+        [1],  # input_cols
+        False,  # dropna
+    )
+
+    plan = LogicalAggregate(
+        pdf.iloc[:0, :],
+        bdf._plan,
+        [0],  # key indices
+        [expr],
+    )
+
+    bodo_out = execute_plan(plan, optimize=False, use_sql_rules=True)
+    expected_out = pd.DataFrame({"A": [1, 2], "B": [0, 0]})
+
+    _test_equal(
+        bodo_out,
+        expected_out,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
     )

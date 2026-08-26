@@ -18,6 +18,11 @@ on:
         required: false
         default: ubuntu-latest
         type: string
+      only-sql:
+        description: 'Whether to run only BodoSQL tests'
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       pytest-marker:
@@ -62,6 +67,7 @@ jobs:
         shell: bash
 
   bodo-compiler-1p:
+    if: ${{ !inputs.only-sql }}
     needs: create-test-marker
     strategy:
       matrix:
@@ -77,6 +83,7 @@ jobs:
     secrets: inherit
 
   bodo-compiler-2p:
+    if: ${{ !inputs.only-sql  }}
     needs: create-test-marker
     strategy:
       matrix:
@@ -92,6 +99,7 @@ jobs:
     secrets: inherit
 
   bodo-cache:
+    if: ${{ !inputs.only-sql  }}
     needs: create-test-marker
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
@@ -102,6 +110,7 @@ jobs:
     secrets: inherit
 
   bodo-spawn-1p:
+    if: ${{ !inputs.only-sql  }}
     needs: create-test-marker
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
@@ -113,6 +122,7 @@ jobs:
     secrets: inherit
 
   bodo-spawn-2p:
+    if: ${{ !inputs.only-sql  }}
     needs: create-test-marker
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
@@ -124,6 +134,7 @@ jobs:
     secrets: inherit
 
   bodo-df-lib-1p:
+    if: ${{ !inputs.only-sql  }}
     needs: create-test-marker
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
@@ -135,6 +146,7 @@ jobs:
     secrets: inherit
 
   bodo-df-lib-2p:
+    if: ${{ !inputs.only-sql  }}
     needs: create-test-marker
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:

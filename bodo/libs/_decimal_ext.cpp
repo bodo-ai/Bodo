@@ -885,7 +885,8 @@ arrow::Decimal128 divide_decimal_scalars_util(arrow::Decimal128 v1, int64_t p1,
                                               int64_t out_precision,
                                               int64_t out_scale,
                                               bool* overflow) {
-    return decimalops::Divide(v1, v2, out_scale, overflow);
+    int32_t delta_scale = out_scale - (s1 + s2);
+    return decimalops::Divide(v1, v2, delta_scale, overflow);
 }
 
 /**
@@ -3079,6 +3080,7 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic(
                 throw std::runtime_error(
                     "arrow_array_decimal_arithmetic error in AppendNull");
             }
+            continue;
         }
         auto left_bytes = left_arr->GetValue(i);
         auto right_bytes = right_arr->GetValue(i);
@@ -3111,9 +3113,6 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic(
                 op);
         }
 
-        if (overflow) {
-            return nullptr;
-        }
         status = builder.Append(result128);
         if (!status.ok()) {
             throw std::runtime_error(
@@ -3163,9 +3162,6 @@ std::shared_ptr<arrow::Array> arrow_array_boolean_op(
             left_val, left_precision, left_scale, right_val, right_precision,
             right_scale, result_precision, result_scale, &overflow);
 
-        if (overflow) {
-            return nullptr;
-        }
         status = builder.Append(result);
         if (!status.ok()) {
             throw std::runtime_error(
@@ -3229,6 +3225,126 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic_util(
     } else {
         throw std::runtime_error(
             "arrow_array_decimal_arithmetic_util does not support operation " +
+            op);
+    }
+}
+
+template <ct_string op>
+std::shared_ptr<arrow::Scalar> arrow_scalar_decimal_arithmetic(
+    std::shared_ptr<arrow::Decimal128Scalar> left_scalar, int left_precision,
+    int left_scale, std::shared_ptr<arrow::Decimal128Scalar> right_scalar,
+    int right_precision, int right_scale, int result_precision,
+    int result_scale) {
+    arrow::Status status;
+    bool overflow = false;
+
+    auto dtype =
+        std::make_shared<arrow::Decimal128Type>(result_precision, result_scale);
+    arrow::Decimal128 result128;
+    if (!left_scalar->is_valid || !right_scalar->is_valid) {
+        return arrow::MakeNullScalar(dtype);
+    }
+
+    arrow::Decimal128 left_val = left_scalar->value;
+    arrow::Decimal128 right_val = right_scalar->value;
+    if constexpr (std::string_view(op.value) == "add") {
+        result128 = add_or_subtract_decimal_scalars_util(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale, true /* add */,
+            &overflow);
+    } else if constexpr (std::string_view(op.value) == "subtract") {
+        result128 = add_or_subtract_decimal_scalars_util(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale, false /* subtract */,
+            &overflow);
+    } else if constexpr (std::string_view(op.value) == "multiply") {
+        result128 = multiply_decimal_scalars_util(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale, &overflow);
+    } else if constexpr (std::string_view(op.value) == "divide") {
+        result128 = divide_decimal_scalars_util(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale, &overflow);
+    } else {
+        throw std::runtime_error(
+            "arrow_array_decimal_arithmetic does not support operation " + op);
+    }
+
+    return std::make_shared<arrow::Decimal128Scalar>(result128, dtype);
+}
+
+template <auto Op>
+std::shared_ptr<arrow::Scalar> arrow_scalar_boolean_op(
+    std::shared_ptr<arrow::Decimal128Scalar> left_scalar, int left_precision,
+    int left_scale, std::shared_ptr<arrow::Decimal128Scalar> right_scalar,
+    int right_precision, int right_scale, int result_precision,
+    int result_scale) {
+    arrow::Status status;
+    bool overflow = false;
+
+    auto dtype = std::make_shared<arrow::BooleanType>();
+    if (!left_scalar->is_valid || !right_scalar->is_valid) {
+        return arrow::MakeNullScalar(dtype);
+    }
+
+    arrow::Decimal128 left_val = left_scalar->value;
+    arrow::Decimal128 right_val = right_scalar->value;
+
+    bool result = compare_decimal_scalars_util<Op>(
+        left_val, left_precision, left_scale, right_val, right_precision,
+        right_scale, result_precision, result_scale, &overflow);
+
+    return arrow::MakeScalar(result);
+}
+
+std::shared_ptr<arrow::Scalar> arrow_scalar_decimal_arithmetic_util(
+    std::shared_ptr<arrow::Decimal128Scalar> left_val, int left_precision,
+    int left_scale, std::shared_ptr<arrow::Decimal128Scalar> right_val,
+    int right_precision, int right_scale, int result_precision,
+    int result_scale, const std::string& op) {
+    if (op == "add") {
+        return arrow_scalar_decimal_arithmetic<"add">(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "subtract") {
+        return arrow_scalar_decimal_arithmetic<"subtract">(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "multiply") {
+        return arrow_scalar_decimal_arithmetic<"multiply">(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "divide") {
+        return arrow_scalar_decimal_arithmetic<"divide">(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "equal") {
+        return arrow_scalar_boolean_op<std::equal_to<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "not_equal") {
+        return arrow_scalar_boolean_op<std::not_equal_to<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "less") {
+        return arrow_scalar_boolean_op<std::less<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "greater") {
+        return arrow_scalar_boolean_op<std::greater<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "less_equal") {
+        return arrow_scalar_boolean_op<std::less_equal<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else if (op == "greater_equal") {
+        return arrow_scalar_boolean_op<std::greater_equal<>{}>(
+            left_val, left_precision, left_scale, right_val, right_precision,
+            right_scale, result_precision, result_scale);
+    } else {
+        throw std::runtime_error(
+            "arrow_scalar_decimal_arithmetic_util does not support operation " +
             op);
     }
 }
