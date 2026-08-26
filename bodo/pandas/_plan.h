@@ -6,6 +6,7 @@
 #include <Python.h>
 #include <arrow/type.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <cstdint>
 #include <utility>
 #include "duckdb/common/enums/join_type.hpp"
@@ -328,6 +329,15 @@ duckdb::unique_ptr<duckdb::Expression> make_const_list_expr(
 template <typename T>
 duckdb::unique_ptr<duckdb::Expression> make_const_number_expr(
     PyObject *out_schema_py, T val);
+
+/**
+ * @brief Create an expression from a constant arrow decimal.
+ *
+ * @param arrow_scalar_py - the constant decimal from Python arrow scalar
+ * @return duckdb::unique_ptr<duckdb::Expression> - the const number expr
+ */
+duckdb::unique_ptr<duckdb::Expression> make_const_arrow_scalar_expr(
+    PyObject *arrow_scalar_py);
 
 /**
  * @brief Create an expression from a constant string.

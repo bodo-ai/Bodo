@@ -572,7 +572,7 @@ def test_row_fn(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"ROW/RANGE not allowed with RANK, DENSE_RANK, ROW_NUMBER or PERCENTILE_CONT/DISC functions",
+        match=r"ROW/RANGE not allowed with RANK, DENSE_RANK, ROW_NUMBER, PERCENTILE_CONT/DISC or LAG/LEAD functions",
     ):
         impl(df)
 
@@ -593,7 +593,7 @@ def test_row_fn_jit(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"ROW/RANGE not allowed with RANK, DENSE_RANK, ROW_NUMBER or PERCENTILE_CONT/DISC functions",
+        match=r"ROW/RANGE not allowed with RANK, DENSE_RANK, ROW_NUMBER, PERCENTILE_CONT/DISC or LAG/LEAD functions",
     ):
         impl(df)
 
@@ -751,7 +751,7 @@ def test_qualify_no_window_err(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match=r"QUALIFY expression '`TABLE1`.`A` > 3' must contain a window function",
+        match=r"QUALIFY expression '`TABLE1`.`A` > CAST\(3 AS BIGINT\)' must contain a window function",
     ):
         impl(table1)
 

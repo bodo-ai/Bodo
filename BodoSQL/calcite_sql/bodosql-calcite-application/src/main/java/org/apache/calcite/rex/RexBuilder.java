@@ -27,6 +27,7 @@ import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeSystemImpl;
 import org.apache.calcite.runtime.FlatLists;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlCollation;
@@ -43,6 +44,7 @@ import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.BodoSqlTypeUtil;
 import org.apache.calcite.sql.type.MapSqlType;
 import org.apache.calcite.sql.type.MultisetSqlType;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
@@ -77,6 +79,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
 
@@ -94,6 +97,12 @@ import static java.util.Objects.requireNonNull;
  * <p>Some common literal values (NULL, TRUE, FALSE, 0, 1, '') are cached.
  */
 public class RexBuilder {
+    /**
+     * Default RexBuilder.
+     */
+    public static final RexBuilder DEFAULT =
+            new RexBuilder(new SqlTypeFactoryImpl(RelDataTypeSystemImpl.DEFAULT));
+
     /**
      * Special operator that accesses an unadvertised field of an input record.
      * This operator cannot be used in SQL queries; it is introduced temporarily
@@ -1478,6 +1487,10 @@ public class RexBuilder {
         return makeLiteral(requireNonNull(s, "s"), type, SqlTypeName.SARG);
     }
 
+    public RexLiteral makeUuidLiteral(@Nullable UUID uuid) {
+        return new RexLiteral(uuid, typeFactory.createSqlType(SqlTypeName.UUID), SqlTypeName.UUID);
+    }
+
     /**
      * Creates a character string literal.
      */
@@ -1850,6 +1863,7 @@ public class RexBuilder {
                 return literal.getValueAs(clazz);
 
             case ROW:
+            case ARRAY_VALUE_CONSTRUCTOR:
                 final RexCall call = (RexCall) point;
                 final ImmutableList.Builder<Comparable> b = ImmutableList.builder();
                 for (RexNode operand : call.operands) {
@@ -1900,6 +1914,27 @@ public class RexBuilder {
         return makeLiteral(zeroValue(type), type);
     }
 
+    public RexNode makeZeroRexNode(RelDataType type) {
+        switch (type.getSqlTypeName()) {
+            case ARRAY:
+                return makeCast(type,
+                        makeCall(type, SqlStdOperatorTable.ARRAY_VALUE_CONSTRUCTOR, ImmutableList.of()));
+            case MULTISET:
+                return makeCast(type,
+                        makeCall(type, SqlStdOperatorTable.MULTISET_VALUE, ImmutableList.of()));
+            case MAP:
+                return makeCast(type,
+                        makeCall(type, SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, ImmutableList.of()));
+            case ROW:
+                List<RexNode> zeroFields = type.getFieldList().stream()
+                        .map(field -> makeZeroRexNode(field.getType()))
+                        .collect(Collectors.toList());
+                return makeCall(type, SqlStdOperatorTable.ROW, zeroFields);
+            default:
+                return makeZeroLiteral(type);
+        }
+    }
+
     private static Comparable zeroValue(RelDataType type) {
         switch (type.getSqlTypeName()) {
             case CHAR:
@@ -1930,10 +1965,10 @@ public class RexBuilder {
             case TIME_TZ:
                 return new TimeWithTimeZoneString(0, 0, 0, "GMT+00");
             case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-                return new TimestampString(0, 1, 1, 0, 0, 0);
+                return new TimestampString(1, 1, 1, 0, 0, 0);
             case TIMESTAMP_TZ:
                 // TODO: alter the offset used to reflect the default timezone
-                return new TimestampWithTimeZoneString(0, 1, 1, 0, 0, 0, "GMT+00");
+                return new TimestampWithTimeZoneString(1, 1, 1, 0, 0, 0, "GMT+00");
             default:
                 throw Util.unexpected(type.getSqlTypeName());
         }
@@ -2144,6 +2179,8 @@ public class RexBuilder {
                         SqlTypeName.GEOMETRY);
             case ANY:
                 return makeLiteral(value, guessType(value), allowCast);
+            case UUID:
+                return makeUuidLiteral((UUID) value);
             default:
                 throw new IllegalArgumentException(
                         "Cannot create literal for type '" + sqlTypeName + "'");
@@ -2227,6 +2264,9 @@ public class RexBuilder {
               final Charset charset = type.getCharset();
               if (charset == null) {
                 throw new AssertionError(type + ".getCharset() must not be null");
+              }
+              if (o instanceof Character) {
+                return new NlsString(o.toString(), charset.name(), type.getCollation());
               }
               return new NlsString((String) o, charset.name(), type.getCollation());
             case TIME:

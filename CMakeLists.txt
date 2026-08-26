@@ -75,7 +75,7 @@ set(FMT_TEST OFF CACHE INTERNAL "disabling fmt tests")
 FetchContent_Declare(
   fmt
   GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
-  GIT_TAG         10.2.1
+  GIT_TAG         12.2.0
   EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(fmt)

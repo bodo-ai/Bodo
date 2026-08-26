@@ -103,7 +103,8 @@ struct Bodo_FTypes {
         idx_n_columns = 70,
         // Streaming UDFs for Bodo DataFrames groupby.agg
         stream_udf = 71,
-        n_ftypes = 72,
+        sum0 = 72,
+        n_ftypes = 73,
     };
 };
 
