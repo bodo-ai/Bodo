@@ -47,11 +47,16 @@ void BasicColSet::alloc_running_value_columns(
     Bodo_CTypes::CTypeEnum dtype = in_col->dtype;
     int64_t num_categories = in_col->num_categories;
     std::string timezone = in_col->timezone;
+    int precision = in_col->precision;
+    int scale = in_col->scale;
+    if (ftype == Bodo_FTypes::sum || ftype == Bodo_FTypes::sum0) {
+        precision = DECIMAL128_MAX_PRECISION;
+    }
     std::tie(arr_type, dtype) =
         get_groupby_output_dtype(ftype, arr_type, dtype);
     out_cols.push_back(alloc_array_top_level(
         num_groups, 1, 1, arr_type, dtype, -1, 0, num_categories, false, false,
-        false, pool, std::move(mm), timezone));
+        false, pool, std::move(mm), timezone, precision, scale));
 }
 
 void BasicColSet::update(const std::vector<grouping_info>& grp_infos,
@@ -218,10 +223,18 @@ MeanColSet::~MeanColSet() = default;
 void MeanColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    Bodo_CTypes::CTypeEnum sum_dtype = Bodo_CTypes::FLOAT64;
+    int8_t precision = -1, scale = -1;
+    if (in_col->dtype == Bodo_CTypes::DECIMAL) {
+        sum_dtype = Bodo_CTypes::DECIMAL;
+        precision = DECIMAL128_MAX_PRECISION;
+        scale = in_col->scale;
+    }
+
     std::shared_ptr<array_info> c1 = alloc_array_top_level(
-        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
-        Bodo_CTypes::FLOAT64, -1, 0, 0, false, false, false, pool,
-        mm);  // for sum and result
+        num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL, sum_dtype, -1, 0,
+        0, false, false, false, pool, mm, "", precision,
+        scale);  // for sum and result
     std::shared_ptr<array_info> c2 = alloc_array_top_level(
         num_groups, 1, 1, bodo_array_type::NULLABLE_INT_BOOL,
         Bodo_CTypes::UINT64, -1, 0, 0, false, false, false, pool,
@@ -2193,6 +2206,12 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::vector<std::vector<std::unique_ptr<bodo::DataType>>> in_arr_types_vec,
     stream_udf_t* udf_cfunc) {
     BasicColSet* colset;
+
+    // Sum0 is the same as sum but initializes output to 0 instead of NULL.
+    if (ftype == Bodo_FTypes::sum0) {
+        use_sql_rules = false;
+        ftype = Bodo_FTypes::sum;
+    }
 
     if (ftype != Bodo_FTypes::size && ftype != Bodo_FTypes::window &&
         in_cols.size() == 0) {

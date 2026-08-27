@@ -194,6 +194,7 @@ public class ${parser.class} extends SqlAbstractParserImpl
                 final String sql =
                     ((SourceStringReader) reader).getSourceString();
                 parser.setOriginalSql(sql);
+                parser.jj_input_stream.ReInit(reader, 1, 1, sql.length());
             }
           return parser;
         }
@@ -1185,17 +1186,19 @@ SqlNodeList SqlStmtList() :
     SqlNode stmt;
 }
 {
-    stmt = SqlStmt() {
-        stmtList.add(stmt);
-    }
     (
-        <SEMICOLON>
-        [
-            stmt = SqlStmt() {
-                stmtList.add(stmt);
-            }
-        ]
-    )*
+        stmt = SqlStmt() {
+            stmtList.add(stmt);
+        }
+        (
+            <SEMICOLON>
+            [
+                stmt = SqlStmt() {
+                    stmtList.add(stmt);
+                }
+            ]
+        )*
+    )?
     <EOF>
     {
         return new SqlNodeList(stmtList, Span.of(stmtList).pos());
@@ -1222,7 +1225,7 @@ SqlNode SqlStmt() :
         LOOKAHEAD(3) stmt = ${method}
     |
 </#list>
-        stmt = SqlSetOption(Span.of(), null)
+        stmt = ${parser.setOptionParserMethod!default.parser.setOptionParserMethod}(Span.of(), null)
     |
         stmt = SqlAlter()
     |
@@ -7094,10 +7097,17 @@ SqlNode BuiltinFunctionCall() :
                 }
             |
                 <COMMA> e = SimpleIdentifier() { args.add(e); }
-                <COMMA> e = SimpleIdentifier() { args.add(e); }
-                <RPAREN> {
-                    return SqlStdOperatorTable.CONVERT.createCall(s.end(this), args);
-                }
+                (
+                    <COMMA> e = SimpleIdentifier() { args.add(e); }
+                    <RPAREN> {
+                        SqlOperator op = SqlStdOperatorTable.getConvertFuncByConformance(this.conformance);
+                        return op.createCall(s.end(this), args);
+                    }
+                |
+                    <RPAREN> {
+                        return SqlLibraryOperators.CONVERT_ORACLE.createCall(s.end(this), args);
+                    }
+                )
             )
         |
             // MSSql CONVERT(type, val [,style])
@@ -7207,7 +7217,7 @@ SqlNode BuiltinFunctionCall() :
                 <FROM> {
                     if (null == flag && null == e) {
                         throw SqlUtil.newContextException(getPos(),
-                            RESOURCE.illegalFromEmpty());
+                            BODO_SQL_RESOURCE.genericTrimError());
                     }
                     // Need to reinterpret e as the trimChars
                     trimChars = e;

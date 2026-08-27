@@ -21,6 +21,7 @@ import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlValidator;
@@ -31,6 +32,8 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.List;
 
 import static com.google.common.base.Preconditions.checkArgument;
+
+import static org.apache.calcite.util.Static.RESOURCE;
 
 import static java.util.Objects.requireNonNull;
 
@@ -116,8 +119,51 @@ public class SqlQuantifyOperator extends SqlInOperator {
               rightType.isNullable()
                   || componentRightType.isNullable()
                   || leftType.isNullable());        }
+        throw validator.newValidationError(call,
+            RESOURCE.incompatibleValueType(call.getOperator().getName()));
       }
     }
     return null;
+  }
+
+  @Override public SqlOperator not() {
+    switch (kind) {
+    case SOME:
+      switch (comparisonKind) {
+      case EQUALS:
+        return SqlStdOperatorTable.ALL_NE;
+      case NOT_EQUALS:
+        return SqlStdOperatorTable.ALL_EQ;
+      case LESS_THAN_OR_EQUAL:
+        return SqlStdOperatorTable.ALL_GT;
+      case LESS_THAN:
+        return SqlStdOperatorTable.ALL_GE;
+      case GREATER_THAN_OR_EQUAL:
+        return SqlStdOperatorTable.ALL_LT;
+      case GREATER_THAN:
+        return SqlStdOperatorTable.ALL_LE;
+      default:
+        throw new AssertionError("unexpected SOME comparisonKind " + kind);
+      }
+    case ALL:
+      switch (comparisonKind) {
+      case EQUALS:
+        return SqlStdOperatorTable.SOME_NE;
+      case NOT_EQUALS:
+        return SqlStdOperatorTable.SOME_EQ;
+      case LESS_THAN_OR_EQUAL:
+        return SqlStdOperatorTable.SOME_GT;
+      case LESS_THAN:
+        return SqlStdOperatorTable.SOME_GE;
+      case GREATER_THAN_OR_EQUAL:
+        return SqlStdOperatorTable.SOME_LT;
+      case GREATER_THAN:
+        return SqlStdOperatorTable.SOME_LE;
+      default:
+        throw new AssertionError("unexpected ALL comparisonKind " + kind);
+      }
+    default:
+      throw new AssertionError("unexpected " + kind);
+    }
   }
 }

@@ -390,6 +390,19 @@ duckdb::Value ArrowScalarToDuckDBValue(
         case arrow::Type::DOUBLE:
             return duckdb::Value::DOUBLE(
                 std::static_pointer_cast<arrow::DoubleScalar>(scalar)->value);
+        case arrow::Type::DECIMAL: {
+            auto dec_scalar =
+                std::static_pointer_cast<arrow::Decimal128Scalar>(scalar);
+            arrow::Decimal128 dec_value = dec_scalar->value;
+            auto dec_type = std::static_pointer_cast<arrow::Decimal128Type>(
+                dec_scalar->type);
+            int32_t precision = dec_type->precision();
+            int32_t scale = dec_type->scale();
+            int64_t high_bits = dec_value.high_bits();
+            int64_t low_bits = dec_value.low_bits();
+            duckdb::hugeint_t hugeint_value(high_bits, low_bits);
+            return duckdb::Value::DECIMAL(hugeint_value, precision, scale);
+        } break;
         case arrow::Type::BOOL:
             return duckdb::Value::BOOLEAN(
                 std::static_pointer_cast<arrow::BooleanScalar>(scalar)->value);
@@ -1204,6 +1217,18 @@ PyObject *_duckdbFilterToPyicebergFilter(
                 }
             }
         } break;
+        case duckdb::TableFilterType::OPTIONAL_FILTER: {
+            duckdb::unique_ptr<duckdb::OptionalFilter> optionalFilter =
+                dynamic_cast_unique_ptr<duckdb::OptionalFilter>(std::move(tf));
+            try {
+                py_expr = _duckdbFilterToPyicebergFilter(
+                    std::move(optionalFilter->child_filter), field_name,
+                    pyiceberg_expression_mod);
+            } catch (...) {
+                py_expr = PyObject_CallMethod(pyiceberg_expression_mod.get(),
+                                              "AlwaysTrue", nullptr);
+            }
+        } break;
         default:
             throw std::runtime_error(
                 "duckdbFilterToPyicebergFilter unsupported filter "
@@ -1486,7 +1511,7 @@ JoinFilterColStats::col_stats_collector::collect_min_max() const {
     return std::visit(
         [&](const auto &join_state)
             -> std::optional<JoinFilterColStats::col_min_max_t> {
-            using T = std::decay_t<decltype(join_state)>;
+            using T = std::decay_t<decltype(join_state.get())>;
             if constexpr (std::is_same_v<T, JoinState *>) {
                 std::unique_ptr<bodo::DataType> dt =
                     join_state->build_table_schema->column_types[build_key_col]
@@ -2173,7 +2198,7 @@ static std::pair<int, int> precision_scale_from_double_array(
     return {out_precision, out_scale};
 }
 
-std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input) {
+std::pair<int, int> getPrecisionScaleNonDecimal(const arrow::Datum &input) {
     auto id = input.type()->id();
     switch (id) {
         case arrow::Type::INT8:
@@ -2189,13 +2214,79 @@ std::pair<int, int> getPrecisionScaleNonDecimal(arrow::Datum &input) {
         case arrow::Type::UINT64:
             return std::make_pair<int, int>(19, 0);
         case arrow::Type::FLOAT:
+            if (input.is_scalar()) {
+                std::shared_ptr<arrow::Scalar> s = input.scalar();
+                if (!s->is_valid) {
+                    return {1, 0};
+                }
+                return precision_scale_from_double(
+                    std::static_pointer_cast<arrow::FloatScalar>(s)->value);
+            } else {
+                return precision_scale_from_double_array(input.make_array());
+            }
+            break;
         case arrow::Type::DOUBLE:
-            return precision_scale_from_double_array(input.make_array());
+            if (input.is_scalar()) {
+                std::shared_ptr<arrow::Scalar> s = input.scalar();
+                if (!s->is_valid) {
+                    return {1, 0};
+                }
+                return precision_scale_from_double(
+                    std::static_pointer_cast<arrow::DoubleScalar>(s)->value);
+            } else {
+                return precision_scale_from_double_array(input.make_array());
+            }
+            break;
         default:
             throw std::runtime_error(
                 "getPrecisionScaleNonDecimal unsupported type " +
                 input.type()->ToString());
     }
+}
+
+std::tuple<bool, int, int, int> getDatumPrecisionScale(
+    const arrow::Datum &datum) {
+    bool is_decimal =
+        datum.type() && datum.type()->id() == arrow::Type::DECIMAL128;
+    int p1, s1, l1;
+    if (is_decimal) {
+        // Decimal doesn't matter if scalar or array.
+        auto dec_type =
+            std::static_pointer_cast<arrow::Decimal128Type>(datum.type());
+        p1 = dec_type->precision();
+        s1 = dec_type->scale();
+    } else {
+        std::tie(p1, s1) = getPrecisionScaleNonDecimal(datum);
+    }
+    l1 = p1 - s1;
+    return std::tuple<bool, int, int, int>(datum.is_scalar(), p1, s1, l1);
+}
+
+std::pair<int, int> getOpPrecisionScale(const std::string &op, int p1, int s1,
+                                        int l1, int p2, int s2, int l2) {
+    int result_precision = -1;
+    int result_scale = -1;
+    if (op == "add" || op == "subtract") {
+        // from decimal_arr_ext.py
+        auto l = std::max(l1, l2) + 1;
+        result_scale = std::max(s1, s2);
+        result_precision = l + result_scale;
+    } else if (op == "multiply") {
+        // from decimal_arr_ext.py
+        auto l = l1 + l2;
+        result_scale = std::min(s1 + s2, std::max(std::max(s1, s2), 12));
+        result_precision = l + result_scale;
+    } else if (op == "divide") {
+        // from decimal_arr_ext.py
+        auto l = l1 + s2;
+        result_scale = std::max(s1, std::min(s1 + 6, 12));
+        result_precision = l + result_scale;
+    } else if (op == "equal" || op == "not_equal" || op == "less" ||
+               op == "greater" || op == "less_equal" || op == "greater_equal") {
+        result_scale = std::max(s1, s2);
+        result_precision = std::max(l1, l2) + result_scale;
+    }
+    return {result_precision, result_scale};
 }
 
 #ifdef USE_CUDF

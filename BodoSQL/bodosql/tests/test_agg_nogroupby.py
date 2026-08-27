@@ -1291,3 +1291,39 @@ def test_all_null(memory_leak_check):
         sort_output=False,
         is_out_distributed=False,
     )
+
+
+@pytest.mark.gpu
+@pytest.mark.cpp_backend
+def test_sum0_init_value(tpch_data):
+    """
+    Test that the initial value of sum0 is 0, and not NULL.
+    """
+
+    # Calcite generates SUM0 when an aggregate containing COUNT(*) is pushed through a join.
+    # o_orderkey < 0 ensures the input to SUM0 is empty.
+    query = """
+    SELECT COUNT(*) AS cnt
+        FROM orders
+        JOIN customer
+        ON o_custkey = c_custkey
+        WHERE o_orderkey < 0
+    """
+
+    bc = bodosql.BodoSQLContext(tpch_data)
+    plan_str = bc.generate_plan(query)
+    assert "BodoPhysicalAggregate(group=[{}], CNT=[$SUM0($0)])" in plan_str, (
+        "Expected SUM0 in the plan."
+    )
+
+    check_query(
+        query,
+        tpch_data,
+        None,
+        expected_output=pd.DataFrame({"CNT": [0]}),
+        sort_output=False,
+        check_dtype=False,
+        check_names=False,
+        is_out_distributed=False,
+        only_python=True,
+    )

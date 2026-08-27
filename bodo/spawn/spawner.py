@@ -167,7 +167,11 @@ class Spawner:
             command, args = self._get_spawn_command_args()
 
             # We need to tell OpenMPI to create ranks on other nodes
-            mpi_info = MPI.Info.Create({"map_by": "node"})
+            mpi_info = (
+                MPI.Info.Create({"map_by": "node"})
+                if MPI.get_vendor()[0] == "Open MPI"
+                else MPI.INFO_NULL
+            )
 
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(

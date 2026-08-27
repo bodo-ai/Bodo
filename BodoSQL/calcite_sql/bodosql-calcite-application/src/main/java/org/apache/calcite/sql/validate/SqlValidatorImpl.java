@@ -170,6 +170,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -191,6 +192,7 @@ import static org.apache.calcite.util.Util.first;
 
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.joining;
 
 /**
  * Default implementation of {@link SqlValidator}.
@@ -411,11 +413,12 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       SqlSelect select, boolean includeSystemVars) {
     final List<SqlNode> list = new ArrayList<>();
     final PairList<String, RelDataType> types = PairList.of();
+    final Map<String, SqlNode> expansions = new HashMap<>();
     for (int i = 0; i < selectList.size(); i++) {
       final SqlNode selectItem = selectList.get(i);
       final RelDataType originalType = getValidatedNodeTypeIfKnown(selectItem);
       expandSelectItem(selectItem, select, first(originalType, unknownType),
-          list, catalogReader.nameMatcher().createSet(), types,
+          list, catalogReader.nameMatcher().createSet(), types, expansions,
           includeSystemVars, i);
     }
     getRawSelectScopeNonNull(select).setExpandedSelectList(list);
@@ -471,31 +474,35 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    * @param selectItems       List that expanded items are written to
    * @param aliases           Set of aliases
    * @param fields            List of field names and types, in alias order
+   * @param expansions        Maps simple identifiers defined in the current SELECT
+   *                          statement to their expansions (used only when
+   *                          {@link SqlConformance#isSelectAlias()} requires it).
    * @param includeSystemVars If true include system vars in lists
    * @return Whether the node was expanded
    */
    private boolean expandSelectItem(final SqlNode selectItem, SqlSelect select,
-      RelDataType targetType, List<SqlNode> selectItems, Set<String> aliases,
-      PairList<String, RelDataType> fields, boolean includeSystemVars,
-      Integer selectItemIdx) {
-     final SqlValidatorScope selectScope;
-     SqlNode expanded;
-     if (SqlValidatorUtil.isMeasure(selectItem)) {
-       selectScope = getMeasureScope(select);
-       expanded = selectItem;
-     } else {
-       final SelectScope scope = (SelectScope) getWhereScope(select);
-       if (expandStar(selectItems, aliases, fields, includeSystemVars, scope,
-           selectItem)) {
-         return true;
-       }
-
-       // Expand the select item: fully-qualify columns, and convert
-       // parentheses-free functions such as LOCALTIME into explicit function
-       // calls.
-       selectScope = getSelectScope(select);
-       expanded = expandSelectExpr(selectItem, scope, select, selectItemIdx);
+     RelDataType targetType, List<SqlNode> selectItems, Set<String> aliases,
+     PairList<String, RelDataType> fields,
+     Map<String, SqlNode> expansions, boolean includeSystemVars,
+     Integer selectItemIdx) {
+    final SqlValidatorScope selectScope;
+    SqlNode expanded;
+    if (SqlValidatorUtil.isMeasure(selectItem)) {
+     selectScope = getMeasureScope(select);
+     expanded = selectItem;
+    } else {
+     final SelectScope scope = (SelectScope) getWhereScope(select);
+     if (expandStar(selectItems, aliases, fields, includeSystemVars, scope,
+       selectItem)) {
+      return true;
      }
+
+     // Expand the select item: fully-qualify columns, and convert
+     // parentheses-free functions such as LOCALTIME into explicit function
+     // calls.
+     selectScope = getSelectScope(select);
+     expanded = expandSelectExpr(selectItem, scope, select, expansions, selectItemIdx);
+    }
     final String alias =
         SqlValidatorUtil.alias(selectItem, aliases.size());
 
@@ -1424,13 +1431,19 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         // A top-level namespace must not return any must-filter fields.
         // A non-top-level namespace (e.g. a subquery) may return must-filter
         // fields; these are neutralized if the consuming query filters on them.
-        final ImmutableBitSet mustFilterFields =
-            namespace.getMustFilterFields();
-        if (!mustFilterFields.isEmpty()) {
+        final FilterRequirement filterRequirement =
+            namespace.getFilterRequirement();
+        if (!filterRequirement.filterFields.isEmpty()
+            || !filterRequirement.remnantFilterFields.isEmpty()) {
+          Stream<String> mustFilterStream =
+              filterRequirement.filterFields.stream()
+                  .mapToObj(namespace.getRowType().getFieldNames()::get);
+          Stream<String> remnantStream =
+              filterRequirement.remnantFilterFields.stream()
+                  .map(q -> q.suffix().get(0));
           // Set of field names, sorted alphabetically for determinism.
           Set<String> fieldNameSet =
-              StreamSupport.stream(mustFilterFields.spliterator(), false)
-                  .map(namespace.getRowType().getFieldNames()::get)
+              Stream.concat(mustFilterStream, remnantStream)
                   .collect(Collectors.toCollection(TreeSet::new));
           throw newValidationError(node,
               RESOURCE.mustFilterFieldsMissing(fieldNameSet.toString()));
@@ -4744,64 +4757,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         validateSelectList(selectItems, select, targetRowType);
     ns.setType(rowType);
 
-    // Deduce which columns must be filtered.
-    ns.mustFilterFields = ImmutableBitSet.of();
-    if (from != null) {
-      final Set<SqlQualified> qualifieds = new LinkedHashSet<>();
-      for (ScopeChild child : fromScope.children) {
-        final List<String> fieldNames =
-            child.namespace.getRowType().getFieldNames();
-        child.namespace.getMustFilterFields()
-            .forEachInt(i ->
-                qualifieds.add(
-                    SqlQualified.create(fromScope, 1, child.namespace,
-                        new SqlIdentifier(
-                            ImmutableList.of(child.name, fieldNames.get(i)),
-                            SqlParserPos.ZERO))));
-      }
-      if (!qualifieds.isEmpty()) {
-        if (select.getWhere() != null) {
-          forEachQualified(select.getWhere(), getWhereScope(select),
-              qualifieds::remove);
-        }
-        if (select.getHaving() != null) {
-          forEachQualified(select.getHaving(), getHavingScope(select),
-              qualifieds::remove);
-        }
-
-        // Each of the must-filter fields identified must be returned as a
-        // SELECT item, which is then flagged as must-filter.
-        final BitSet mustFilterFields = new BitSet();
-        final List<SqlNode> expandedSelectItems =
-            requireNonNull(fromScope.getExpandedSelectList(),
-                "expandedSelectList");
-        forEach(expandedSelectItems, (selectItem, i) -> {
-          selectItem = stripAs(selectItem);
-          if (selectItem instanceof SqlIdentifier) {
-            SqlQualified qualified =
-                fromScope.fullyQualify((SqlIdentifier) selectItem);
-            if (qualifieds.remove(qualified)) {
-              // SELECT item #i referenced a must-filter column that was not
-              // filtered in the WHERE or HAVING. It becomes a must-filter
-              // column for our consumer.
-              mustFilterFields.set(i);
-            }
-          }
-        });
-
-        // If there are must-filter fields that are not in the SELECT clause,
-        // this is an error.
-        if (!qualifieds.isEmpty()) {
-          throw newValidationError(select,
-              RESOURCE.mustFilterFieldsMissing(
-                  qualifieds.stream()
-                      .map(q -> q.suffix().get(0))
-                      .collect(Collectors.toCollection(TreeSet::new))
-                      .toString()));
-        }
-        ns.mustFilterFields = ImmutableBitSet.fromBitSet(mustFilterFields);
-      }
-    }
+    validateMustFilterRequirements(select, ns);
 
     // Validate ORDER BY after we have set ns.rowType because in some
     // dialects you can refer to columns of the select list, e.g.
@@ -4829,6 +4785,136 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         return null;
       }
     });
+  }
+
+  /** Removes all entries from {@code qualifieds} and
+   * {@code remnantMustFilterFields} if {@code node} is a bypassField. */
+  private static void purgeForBypassFields(SqlNode node, SqlValidatorScope scope,
+      Set<SqlQualified> qualifieds, Set<SqlQualified> bypassQualifieds,
+      Set<SqlQualified> remnantMustFilterFields) {
+    node.accept(new SqlBasicVisitor<Void>() {
+      @Override public Void visit(SqlIdentifier id) {
+        final SqlQualified qualified = scope.fullyQualify(id);
+        if (bypassQualifieds.contains(qualified)) {
+          // Clear all the must-filter qualifieds from the same table identifier
+          Collection<SqlQualified> sameIdentifier =
+              qualifieds.stream()
+                  .filter(q -> qualifiedMatchesIdentifier(q, qualified))
+                  .collect(Collectors.toList());
+          sameIdentifier.forEach(qualifieds::remove);
+
+          // Clear all the remnant must-filter qualifieds from the same table identifier
+          Collection<SqlQualified> sameIdentifier_ =
+              remnantMustFilterFields.stream()
+                  .filter(q -> qualifiedMatchesIdentifier(q, qualified))
+                  .collect(Collectors.toList());
+          sameIdentifier_.forEach(remnantMustFilterFields::remove);
+        }
+        return null;
+      }
+    });
+  }
+
+  private static void toQualifieds(ImmutableBitSet fields,
+      Set<SqlQualified> qualifiedSet, SelectScope fromScope, ScopeChild child,
+      List<String> fieldNames) {
+    fields.forEachInt(i ->
+        qualifiedSet.add(
+            SqlQualified.create(fromScope, 1, child.namespace,
+                new SqlIdentifier(ImmutableList.of(child.name, fieldNames.get(i)),
+                    SqlParserPos.ZERO))));
+  }
+
+  private static boolean qualifiedMatchesIdentifier(SqlQualified q1, SqlQualified q2) {
+    return q1.identifier.names.get(0).equals(q2.identifier.names.get(0));
+  }
+
+  protected void validateMustFilterRequirements(SqlSelect select, SelectNamespace ns) {
+    ns.filterRequirement = FilterRequirement.EMPTY;
+    if (select.getFrom() != null) {
+      final SelectScope fromScope = (SelectScope) getFromScope(select);
+      final BitSet projectedNonFilteredBypassField = new BitSet();
+      final Set<SqlQualified> qualifieds = new LinkedHashSet<>();
+      final Set<SqlQualified> bypassQualifieds = new LinkedHashSet<>();
+      final Set<SqlQualified> remnantQualifieds = new LinkedHashSet<>();
+
+    // Step 1: Collect must-filter fields, bypass fields, and remnants from
+    //         all FROM children (tables, subqueries, etc.)
+    for (ScopeChild child : fromScope.children) {
+      final List<String> fieldNames =
+          child.namespace.getRowType().getFieldNames();
+      final FilterRequirement filterRequirement =
+          child.namespace.getFilterRequirement();
+      toQualifieds(filterRequirement.filterFields, qualifieds, fromScope,
+          child, fieldNames);
+      toQualifieds(filterRequirement.bypassFields, bypassQualifieds,
+          fromScope, child, fieldNames);
+      remnantQualifieds.addAll(filterRequirement.remnantFilterFields);
+    }
+
+    // Step 2: Remove fields that are filtered in WHERE or HAVING
+    if (!qualifieds.isEmpty() || !bypassQualifieds.isEmpty()) {
+      if (select.getWhere() != null) {
+        forEachQualified(select.getWhere(), getWhereScope(select),
+            qualifieds::remove);
+        purgeForBypassFields(select.getWhere(), getWhereScope(select),
+            qualifieds, bypassQualifieds, remnantQualifieds);
+      }
+      if (select.getHaving() != null) {
+        forEachQualified(select.getHaving(), getHavingScope(select),
+            qualifieds::remove);
+        purgeForBypassFields(select.getHaving(), getHavingScope(select),
+            qualifieds, bypassQualifieds, remnantQualifieds);
+      }
+
+      // Step 3: Check SELECT items — if a must-filter field is in the SELECT
+      //         list but was NOT filtered, it propagates upward as a must-filter
+      final BitSet mustFilterFields = new BitSet();
+      final BitSet mustFilterBypassFields = new BitSet();
+      final List<SqlNode> expandedSelectItems =
+          requireNonNull(fromScope.getExpandedSelectList(),
+              "expandedSelectList");
+      forEach(expandedSelectItems, (selectItem, i) -> {
+        selectItem = stripAs(selectItem);
+        if (selectItem instanceof SqlIdentifier) {
+          SqlQualified qualified =
+              fromScope.fullyQualify((SqlIdentifier) selectItem);
+          if (qualifieds.remove(qualified)) {
+            // SELECT item #i referenced a must-filter column that was not
+            // filtered in the WHERE or HAVING. It becomes a must-filter
+            // column for our consumer.
+            mustFilterFields.set(i);
+          }
+          if (bypassQualifieds.remove(qualified)) {
+            // SELECT item #i referenced a bypass column that was not filtered
+            // in the WHERE or HAVING. It becomes a bypass column for our consumer.
+            mustFilterBypassFields.set(i);
+            projectedNonFilteredBypassField.set(0);
+          }
+        }
+      });
+
+      // Step 4: Error if there are must-filter fields not in SELECT and no bypass
+      if (!qualifieds.isEmpty() && !projectedNonFilteredBypassField.get(0)) {
+        throw newValidationError(select,
+            RESOURCE.mustFilterFieldsMissing(
+                qualifieds.stream()
+                    .map(q -> q.suffix().get(0))
+                    .collect(Collectors.toCollection(TreeSet::new))
+                    .toString()));
+      }
+
+      // Step 5: Remaining must-filter fields that can be defused by a bypass
+      //         field become remnantFilterFields for the consumer
+      ImmutableSet<SqlQualified> remnantMustFilterFields =
+          Stream.of(remnantQualifieds, qualifieds)
+              .flatMap(Set::stream).collect(ImmutableSet.toImmutableSet());
+      ns.filterRequirement =
+          new FilterRequirement(ImmutableBitSet.fromBitSet(mustFilterFields),
+              ImmutableBitSet.fromBitSet(mustFilterBypassFields),
+              remnantMustFilterFields);
+      }
+    }
   }
 
   private void checkRollUpInSelectList(SqlSelect select) {
@@ -5701,6 +5787,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     final List<SqlNode> expandedSelectItems = new ArrayList<>();
     final Set<String> aliases = new HashSet<>();
     final PairList<String, RelDataType> fieldList = PairList.of();
+    // Populated during select expansion when SqlConformance.isSelectAlias != UNSUPPORTED
+    final Map<String, SqlNode> expansions = new HashMap<>();
 
     for (int i = 0; i < selectItems.size(); i++) {
       SqlNode selectItem = selectItems.get(i);
@@ -5717,7 +5805,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
                 ? targetRowType.getFieldList().get(fieldIdx).getType()
                 : unknownType;
         expandSelectItem(selectItem, select, fieldType, expandedSelectItems,
-            aliases, fieldList, false, i);
+            aliases, fieldList, expansions, false, i);
       }
     }
 
@@ -7497,8 +7585,9 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
   }
 
   public SqlNode expandSelectExpr(SqlNode expr,
-      SelectScope scope, SqlSelect select, Integer selectItemIdx) {
-    final Expander expander = new SelectExpander(this, scope, select, selectItemIdx);
+      SelectScope scope, SqlSelect select, Map<String, SqlNode> expansions,
+      Integer selectItemIdx) {
+    final Expander expander = new SelectExpander(this, scope, select, expansions, selectItemIdx);
     final SqlNode newExpr = expander.go(expr);
     if (expr != newExpr) {
       setOriginal(newExpr, expr);
@@ -8722,10 +8811,35 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    */
   static class SelectExpander extends ExtendedExpander {
 
+    // Maps simple identifiers to their expansions.
+    final Map<String, SqlNode> expansions;
+    // List of identifiers that are currently being looked-up.  Used to detect
+    // circular dependencies when SqlConformance#isSelectAlias is ANY.
+    final Set<String> lookingUp;
+
     SelectExpander(SqlValidatorImpl validator, SelectScope scope,
         SqlSelect select, Integer selectItemIdx) {
+      this(validator, scope, select, new HashMap<>(), new HashSet<>(), selectItemIdx);
+    }
+
+    SelectExpander(SqlValidatorImpl validator, SelectScope scope,
+        SqlSelect select, Map<String, SqlNode> expansions, Integer selectItemIdx) {
+      this(validator, scope, select, expansions, new HashSet<>(), selectItemIdx);
+    }
+
+    private SelectExpander(SqlValidatorImpl validator, SelectScope scope,
+        SqlSelect select, Map<String, SqlNode> expansions, Set<String> lookingUp,
+        Integer selectItemIdx) {
       super(validator, scope, select, select, Clause.SELECT,
           selectItemIdx);
+      this.expansions = expansions;
+      this.lookingUp = lookingUp;
+    }
+
+    private SelectExpander(SelectExpander expander) {
+      this(expander.validator, (SelectScope) expander.getScope(),
+          expander.select, expander.expansions, expander.lookingUp,
+          expander.maxNumCols);
     }
 
     @Override public @Nullable SqlNode visit(SqlIdentifier id) {
@@ -8734,8 +8848,82 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       if (node != id) {
         return node;
       } else {
-        return super.visit(id);
+        try {
+          return super.visit(id);
+        } catch (CalciteContextException ex) {
+          String message = ex.getMessage();
+          if (message != null && !message.contains("not found")) {
+            throw ex;
+          }
+          // This point is reached only if the name lookup failed using standard rules
+          SqlConformance.SelectAliasLookup selectAlias = validator.getConformance().isSelectAlias();
+          if (selectAlias == SqlConformance.SelectAliasLookup.UNSUPPORTED || !id.isSimple()) {
+            throw ex;
+          }
+          return expandAliases(id, ex);
+        }
       }
+    }
+
+    // Handle "SELECT expr as X, X+1 as Y"
+    // where X is not defined previously.
+    // Try to look up the item in the select list itself.
+    private SqlNode expandAliases(SqlIdentifier id, CalciteContextException ex) {
+      String name = id.getSimple();
+      if (lookingUp.contains(name)) {
+        final String dependentColumns = lookingUp.stream()
+            .map(s -> "'" + s + "'")
+            .collect(joining(", "));
+        throw validator.newValidationError(id,
+            RESOURCE.columnIsCyclic(name, dependentColumns));
+      }
+      // Check whether we already have an expansion for this identifier
+      @Nullable SqlNode expr = null;
+      if (expansions.containsKey(name)) {
+        expr = expansions.get(name);
+      } else {
+        final SqlNameMatcher nameMatcher =
+            validator.catalogReader.nameMatcher();
+        int matches = 0;
+        for (SqlNode s : select.getSelectList()) {
+          if (s == this.root && validator.getConformance().isSelectAlias()
+              == SqlConformance.SelectAliasLookup.LEFT_TO_RIGHT) {
+            // Stop lookup at the current item
+            break;
+          }
+          final String alias = SqlValidatorUtil.alias(s);
+          if (alias != null && nameMatcher.matches(alias, name)) {
+            expr = s;
+            matches++;
+          }
+        }
+        if (matches == 0) {
+          // Throw the original exception
+          throw ex;
+        } else if (matches > 1) {
+          // More than one column has this alias.
+          throw validator.newValidationError(id,
+              RESOURCE.columnAmbiguous(name));
+        }
+        expr = stripAs(requireNonNull(expr, "expr"));
+      }
+      // Recursively expand the result
+      lookingUp.add(name);
+      SelectExpander expander = new SelectExpander(this);
+      final SqlNode newExpr = expander.go(expr);
+      lookingUp.remove(name);
+      if (expr != newExpr) {
+        validator.setOriginal(newExpr, expr);
+      }
+      expr = newExpr;
+      if (expr instanceof SqlIdentifier) {
+        expr = getScope().fullyQualify((SqlIdentifier) expr).identifier;
+      }
+      if (!expansions.containsKey(name)) {
+        expansions.put(name, expr);
+        validator.setOriginal(expr, id);
+      }
+      return expr;
     }
   }
 
@@ -8793,8 +8981,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
 
       //Handle expanding columns in the USING clause if needed
       final boolean replaceAliases = clause.shouldReplaceAliases(validator.config);
-      final SelectScope scope = validator.getRawSelectScopeNonNull(select);
-      final SqlNode node = expandCommonColumn(select, id, scope, validator);
+      final SelectScope selectScope = validator.getRawSelectScopeNonNull(select);
+      final SqlNode node = expandCommonColumn(select, id, selectScope, validator);
       if (!replaceAliases) {
         if (node != id) {
           return node;
@@ -8843,6 +9031,13 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         SqlNode expr = occurrenceNumExprAndExprIdx.right.left;
         // Returned expr is only null if the number of occurrences of the alias is 0
         requireNonNull(expr, "expr");
+        if (validator.getConformance().isSelectAlias()
+                != SqlConformance.SelectAliasLookup.UNSUPPORTED) {
+          Map<String, SqlNode> aliasExpansions = new HashMap<>();
+          final Expander expander = new SelectExpander(validator, selectScope, select,
+              aliasExpansions, this.maxNumCols);
+          expr = expander.go(expr);
+        }
         expr = stripAs(expr);
 
         int idxOfOccurence = occurrenceNumExprAndExprIdx.right.right;
@@ -9461,10 +9656,14 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     boolean shouldReplaceAliases(Config config) {
       switch (this) {
       case GROUP_BY:
-        return config.conformance().isGroupByAlias();
+        return config.conformance().isGroupByAlias()
+                || (config.conformance().isSelectAlias()
+                != SqlConformance.SelectAliasLookup.UNSUPPORTED);
 
       case HAVING:
-        return config.conformance().isHavingAlias();
+        return config.conformance().isHavingAlias()
+                || (config.conformance().isSelectAlias()
+                != SqlConformance.SelectAliasLookup.UNSUPPORTED);
 
       case QUALIFY:
       // Bodo Change: We always want to expand Select or WHERE

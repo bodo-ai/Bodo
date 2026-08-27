@@ -3,6 +3,7 @@ import hashlib
 import os
 import string
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -1512,6 +1513,22 @@ def load_tpch_data(dir_name):
         part_df,
         partsupp_df,
     )
+
+
+@pytest.fixture(scope="module")
+def tpch_iceberg_data(datapath):
+    cwd = Path.cwd()
+    warehouse = "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg"
+    output_dir = Path("BodoSQL/bodosql/tests/data/test_tpch_iceberg")
+    output_dir = str((cwd / output_dir).resolve())
+    # If a local testing environment where you've already downloaded it, don't
+    # download it again.
+    if not os.path.isdir(output_dir):
+        import s3fs
+
+        fs = s3fs.S3FileSystem()
+        fs.get(warehouse, output_dir, recursive=True)
+    return bodosql.FileSystemCatalog(output_dir)
 
 
 @pytest.fixture(scope="module")

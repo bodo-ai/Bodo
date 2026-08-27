@@ -599,6 +599,7 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
             break;
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::sum:
+        case Bodo_FTypes::sum0:
             // This is safe even for cumsum because a boolean cumsum is not yet
             // supported on the Python side, so an error will be raised there
             if (dtype == Bodo_CTypes::_BOOL) {

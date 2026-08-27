@@ -195,6 +195,64 @@ inline static void bool_sum(int64_t& v1, bool& v2) {
     }
 }
 
+// From
+// https://github.com/dcleblanc/SafeInt/blob/1c94d38fe4c19fe17792de5e0f6619258c94bb30/safe_math_impl.h#L686
+// We were using arrow/vendored/portable-snippets/safe-math.h, but Arrow removed
+// this header due to to compatibility issues with Windows and switched to
+// vendoring SafeInt. We copy the relevant SafeInt function here to ensure
+// compatibility with Arrow.
+static inline bool check_add_int64_int64(int64_t a, int64_t b, int64_t* ret) {
+    int64_t tmp = (int64_t)((uint64_t)a + (uint64_t)b);
+    *ret = tmp;
+
+    if (a >= 0) {
+        // mixed sign cannot overflow
+        if (b >= 0 && tmp < a) {
+            return false;
+        }
+    } else {
+        // lhs negative
+        if (b < 0 && tmp > a) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Equivalent to arrow::Decimal128::FitsInPrecision(DECIMAL128_MAX_PRECISION).
+// This is used in Groupby-Sum for decimals.
+// We define the value explicitly so that this check can be inlined.
+static inline bool Decimal128FitsInMaxPrecision(
+    const arrow::BasicDecimal128& dec) {
+    static constexpr auto kDecimal128Max =
+        arrow::BasicDecimal128(5421010862427522170LL, 687399551400673280ULL);
+    return arrow::BasicDecimal128::Abs(dec) < kDecimal128Max;
+}
+
+inline static void sum_decimal128(arrow::Decimal128* out_ptr,
+                                  const arrow::Decimal128& data_val,
+                                  bool& success) {
+    /* Support overflow handling for Decimal data. */
+    /* Same as Arrow implementation of decimal addition except has
+     * overflow handling */
+    /* https://github.com/apache/arrow/blob/6a28035c2b49b432dc63f5ee7524d76b4ed2d762/cpp/src/arrow/util/basic_decimal.cc#L80
+     */
+    /* https://github.com/apache/arrow/blob/6a28035c2b49b432dc63f5ee7524d76b4ed2d762/cpp/src/arrow/util/int_util_overflow.h#L43
+     */
+    arrow::Decimal128 out_val = *out_ptr;
+    int64_t result_hi;
+    success &= check_add_int64_int64(out_val.high_bits(), data_val.high_bits(),
+                                     &result_hi);
+    uint64_t result_lo = out_val.low_bits() + data_val.low_bits();
+    /* Handle carry bit from low bits */
+    success &= check_add_int64_int64(result_hi, result_lo < out_val.low_bits(),
+                                     &result_hi);
+    arrow::Decimal128 result_decimal = arrow::Decimal128(result_hi, result_lo);
+    success &= Decimal128FitsInMaxPrecision(result_decimal);
+    *out_ptr = result_decimal;
+}
+
 template <>
 struct aggliststring<Bodo_FTypes::sum> {
     template <typename Alloc1, typename Alloc2>
