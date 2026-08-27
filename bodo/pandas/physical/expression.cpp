@@ -2081,7 +2081,71 @@ struct BodoStringCastVisitor {
             arrow::bit_util::SetBitTo(out_data_buffer, out_offset + i,
                                       parsed_value);
         };
-        return ParseValues(get_standard_parse_func<CType>(type), output_setter);
+
+        // Snowflake has different rules than Arrow for parsing strings
+        // as booleans:
+        // https://docs.snowflake.com/en/sql-reference/functions/try_to_boolean.
+        // The strings are evaluated with case-insensitivity.
+        // 'true', 't', 'yes', 'y', 'on', '1' return True.
+        // 'false', 'f', 'no', 'n', 'off', '0' return False.
+        auto parse_func = [](const char* data,
+                             int64_t len) -> std::optional<CType> {
+            if (len == 1) {
+                // "0", "f", or "n"
+                if (data[0] == '0' || (data[0] == 'f' || data[0] == 'F') ||
+                    (data[0] == 'n' || data[0] == 'N')) {
+                    return false;
+                    // "1", "t", or "y"
+                } else if (data[0] == '1' ||
+                           (data[0] == 't' || data[0] == 'T') ||
+                           (data[0] == 'y' || data[0] == 'Y')) {
+                    return true;
+                }
+            } else if (len == 2) {
+                // "no"
+                if ((data[0] == 'n' || data[0] == 'N') &&
+                    (data[1] == 'o' || data[1] == 'O')) {
+                    return false;
+                    // "on"
+                } else if ((data[0] == 'o' || data[0] == 'O') &&
+                           (data[1] == 'n' || data[1] == 'N')) {
+                    return true;
+                }
+            } else if (len == 3) {
+                // "yes"
+                if ((data[0] == 'y' || data[0] == 'Y') &&
+                    (data[1] == 'e' || data[1] == 'E') &&
+                    (data[2] == 's' || data[2] == 'S')) {
+                    return true;
+                    // "off"
+                } else if ((data[0] == 'o' || data[0] == 'O') &&
+                           (data[1] == 'f' || data[1] == 'F') &&
+                           (data[2] == 'f' || data[2] == 'F')) {
+                    return false;
+                }
+            } else if (len == 4) {
+                // "true"
+                if ((data[0] == 't' || data[0] == 'T') &&
+                    (data[1] == 'r' || data[1] == 'R') &&
+                    (data[2] == 'u' || data[2] == 'U') &&
+                    (data[3] == 'e' || data[3] == 'E')) {
+                    return true;
+                }
+            } else if (len == 5) {
+                // "false"
+                if ((data[0] == 'f' || data[0] == 'F') &&
+
+                    (data[1] == 'a' || data[1] == 'A') &&
+                    (data[2] == 'l' || data[2] == 'L') &&
+                    (data[3] == 's' || data[3] == 'S') &&
+                    (data[4] == 'e' || data[4] == 'E')) {
+                    return false;
+                }
+            }
+            return std::nullopt;
+        };
+
+        return ParseValues(parse_func, output_setter);
     }
 
     template <typename T>

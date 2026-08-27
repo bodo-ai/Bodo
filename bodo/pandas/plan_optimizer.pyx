@@ -26,6 +26,10 @@ from pyarrow._compute cimport FunctionOptions
 from pyarrow.lib cimport pyarrow_wrap_data_type, pyarrow_unwrap_data_type
 from pyarrow.includes.libarrow cimport CDataType, CFunctionOptions, CCastOptions
 
+from pyarrow._compute cimport FunctionOptions
+from pyarrow.lib cimport pyarrow_wrap_data_type, pyarrow_unwrap_data_type
+from pyarrow.includes.libarrow cimport CDataType, CFunctionOptions, CCastOptions
+
 from cpython.ref cimport PyObject
 ctypedef PyObject* PyObjectPtr
 ctypedef unsigned long long idx_t
