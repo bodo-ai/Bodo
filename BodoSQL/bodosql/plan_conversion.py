@@ -2762,7 +2762,7 @@ def convert_cast(ctx, input_plan, in_expr, operand_type, target_type, safe_cast)
             "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
         )
 
-    # Use bodo_string_cast with emit_null_on_failure=True if
+    # Use bodo_string_cast with emit_null_on_failure=True
     # when the source expression has string dtype
     string_try_cast = False
     if safe_cast:
