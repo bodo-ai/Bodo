@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import duckdb
+import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 from pyiceberg.catalog import WAREHOUSE_LOCATION
@@ -136,10 +137,25 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
         dataset = ds.dataset(table_dir, format="parquet")
         schema = dataset.schema
 
+        # Duckdb TPCH extension includes a NOT NULL constraint on all columns,
+        # which gets dropped when copying to Parquet.
+        required_schema = pa.schema(
+            [
+                pa.field(
+                    field.name,
+                    field.type,
+                    nullable=False,
+                    metadata=field.metadata,
+                )
+                for field in schema
+            ],
+            metadata=schema.metadata,
+        )
+
         # Uses large write threshold so number of files matches parquet dataset
         iceberg_table = catalog.create_table(
             table.upper(),
-            schema,
+            required_schema,
             properties={
                 "write.target-file-size-bytes": str(100 * 1024**3),  # 100 GiB
             },
@@ -150,6 +166,10 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
             desc=f"Copying {table.upper()} to Iceberg: ",
         ):
             table_fragment = pq.read_table(pq_file)
+            table_fragment = pa.Table.from_arrays(
+                table_fragment.columns,
+                schema=required_schema,
+            )
             iceberg_table.append(table_fragment)
 
 
