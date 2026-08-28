@@ -12,6 +12,7 @@ from bodo.tests.utils import (
     check_func,
     gen_unique_table_id,
     pytest_glue,
+    temp_env_override,
 )
 from bodosql.bodosql_types.glue_catalog_ext import GlueConnectionType
 
@@ -47,6 +48,21 @@ def test_basic_read(memory_leak_check, glue_catalog):
         sort_output=True,
         reset_index=True,
     )
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" in os.environ,
+    reason="BSE-3425: Permissions error only in azure environment",
+)
+def test_glue_catalog_region():
+    """Test passing a region to a glue catalog works when AWS_DEFAULT_REGION is not set."""
+
+    with temp_env_override({"AWS_DEFAULT_REGION": ""}):
+        warehouse = "s3://icebergglue-ci"
+        catalog = bodosql.GlueCatalog(warehouse=warehouse, region="us-east-2")
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+
+        bc.sql('SELECT * FROM "icebergglueci"."iceberg_read_test"')
 
 
 @pytest.mark.skipif(

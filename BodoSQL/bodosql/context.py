@@ -430,6 +430,7 @@ class BodoSQLContext:
         import numba
         from mpi4py import MPI
 
+        import bodo.decorators  # noqa
         from bodo.utils.typing import BodoError
 
         comm = MPI.COMM_WORLD

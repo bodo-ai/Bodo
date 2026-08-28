@@ -13,7 +13,8 @@ import org.apache.iceberg.aws.glue.GlueCatalog
 
 class BodoGlueCatalog(
     private val warehouse: String,
-) : IcebergCatalog<GlueCatalog>(createGlueCatalog(warehouse)) {
+    private val region: String,
+) : IcebergCatalog<GlueCatalog>(createGlueCatalog(warehouse, region)) {
     /**
      * Generates the code necessary to submit the remote query to the catalog DB.
      *
@@ -54,7 +55,7 @@ class BodoGlueCatalog(
      * @return The connection string
      */
     override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr =
-        Expr.Call("bodosql.get_glue_connection", Expr.StringLiteral(warehouse))
+        Expr.Call("bodosql.get_glue_connection", Expr.StringLiteral(warehouse), Expr.StringLiteral(region))
 
     /**
      * Return the desired WriteTarget for a create table operation.
@@ -184,14 +185,30 @@ class BodoGlueCatalog(
 
     companion object {
         /**
-         * Create a RESTCatalog object from the given connection string.
-         * @param connStr The connection string to the REST catalog.
-         * @return The RESTCatalog object.
+         * Creates and initializes an Iceberg Glue catalog.
+         *
+         * @param warehouse S3 location used as the catalog warehouse.
+         * @param region AWS region for the Glue catalog and other AWS clients. If empty, the region is
+         *     determined by the AWS SDK's default region provider chain.
+         * @return The initialized Glue catalog.
          */
         @JvmStatic
-        private fun createGlueCatalog(warehouse: String): GlueCatalog {
+        private fun createGlueCatalog(
+            warehouse: String,
+            region: String,
+        ): GlueCatalog {
             val catalog = GlueCatalog()
-            catalog.initialize("glueCatalog", mapOf(Pair("warehouse", warehouse)))
+
+            val properties =
+                mutableMapOf(
+                    "warehouse" to warehouse,
+                )
+
+            if (region != "") {
+                properties["client.region"] = region
+            }
+
+            catalog.initialize("glueCatalog", properties)
             return catalog
         }
     }

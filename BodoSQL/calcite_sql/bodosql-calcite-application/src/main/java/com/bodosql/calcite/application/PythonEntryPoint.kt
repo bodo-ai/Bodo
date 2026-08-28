@@ -335,7 +335,10 @@ class PythonEntryPoint {
          * @return The BodoGlueCatalog object.
          */
         @JvmStatic
-        fun buildBodoGlueCatalog(warehouse: String): BodoGlueCatalog = BodoGlueCatalog(warehouse)
+        fun buildBodoGlueCatalog(
+            warehouse: String,
+            region: String,
+        ): BodoGlueCatalog = BodoGlueCatalog(warehouse, region)
 
         /**
          * Build a BodoS3TablesCatalog object.
