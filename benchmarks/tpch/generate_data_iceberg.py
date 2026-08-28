@@ -144,7 +144,7 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
                 pa.field(
                     field.name,
                     field.type,
-                    nullable=True,
+                    nullable=False,
                     metadata=field.metadata,
                 )
                 for field in schema
