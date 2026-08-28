@@ -774,6 +774,16 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
         ),
         pytest.param(
             (
+                "BOOLEAN",
+                pd.Series(
+                    ["true", "false", "True", "False", "1", "0", "0false", None] * 1
+                ),
+                pd.Series([True, False, True, False, True, False, None, None] * 1),
+            ),
+            id="BOOLEAN",
+        ),
+        pytest.param(
+            (
                 "DOUBLE",
                 pd.Series(["634.234", "425", "asda", None, "-0.1251"] * 4),
                 pd.Series([634.234, 425.0, None, None, -0.1251] * 4),
@@ -799,10 +809,36 @@ def test_cast_columns_to_timestamp_ntz(basic_df, use_sf_cast_syntax, memory_leak
         pytest.param(
             (
                 "INTEGER",
-                pd.Series(["0", "-49.36", "1999-12-31", None, "482"] * 4),
-                pd.Series([0, -49, None, None, 482] * 4),
+                pd.Series(
+                    [
+                        "0",
+                        "-49.36",
+                        "1999-12-31",
+                        None,
+                        "482",
+                        str(2**31 - 1.0),
+                        str(2**40),
+                    ]
+                    * 3
+                ),
+                pd.Series([0, -49, None, None, 482, 2**31 - 1, None] * 3),
             ),
             id="INTEGER",
+        ),
+        pytest.param(
+            (
+                "BIGINT",
+                pd.Series(
+                    [str(-(2**63)), str(2**63), str(2**53 - 1.0), str(-(2**53) + 1.0)]
+                    * 4
+                ),
+                pd.Series([-(2**63), None, 2**53 - 1, None] * 4),
+            ),
+            id="BIGINT_edge_cases",
+            marks=pytest.mark.skipif(
+                not bodosql.use_cpp_backend,
+                reason="The JIT backend doesn't handle integer strings that don't have an exact double representation",
+            ),
         ),
         pytest.param(
             (
@@ -883,6 +919,7 @@ def try_cast_argument(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_try_cast(try_cast_argument, memory_leak_check):
     """Tests TRY_CAST behaves as expected"""
     type, data, answer = try_cast_argument

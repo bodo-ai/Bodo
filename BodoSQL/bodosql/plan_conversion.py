@@ -46,6 +46,9 @@ from bodo.pandas.plan import (
     arrow_to_empty_df,
     make_col_ref_exprs,
 )
+
+CastOptions = CastExpression.CastOptions
+BodoStringCastOptions = CastExpression.BodoStringCastOptions
 from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
 
@@ -145,6 +148,12 @@ def java_plan_to_python_plan(ctx, java_plan):
     """Convert a BodoSQL Java plan (RelNode) to a DataFrame library plan
     (bodo.pandas.plan.LazyPlan) for execution in the C++ runtime backend.
     """
+    # This is the entry point, so define SqlTypeName and SqlKind global
+    # aliases here to reduce repetition.
+    global SqlTypeName, SqlKind
+    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
+    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
+
     java_class_name = java_plan.getClass().getSimpleName()
 
     if java_class_name in (
@@ -2106,7 +2115,7 @@ def convert_combine_intervals(input_plan, op_exprs):
     return ConstantExpression(dummy_empty_data, input_plan, combined_val)
 
 
-def cast_string_to_date(in_expr):
+def cast_string_to_date(in_expr, safe_cast):
     string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
 
     # Replace any slashes with dashes since this is the format Arrow expects by default
@@ -2133,13 +2142,18 @@ def cast_string_to_date(in_expr):
     return CastExpression(
         pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))),
         cleaned_input,
+        BodoStringCastOptions(True) if safe_cast else CastOptions(),
     )
 
 
-def cast_string_to_time(input_plan, in_expr, target_empty_data):
-    string_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
+def cast_string_to_time(input_plan, in_expr, target_empty_data, safe_cast):
     int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
 
+    # If the input represents simply an integer, interpret it as the number of seconds/milliseconds/microseconds/nanoseconds,
+    # depending on the actual value.
+
+    # utf8_is_digit excludes negative integers which is what
+    # we want in this case
     represents_int = ArrowScalarFuncExpression(
         pd.Series(dtype=pd.ArrowDtype(pa.bool_())),
         [in_expr],
@@ -2147,76 +2161,191 @@ def cast_string_to_time(input_plan, in_expr, target_empty_data):
         (),
     )
 
-    # If the input represents simply an integer, interpret it as the number of seconds.
-    # For the strings that were times, replace them with 0 so that we don't get an error trying to cast them to integers
+    # For the strings that were times, replace them with NULL so that we don't get an error trying to cast them to integers
     safe_int_strings = CaseExpression(
-        string_empty_data,
+        in_expr.empty_data,
         represents_int,
         in_expr,
-        ConstantExpression(string_empty_data, input_plan, "0"),
+        NullExpression(in_expr.empty_data, input_plan, 0),
     )
-    seconds = CastExpression(int_empty_data, safe_int_strings)
-    nanoseconds = ArithOpExpression(
-        int_empty_data,
-        seconds,
-        ConstantExpression(int_empty_data, input_plan, 1_000_000_000),
-        "__mul__",
+    time_int_expr = CastExpression(int_empty_data, safe_int_strings)
+
+    # Normalize to nanoseconds and convert to time. We specify time64[ns] explicitly to
+    # express that we are reliant on the unit being nanoseconds.
+    nanoseconds = snowflake_normalize_time_ints(
+        time_int_expr, "ns", input_plan, can_be_negative=False
     )
-    nanoseconds_time = CastExpression(target_empty_data, nanoseconds)
+    # `nanoseconds` represents timestamp nanoseconds. The resulting time value should be
+    # modulo the number of nanoseconds in a day. This is automatically handled by Arrow's
+    # int-to-time casting.
+    nanoseconds_time = CastExpression(
+        pd.Series(dtype=pd.ArrowDtype(pa.time64("ns"))), nanoseconds
+    )
 
     # Otherwise, we proceed with the usual parsing if the input string is formatted as a time
 
-    # Add zeroes before the hour, minute, and second if they are single digits
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data,
-        [in_expr],
-        "replace_substring_regex",
-        (r"^(\d):", r"0\1:"),
-    )
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data,
-        [cleaned_input],
-        "replace_substring_regex",
-        (r":(\d):", r":0\1:"),
-    )
-    cleaned_input = ArrowScalarFuncExpression(
-        string_empty_data,
-        [cleaned_input],
-        "replace_substring_regex",
-        (r":(\d)($|\.)", r":0\1\2"),
-    )
-
-    # For the strings that were integers, replace them with 00:00:00 so that we don't get an error trying to parse integers as times
+    # For the strings that were integers, replace them with NULL so that we don't get an error trying to parse integers as times
     safe_time_strings = CaseExpression(
-        string_empty_data,
+        in_expr.empty_data,
         represents_int,
-        ConstantExpression(string_empty_data, input_plan, "00:00:00"),
-        cleaned_input,
+        NullExpression(in_expr.empty_data, input_plan, 0),
+        in_expr,
     )
 
-    # Convert to a timestamp string before casting because Arrow has no way to directly parse as a time.
-    dummy_date_string = ConstantExpression(string_empty_data, input_plan, "1970-01-01")
-    separator = ConstantExpression(string_empty_data, input_plan, " ")
-    timestamp_string = ArrowScalarFuncExpression(
-        string_empty_data,
-        [dummy_date_string, safe_time_strings, separator],
-        "binary_join_element_wise",
-        (),
+    # Add zeroes before the hour, minute, and second if they are single digits
+    cleaned_time_strings = pad_time_string_expr(safe_time_strings)
+
+    # Parse as a time via bodo_string_cast since Arrow's native cast function
+    # doesn't allow string-to-time casting for some reason.
+    parsed_time = CastExpression(
+        target_empty_data, cleaned_time_strings, BodoStringCastOptions(safe_cast)
     )
-    # Parse as timestamp
-    timestamp_expr = CastExpression(
-        pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns"))), timestamp_string
-    )
-    # Casting to time64 will strip off the dummy date part of the timestamp
-    timestamp_time = CastExpression(target_empty_data, timestamp_expr)
 
     # Return the final time64 array, selecting the result based on whether each input was an integer string or time string
     return CaseExpression(
-        target_empty_data, represents_int, nanoseconds_time, timestamp_time
+        target_empty_data, represents_int, nanoseconds_time, parsed_time
     )
 
 
-def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
+def snowflake_normalize_time_ints(
+    time_int_expr, time_unit_str, input_plan, can_be_negative=True
+):
+    """
+    Normalizes the values of the input integer expression to the given time unit.
+    This uses Snowflake rules about interpreting the unit of the input value (x):
+    - seconds if `abs(x) < 31,536,000,000`
+    - milliseconds if `31,536,000,000 <= abs(x) < 31,536,000,000,000`
+    - microseconds if `31,536,000,000,000 <= abs(x) < 31,536,000,000,000,000`
+    - nanoseconds if `31,536,000,000,000,000 <= abs(x)`
+
+    This function truncates when reducing the precision of a value.
+    See: TO_DATE, TO_TIME, etc.
+    """
+    time_unit_str = time_unit_str.lower()
+    assert time_unit_str in ("s", "ms", "us", "ns"), (
+        "snowflake_normalize_time_ints: time unit string must be one of ['s', 'ms', 'us', 'ns']"
+    )
+
+    int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+
+    if can_be_negative:
+        abs_expr = UnaryOpExpression(int_empty_data, time_int_expr, "abs")
+    else:
+        abs_expr = time_int_expr
+
+    secs_threshold = ConstantExpression(int_empty_data, input_plan, 31_536_000_000)
+    ms_threshold = ConstantExpression(int_empty_data, input_plan, 31_536_000_000_000)
+    us_threshold = ConstantExpression(
+        int_empty_data, input_plan, 31_536_000_000_000_000
+    )
+
+    is_seconds = ComparisonOpExpression(
+        bool_empty_data, abs_expr, secs_threshold, operator.lt
+    )
+    # is_millis = seconds or milliseconds
+    is_millis = ComparisonOpExpression(
+        bool_empty_data, abs_expr, ms_threshold, operator.lt
+    )
+    # is_micros = seconds, milliseconds, or microseconds
+    is_micros = ComparisonOpExpression(
+        bool_empty_data, abs_expr, us_threshold, operator.lt
+    )
+
+    # First, convert all values to nanoseconds. There is no possibility of overflow
+    # due to how the thresholds are defined. We can minimize operations this way
+    # since it isn't convenient to do a multiply for some elements and integer division
+    # for others. So we normalize to nanoseconds first and then scale down by a
+    # constant power of 10 at the end to reach the target unit.
+
+    ns_per_unit = {
+        "ns": ConstantExpression(int_empty_data, input_plan, 1),
+        "us": ConstantExpression(int_empty_data, input_plan, 1_000),
+        "ms": ConstantExpression(int_empty_data, input_plan, 1_000_000),
+        "s": ConstantExpression(int_empty_data, input_plan, 1_000_000_000),
+    }
+
+    if time_unit_str != "s":
+        # The order of the case expressions is important due to the comparisons above.
+        # is_seconds must be checked first to rule out is_millis being true because the value
+        # is less than 31,536,000,000, and so on.
+        to_nanos_factor = CaseExpression(
+            int_empty_data,
+            is_seconds,
+            ns_per_unit["s"],
+            CaseExpression(
+                int_empty_data,
+                is_millis,
+                ns_per_unit["ms"],
+                CaseExpression(
+                    int_empty_data, is_micros, ns_per_unit["us"], ns_per_unit["ns"]
+                ),
+            ),
+        )
+
+        # Convert all values to nanoseconds by multiplying by a dynamic factor
+        nanoseconds_expr = ArithOpExpression(
+            int_empty_data, time_int_expr, to_nanos_factor, "__mul__"
+        )
+
+        if time_unit_str != "ns":
+            # Convert from nanos to the target unit. Truncates toward zero so works correctly for negative input.
+            target_time_unit_expr = ArithOpExpression(
+                int_empty_data,
+                nanoseconds_expr,
+                ns_per_unit[time_unit_str],
+                "__floordiv__",
+            )
+        else:
+            # Shortcut: dividing by 1 is unnecessary
+            target_time_unit_expr = nanoseconds_expr
+    else:
+        # Shortcut: can normalize directly to seconds since the exponent of the divisor (a power of 10) is positive for all input values
+        # The divisor is 1 billion divided by the number of nanoseconds in the identified unit of each input value
+        to_nanos_divisor = CaseExpression(
+            int_empty_data,
+            is_seconds,
+            ns_per_unit["ns"],
+            CaseExpression(
+                int_empty_data,
+                is_millis,
+                ns_per_unit["us"],
+                CaseExpression(
+                    int_empty_data, is_micros, ns_per_unit["ms"], ns_per_unit["s"]
+                ),
+            ),
+        )
+        target_time_unit_expr = ArithOpExpression(
+            int_empty_data, time_int_expr, to_nanos_divisor, "__floordiv__"
+        )
+
+    return target_time_unit_expr
+
+
+def pad_time_string_expr(time_string_expr):
+    # Add zeroes before the hour, minute, and second if they are single digits
+    padded_time_string_expr = ArrowScalarFuncExpression(
+        time_string_expr.empty_data,
+        [time_string_expr],
+        "replace_substring_regex",
+        (r"(^|\s+)(\d):", r"\10\2:"),
+    )
+    padded_time_string_expr = ArrowScalarFuncExpression(
+        time_string_expr.empty_data,
+        [padded_time_string_expr],
+        "replace_substring_regex",
+        (r":(\d):", r":0\1:"),
+    )
+    padded_time_string_expr = ArrowScalarFuncExpression(
+        time_string_expr.empty_data,
+        [padded_time_string_expr],
+        "replace_substring_regex",
+        (r":(\d)($|\.)", r":0\1\2"),
+    )
+    return padded_time_string_expr
+
+
+def convert_cast(ctx, input_plan, in_expr, operand_type, target_type, safe_cast):
     # TODO[BSE-5154]: support all Calcite casts
     SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
 
@@ -2243,14 +2372,299 @@ def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
         # Cast of DATE to TIMESTAMP is unnecessary in C++ backend
         return in_expr
 
-    empty_data = pd.Series(dtype=pd.ArrowDtype(sql_type_to_pa_type(ctx, target_type)))
+    pa_target_type = sql_type_to_pa_type(ctx, target_type)
+    empty_data = pd.Series(dtype=pd.ArrowDtype(pa_target_type))
+
+    if operand_type.getSqlTypeName().equals(SqlTypeName.VARCHAR) and is_int_type(
+        target_type
+    ):
+        float_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.float64()))
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+
+        # Float strings should be truncated to integers, so parse as floats first.
+        # Casting directly from float strings to int isn't permitted.
+        # The allow_int_overflow and allow_float_truncate flags seem to
+        # only affect numeric-to-numeric casting.
+        float_parsed = CastExpression(
+            float_empty_data,
+            in_expr,
+            BodoStringCastOptions(True) if safe_cast else CastOptions(),
+        )
+        if not safe_cast:
+            # Throw an error if one of the float values cannot fit in the integer type
+            float_to_int_cast_options = CastOptions(
+                allow_int_overflow=False, allow_float_truncate=True
+            )
+            # Truncate and cast to the target int type
+            float_to_int = CastExpression(
+                empty_data, float_parsed, float_to_int_cast_options
+            )
+        else:
+            # Safe casting here means ensuring int overflow doesn't lead to an error,
+            # which is the opposite of how Arrow defines "safe" casting
+            float_to_int_cast_options = CastOptions(
+                allow_int_overflow=True, allow_float_truncate=True
+            )
+            # Truncate and cast to the target int type
+            float_to_int = CastExpression(
+                empty_data, float_parsed, float_to_int_cast_options
+            )
+
+            # If try-casting, converting from float64 to the int type could have overflowed.
+            # To catch these cases and return NULL instead, we need to compare the float
+            # value to the min/max bounds of the integer type.
+
+            if pa_target_type.bit_width < 64:
+                # NOTE: Despite the name, to_pandas_dtype() converts to numpy integer dtypes
+                int_val_bounds = np.iinfo(pa_target_type.to_pandas_dtype())
+                # This code doesn't run for int64/uint64 target type, so we know we can
+                # accurately represent the int bounds in float64.
+                min_int_threshold = ConstantExpression(
+                    float_empty_data, input_plan, int_val_bounds.min - 1.0
+                )
+                max_int_threshold = ConstantExpression(
+                    float_empty_data, input_plan, int_val_bounds.max + 1.0
+                )
+                float_under_min = ComparisonOpExpression(
+                    bool_empty_data, float_parsed, min_int_threshold, operator.le
+                )
+                float_over_max = ComparisonOpExpression(
+                    bool_empty_data, float_parsed, max_int_threshold, operator.ge
+                )
+                val_out_of_bounds = ConjunctionOpExpression(
+                    bool_empty_data, float_under_min, float_over_max, "__or__"
+                )
+                return CaseExpression(
+                    empty_data,
+                    val_out_of_bounds,
+                    NullExpression(empty_data, input_plan, 0),
+                    float_to_int,
+                )
+
+        # If float_parsed >= 2^53 or float_parsed <= -2^53 + 1,
+        # the result is unreliable.
+        # This only matters if the target type is a 64-bit int.
+        # In this case we try to parse the input string as an integer
+        # without going through float so we can support integer
+        # strings > 2^53 or <= -2^53.
+        if pa_target_type.bit_width == 64:
+            max_safe_float = ConstantExpression(float_empty_data, input_plan, 2**53)
+            too_high = ComparisonOpExpression(
+                bool_empty_data, float_parsed, max_safe_float, operator.ge
+            )
+            if pa.types.is_signed_integer(pa_target_type):
+                min_safe_float = ConstantExpression(
+                    float_empty_data, input_plan, -(2**53) + 1
+                )
+                too_low = ComparisonOpExpression(
+                    bool_empty_data, float_parsed, min_safe_float, operator.le
+                )
+                imprecise_result = ConjunctionOpExpression(
+                    bool_empty_data, too_high, too_low, "__or__"
+                )
+            else:
+                imprecise_result = too_high
+
+            # Here we want to handle the int strings that we could theoretically
+            # represent if casting straight to int. This will disqualify
+            # int strings outside of 64-bit bounds and float strings for
+            # which we can't determine the correct truncated int value.
+
+            if safe_cast:
+                # With safe casting we don't need to worry about crashing with float strings
+                # in the input
+                int_parsed = CastExpression(
+                    empty_data, in_expr, BodoStringCastOptions(True)
+                )
+            else:
+                # With regular casting, we want to throw an error when there are float
+                # strings in the input whose truncated values might not be perfectly
+                # representable in float64.
+
+                # First we need to set the strings that were in safe bounds to NULL, so we
+                # don't get errors parsing float strings as ints that we already confirmed
+                # are good.
+                big_in_expr = CaseExpression(
+                    in_expr.empty_data,
+                    imprecise_result,
+                    in_expr,
+                    NullExpression(in_expr.empty_data, input_plan, 0),
+                )
+                # Try to parse strings that are too large in magnitude as int, throwing an error if at least one is a float or would overflow
+                int_parsed = CastExpression(empty_data, big_in_expr)
+
+            # Select the string -> float -> int or string -> int path based on whether
+            # float64 has enough precision to accurately represent the output
+            return CaseExpression(
+                empty_data, imprecise_result, int_parsed, float_to_int
+            )
+        else:
+            return float_to_int
 
     if operand_type.getSqlTypeName().equals(
         SqlTypeName.VARCHAR
-    ) and target_type.getSqlTypeName().equals(SqlTypeName.DATE):
-        # Casts to timestamp and reassigns to in_expr; truncation
-        # will happen in the CastExpression at the end.
-        in_expr = cast_string_to_date(in_expr)
+    ) and target_type.getSqlTypeName().equals(SqlTypeName.BOOLEAN):
+        # Remove any whitespace padding
+        trimmed = ArrowScalarFuncExpression(
+            in_expr.empty_data, [in_expr], "utf8_trim_whitespace", ()
+        )
+
+        # Arrow's rules for parsing strings as booleans is more restrictive than Snowflake, so use our custom string cast kernel
+        return CastExpression(empty_data, trimmed, BodoStringCastOptions(safe_cast))
+
+    if operand_type.getSqlTypeName().equals(SqlTypeName.VARCHAR) and (
+        target_type.getSqlTypeName().equals(SqlTypeName.DATE)
+        or target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP)
+        or target_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+        )
+    ):
+        if target_type.getSqlTypeName().equals(SqlTypeName.DATE):
+            timestamp_pa_type = pa.timestamp("ns")
+        else:
+            timestamp_pa_type = pa_target_type
+        ns_timestamp_empty_data = pd.Series(
+            dtype=pd.ArrowDtype(pa.timestamp("ns", tz=timestamp_pa_type.tz))
+        )
+
+        # For the input strings representing integers, get their integer values.
+        # The strings that are not integers are converted to null.
+        # test_date_casting_functions[DIGIT_STRINGS] considers negative integer strings
+        # to be valid, although it's not entirely clear if Snowflake does.
+        int_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+        as_integer = CastExpression(
+            int_empty_data, in_expr, BodoStringCastOptions(True)
+        )
+
+        # as_integer has units of seconds/milliseconds/microseconds/nanoseconds depending
+        # on the magnitude of each individual value. It represents time since the start
+        # of the UNIX epoch in UTC.
+        # Losslessly normalize the values to the timestamp empty_data unit.
+        normalized_time_int = snowflake_normalize_time_ints(
+            as_integer, timestamp_pa_type.unit, input_plan, can_be_negative=True
+        )
+        # Interpret the integer as the underlying value of a timestamp of the target unit
+        timestamp_empty_data = pd.Series(dtype=pd.ArrowDtype(timestamp_pa_type))
+        timestamp_from_int = CastExpression(timestamp_empty_data, normalized_time_int)
+
+        # Now we handle the input strings representing formatted dates/timestamps.
+
+        # First, mask the input expression to get only the strings that are not integers,
+        # replacing integer strings with NULL. In other words, we keep date strings and
+        # invalid strings. We're fine with invalid strings throwing an error (if not
+        # try-casting), but we should avoid errors parsing the integer strings we've
+        # handled separately.
+        bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+        not_an_int = UnaryOpExpression(bool_empty_data, as_integer, "isnull")
+        safe_date_strings = CaseExpression(
+            in_expr.empty_data,
+            not_an_int,
+            in_expr,
+            NullExpression(in_expr.empty_data, input_plan, 0),
+        )
+
+        # Replace any slashes with dashes since this is the format Arrow expects by default
+        cleaned_date_strings = ArrowScalarFuncExpression(
+            in_expr.empty_data, [safe_date_strings], "replace_substring", ("/", "-")
+        )
+
+        # Add zeroes before the month and day if they are single digits
+        cleaned_date_strings = ArrowScalarFuncExpression(
+            in_expr.empty_data,
+            [cleaned_date_strings],
+            "replace_substring_regex",
+            (r"-(\d)-", r"-0\1-"),
+        )
+        cleaned_date_strings = ArrowScalarFuncExpression(
+            in_expr.empty_data,
+            [cleaned_date_strings],
+            "replace_substring_regex",
+            (r"-(\d)($|[ T])", r"-0\1\2"),
+        )
+
+        if target_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP
+        ) or target_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+        ):
+            # Add leading zeros before hours, minutes, and seconds if needed
+            cleaned_date_strings = pad_time_string_expr(cleaned_date_strings)
+
+        if target_type.getSqlTypeName().equals(
+            SqlTypeName.DATE
+        ) or target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
+            # Strip any timezone from the string, since we want to return a local
+            # naive timestamp/date. Arrow's timestamp parsing appears to convert
+            # TZ-aware timestamp strings to UTC, and also doesn't play nicely
+            # with mixed TZ-aware and TZ-naive strings. The easiest thing to do
+            # is just remove the timezone using regex.
+            no_tz_date_strings = ArrowScalarFuncExpression(
+                in_expr.empty_data,
+                [cleaned_date_strings],
+                "replace_substring_regex",
+                (r"(?:Z|[+-]\d{2}:?\d{2})\s*$", ""),
+            )
+
+            # Parse as a nanosecond timestamp. If the target type is DATE or a timestamp with a lower precision unit,
+            # the final casting step at the bottom will do the truncation.
+            parsed_timestamp = CastExpression(
+                ns_timestamp_empty_data,
+                no_tz_date_strings,
+                BodoStringCastOptions(True) if safe_cast else CastOptions(),
+            )
+        elif target_type.getSqlTypeName().equals(
+            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+        ):
+            # The timestamp strings could be TZ-aware or TZ-naive. For TZ-aware strings, they should be converted to the session
+            # timezone. TZ-naive strings should be assumed to be in the session timezone. We have to parse the two kinds
+            # of strings separately since Arrow casting expects all elements to be one or the other.
+            # First, we safely parse the TZ-aware strings; the others become NULL.
+            parsed_tz_timestamp = CastExpression(
+                ns_timestamp_empty_data,
+                cleaned_date_strings,
+                BodoStringCastOptions(True),
+            )
+            # Get only the TZ-naive and invalid strings
+            not_tz_aware = UnaryOpExpression(
+                bool_empty_data, parsed_tz_timestamp, "isnull"
+            )
+            tz_naive_strings = CaseExpression(
+                in_expr.empty_data,
+                not_tz_aware,
+                cleaned_date_strings,
+                NullExpression(in_expr.empty_data, input_plan, 0),
+            )
+            # Parse the TZ-naive / invalid strings
+            naive_timestamp_empty_data = pd.Series(
+                dtype=pd.ArrowDtype(pa.timestamp("ns"))
+            )
+            parsed_no_tz_timestamp = CastExpression(
+                naive_timestamp_empty_data,
+                tz_naive_strings,
+                BodoStringCastOptions(True) if safe_cast else CastOptions(),
+            )
+            no_tz_timestamp_as_local_tz = ArrowScalarFuncExpression(
+                ns_timestamp_empty_data,
+                [parsed_no_tz_timestamp],
+                "assume_timezone",
+                (timestamp_pa_type.tz,),
+            )
+            # Piece the disjoint arrays of timestamps from TZ-aware strings and TZ-naive strings back together
+            parsed_timestamp = ArrowScalarFuncExpression(
+                ns_timestamp_empty_data,
+                [parsed_tz_timestamp, no_tz_timestamp_as_local_tz],
+                "coalesce",
+                (),
+            )
+
+        # Select the timestamp from int strings or the parsed timestamp from timestamp strings.
+        # Reassign to in_expr so the regular CastExpression at the bottom can take care of the truncation.
+        in_expr = CaseExpression(
+            ns_timestamp_empty_data,
+            not_an_int,
+            parsed_timestamp,
+            timestamp_from_int,
+        )
 
     if pa.types.is_decimal(
         in_expr.empty_data.dtypes.iloc[0].pyarrow_dtype
@@ -2265,7 +2679,7 @@ def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
     if operand_type.getSqlTypeName().equals(
         SqlTypeName.VARCHAR
     ) and target_type.getSqlTypeName().equals(SqlTypeName.TIME):
-        return cast_string_to_time(input_plan, in_expr, empty_data)
+        return cast_string_to_time(input_plan, in_expr, empty_data, safe_cast)
 
     # TO_TIMESTAMP/TO_TIMESTAMP_NTZ remove the timezone which is same as
     # local_timestamp() function of Arrow (not cast)
@@ -2281,8 +2695,11 @@ def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
         )
 
     # TO_TIMESTAMP_LTZ adds local time zone which is same as assume_timezone()
-    # function of Arrow (not cast)
-    if target_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE):
+    # function of Arrow (not cast).
+    # VARCHAR to TIMESTAMP_LTZ is handled above.
+    if target_type.getSqlTypeName().equals(
+        SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+    ) and not operand_type.getSqlTypeName().equals(SqlTypeName.VARCHAR):
         if not operand_type.getSqlTypeName().equals(SqlTypeName.TIMESTAMP):
             # Integers are assumed in seconds in BodoSQL
             cast_empty_data = pd.Series(
@@ -2290,10 +2707,8 @@ def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
                     pa.timestamp("s" if is_int_type(operand_type) else "ns")
                 )
             )
-            in_expr = CastExpression(
-                cast_empty_data,
-                in_expr,
-            )
+
+            in_expr = CastExpression(cast_empty_data, in_expr)
 
         tz = get_session_tz(ctx)
         empty_data = pd.Series(dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz)))
@@ -2313,7 +2728,12 @@ def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
             (0, "half_towards_infinity"),
         )
 
-    # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type())
+    # Integers are assumed in seconds in BodoSQL (instead of nanoseconds as converted by sql_type_to_pa_type()).
+    # TODO: Are they actually? Calcite converts the single-argument TO_TIMESTAMP to regular cast to timestamp.
+    # According to Snowflake, if an integer input is given, the unit is seconds unless the second argument for scale is passed.
+    # However this contradicts the BodoSQL docs (https://docs.bodo.ai/latest/api_docs/sql/functions/casting/to_timestamp/)
+    # which say that the unit of the integer depends on its magnitude, similar to when the input is an integer
+    # string (see snowflake_normalize_time_ints()).
     if is_int_type(operand_type) and target_type.getSqlTypeName().equals(
         SqlTypeName.TIMESTAMP
     ):
@@ -2342,9 +2762,20 @@ def convert_cast(ctx, input_plan, in_expr, operand_type, target_type):
             "Cast of VARCHAR to VARBINARY is not supported in C++ backend yet"
         )
 
+    # Use bodo_string_cast with emit_null_on_failure=True
+    # when the source expression has string dtype
+    string_try_cast = False
+    if safe_cast:
+        in_expr_dtype = get_expr_dtype(in_expr)
+        if compare_types(in_expr_dtype, str):
+            string_try_cast = True
+
     return CastExpression(
         empty_data,
         in_expr,
+        BodoStringCastOptions(True)
+        if string_try_cast
+        else CastOptions(allow_time_truncate=True),
     )
 
 
@@ -4761,6 +5192,149 @@ def convert_SqlBasicFunction(ctx, java_call, input_plan):
     if func_name == "COMBINE_INTERVALS":
         return convert_combine_intervals(input_plan, op_exprs)
 
+    if (
+        func_name
+        in (
+            "TO_TIMESTAMP",
+            "TO_TIMESTAMP_NTZ",
+            "TO_TIMESTAMP_LTZ",
+            "TRY_TO_TIMESTAMP",
+            "TRY_TO_TIMESTAMP_NTZ",
+            "TRY_TO_TIMESTAMP_LTZ",
+        )
+        and not java_call.getOperands()[0]
+        .getType()
+        .getSqlTypeName()
+        .equals(SqlTypeName.VARCHAR)
+        and len(op_exprs) == 2
+    ):
+        # This is for the two-argument form of TO_TIMESTAMP with numeric input.
+        # There is another two-argument version that takes a string timestamp and a format specifier.
+        numeric_timestamp_expr = op_exprs[0]
+        scale_expr = op_exprs[1]
+        ensure_type_of_expr(
+            numeric_timestamp_expr, "numeric_timestamp_expr", (int, float)
+        )
+        ensure_arg_is_const_expr_of_type(scale_expr, "scale_expr", int)
+
+        # Get the timestamp unit to initially convert to. This will be
+        # the final timestamp unit for integer inputs, but nanoseconds
+        # will be the final unit for float input to retain as much
+        # precision as possible.
+        scale_to_unit = {0: "s", 3: "ms", 6: "us", 9: "ns"}
+        timestamp_unit = scale_to_unit[scale_expr.value]
+        if func_name in ("TO_TIMESTAMP_LTZ", "TRY_TO_TIMESTAMP_LTZ"):
+            tz = ctx.default_tz if ctx.default_tz is not None else "UTC"
+        else:
+            tz = None
+
+        int64_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.int64()))
+
+        numeric_timestamp_dtype = get_expr_dtype(numeric_timestamp_expr)
+        if compare_types(numeric_timestamp_dtype, int):
+            # Must be int64 since that is underlying type of Arrow timestamps
+            int64_timestamp_expr = CastExpression(
+                int64_empty_data, numeric_timestamp_expr
+            )
+            # The integer is relative to the start of the UNIX epoch in UTC,
+            # so we can cast straight to timestamp. For casting to TIMESTAMP_LTZ,
+            # this still works because underlying timestamp values in Arrow
+            # are always in UTC; the timezone of the target type only affects
+            # the metadata added after the cast.
+            return CastExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit, tz=tz))),
+                int64_timestamp_expr,
+            )
+        else:
+            # The float case is trickier because 1. we can only cast ints directly
+            # to timestamps, 2. we are limited by the size of int64. There could be an
+            # arbitrary number of digits after the decimal point, so we are virtually
+            # forced to convert to nanosecond precision, which could easily lead
+            # to overflow for bigger values when the unit is e.g. seconds.
+
+            # Don't support try-casting for float input for now since it is inconvenient
+            # to implement and not well-documented what the error conditions are.
+            # It doesn't look like Snowflake even permits TRY_TO_TIMESTAMP with
+            # numeric input.
+            if func_name in (
+                "TRY_TO_TIMESTAMP",
+                "TRY_TO_TIMESTAMP_NTZ",
+                "TRY_TO_TIMESTAMP_LTZ",
+            ):
+                raise NotImplementedError(
+                    f"C++ backend does not support two-argument {func_name} with float input yet."
+                )
+
+            # Minimize lost precision by doing float multiplication on only the
+            # fractional part of the value instead of the full value.
+
+            # Truncate to get the integer portion of the timestamp value
+            int_timestamp_val = UnaryOpExpression(
+                int64_empty_data, numeric_timestamp_expr, "trunc"
+            )
+            # Make a timestamp from the integer value in the original units - guaranteed to fit
+            int_timestamp = CastExpression(
+                pd.Series(dtype=pd.ArrowDtype(pa.timestamp(timestamp_unit))),
+                int_timestamp_val,
+            )
+
+            if timestamp_unit != "ns":
+                # Subtract to get the fractional portion of the timestamp value
+                frac_timestamp_val = ArithOpExpression(
+                    numeric_timestamp_expr.empty_data,
+                    numeric_timestamp_expr,
+                    int_timestamp_val,
+                    "__sub__",
+                )
+
+                # Get the fractional part as a nanosecond integer.
+                # We round when the fractional part has more than nine digits after the decimal point;
+                # truncating could exaggerate floating-point error.
+                to_nanos_factor = ConstantExpression(
+                    int64_empty_data, input_plan, 10 ** (9 - scale_expr.value)
+                )
+                frac_nanos_val = ArithOpExpression(
+                    numeric_timestamp_expr.empty_data,
+                    frac_timestamp_val,
+                    to_nanos_factor,
+                    "__mul__",
+                )
+                frac_nanos_trunc = UnaryOpExpression(
+                    int64_empty_data, frac_nanos_val, "round"
+                )
+
+                # We want to add the fractional part to the int timestamp, so convert to nanosecond duration
+                duration_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.duration("ns")))
+                frac_nanos_duration = CastExpression(
+                    duration_empty_data, frac_nanos_trunc
+                )
+                # Add a duration[ns] to a timestamp of a longer unit. The result will be timestamp[ns],
+                # so this is where overflow could happen.
+                ns_timestamp_empty_data = pd.Series(
+                    dtype=pd.ArrowDtype(pa.timestamp("ns"))
+                )
+                combined_timestamp = ArithOpExpression(
+                    ns_timestamp_empty_data,
+                    int_timestamp,
+                    frac_nanos_duration,
+                    "__add__",
+                )
+
+                if tz is not None:
+                    # Add timezone metadata at the end. If we do this earlier, we run into
+                    # DuckDB limitations related to TZ-aware arithmetic [BSE-5500].
+                    timestamp_ltz_empty_data = pd.Series(
+                        dtype=pd.ArrowDtype(pa.timestamp("ns", tz=tz))
+                    )
+                    combined_timestamp = CastExpression(
+                        timestamp_ltz_empty_data, combined_timestamp
+                    )
+                return combined_timestamp
+            else:
+                # If the original value was already in units of nanoseconds, the integer part
+                # is the most precise value we can store.
+                return int_timestamp
+
     if func_name == "SIGN" and len(op_exprs) == 1:
         return convert_sign(op_exprs[0])
 
@@ -5074,11 +5648,15 @@ def convert_SqlNullPolicyFunction(ctx, java_call, input_plan):
     if func_name in ("TIMEZONE_HOUR", "TIMEZONE_MINUTE") and num_operands == 1:
         return convert_timezone_hour_timezone_minute(input_plan, func_name, op_exprs[0])
 
-    if func_name in (
-        "EPOCH_SECOND",
-        "EPOCH_MILLISECOND",
-        "EPOCH_MICROSECOND",
-        "EPOCH_NANOSECOND",
+    if (
+        func_name
+        in (
+            "EPOCH_SECOND",
+            "EPOCH_MILLISECOND",
+            "EPOCH_MICROSECOND",
+            "EPOCH_NANOSECOND",
+        )
+        and num_operands == 1
     ):
         return convert_epoch_second(input_plan, func_name, op_exprs[0])
 
@@ -5297,9 +5875,14 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operand = java_call.getOperands()[0]
         operand_type = operand.getType()
         target_type = java_call.getType()
+        func_name = op.getName().upper()
+        # Calcite converts TRY_CAST to SAFE_CAST
+        safe_cast = func_name == "SAFE_CAST"
         in_expr = java_expr_to_python_expr(ctx, operand, input_plan)
 
-        return convert_cast(ctx, input_plan, in_expr, operand_type, target_type)
+        return convert_cast(
+            ctx, input_plan, in_expr, operand_type, target_type, safe_cast
+        )
 
     if (
         operator_class_name == "SqlPostfixOperator"
@@ -5310,7 +5893,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
     if operator_class_name == "SqlCaseOperator":
         operands = java_call.getOperands()
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
         assert kind.equals(SqlKind.CASE), (
             "Expected CASE operator, got " + kind.toString()
         )
@@ -5321,7 +5903,6 @@ def java_call_to_python_call(ctx, java_call, input_plan):
         operands = java_call.getOperands()
         input = java_expr_to_python_expr(ctx, operands[0], input_plan)
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
         if kind.equals(SqlKind.MINUS_PREFIX):
             out_empty = -input.empty_data.iloc[:, 0]
@@ -5650,8 +6231,10 @@ def get_binop_output_type(left, right, non_decimal_func, decimal_func):
     return bd.utils.get_binop_output_type(
         left_empty,
         left_atype,
+        left,
         right_empty,
         right_atype,
+        right,
         non_decimal_func,
         decimal_func,
     )
@@ -5667,8 +6250,6 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
         right = java_binop_to_python_expr(ctx, kind, op_name, op_exprs[1:])
     else:
         right = op_exprs[1]
-
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
     if kind.equals(SqlKind.PLUS):
         # TODO[BSE-5155]: support all BodoSQL data types in backend (including date/time)
@@ -6161,7 +6742,6 @@ def java_filter_to_python_filter(ctx, java_filter):
 
 def _is_interval_type(sql_type_name):
     """Check if a SqlTypeName is any interval subtype."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     return (
         sql_type_name.equals(SqlTypeName.INTERVAL_YEAR)
         or sql_type_name.equals(SqlTypeName.INTERVAL_MONTH)
@@ -6181,7 +6761,6 @@ def _is_interval_type(sql_type_name):
 
 def _is_year_month_interval(sql_type_name):
     """Check if a SqlTypeName is a year/month interval subtype."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     return (
         sql_type_name.equals(SqlTypeName.INTERVAL_YEAR)
         or sql_type_name.equals(SqlTypeName.INTERVAL_MONTH)
@@ -6191,7 +6770,6 @@ def _is_year_month_interval(sql_type_name):
 
 def java_literal_to_python_literal(ctx, java_literal, input_plan):
     """Convert a BodoSQL Java literal expression to a DataFrame library constant."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type = java_literal.getType()
     lit_type_name = lit_type.getSqlTypeName()
 
@@ -6302,7 +6880,6 @@ def get_java_symbol(java_symbol):
         "get_java_symbol: expected RexLiteral but got "
         + java_symbol.getClass().getSimpleName()
     )
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
 
     if java_symbol.getTypeName().equals(SqlTypeName.CHAR):
         return java_symbol.getValue2()
@@ -6325,19 +6902,13 @@ def standardize_java_time_unit(fname, time_unit):
 
 def is_int_type(java_type):
     """Check if a Calcite type is an integer type."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
-    type_name = java_type.getSqlTypeName()
-    return (
-        type_name.equals(SqlTypeName.TINYINT)
-        or type_name.equals(SqlTypeName.SMALLINT)
-        or type_name.equals(SqlTypeName.INTEGER)
-        or type_name.equals(SqlTypeName.BIGINT)
-    )
+    SqlTypeUtil = gateway.jvm.org.apache.calcite.sql.type.SqlTypeUtil
+    # TINYINT, SMALLINT, INTEGER, or BIGINT
+    return SqlTypeUtil.isIntType(java_type)
 
 
 def is_float_type(java_type):
     """Check if a Calcite type is a float type."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     type_name = java_type.getSqlTypeName()
     return type_name.equals(SqlTypeName.FLOAT) or type_name.equals(SqlTypeName.DOUBLE)
 
@@ -6555,7 +7126,6 @@ def java_agg_to_python_agg(ctx, java_plan):
 def _agg_to_func_name(func):
     """Map a Calcite aggregation to a groupby function name."""
     agg = func.getAggregation()
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     kind = agg.getKind()
     agg_name = agg.getName()
 
@@ -6761,7 +7331,6 @@ def java_field_to_pa_field(ctx, java_field):
 
 def sql_type_to_pa_type(ctx, sql_type):
     """Convert a Calcite SqlTypeName to a PyArrow data type."""
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     sql_type_name = sql_type.getSqlTypeName()
 
     if sql_type_name.equals(SqlTypeName.TINYINT):
@@ -6932,7 +7501,6 @@ def get_pyiceberg_row_filter(filters, field_names):
         return op_exprs[0]
 
     # AND all filters
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
     return java_binop_to_pyiceberg_expr(SqlKind.AND, op_exprs)
 
 
@@ -6975,7 +7543,6 @@ def java_call_to_pyiceberg_call(java_call, field_names):
         operand = java_call.getOperands()[0]
         operand_type = operand.getType()
         target_type = java_call.getType()
-        SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
         # TODO[BSE-5154]: support all Calcite casts
 
         if target_type.getSqlTypeName().equals(SqlTypeName.DECIMAL) and is_int_type(
@@ -6998,7 +7565,6 @@ def java_call_to_pyiceberg_call(java_call, field_names):
         operands = java_call.getOperands()
         input = java_expr_to_pyiceberg_expr(operands[0], field_names)
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
         if kind.equals(SqlKind.IS_NOT_NULL):
             return pie.NotNull(input)
@@ -7014,7 +7580,6 @@ def java_call_to_pyiceberg_call(java_call, field_names):
 
     if operator_class_name == "SqlPrefixOperator" and len(java_call.getOperands()) == 1:
         kind = op.getKind()
-        SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
         if kind.equals(SqlKind.NOT):
             operand = java_expr_to_pyiceberg_expr(
                 java_call.getOperands()[0], field_names
@@ -7207,8 +7772,6 @@ def java_binop_to_pyiceberg_expr(kind, op_exprs):
     else:
         right = op_exprs[1]
 
-    SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
-
     # Comparison operators
     if kind.equals(SqlKind.EQUALS):
         return pie.EqualTo(left, right)
@@ -7290,7 +7853,6 @@ def java_literal_to_pyiceberg_literal(java_literal):
     """Convert a BodoSQL Java literal expression to a constant to use in PyIceberg
     expressions.
     """
-    SqlTypeName = gateway.jvm.org.apache.calcite.sql.type.SqlTypeName
     lit_type_name = java_literal.getTypeName()
     lit_type = java_literal.getType()
 

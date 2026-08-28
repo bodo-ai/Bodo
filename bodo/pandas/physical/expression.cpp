@@ -1,5 +1,7 @@
 #include "expression.h"
 #include <arrow/type_fwd.h>
+#include <arrow/util/checked_cast.h>
+#include <arrow/util/value_parsing.h>
 #include <cmath>
 #include "../libs/_decimal_ext.h"
 #include "_util.h"
@@ -623,6 +625,16 @@ std::shared_ptr<array_info> do_arrow_compute_cast(
     return ConvertDatumToArrayInfo(casted);
 }
 
+std::shared_ptr<array_info> do_arrow_compute_cast(
+    std::shared_ptr<ExprResult> left_res,
+    const arrow::compute::FunctionOptions* cast_options) {
+    arrow::Datum src1 =
+        ConvertExprResultToDatum(left_res, "do_arrow_compute left");
+
+    arrow::Datum casted = do_arrow_compute_cast(src1, cast_options);
+    return ConvertDatumToArrayInfo(casted);
+}
+
 void do_result_type_cast(arrow::Result<arrow::Datum>& out_res,
                          const std::shared_ptr<arrow::DataType> result_type) {
     arrow::Datum out_datum = out_res.ValueOrDie();
@@ -813,6 +825,36 @@ arrow::Datum do_arrow_compute_unary(
 arrow::Datum do_arrow_compute_cast(
     arrow::Datum left_res,
     const std::shared_ptr<arrow::DataType>& return_type) {
+    // If only return_type is given, configure CastOptions to Bodo defaults.
+    // This overload is only used if called directly from C++. Regular
+    // CastExpressions are guaranteed to have cast options, created in plan.py.
+    arrow::compute::CastOptions cast_opts;
+    cast_opts.to_type = return_type;
+    cast_opts.allow_int_overflow = true;
+    cast_opts.allow_float_truncate = true;
+
+    return do_arrow_compute_cast(left_res, &cast_opts);
+}
+
+arrow::Datum do_arrow_compute_cast(
+    arrow::Datum left_res,
+    const arrow::compute::FunctionOptions* cast_options) {
+    std::shared_ptr<arrow::DataType> return_type;
+
+    const arrow::compute::CastOptions* as_cast_options =
+        dynamic_cast<const arrow::compute::CastOptions*>(cast_options);
+    const BodoStringCastOptions* as_bodo_string_cast_options =
+        dynamic_cast<const BodoStringCastOptions*>(cast_options);
+    if (as_cast_options) {
+        return_type = as_cast_options->to_type.GetSharedPtr();
+    } else if (as_bodo_string_cast_options) {
+        return_type = as_bodo_string_cast_options->to_type.GetSharedPtr();
+    } else {
+        throw std::runtime_error(
+            "do_arrow_compute_cast: Cast options not "
+            "arrow::compute::CastOptions or BodoStringCastOptions");
+    }
+
     // No need to cast if type is already the target type.
     // Note that arrow::DataType.Equals() also compares type parameters such
     // as time units and timezones.
@@ -820,13 +862,17 @@ arrow::Datum do_arrow_compute_cast(
         return left_res;
     }
 
-    // Globally set the allow_int_overflow cast option to true; in the future,
-    // CastExpressions should support these options.
-    arrow::compute::CastOptions cast_opts;
-    cast_opts.allow_int_overflow = true;
-    cast_opts.allow_float_truncate = true;
-    arrow::Result<arrow::Datum> cmp_res =
-        arrow::compute::Cast(left_res, return_type, cast_opts);
+    // Call Arrow Cast or bodo_string_cast depending on the class of cast
+    // options passed
+    arrow::Result<arrow::Datum> cmp_res;
+    if (as_cast_options) {
+        cmp_res = arrow::compute::Cast(left_res, *as_cast_options);
+    } else {
+        EnsureBodoStringCastRegistered();
+        cmp_res = arrow::compute::CallFunction("bodo_string_cast", {left_res},
+                                               as_bodo_string_cast_options);
+    }
+
     if (!cmp_res.ok()) [[unlikely]] {
         throw std::runtime_error(
             "do_arrow_compute_cast: Error in Arrow compute: " +
@@ -1134,7 +1180,7 @@ std::shared_ptr<PhysicalExpression> buildPhysicalExprTree(
             return std::static_pointer_cast<PhysicalExpression>(
                 std::make_shared<PhysicalCastExpression>(
                     buildPhysicalExprTree(bce.child, col_ref_map, no_scalars),
-                    getCastReturnType(bce)));
+                    getCastOptions(bce)));
         } break;  // suppress wrong fallthrough error
         case duckdb::ExpressionClass::BOUND_BETWEEN: {
             // Convert the base duckdb::Expression node to its actual derived
@@ -2263,6 +2309,405 @@ void EnsureSubstrRegistered() {
     std::call_once(once_flag_, [&]() {
         auto* registry = arrow::compute::GetFunctionRegistry();
         RegisterSubstr(registry);
+    });
+}
+
+class BodoStringCastOptionsType : public arrow::compute::FunctionOptionsType {
+   public:
+    const char* type_name() const override {
+        return BodoStringCastOptions::kTypeName;
+    }
+
+    std::string Stringify(
+        const arrow::compute::FunctionOptions& options) const override {
+        const auto& opts =
+            arrow::internal::checked_cast<const BodoStringCastOptions&>(
+                options);
+        return "{to_type=" + opts.to_type.ToString() +
+               ", emit_null_on_failure=" +
+               (opts.emit_null_on_failure ? "true" : "false") + "}";
+    }
+
+    bool Compare(const arrow::compute::FunctionOptions& options,
+                 const arrow::compute::FunctionOptions& other) const override {
+        const auto& lhs =
+            arrow::internal::checked_cast<const BodoStringCastOptions&>(
+                options);
+        const auto& rhs =
+            arrow::internal::checked_cast<const BodoStringCastOptions&>(other);
+        return lhs.to_type == rhs.to_type &&
+               lhs.emit_null_on_failure == rhs.emit_null_on_failure;
+    }
+
+    std::unique_ptr<arrow::compute::FunctionOptions> Copy(
+        const arrow::compute::FunctionOptions& options) const override {
+        const auto& opts =
+            arrow::internal::checked_cast<const BodoStringCastOptions&>(
+                options);
+        return std::make_unique<BodoStringCastOptions>(
+            opts.to_type, opts.emit_null_on_failure);
+    }
+};
+
+static const BodoStringCastOptionsType kBodoStringCastOptionsType =
+    BodoStringCastOptionsType();
+
+BodoStringCastOptions::BodoStringCastOptions()
+    : arrow::compute::FunctionOptions(&kBodoStringCastOptionsType) {}
+BodoStringCastOptions::BodoStringCastOptions(arrow::TypeHolder to_type,
+                                             bool emit_null_on_failure)
+    : arrow::compute::FunctionOptions(&kBodoStringCastOptionsType),
+      to_type(to_type),
+      emit_null_on_failure(emit_null_on_failure) {}
+
+struct BodoStringCastState : public arrow::compute::KernelState {
+    std::shared_ptr<arrow::DataType> target_type;
+    BodoStringCastOptions options;
+
+    BodoStringCastState(std::shared_ptr<arrow::DataType> type,
+                        BodoStringCastOptions opts)
+        : target_type(std::move(type)), options(std::move(opts)) {}
+};
+
+arrow::Result<std::unique_ptr<arrow::compute::KernelState>> InitTryCast(
+    arrow::compute::KernelContext* ctx,
+    const arrow::compute::KernelInitArgs& args) {
+    // Safely cast the generic FunctionOptions to BodoStringCastOptions
+    const auto* cast_options =
+        dynamic_cast<const BodoStringCastOptions*>(args.options);
+    if (!cast_options) {
+        return arrow::Status::Invalid("BodoStringCastOptions are required.");
+    }
+
+    // Extract the target type from BodoStringCastOptions
+    std::shared_ptr<arrow::DataType> target_type =
+        cast_options->to_type.GetSharedPtr();
+    if (!target_type) {
+        return arrow::Status::Invalid(
+            "target type (BodoStringCastOptions.to_type) must be specified.");
+    }
+
+    // Return our custom state wrapping the options
+    return std::make_unique<BodoStringCastState>(target_type, *cast_options);
+}
+
+struct BodoStringCastVisitor {
+    const arrow::ArraySpan& input;
+    arrow::ArraySpan* output;
+    arrow::compute::KernelContext* ctx;
+
+    template <typename ParseFunc, typename OutputSetter>
+    arrow::Status ParseValues(ParseFunc parse_func, OutputSetter set_output) {
+        auto* state = static_cast<BodoStringCastState*>(ctx->state());
+        bool emit_null_on_failure = state->options.emit_null_on_failure;
+
+        // GetValues accounts for the ArraySpan offset, so we don't need to
+        // account for it when indexing into input_offsets or input_data
+        const int64_t* input_offsets = input.GetValues<const int64_t>(1);
+        const char* input_data = input.GetValues<const char>(2);
+
+        // Validity buffer is bitpacked, so we need to pass 0 as the
+        // offset to GetValues so that the bit offset (output->offset)
+        // isn't applied as a byte offset
+        uint8_t* out_validity_buffer = output->GetValues<uint8_t>(0, 0);
+
+        for (int64_t i = 0; i < input.length; i++) {
+            if (input.IsValid(i)) {
+                // Get the start and end positions for the current element
+                int64_t start = input_offsets[i];
+                int64_t end = input_offsets[i + 1];
+
+                // Attempt to parse the string element
+                auto parsed_value = parse_func(input_data + start, end - start);
+                if (parsed_value.has_value()) {
+                    set_output(*parsed_value, i);
+                    arrow::bit_util::SetBit(out_validity_buffer,
+                                            output->offset + i);
+                } else {
+                    // If we failed to parse the string, either emit null or
+                    // throw an error depending on the user's chosen option.
+                    if (emit_null_on_failure) {
+                        arrow::bit_util::ClearBit(out_validity_buffer,
+                                                  output->offset + i);
+                        output->null_count++;
+                    } else {
+                        std::string_view invalid_str(input_data + start,
+                                                     end - start);
+                        return arrow::Status::Invalid(
+                            "Failed to parse '" + std::string(invalid_str) +
+                            "' as type " + state->target_type->ToString());
+                    }
+                }
+            } else {
+                arrow::bit_util::ClearBit(out_validity_buffer,
+                                          output->offset + i);
+                output->null_count++;
+            }
+        }
+        return arrow::Status::OK();
+    }
+
+    template <typename CType, typename T>
+    auto get_standard_parse_func(const T& type) {
+        return [&type](const char* data, int64_t len) -> std::optional<CType> {
+            CType parsed_value;
+            if (arrow::internal::ParseValue(type, data, len, &parsed_value)) {
+                return parsed_value;
+            }
+            return std::nullopt;
+        };
+    }
+
+    template <typename CType>
+    auto get_standard_output_setter() {
+        // Accounts for the ArraySpan offset, so we don't need to account for it
+        // when indexing
+        CType* out_data_buffer = output->GetValues<CType>(1);
+        return [out_data_buffer](CType parsed_value, int64_t i) {
+            out_data_buffer[i] = parsed_value;
+        };
+    }
+
+    template <typename T>
+    arrow::Status Visit(const T& type)
+        requires(arrow::is_fixed_width_type<T>::value &&
+                 arrow::has_c_type<T>::value &&
+                 !arrow::is_boolean_type<T>::value &&
+                 !arrow::is_half_float_type<T>::value &&
+                 !arrow::is_decimal_type<T>::value &&
+                 !arrow::is_interval_type<T>::value)
+    {
+        using CType = typename T::c_type;
+        return ParseValues(get_standard_parse_func<CType>(type),
+                           get_standard_output_setter<CType>());
+    }
+
+    template <typename T>
+    arrow::Status Visit(const T& type)
+        requires arrow::is_boolean_type<T>::value
+    {
+        using CType = typename T::c_type;
+        // Arrow booleans are bitpacked, so we need to apply the bit
+        // offset ourselves and set individual bits.
+        uint8_t* out_data_buffer = output->GetValues<uint8_t>(1, 0);
+        int64_t out_offset = output->offset;
+        auto output_setter = [out_data_buffer, &out_offset](CType parsed_value,
+                                                            int64_t i) {
+            // Either set or clear the bit depending on `parsed_value`
+            arrow::bit_util::SetBitTo(out_data_buffer, out_offset + i,
+                                      parsed_value);
+        };
+
+        // Snowflake has different rules than Arrow for parsing strings
+        // as booleans:
+        // https://docs.snowflake.com/en/sql-reference/functions/try_to_boolean.
+        // The strings are evaluated with case-insensitivity.
+        // 'true', 't', 'yes', 'y', 'on', '1' return True.
+        // 'false', 'f', 'no', 'n', 'off', '0' return False.
+        auto parse_func = [](const char* data,
+                             int64_t len) -> std::optional<CType> {
+            if (len == 1) {
+                // "0", "f", or "n"
+                if (data[0] == '0' || (data[0] == 'f' || data[0] == 'F') ||
+                    (data[0] == 'n' || data[0] == 'N')) {
+                    return false;
+                    // "1", "t", or "y"
+                } else if (data[0] == '1' ||
+                           (data[0] == 't' || data[0] == 'T') ||
+                           (data[0] == 'y' || data[0] == 'Y')) {
+                    return true;
+                }
+            } else if (len == 2) {
+                // "no"
+                if ((data[0] == 'n' || data[0] == 'N') &&
+                    (data[1] == 'o' || data[1] == 'O')) {
+                    return false;
+                    // "on"
+                } else if ((data[0] == 'o' || data[0] == 'O') &&
+                           (data[1] == 'n' || data[1] == 'N')) {
+                    return true;
+                }
+            } else if (len == 3) {
+                // "yes"
+                if ((data[0] == 'y' || data[0] == 'Y') &&
+                    (data[1] == 'e' || data[1] == 'E') &&
+                    (data[2] == 's' || data[2] == 'S')) {
+                    return true;
+                    // "off"
+                } else if ((data[0] == 'o' || data[0] == 'O') &&
+                           (data[1] == 'f' || data[1] == 'F') &&
+                           (data[2] == 'f' || data[2] == 'F')) {
+                    return false;
+                }
+            } else if (len == 4) {
+                // "true"
+                if ((data[0] == 't' || data[0] == 'T') &&
+                    (data[1] == 'r' || data[1] == 'R') &&
+                    (data[2] == 'u' || data[2] == 'U') &&
+                    (data[3] == 'e' || data[3] == 'E')) {
+                    return true;
+                }
+            } else if (len == 5) {
+                // "false"
+                if ((data[0] == 'f' || data[0] == 'F') &&
+                    (data[1] == 'a' || data[1] == 'A') &&
+                    (data[2] == 'l' || data[2] == 'L') &&
+                    (data[3] == 's' || data[3] == 'S') &&
+                    (data[4] == 'e' || data[4] == 'E')) {
+                    return false;
+                }
+            }
+            return std::nullopt;
+        };
+
+        return ParseValues(parse_func, output_setter);
+    }
+
+    template <typename T>
+    arrow::Status Visit(const T& type)
+        requires arrow::is_decimal_type<T>::value
+    {
+        using DecimalType = typename arrow::TypeTraits<T>::CType;
+        auto parse_func = [&type](const char* data,
+                                  int64_t len) -> std::optional<DecimalType> {
+            std::string_view view(data, len);
+            DecimalType parsed_decimal;
+            int32_t precision;
+            int32_t scale;
+            if (DecimalType::FromString(view, &parsed_decimal, &precision,
+                                        &scale)
+                    .ok()) {
+                // The parsed scale may be different than the target scale,
+                // so we need to rescale to the target scale so the value is
+                // interpreted correctly.
+                int32_t target_scale = type.scale();
+                // First, check that the scaled number can fit within the
+                // limits of the type, since Arrow's own overflow checking
+                // is poor.
+                int32_t needed_precision = precision + target_scale - scale;
+                if (0 < needed_precision &&
+                    needed_precision <= T::kMaxPrecision) {
+                    // When reducing scale we want to round, so we should
+                    // call ReduceScaleBy() in that case instead of
+                    // Rescale() which always returns a failed status when
+                    // there is data loss.
+                    if (target_scale <= scale) {
+                        return parsed_decimal.ReduceScaleBy(
+                            scale - target_scale, /*round=*/true);
+                    }
+                    if (target_scale > scale) {
+                        return parsed_decimal.IncreaseScaleBy(target_scale -
+                                                              scale);
+                    }
+                }
+            }
+            return std::nullopt;
+        };
+        return ParseValues(parse_func,
+                           get_standard_output_setter<DecimalType>());
+    }
+
+    // Fallback for unsupported types
+    template <typename T>
+    arrow::Status Visit(const T& type)
+        requires(!((arrow::is_boolean_type<T>::value) ||
+                   (arrow::is_decimal_type<T>::value) ||
+                   (arrow::is_fixed_width_type<T>::value &&
+                    arrow::has_c_type<T>::value &&
+                    !arrow::is_half_float_type<T>::value &&
+                    !arrow::is_decimal_type<T>::value &&
+                    !arrow::is_interval_type<T>::value)))
+    {
+        return arrow::Status::NotImplemented(
+            "bodo_string_cast doesn't support the given target type " +
+            type.ToString());
+    }
+};
+
+arrow::Status BodoStringCastGeneric(arrow::compute::KernelContext* ctx,
+                                    const arrow::compute::ExecSpan& batch,
+                                    arrow::compute::ExecResult* out) {
+    // Get input and output ArraySpans.
+    // The output validity and data buffers are preallocated due to the
+    // kernel's mem_allocation and null_handling options.
+    const arrow::ArraySpan& input = batch[0].array;
+    arrow::ArraySpan* output = out->array_span_mutable();
+    output->null_count = 0;
+
+    // Call our string cast visitor which specializes the implementation
+    // according to the target type.
+    BodoStringCastVisitor visitor{.input = input, .output = output, .ctx = ctx};
+    arrow::Status result_status =
+        arrow::VisitTypeInline(*out->type(), &visitor);
+
+    return result_status;
+}
+
+arrow::Result<arrow::TypeHolder> ResolveCastTargetType(
+    arrow::compute::KernelContext* ctx,
+    const std::vector<arrow::TypeHolder>& args) {
+    // Extract our state from the context so we can retrieve the target type.
+    auto* state = static_cast<BodoStringCastState*>(ctx->state());
+    if (!state) {
+        return arrow::Status::Invalid(
+            "Kernel state missing during type resolution.");
+    }
+
+    // Return the target type in the BodoStringCastState which comes from
+    // BodoStringCastOptions
+    return arrow::TypeHolder(state->target_type);
+}
+
+void RegisterBodoStringCast(arrow::compute::FunctionRegistry* registry) {
+    auto func = std::make_shared<arrow::compute::ScalarFunction>(
+        "bodo_string_cast", arrow::compute::Arity::Unary(),
+        arrow::compute::FunctionDoc{
+            "Cast string arrays to most fixed-width types, optionally emitting "
+            "NULL on failure.",
+            "Returns an array of the requested type. Malformed string inputs "
+            "are coerced to NULL if the `emit_null_on_failure` option is set "
+            "to true.",
+            {"str_array"},
+            "BodoStringCastOptions"});
+
+    // Use arrow::compute::OutputType(ResolveCastTargetType) for dynamic mapping
+    arrow::compute::ScalarKernel kernel(
+        {arrow::compute::InputType(arrow::large_utf8())},
+        arrow::compute::OutputType(ResolveCastTargetType),
+        BodoStringCastGeneric);
+    kernel.mem_allocation = arrow::compute::MemAllocation::PREALLOCATE;
+    kernel.null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+
+    // Attach the Initialization function to populate the custom
+    // BodoStringCastState
+    kernel.init = InitTryCast;
+
+    arrow::Status status = func->AddKernel(kernel);
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterBodoStringCast AddKernel failed.");
+    }
+
+    // Register the function.
+    status = registry->AddFunction(std::move(func));
+    if (!status.ok()) {
+        throw std::runtime_error("RegisterBodoStringCast AddFunction failed.");
+    }
+}
+
+// Register the function in Arrow's global function registry.
+void EnsureBodoStringCastRegistered() {
+    static std::once_flag once_flag_;
+    // Register the bodo_string_cast arrow compute function only once.
+    std::call_once(once_flag_, [&]() {
+        auto* registry = arrow::compute::GetFunctionRegistry();
+        RegisterBodoStringCast(registry);
+        arrow::Status add_options_type_status =
+            registry->AddFunctionOptionsType(&kBodoStringCastOptionsType);
+        if (!add_options_type_status.ok()) {
+            throw std::runtime_error(
+                "Failed to add BodoStringCastOptionsType to Arrow function "
+                "registry.");
+        }
     });
 }
 
