@@ -2134,7 +2134,6 @@ struct BodoStringCastVisitor {
             } else if (len == 5) {
                 // "false"
                 if ((data[0] == 'f' || data[0] == 'F') &&
-
                     (data[1] == 'a' || data[1] == 'A') &&
                     (data[2] == 'l' || data[2] == 'L') &&
                     (data[3] == 's' || data[3] == 'S') &&

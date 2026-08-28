@@ -919,6 +919,7 @@ def try_cast_argument(request):
     return request.param
 
 
+@pytest.mark.bodosql_cpp
 def test_try_cast(try_cast_argument, memory_leak_check):
     """Tests TRY_CAST behaves as expected"""
     type, data, answer = try_cast_argument

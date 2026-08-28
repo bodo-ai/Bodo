@@ -407,14 +407,26 @@ class Spawner:
                     exceptions.append(excep)
 
                 # Combine all exceptions into a single chain
+                exception_strings = []
                 accumulated_exception = None
                 for excep in exceptions:
+                    # Collect the rank error messages and notes to add
+                    # to a top-level exception message. The __cause__
+                    # chain is hidden using typical printing means
+                    # since __str__ only uses the top-level message.
+                    msg = str(excep)
+                    notes = "\n  ".join(excep.__notes__)
+                    exception_strings.append(f"{msg}\n  {notes}")
+
                     try:
                         raise excep from accumulated_exception
                     except Exception as e:
                         accumulated_exception = e
                 # Raise the combined exception
-                raise Exception("Some ranks failed") from accumulated_exception
+                combined_msg = "\n".join(exception_strings)
+                raise Exception(
+                    "Some ranks failed:\n" + combined_msg
+                ) from accumulated_exception
 
         # Get output from workers
         output_is_distributed = self.worker_intercomm.recv(source=0)
