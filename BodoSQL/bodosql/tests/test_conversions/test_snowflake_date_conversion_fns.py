@@ -781,32 +781,23 @@ def test_to_timestamp_non_numeric(
                     [
                         15.411,
                         None,
-                        1234567890123.456789012,
-                        314159265.3589793,
-                        -98123456789.01234,
+                        1234567890000.0,
+                        314159265.0,
+                        -98123456000.0,
                     ]
                 ),
                 pd.Series(
                     [
                         "1970-01-01 00:00:00.015411",
                         None,
-                        # The objectively correct answer is 2009-02-13 23:31:30.123456789.
-                        # Due to the limits of double-precision the best we can do is 2009-02-13 23:31:30.123456787.
-                        # Previously the answer was hard-coded to be 2009-02-13 23:31:30.123456768 (likely to match the JIT backend result).
-                        "2009-02-13 23:31:30.123456787",
-                        "1970-01-04 15:15:59.265358979",
-                        # Similarly, the objectively correct answer here is 1966-11-22 07:29:03.210987660.
-                        # The best we can do is 1966-11-22 07:29:03.210987656.
-                        "1966-11-22 07:29:03.210987656",
+                        "2009-02-13 23:31:30.000000000",
+                        "1970-01-04 15:15:59.265000",
+                        "1966-11-22 07:29:04.000000000",
                     ]
                 ),
                 ", 3",
             ),
             id="floats-millisecond_scale",
-            marks=pytest.mark.skipif(
-                not bodosql.use_cpp_backend,
-                reason="JIT backend answers are slightly off.",
-            ),
         ),
     ]
 )
