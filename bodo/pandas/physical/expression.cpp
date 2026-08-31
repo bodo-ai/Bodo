@@ -1536,7 +1536,11 @@ PhysicalArrowExpression::get_unique_func_data() {
         // Set nan_is_null option to match Pandas isna behavior
         auto opts = std::make_unique<arrow::compute::NullOptions>(true);
         return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
-    } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits") {
+        // NOTE: multi-input version of utf8_slice_codeunits is handled
+        // differently in the backend. See
+        // bodosql/bodosql/tests/test_string_ops_second_half.py::test_format[FORMAT_all_vector]
+    } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits" &&
+               children.size() == 1) {
         auto [start, stop, step] = get_py_slice_args(scalar_func_data.args);
         auto opts =
             std::make_unique<arrow::compute::SliceOptions>(start, stop, step);
