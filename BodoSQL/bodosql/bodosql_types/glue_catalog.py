@@ -8,7 +8,7 @@ from bodosql import DatabaseCatalog
 from bodosql.imported_java_classes import JavaEntryPoint
 
 
-def _create_java_glue_catalog(warehouse: str, region: str | None = None):
+def _create_java_glue_catalog(warehouse: str, region: str = ""):
     """
     Create a Java BodoGlueCatalog object.
     Args:
@@ -26,7 +26,7 @@ class GlueCatalog(DatabaseCatalog):
         needed to connect to a Glue Iceberg catalog.
     """
 
-    def __init__(self, warehouse: str, region=None):
+    def __init__(self, warehouse: str, region: str = ""):
         """
         Create a Glue catalog from a connection string to a glue catalog.
         Args:
