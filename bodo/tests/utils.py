@@ -3345,9 +3345,9 @@ pytest_polaris = list(polaris_markers)
 glue_markers = (
     pytest.mark.glue,
     pytest.mark.iceberg,
-    # pytest.mark.skipif(
-    #     "AWS_ACCESS_KEY_ID" not in os.environ, reason="requires glue credentials"
-    # ),
+    pytest.mark.skipif(
+        "AWS_ACCESS_KEY_ID" not in os.environ, reason="requires glue credentials"
+    ),
 )
 
 # Decorate
