@@ -1778,7 +1778,7 @@ PhysicalArrowExpression::get_unique_func_data() {
         auto opts = std::make_shared<RandomInt64Data>();
         // Only create PRNG once so we keep state across batches
         // and don't start from the same position for each batch.
-        opts->gen = std::move(create_random_int64_gen(seed_arg));
+        opts->gen = create_random_int64_gen(seed_arg);
         return opts;
     }
 
