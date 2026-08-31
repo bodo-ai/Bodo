@@ -4835,24 +4835,66 @@ def convert_concat_ws(separator, src, strings_to_concat):
     )
 
 
-def convert_repeat(src, num_repeats_expr):
+def convert_repeat(input_plan, src, num_repeats_expr):
     ensure_type_of_expr(src, "src", (str, pa.binary()))
-    ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
+    ensure_type_of_expr(num_repeats_expr, "num_repeats_expr", int)
 
-    return ArrowScalarFuncExpression(
-        src.empty_data, [src], "binary_repeat", (num_repeats_expr.value,)
+    # If num_repeats_expr <= 0, return an empty string.
+    # binary_repeat requires num_repeats >= 0.
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    zero_expr = ConstantExpression(
+        pd.Series(dtype=pd.ArrowDtype(pa.int64())), input_plan, 0
     )
+    return_empty = ComparisonOpExpression(
+        bool_empty_data, num_repeats_expr, zero_expr, operator.le
+    )
+
+    # Set negative elements to null to avoid errors in binary_repeat
+    num_repeats_expr = CaseExpression(
+        num_repeats_expr.empty_data,
+        return_empty,
+        NullExpression(num_repeats_expr.empty_data, input_plan, 0),
+        num_repeats_expr,
+    )
+
+    repeated = ArrowScalarFuncExpression(
+        src.empty_data, [src, num_repeats_expr], "binary_repeat", ()
+    )
+
+    empty_string = ConstantExpression(src.empty_data, input_plan, "")
+    return CaseExpression(src.empty_data, return_empty, empty_string, repeated)
 
 
 def convert_space(input_plan, num_repeats_expr):
-    ensure_arg_is_const_expr_of_type(num_repeats_expr, "num_repeats_expr", int)
+    ensure_type_of_expr(num_repeats_expr, "num_repeats_expr", int)
 
     str_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.string()))
     space_expr = ConstantExpression(str_empty_data, input_plan, " ")
 
-    return ArrowScalarFuncExpression(
-        str_empty_data, [space_expr], "binary_repeat", (num_repeats_expr.value,)
+    # If num_repeats_expr <= 0, return an empty string.
+    # binary_repeat requires num_repeats >= 0.
+    bool_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.bool_()))
+    zero_expr = ConstantExpression(
+        pd.Series(dtype=pd.ArrowDtype(pa.int64())), input_plan, 0
     )
+    return_empty = ComparisonOpExpression(
+        bool_empty_data, num_repeats_expr, zero_expr, operator.le
+    )
+
+    # Set negative elements to null to avoid errors in binary_repeat
+    num_repeats_expr = CaseExpression(
+        num_repeats_expr.empty_data,
+        return_empty,
+        NullExpression(num_repeats_expr.empty_data, input_plan, 0),
+        num_repeats_expr,
+    )
+
+    repeated = ArrowScalarFuncExpression(
+        str_empty_data, [space_expr, num_repeats_expr], "binary_repeat", ()
+    )
+
+    empty_string = ConstantExpression(str_empty_data, input_plan, "")
+    return CaseExpression(str_empty_data, return_empty, empty_string, repeated)
 
 
 def convert_insert(src, start_expr, len_expr, inserted_str_expr):
@@ -5788,7 +5830,7 @@ def convert_SqlNullPolicyFunction(ctx, java_call, input_plan):
         return convert_concat_ws(op_exprs[0], op_exprs[1], op_exprs[2:])
 
     if func_name == "REPEAT" and num_operands == 2:
-        return convert_repeat(*op_exprs)
+        return convert_repeat(input_plan, *op_exprs)
 
     if func_name == "SPACE" and num_operands == 1:
         return convert_space(input_plan, op_exprs[0])

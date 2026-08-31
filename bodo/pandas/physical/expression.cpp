@@ -1320,24 +1320,14 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
 
         time_pt start_init_time = start_timer();
 
+        std::shared_ptr<ArrowFuncOptionsData> arrow_func_opts_data =
+            std::dynamic_pointer_cast<ArrowFuncOptionsData>(unique_func_data);
+
         // Special handling for multi-input Arrow functions with options
-        if (scalar_func_data.arrow_func_name == "max_element_wise" ||
-            scalar_func_data.arrow_func_name == "min_element_wise") {
-            auto [skip_nulls] = get_var_py_args_as_types<0, 1>(
-                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-                get_py_object_as_bool);
-
-            arrow::compute::ElementWiseAggregateOptions opts;
-            if (skip_nulls.has_value()) {
-                opts.skip_nulls = *skip_nulls;
-            } else {
-                // Avoid skipping nulls to match SQL semantics.
-                // This is True by default in Arrow.
-                opts.skip_nulls = false;
-            }
-
+        if (arrow_func_opts_data) {
             result = do_arrow_compute_multi_input(
-                in_expr_results, scalar_func_data.arrow_func_name, &opts);
+                in_expr_results, scalar_func_data.arrow_func_name,
+                arrow_func_opts_data->opts.get());
         } else {
             result = do_arrow_compute_multi_input(
                 in_expr_results, scalar_func_data.arrow_func_name);
@@ -1367,6 +1357,436 @@ std::shared_ptr<ExprResult> PhysicalArrowExpression::ProcessBatch(
     }
 
     return std::make_shared<ArrayExprResult>(result, "Arrow Scalar");
+}
+
+/**
+ * @brief Return a tuple of the input regex pattern with its capturing
+ *   groups converted to named groups, and the number of groups that were
+ *   found in the pattern.
+ */
+std::tuple<std::string, int> convert_to_named_regexp(std::string pattern_str) {
+    std::string named_pattern;
+    // Number of groups found in regex pattern so far
+    int num_groups = 0;
+
+    // Convert all groups to _groupN format for extract_regex
+    for (size_t i = 0; i < pattern_str.length(); i++) {
+        // Handle escaped characters by reading the backslash and the
+        // following character together
+        if (pattern_str[i] == '\\' && i + 1 < pattern_str.length()) {
+            named_pattern += pattern_str[i];
+            named_pattern += pattern_str[i + 1];
+            i++;
+        } else if (pattern_str[i] == '(') {  // Start of group
+            // Check if it's a named group of the form (?<name>...)
+            // or (?P<name>...)
+            if (i + 1 < pattern_str.length() && pattern_str[i + 1] == '?') {
+                // Offset by 1 if it is of the form (?P<name>...)
+                int p_offset =
+                    (i + 2 < pattern_str.length() && pattern_str[i + 2] == 'P')
+                        ? 1
+                        : 0;
+                if (i + 2 + p_offset < pattern_str.length() &&
+                    pattern_str[i + 2 + p_offset] == '<') {
+                    // Rename existing name to _groupN
+                    size_t close = pattern_str.find('>', i + 3 + p_offset);
+                    if (close != std::string::npos) {
+                        named_pattern +=
+                            "(?<_group" + std::to_string(num_groups++) + ">";
+                        i = close;  // Skip to after the >
+                    } else {
+                        named_pattern += pattern_str[i];
+                    }
+                } else {
+                    // Non-capturing or other special group, keep as-is
+                    named_pattern += pattern_str[i];
+                }
+            } else {
+                // Unnamed group: convert to named group
+                named_pattern +=
+                    "(?<_group" + std::to_string(num_groups++) + ">";
+            }
+        } else {
+            named_pattern += pattern_str[i];
+        }
+    }
+
+    return std::tuple(named_pattern, num_groups);
+}
+
+std::mt19937_64 create_random_int64_gen(std::optional<int64_t> seed_arg) {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (seed_arg.has_value()) {
+        // Seed was explicitly provided, so use it
+        int64_t seed = *seed_arg;
+
+        if (rank == 0) {
+            // Create psuedo-random number generator.
+            // For rank 0 we use the input seed directly
+            return std::mt19937_64(seed);
+        } else {
+            // seed_seq applies a transformation on the master seed and
+            // the rank number to scramble and break linear correlation
+            // between the seeds used by each rank.
+            // Because of this, the generated sequence will be different
+            // depending on the number of workers used, but it should
+            // still be deterministic.
+            // The Dynamic Creator algorithm might be theoretically
+            // better here, but seed_seq is probably sufficient in
+            // practice.
+
+            // Note that we have to split the 64-bit input seed because
+            // seed_seq only accepts 32-bit integers
+            std::seed_seq rank_seed{static_cast<uint32_t>(seed >> 32),
+                                    static_cast<uint32_t>(seed & 0xFFFFFFFF),
+                                    static_cast<uint32_t>(rank)};
+
+            // Create PRNG with a (hopefully) independent seed
+            return std::mt19937_64(rank_seed);
+        }
+    } else {
+        // Generate a seed with 96-bits of entropy from system's
+        // random_device and the current system time. time(NULL) is
+        // mainly a backup in case std::random_device falls back
+        // to a deterministic implementation.
+        // We also integrate the rank number in the seed calculation
+        // to ensure that two ranks do not get the same seed by chance.
+        std::random_device rd;
+        std::seed_seq seed{rd(), static_cast<uint32_t>(time(NULL)), rd(),
+                           static_cast<uint32_t>(rank)};
+        // Create psuedo-random number generator
+        return std::mt19937_64(seed);
+    }
+}
+
+std::shared_ptr<UniqueFunctionData>
+PhysicalArrowExpression::get_unique_func_data() {
+    if (scalar_func_data.arrow_func_name == "max_element_wise" ||
+        scalar_func_data.arrow_func_name == "min_element_wise") {
+        auto [skip_nulls] = get_var_py_args_as_types<0, 1>(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_bool);
+
+        auto opts =
+            std::make_unique<arrow::compute::ElementWiseAggregateOptions>();
+        if (skip_nulls.has_value()) {
+            opts->skip_nulls = *skip_nulls;
+        } else {
+            // Avoid skipping nulls to match SQL semantics.
+            // This is True by default in Arrow.
+            opts->skip_nulls = false;
+        }
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "day_of_week") {
+        auto [count_from_zero, week_start] = get_var_py_args_as_types<0, 1, 2>(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_bool, get_py_object_as_int64);
+
+        auto opts = std::make_unique<arrow::compute::DayOfWeekOptions>();
+        if (count_from_zero.has_value()) {
+            opts->count_from_zero = *count_from_zero;
+        }
+        if (week_start.has_value()) {
+            opts->week_start = *week_start;
+        }
+
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "match_substring_regex" ||
+               scalar_func_data.arrow_func_name ==
+                   "match_substring_regex_first" ||
+               scalar_func_data.arrow_func_name == "match_substring" ||
+               scalar_func_data.arrow_func_name == "match_like" ||
+               scalar_func_data.arrow_func_name == "starts_with" ||
+               scalar_func_data.arrow_func_name == "ends_with" ||
+               scalar_func_data.arrow_func_name == "find_substring" ||
+               scalar_func_data.arrow_func_name == "find_substring_regex" ||
+               scalar_func_data.arrow_func_name == "count_substring" ||
+               scalar_func_data.arrow_func_name == "count_substring_regex") {
+        auto [pattern, ignore_case] = get_var_py_args_as_types<1, 2>(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_cstr, get_py_object_as_bool);
+
+        std::string func_name = scalar_func_data.arrow_func_name;
+        std::string pattern_str(pattern);
+        if (func_name == "match_substring_regex_first") {
+            // match_substring_regex in Arrow matches anywhere in the string
+            // but Series.str.match() matches from the start. Add ^ to the
+            // pattern to match from the start same as Pandas:
+            // https://github.com/pandas-dev/pandas/blob/366ccdfcd8ed1e5543bfb6d4ee0c9bc519898670/pandas/core/arrays/_arrow_string_mixins.py#L378
+            pattern_str = "^(" + pattern_str + ")";
+        }
+
+        auto opts = std::make_unique<arrow::compute::MatchSubstringOptions>();
+        opts->pattern = pattern_str;
+        if (ignore_case.has_value()) {
+            opts->ignore_case = *ignore_case;
+        }
+
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "round") {
+        auto [digits, round_mode] = get_py_round_args(scalar_func_data.args);
+
+        auto opts =
+            std::make_unique<arrow::compute::RoundOptions>(digits, round_mode);
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "is_null" ||
+               scalar_func_data.arrow_func_name == "is_not_null") {
+        // Set nan_is_null option to match Pandas isna behavior
+        auto opts = std::make_unique<arrow::compute::NullOptions>(true);
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+        // NOTE: multi-input version of utf8_slice_codeunits is handled
+        // differently in the backend. See
+        // bodosql/bodosql/tests/test_string_ops_second_half.py::test_format[FORMAT_all_vector]
+    } else if (scalar_func_data.arrow_func_name == "utf8_slice_codeunits" &&
+               children.size() == 1) {
+        auto [start, stop, step] = get_py_slice_args(scalar_func_data.args);
+        auto opts =
+            std::make_unique<arrow::compute::SliceOptions>(start, stop, step);
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "regexp_substr") {
+        auto [pattern, extract_submatches, group_to_extract] =
+            get_py_args_as_types(scalar_func_data.args,
+                                 scalar_func_data.arrow_func_name.c_str(),
+                                 get_py_object_as_cstr, get_py_object_as_bool,
+                                 get_py_object_as_int64);
+
+        // Ensure all groups are named so that we can pass to extract_regex.
+        // Do this once per operator.
+        auto [named_regexp, num_groups] =
+            convert_to_named_regexp(std::string(pattern));
+
+        if (!extract_submatches || num_groups == 0) {
+            // Wrap the whole pattern in a group
+            named_regexp = "(?<_whole>" + named_regexp + ")";
+            extract_submatches = false;
+        }
+
+        auto opts = std::make_shared<RegexpSubstrData>();
+        opts->named_regexp = named_regexp;
+        opts->num_groups = num_groups;
+        opts->extract_submatches = extract_submatches;
+        opts->group_to_extract = group_to_extract;
+        return opts;
+    } else if (scalar_func_data.arrow_func_name == "regexp_instr") {
+        auto [pattern, get_start_index, extract_submatches, group_to_extract] =
+            get_py_args_as_types(scalar_func_data.args,
+                                 scalar_func_data.arrow_func_name.c_str(),
+                                 get_py_object_as_cstr, get_py_object_as_bool,
+                                 get_py_object_as_bool, get_py_object_as_int64);
+
+        // Ensure all groups are named so that we can pass to
+        // extract_regex_span. Do this once per operator.
+        auto [named_regexp, num_groups] =
+            convert_to_named_regexp(std::string(pattern));
+
+        if (!extract_submatches || num_groups == 0) {
+            // Wrap the whole pattern in a group
+            named_regexp = "(?<_whole>" + named_regexp + ")";
+            extract_submatches = false;
+        }
+
+        auto opts = std::make_shared<RegexpInstrData>();
+        opts->named_regexp = named_regexp;
+        opts->num_groups = num_groups;
+        opts->get_start_index = get_start_index;
+        opts->extract_submatches = extract_submatches;
+        opts->group_to_extract = group_to_extract;
+        return opts;
+    } else if (scalar_func_data.arrow_func_name ==
+               "replace_substring_regex_single") {
+        auto [pattern, replacement, occurrence_num] = get_py_args_as_types(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_cstr, get_py_object_as_cstr,
+            get_py_object_as_int64);
+
+        auto opts = std::make_shared<ReplaceSubstringRegexSingleData>();
+        opts->pattern_str = std::string(pattern);
+        opts->replacement_str = std::string(replacement);
+        opts->occurrence_num = occurrence_num;
+        return opts;
+    } else if (scalar_func_data.arrow_func_name == "substring_index") {
+        auto [delimiter, count] = get_py_args_as_types(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_cstr, get_py_object_as_int64);
+        std::string delim_str(delimiter);
+
+        auto opts = std::make_shared<SubstringIndexData>();
+        opts->delim_str = std::string(delimiter);
+        opts->count = count;
+        return opts;
+    } else if (scalar_func_data.arrow_func_name == "split_part" ||
+               scalar_func_data.arrow_func_name == "strtok") {
+        auto [delimiter, part_num] = get_py_args_as_types(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_cstr, get_py_object_as_int64);
+        std::string delim_str(delimiter);
+
+        auto opts = std::make_shared<StrtokData>();
+        opts->delim_str = std::string(delimiter);
+        opts->part_num = part_num;
+        return opts;
+    } else if (scalar_func_data.arrow_func_name == "split_pattern" ||
+               scalar_func_data.arrow_func_name == "split_pattern_regex") {
+        auto [delimiter, max_splits, reverse] =
+            get_var_py_args_as_types<1, 2, 3>(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_int64,
+                get_py_object_as_bool);
+
+        auto opts = std::make_unique<arrow::compute::SplitPatternOptions>();
+        opts->pattern = std::string(delimiter);
+        if (max_splits.has_value()) {
+            opts->max_splits = *max_splits;
+        }
+        if (reverse.has_value()) {
+            opts->reverse = *reverse;
+        }
+
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "utf8_trim" ||
+               scalar_func_data.arrow_func_name == "utf8_ltrim" ||
+               scalar_func_data.arrow_func_name == "utf8_rtrim" ||
+               scalar_func_data.arrow_func_name == "ascii_trim" ||
+               scalar_func_data.arrow_func_name == "ascii_ltrim" ||
+               scalar_func_data.arrow_func_name == "ascii_rtrim") {
+        const char* c_str = get_py_single_arg_as_cstr(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str());
+
+        auto opts = std::make_unique<arrow::compute::TrimOptions>(c_str);
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "utf8_lpad" ||
+               scalar_func_data.arrow_func_name == "utf8_rpad") {
+        auto [width, padding, lean_left_on_odd_padding] =
+            get_var_py_args_as_types<1, 2, 3>(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_int64, get_py_object_as_cstr,
+                get_py_object_as_bool);
+
+        auto opts = std::make_unique<arrow::compute::PadOptions>();
+        opts->width = width;
+        if (padding.has_value()) {
+            opts->padding = std::string(*padding);
+        }
+        if (lean_left_on_odd_padding.has_value()) {
+            opts->lean_left_on_odd_padding = *lean_left_on_odd_padding;
+        }
+
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "replace_substring" ||
+               scalar_func_data.arrow_func_name == "replace_substring_regex") {
+        auto [pattern, replacement, max_replacements] =
+            get_var_py_args_as_types<2, 3>(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_cstr,
+                get_py_object_as_int64);
+
+        auto opts = std::make_unique<arrow::compute::ReplaceSubstringOptions>();
+        opts->pattern = std::string(pattern);
+        opts->replacement = std::string(replacement);
+        if (max_replacements.has_value()) {
+            opts->max_replacements = *max_replacements;
+        }
+
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "utf8_replace_slice") {
+        auto [start, stop, replacement] = get_py_args_as_types(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_int64, get_py_object_as_int64,
+            get_py_object_as_cstr);
+        std::string replacement_str(replacement);
+
+        auto opts = std::make_unique<arrow::compute::ReplaceSliceOptions>(
+            start, stop, replacement_str);
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "is_in") {
+        std::shared_ptr<arrow::Array> values_array =
+            get_py_isin_arg_as_arrow_array(scalar_func_data.args);
+        auto opts =
+            std::make_unique<arrow::compute::SetLookupOptions>(values_array);
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "assume_timezone") {
+        const char* c_str = get_py_single_arg_as_cstr(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str());
+        auto opts =
+            std::make_unique<arrow::compute::AssumeTimezoneOptions>(c_str);
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "strftime") {
+        const char* fmt_str = get_py_single_arg_as_cstr(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str());
+        auto opts = std::make_unique<arrow::compute::StrftimeOptions>(fmt_str);
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "strptime") {
+        auto [fmt_str, unit_cstr, error_is_null] =
+            get_var_py_args_as_types<2, 3>(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_cstr, get_py_object_as_cstr,
+                get_py_object_as_bool);
+        std::string unit_str(unit_cstr);
+        arrow::TimeUnit::type time_unit;
+        if (unit_str == "s") {
+            time_unit = arrow::TimeUnit::SECOND;
+        } else if (unit_str == "ms") {
+            time_unit = arrow::TimeUnit::MILLI;
+        } else if (unit_str == "us") {
+            time_unit = arrow::TimeUnit::MICRO;
+        } else if (unit_str == "ns") {
+            time_unit = arrow::TimeUnit::NANO;
+        } else {
+            throw std::invalid_argument("strptime: Invalid time unit string: " +
+                                        unit_str);
+        }
+
+        auto opts = std::make_unique<arrow::compute::StrptimeOptions>(
+            fmt_str, time_unit);
+        if (error_is_null.has_value()) {
+            opts->error_is_null = *error_is_null;
+        }
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "floor_temporal" ||
+               scalar_func_data.arrow_func_name == "ceil_temporal" ||
+               scalar_func_data.arrow_func_name == "round_temporal") {
+        auto [multiple, unit_cstr, week_starts_monday, ceil_is_strictly_greater,
+              calendar_based_origin] =
+            get_var_py_args_as_types<0, 1, 2, 3, 4, 5>(
+                scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+                get_py_object_as_int64, get_py_object_as_cstr,
+                get_py_object_as_bool, get_py_object_as_bool,
+                get_py_object_as_bool);
+
+        auto opts = std::make_unique<arrow::compute::RoundTemporalOptions>();
+        if (multiple.has_value()) {
+            opts->multiple = *multiple;
+        }
+        if (unit_cstr.has_value()) {
+            arrow::compute::CalendarUnit unit =
+                getArrowCalendarUnit(*unit_cstr);
+            opts->unit = unit;
+        }
+        if (week_starts_monday.has_value()) {
+            opts->week_starts_monday = *week_starts_monday;
+        }
+        if (ceil_is_strictly_greater.has_value()) {
+            opts->ceil_is_strictly_greater = *ceil_is_strictly_greater;
+        }
+        if (calendar_based_origin.has_value()) {
+            opts->calendar_based_origin = *calendar_based_origin;
+        }
+        return std::make_shared<ArrowFuncOptionsData>(std::move(opts));
+    } else if (scalar_func_data.arrow_func_name == "random_int64") {
+        auto [seed_arg] = get_var_py_args_as_types<0, 1>(
+            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
+            get_py_object_as_int64);
+
+        auto opts = std::make_shared<RandomInt64Data>();
+        // Only create PRNG once so we keep state across batches
+        // and don't start from the same position for each batch.
+        opts->gen = create_random_int64_gen(seed_arg);
+        return opts;
+    }
+
+    return std::make_shared<UniqueFunctionData>();
 }
 
 bool PhysicalExpression::join_expr(array_info** left_table,
@@ -2551,80 +2971,11 @@ arrow::compute::CalendarUnit getArrowCalendarUnit(const char* unit_str) {
 
 // ----- Translations of custom function names to Arrow computations -----
 
-/**
- * @brief Return a tuple of the input regex pattern with its capturing
- *   groups converted to named groups, and the number of groups that were
- *   found in the pattern.
- */
-std::tuple<std::string, int> convert_to_named_regexp(std::string pattern_str) {
-    std::string named_pattern;
-    // Number of groups found in regex pattern so far
-    int num_groups = 0;
-
-    // Convert all groups to _groupN format for extract_regex
-    for (size_t i = 0; i < pattern_str.length(); i++) {
-        // Handle escaped characters by reading the backslash and the
-        // following character together
-        if (pattern_str[i] == '\\' && i + 1 < pattern_str.length()) {
-            named_pattern += pattern_str[i];
-            named_pattern += pattern_str[i + 1];
-            i++;
-        } else if (pattern_str[i] == '(') {  // Start of group
-            // Check if it's a named group of the form (?<name>...)
-            // or (?P<name>...)
-            if (i + 1 < pattern_str.length() && pattern_str[i + 1] == '?') {
-                // Offset by 1 if it is of the form (?P<name>...)
-                int p_offset =
-                    (i + 2 < pattern_str.length() && pattern_str[i + 2] == 'P')
-                        ? 1
-                        : 0;
-                if (i + 2 + p_offset < pattern_str.length() &&
-                    pattern_str[i + 2 + p_offset] == '<') {
-                    // Rename existing name to _groupN
-                    size_t close = pattern_str.find('>', i + 3 + p_offset);
-                    if (close != std::string::npos) {
-                        named_pattern +=
-                            "(?<_group" + std::to_string(num_groups++) + ">";
-                        i = close;  // Skip to after the >
-                    } else {
-                        named_pattern += pattern_str[i];
-                    }
-                } else {
-                    // Non-capturing or other special group, keep as-is
-                    named_pattern += pattern_str[i];
-                }
-            } else {
-                // Unnamed group: convert to named group
-                named_pattern +=
-                    "(?<_group" + std::to_string(num_groups++) + ">";
-            }
-        } else {
-            named_pattern += pattern_str[i];
-        }
-    }
-
-    return std::tuple(named_pattern, num_groups);
-}
-
-arrow::Datum PhysicalArrowExpression::do_arrow_compute_regexp_substr(
-    arrow::Datum res_datum, std::string pattern_str, bool extract_submatches,
-    int64_t group_to_extract) {
-    // Ensure all groups are named so that we can pass to extract_regex.
-    // Do this once per operator.
-    if (!named_regexp) {
-        named_regexp = std::make_shared<std::tuple<std::string, int>>(
-            convert_to_named_regexp(pattern_str));
-    }
-
-    std::string named_pattern = std::get<0>(*named_regexp);
-    int num_groups = std::get<1>(*named_regexp);
-
-    if (!extract_submatches || num_groups == 0) {
-        // Wrap the whole pattern in a group
-        named_pattern = "(?<_whole>" + named_pattern + ")";
-        extract_submatches = false;
-    }
-
+arrow::Datum do_arrow_compute_regexp_substr(arrow::Datum res_datum,
+                                            std::string named_pattern,
+                                            int num_groups,
+                                            bool extract_submatches,
+                                            int64_t group_to_extract) {
     arrow::compute::ExtractRegexOptions opts(named_pattern);
     auto extract_regex_result =
         do_arrow_compute_unary(res_datum, "extract_regex", &opts);
@@ -2674,25 +3025,11 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_regexp_substr(
     return arrow::Datum(captured_field);
 }
 
-arrow::Datum PhysicalArrowExpression::do_arrow_compute_regexp_instr(
-    arrow::Datum res_datum, std::string pattern_str, bool get_start_index,
-    bool extract_submatches, int64_t group_to_extract) {
-    // Ensure all groups are named so that we can pass to
-    // extract_regex_span. Do this once per operator.
-    if (!named_regexp) {
-        named_regexp = std::make_shared<std::tuple<std::string, int>>(
-            convert_to_named_regexp(pattern_str));
-    }
-
-    std::string named_pattern = std::get<0>(*named_regexp);
-    int num_groups = std::get<1>(*named_regexp);
-
-    if (!extract_submatches || num_groups == 0) {
-        // Wrap the whole pattern in a group
-        named_pattern = "(?<_whole>" + named_pattern + ")";
-        extract_submatches = false;
-    }
-
+arrow::Datum do_arrow_compute_regexp_instr(arrow::Datum res_datum,
+                                           std::string named_pattern,
+                                           int num_groups, bool get_start_index,
+                                           bool extract_submatches,
+                                           int64_t group_to_extract) {
     arrow::compute::ExtractRegexSpanOptions opts(named_pattern);
     auto extract_regex_span_result =
         do_arrow_compute_unary(res_datum, "extract_regex_span", &opts);
@@ -3145,66 +3482,11 @@ arrow::Datum do_arrow_compute_dow_num(arrow::Datum res_datum) {
     return dow_num;
 }
 
-arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
-    arrow::Datum res_datum) {
+arrow::Datum do_arrow_compute_random_int64(arrow::Datum res_datum,
+                                           std::mt19937_64& gen) {
     // Get dummy input as an Arrow array.
     // We need the result to match the length of this array.
     std::shared_ptr<arrow::Array> res_array = res_datum.make_array();
-
-    // Only create PRNG once so we keep state across batches
-    // and don't start from the same position for each batch.
-    if (!gen) {
-        int rank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-        auto [seed_arg] = get_var_py_args_as_types<0, 1>(
-            scalar_func_data.args, scalar_func_data.arrow_func_name.c_str(),
-            get_py_object_as_int64);
-
-        if (seed_arg.has_value()) {
-            // Seed was explicitly provided, so use it
-            int64_t seed = *seed_arg;
-
-            if (rank == 0) {
-                // Create psuedo-random number generator.
-                // For rank 0 we use the input seed directly
-                gen = std::make_shared<std::mt19937_64>(std::mt19937_64(seed));
-            } else {
-                // seed_seq applies a transformation on the master seed and
-                // the rank number to scramble and break linear correlation
-                // between the seeds used by each rank.
-                // Because of this, the generated sequence will be different
-                // depending on the number of workers used, but it should
-                // still be deterministic.
-                // The Dynamic Creator algorithm might be theoretically
-                // better here, but seed_seq is probably sufficient in
-                // practice.
-
-                // Note that we have to split the 64-bit input seed because
-                // seed_seq only accepts 32-bit integers
-                std::seed_seq rank_seed{
-                    static_cast<uint32_t>(seed >> 32),
-                    static_cast<uint32_t>(seed & 0xFFFFFFFF),
-                    static_cast<uint32_t>(rank)};
-
-                // Create PRNG with a (hopefully) independent seed
-                gen = std::make_shared<std::mt19937_64>(
-                    std::mt19937_64(rank_seed));
-            }
-        } else {
-            // Generate a seed with 96-bits of entropy from system's
-            // random_device and the current system time. time(NULL) is
-            // mainly a backup in case std::random_device falls back
-            // to a deterministic implementation.
-            // We also integrate the rank number in the seed calculation
-            // to ensure that two ranks do not get the same seed by chance.
-            std::random_device rd;
-            std::seed_seq seed{rd(), static_cast<uint32_t>(time(NULL)), rd(),
-                               static_cast<uint32_t>(rank)};
-            // Create psuedo-random number generator
-            gen = std::make_shared<std::mt19937_64>(std::mt19937_64(seed));
-        }
-    }
 
     // Full-range uniform int64 distribution
     std::uniform_int_distribution<int64_t> int64_dist(0x8000000000000000,
@@ -3212,15 +3494,17 @@ arrow::Datum PhysicalArrowExpression::do_arrow_compute_random_int64(
 
     // Compute array of random integers based on the length of the dummy
     // input
+    int desired_length = res_array->length();
     arrow::Int64Builder builder;
-    for (int i = 0; i < res_array->length(); i++) {
-        arrow::Status status = builder.Append(int64_dist(*gen));
-        if (!status.ok()) {
-            throw std::runtime_error(
-                "do_arrow_compute (random_int64): Failed to append "
-                "value to "
-                "Int64Builder");
-        }
+    arrow::Status resize_status = builder.Resize(desired_length);
+    if (!resize_status.ok()) {
+        throw std::runtime_error(
+            "do_arrow_compute (random_int64): Failed to resize Int64Builder "
+            "array to needed length: " +
+            resize_status.ToString());
+    }
+    for (int i = 0; i < desired_length; i++) {
+        builder.UnsafeAppend(int64_dist(gen));
     }
     std::shared_ptr<arrow::Array> random_int64_array =
         builder.Finish().ValueOrDie();
