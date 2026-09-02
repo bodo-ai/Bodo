@@ -157,15 +157,15 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.consume_time);
-        PhysicalSource::addPipelineInfo(1, build_pipeline_num,
-                                        build_pipeline_position);
+        PhysicalGPUSource::addPipelineInfo(1, build_pipeline_num,
+                                           build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.produce_time);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
-        PhysicalSource::addPipelineInfo(2, pipeline_num, pipeline_position);
+        PhysicalGPUSource::addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     OperatorResult ConsumeBatchGPU(
