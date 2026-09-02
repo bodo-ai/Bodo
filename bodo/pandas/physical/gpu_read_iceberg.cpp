@@ -1187,7 +1187,8 @@ PhysicalGPUReadIceberg::~PhysicalGPUReadIceberg() {
     }
 }
 
-void PhysicalGPUReadIceberg::FinalizeSource() {
+void PhysicalGPUReadIceberg::FinalizeSource(long pipeline_num,
+                                            long pipeline_position) {
     std::vector<MetricBase> metrics_out;
     metrics_out.emplace_back(
         TimerMetric("produce_time", this->metrics.produce_time));
