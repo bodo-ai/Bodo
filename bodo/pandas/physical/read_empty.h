@@ -35,7 +35,7 @@ class PhysicalReadEmpty : public PhysicalSource {
             duckdb_to_arrow_schema(return_types));
     }
 
-    void FinalizeSource() override {}
+    void FinalizeSource(long pipeline_num, long pipeline_position) override {}
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {

@@ -379,9 +379,13 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     virtual ~PhysicalJoin() = default;
 
-    void FinalizeSink() override {}
+    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+        build_pipeline_num = pipeline_num;
+        build_pipeline_position = pipeline_position;
+    }
 
-    void FinalizeProcessBatch() override {
+    void FinalizeProcessBatch(long pipeline_num,
+                              long pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
@@ -390,12 +394,19 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
+
+        PhysicalProcessBatch::addPipelineInfo(1, build_pipeline_num,
+                                              build_pipeline_position);
+
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             metrics.process_batch_time);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
+
+        PhysicalProcessBatch::addPipelineInfo(2, pipeline_num,
+                                              pipeline_position);
     }
 
     /**
@@ -704,6 +715,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     bool is_anti_join = false;
 
     PhysicalJoinMetrics metrics;
+    long build_pipeline_num, build_pipeline_position;
 };
 
 /*

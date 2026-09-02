@@ -41,7 +41,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
      * meet that goal.
      *
      */
-    void FinalizeSink() override {
+    void FinalizeSink(long pipeline_num, long pipeline_position) override {
         GpuMpiManager gpu_mpi;
 
         if (!is_gpu_rank()) {
@@ -72,7 +72,7 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
         }
     }
 
-    void FinalizeSource() override {}
+    void FinalizeSource(long pipeline_num, long pipeline_position) override {}
 
     /**
      * @brief Do limit.

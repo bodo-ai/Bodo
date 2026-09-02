@@ -181,7 +181,7 @@ class Executor {
         for (size_t i = 0; i < pipelines.size(); ++i) {
             QueryProfileCollector::Default().StartPipeline(i);
             DEBUG_PIPELINE_PRE_EXECUTE(rank, out);
-            uint64_t batches_processed = pipelines[i]->Execute(rank, out);
+            uint64_t batches_processed = pipelines[i]->Execute(i, rank, out);
 
             // Free pipeline resources as early as possible to reduce memory
             // pressure.

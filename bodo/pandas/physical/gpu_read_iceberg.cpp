@@ -1208,6 +1208,7 @@ void PhysicalGPUReadIceberg::FinalizeSource() {
     QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
         QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
         this->metrics.rows_read);
+    addPipelineInfo(1, pipeline_num, pipeline_position);
 }
 
 std::pair<GPU_DATA, OperatorResult> PhysicalGPUReadIceberg::ProduceBatchGPU(

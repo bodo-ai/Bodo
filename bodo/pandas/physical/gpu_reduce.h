@@ -198,14 +198,16 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
 
     virtual ~PhysicalGPUReduce() = default;
 
-    void FinalizeSink() override {
+    void FinalizeSink(long pipeline_num, long pipeline_position) override {
         MPI_Comm comm = get_gpu_mpi_comm(get_gpu_id());
         for (auto& reduction_function : reduction_functions) {
             reduction_function->Finalize(comm);
         }
+        build_pipeline_num = pipeline_num;
+        build_pipeline_position = pipeline_position;
     }
 
-    void FinalizeSource() override {
+    void FinalizeSource(long pipeline_num, long pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(
@@ -218,6 +220,8 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
             QueryProfileCollector::MakeOperatorStageID(
                 PhysicalGPUSink::getOpId(), 1),
             this->metrics.output_row_count);
+        PhysicalGPUSource::addPipelineInfo(1, build_pipeline_num,
+                                           build_pipeline_position);
     }
 
     /**
@@ -292,4 +296,5 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
         metrics_out.emplace_back(
             TimerMetric("produce_time", this->metrics.produce_time));
     }
+    long build_pipeline_num, build_pipeline_position;
 };

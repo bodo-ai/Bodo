@@ -183,7 +183,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
                        : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void FinalizeSink() override {
+    void FinalizeSink(long pipeline_num, long pipeline_position) override {
         time_pt start_finalize_time = start_timer();
 
         // Compact and serialize theta sketches to bytes before passing to
@@ -213,6 +213,7 @@ class PhysicalWriteIceberg : public PhysicalSink {
         // Write doesn't produce rows
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1), 0);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {

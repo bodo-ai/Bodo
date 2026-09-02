@@ -113,7 +113,7 @@ class PhysicalReadParquet : public PhysicalSource {
         Py_XDECREF(this->schema_fields);
     }
 
-    void FinalizeSource() override {
+    void FinalizeSource(long pipeline_num, long pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
@@ -130,6 +130,7 @@ class PhysicalReadParquet : public PhysicalSource {
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.rows_read);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()

@@ -239,9 +239,12 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalAggregate() = default;
 
-    void FinalizeSink() override {}
+    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+        build_pipeline_num = pipeline_num;
+        build_pipeline_position = pipeline_position;
+    }
 
-    void FinalizeSource() override {
+    void FinalizeSource(long pipeline_num, long pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
@@ -250,9 +253,12 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
+        PhysicalSource::addPipelineInfo(1, build_pipeline_num,
+                                        build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             metrics.produce_time);
+        PhysicalSource::addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**
@@ -374,6 +380,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     // Map from function name to Bodo_FTypes
     static const std::map<std::string, int32_t> function_to_ftype;
+    long build_pipeline_num, build_pipeline_position;
 };
 
 // Definition of the static member
@@ -418,7 +425,7 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalCountStar() = default;
 
-    void FinalizeSink() override {
+    void FinalizeSink(long pipeline_num, long pipeline_position) override {
         int result =
             MPI_Allreduce(&local_count, &global_count, 1,
                           MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
@@ -428,7 +435,7 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
         }
     }
 
-    void FinalizeSource() override {}
+    void FinalizeSource(long pipeline_num, long pipeline_position) override {}
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {

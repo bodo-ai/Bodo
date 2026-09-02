@@ -27,7 +27,8 @@ class PhysicalSample : public PhysicalProcessBatch {
 
     virtual ~PhysicalSample() = default;
 
-    void FinalizeProcessBatch() override {
+    void FinalizeProcessBatch(long pipeline_num,
+                              long pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         metrics_out.emplace_back(
             TimerMetric("sample_time", this->metrics.sample_time));
@@ -37,6 +38,7 @@ class PhysicalSample : public PhysicalProcessBatch {
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.output_row_count);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     /**

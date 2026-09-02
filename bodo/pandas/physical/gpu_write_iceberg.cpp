@@ -636,7 +636,8 @@ std::string PhysicalGPUWriteIceberg::build_partition_path(
     return path;
 }
 
-void PhysicalGPUWriteIceberg::FinalizeSink() {
+void PhysicalGPUWriteIceberg::FinalizeSink(long pipeline_num,
+                                           long pipeline_position) {
     time_pt start_finalize = start_timer();
     iceberg_files_info_py = gather_iceberg_files_info(iceberg_files_info_py);
     metrics.finalize_time = end_timer(start_finalize);
@@ -648,6 +649,7 @@ void PhysicalGPUWriteIceberg::FinalizeSink() {
         std::move(metrics_out));
     QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
         QueryProfileCollector::MakeOperatorStageID(getOpId(), 1), 0);
+    addPipelineInfo(1, pipeline_num, pipeline_position);
 }
 
 std::variant<std::shared_ptr<table_info>, PyObject*>

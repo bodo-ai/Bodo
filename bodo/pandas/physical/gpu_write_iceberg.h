@@ -201,7 +201,7 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      * replaces the local list with the gathered result, and registers
      * operator metrics with `QueryProfileCollector`.
      */
-    void FinalizeSink() override;
+    void FinalizeSink(long pipeline_num, long pipeline_position) override;
 
    private:
     /**
