@@ -6,8 +6,33 @@ import warnings
 
 from pyspark.sql import SparkSession
 
+required_tables = {
+    1: ["LINEITEM"],
+    2: ["PART", "PARTSUPP", "SUPPLIER", "NATION", "REGION"],
+    3: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    4: ["LINEITEM", "ORDERS"],
+    5: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION", "REGION", "SUPPLIER"],
+    6: ["LINEITEM"],
+    7: ["LINEITEM", "SUPPLIER", "ORDERS", "CUSTOMER", "NATION"],
+    8: ["PART", "LINEITEM", "SUPPLIER", "ORDERS", "CUSTOMER", "NATION", "REGION"],
+    9: ["LINEITEM", "ORDERS", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
+    10: ["LINEITEM", "ORDERS", "CUSTOMER", "NATION"],
+    11: ["PARTSUPP", "SUPPLIER", "NATION"],
+    12: ["LINEITEM", "ORDERS"],
+    13: ["CUSTOMER", "ORDERS"],
+    14: ["LINEITEM", "PART"],
+    15: ["LINEITEM", "SUPPLIER"],
+    16: ["PART", "PARTSUPP", "SUPPLIER"],
+    17: ["LINEITEM", "PART"],
+    18: ["LINEITEM", "ORDERS", "CUSTOMER"],
+    19: ["LINEITEM", "PART"],
+    20: ["LINEITEM", "PART", "NATION", "PARTSUPP", "SUPPLIER"],
+    21: ["LINEITEM", "ORDERS", "SUPPLIER", "NATION"],
+    22: ["CUSTOMER", "ORDERS"],
+}
 
-def load_tables(spark, base, use_parquet: bool):
+
+def load_tables(spark, base, use_parquet, query):
     """
     Load TPCH tables either from Parquet files (use_parquet=True)
     or from Iceberg tables (use_parquet=False).
@@ -18,22 +43,14 @@ def load_tables(spark, base, use_parquet: bool):
       - Otherwise base is treated as a filesystem path and tables are loaded as
         spark.read.format("iceberg").load(f"{base}/{table_name}")
     """
-    table_names = [
-        "lineitem",
-        "orders",
-        "customer",
-        "part",
-        "partsupp",
-        "supplier",
-        "nation",
-        "region",
-    ]
+    table_names = required_tables[query]
 
     tables = {}
 
     if use_parquet:
         # Existing parquet behavior
         for name in table_names:
+            name = name.lower()
             df = spark.read.parquet(f"{base}/{name}.pq")
             tables[name] = df
     else:
@@ -41,6 +58,7 @@ def load_tables(spark, base, use_parquet: bool):
         # Decide whether base looks like a catalog.namespace (contains a dot)
         is_catalog_style = "." in base
         for name in table_names:
+            name = name.lower()
             if is_catalog_style:
                 iceberg_identifier = f"{base}.{name.upper()}"
             else:
@@ -111,12 +129,13 @@ def run_queries(
     use_parquet: bool = False,
     store_output: bool = False,
 ):
-    load_tables(spark, data_folder, use_parquet)
     create_queries(spark, queries, scale_factor, sql_dir)
 
     t1 = time.time()
 
     for query in queries:
+        spark.catalog.clearCache()
+
         print("Running query", query)
         query_func = globals().get(f"tpch_q{query:02}")
 
@@ -125,6 +144,7 @@ def run_queries(
             continue
 
         t2 = time.time()
+        load_tables(spark, data_folder, use_parquet, query)
         output_df = query_func(spark)  # run the query
         print(f"Query {query:02} took {time.time() - t2:.2f} seconds")
         if store_output:
