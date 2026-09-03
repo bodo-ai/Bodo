@@ -23,7 +23,8 @@ class PhysicalUnionAll : public PhysicalProcessBatch, public PhysicalSink {
 
     virtual ~PhysicalUnionAll() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         build_pipeline_num = pipeline_num;
         build_pipeline_position = pipeline_position;
     }

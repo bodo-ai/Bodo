@@ -183,7 +183,8 @@ class PhysicalWriteIceberg : public PhysicalSink {
                        : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         time_pt start_finalize_time = start_timer();
 
         // Compact and serialize theta sketches to bytes before passing to

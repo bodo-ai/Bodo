@@ -68,8 +68,8 @@ PhysicalReadIceberg::ProduceBatch() {
     return std::make_pair(std::shared_ptr<table_info>(batch), result);
 }
 
-void PhysicalReadIceberg::FinalizeSource(long pipeline_num,
-                                         long pipeline_position) {
+void PhysicalReadIceberg::FinalizeSource(int64_t pipeline_num,
+                                         int64_t pipeline_position) {
     std::vector<MetricBase> metrics;
     this->internal_reader->ReportReadStageMetrics(metrics);
 

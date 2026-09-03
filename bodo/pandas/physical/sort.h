@@ -139,7 +139,8 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalSort() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         time_pt start_finalize_build = start_timer();
         stream_sorter->FinalizeBuild();
         this->metrics.consume_time += end_timer(start_finalize_build);
@@ -147,7 +148,8 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
         build_pipeline_position = pipeline_position;
     }
 
-    void FinalizeSource(long pipeline_num, long pipeline_position) override {
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
