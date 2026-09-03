@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import plotly.express as px
 
 from bodo.utils.aggregate_query_profiles import aggregate
 
@@ -115,6 +114,8 @@ def extract_pipeline_times(obj):
 
 
 def print_sorted(outdir, results, pipeline_ret):
+    import plotly.express as px
+
     results_sorted = sorted(results, key=lambda t: (t[0], t[1]))
     if not results_sorted:
         print("No stages with both pipeline_num and pipeline_position and time found.")
