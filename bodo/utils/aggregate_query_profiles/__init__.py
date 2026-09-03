@@ -22,13 +22,16 @@ def five_number_summary(data: list[float]) -> dict[str, float]:
     }
 
 
-def generate_summary(data: list[float]) -> float | dict[str, Any]:
+def generate_summary(
+    data: list[float], write_all_data: bool = False
+) -> float | dict[str, Any]:
     if all(d == 0 for d in data):
         return 0
-    return {
-        "data": data,
-        "summary": five_number_summary(data),
-    }
+    res: dict[str, Any] = {}
+    if write_all_data:
+        res["data"] = data
+    res["summary"] = five_number_summary(data)
+    return res
 
 
 def assert_keys_consistent(objects: list[dict[str, Any]]) -> list[str]:
@@ -39,7 +42,9 @@ def assert_keys_consistent(objects: list[dict[str, Any]]) -> list[str]:
     return keys
 
 
-def aggregate_buffer_pool_stats(stats: list[dict[str, Any]]) -> dict[str, Any]:
+def aggregate_buffer_pool_stats(
+    stats: list[dict[str, Any]], write_all_data: bool = False
+) -> dict[str, Any]:
     stat0 = stats[0]
     aggregated_stats = {}
     # assert that all ranks have the same buffer pool stat keys
@@ -49,7 +54,7 @@ def aggregate_buffer_pool_stats(stats: list[dict[str, Any]]) -> dict[str, Any]:
     general_stats = {}
     for k in stat0["general stats"]:
         data = [stat["general stats"][k] for stat in stats]
-        general_stats[k] = generate_summary(data)
+        general_stats[k] = generate_summary(data, write_all_data)
     aggregated_stats["general stats"] = general_stats
 
     # Helper since both SizeClassMetrics and StorageManagerStats have the same
@@ -96,7 +101,9 @@ def aggregate_buffer_pool_stats(stats: list[dict[str, Any]]) -> dict[str, Any]:
         for subkey in subkeys:
             for k in stat0[key][subkey]:
                 data = [stat[key][subkey][k] for stat in stats]
-                aggregated_stats[key][subkey][k] = generate_summary(data)
+                aggregated_stats[key][subkey][k] = generate_summary(
+                    data, write_all_data
+                )
 
     aggregate_bufferpool_subkeys("SizeClassMetrics")
     # StorageManagerStats is optional
@@ -105,7 +112,9 @@ def aggregate_buffer_pool_stats(stats: list[dict[str, Any]]) -> dict[str, Any]:
     return aggregated_stats
 
 
-def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+def aggregate_operator_reports(
+    reports: list[dict[str, Any]], write_all_data: bool = False
+) -> dict[str, Any]:
     op_ids = assert_keys_consistent(reports)
     res = {}
     for op in op_ids:
@@ -127,12 +136,13 @@ def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
                 times = [report[op][stage]["time"] for report in reports]
                 agg_stage["time"] = {
                     "max": max(times),
-                    "data": times,
                     "summary": five_number_summary(times),
                 }
+                if write_all_data:
+                    agg_stage["time"]["data"] = times
             if "output_row_count" in keys:
                 counts = [report[op][stage]["output_row_count"] for report in reports]
-                agg_stage["output_row_count"] = generate_summary(counts)
+                agg_stage["output_row_count"] = generate_summary(counts, write_all_data)
                 if not all(c == 0 for c in counts):
                     agg_stage["output_row_count"]["sum"] = sum(counts)
 
@@ -185,7 +195,8 @@ def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
                                     "summary": five_number_summary(data),
                                 }
                             )
-                        agg_metric["data"] = data
+                        if write_all_data:
+                            agg_metric["data"] = data
                     metrics_res.append(agg_metric)
 
                 agg_stage["metrics"] = metrics_res
@@ -196,7 +207,10 @@ def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def aggregate_helper(
-    profiles: list[dict[str, Any]], key: str, aggregated: dict[str, Any]
+    profiles: list[dict[str, Any]],
+    key: str,
+    aggregated: dict[str, Any],
+    write_all_data: bool = False,
 ) -> None:
     """Aggregate the profiles with custom per-key aggregation strategies"""
     profile0 = profiles[0]
@@ -217,7 +231,7 @@ def aggregate_helper(
 
     if key == "operator_reports":
         aggregated[key] = aggregate_operator_reports(
-            [profile[key] for profile in profiles]
+            [profile[key] for profile in profiles], write_all_data
         )
         return
 
@@ -237,14 +251,15 @@ def aggregate_helper(
             ]
             aggregated_pipeline[pipeline_id] = {
                 "duration": {
-                    "data": durations,
                     "summary": five_number_summary(durations),
                 },
                 "num_iterations": {
-                    "data": iterations,
                     "summary": five_number_summary(iterations),
                 },
             }
+            if write_all_data:
+                aggregated_pipeline[pipeline_id]["duration"]["data"] = durations
+                aggregated_pipeline[pipeline_id]["num_iterations"]["data"] = iterations
         aggregated[key] = aggregated_pipeline
         return
 
@@ -255,7 +270,7 @@ def aggregate_helper(
 
     if key == "buffer_pool_stats":
         aggregated[key] = aggregate_buffer_pool_stats(
-            [profile[key] for profile in profiles]
+            [profile[key] for profile in profiles], write_all_data
         )
         return
 
@@ -264,7 +279,9 @@ def aggregate_helper(
     return
 
 
-def aggregate(profiles: list[dict[str, Any]]) -> dict[str, Any]:
+def aggregate(
+    profiles: list[dict[str, Any]], write_all_data: bool = False
+) -> dict[str, Any]:
     """Given a set of query profiles from different ranks, aggregate them into a
     single profile, summarizing the data as necessary"""
     if len(profiles) == 0:
@@ -275,5 +292,5 @@ def aggregate(profiles: list[dict[str, Any]]) -> dict[str, Any]:
     aggregated = {}
     keys = assert_keys_consistent(profiles)
     for k in keys:
-        aggregate_helper(profiles, k, aggregated)
+        aggregate_helper(profiles, k, aggregated, write_all_data)
     return aggregated
