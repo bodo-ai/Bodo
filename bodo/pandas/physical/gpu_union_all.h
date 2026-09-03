@@ -34,19 +34,28 @@ class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
 
     virtual ~PhysicalGPUUnionAll() = default;
 
-    void FinalizeSink() override {}
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
+        build_pipeline_num = pipeline_num;
+        build_pipeline_position = pipeline_position;
+    }
 
-    void FinalizeProcessBatch() override {
+    void FinalizeProcessBatch(long pipeline_num,
+                              long pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(
                 PhysicalGPUSink::getOpId(), 1),
             std::move(metrics_out));
+        PhysicalGPUProcessBatch::addPipelineInfo(1, build_pipeline_num,
+                                                 build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(
                 PhysicalGPUSink::getOpId(), 2),
             this->metrics.output_row_count);
+        PhysicalGPUProcessBatch::addPipelineInfo(2, pipeline_num,
+                                                 pipeline_position);
     }
 
     /**
@@ -125,4 +134,5 @@ class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
     void ReportMetrics(std::vector<MetricBase> &metrics_out) {
         // No metrics to report for GPU union all yet
     }
+    long build_pipeline_num, build_pipeline_position;
 };

@@ -239,9 +239,14 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
 
     virtual ~PhysicalGPUAggregate() = default;
 
-    void FinalizeSink() override {}
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
+        build_pipeline_num = pipeline_num;
+        build_pipeline_position = pipeline_position;
+    }
 
-    void FinalizeSource() override {
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
@@ -250,9 +255,11 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
+        PhysicalGPUSource::addPipelineInfo(1, pipeline_num, pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             metrics.produce_time);
+        PhysicalGPUSource::addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**
@@ -390,6 +397,7 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
     std::unique_ptr<cudf::table> leftover_tbl;
     bool out_is_last = false;
     size_t batch_size;
+    long build_pipeline_num, build_pipeline_position;
 };
 
 /**
@@ -411,7 +419,8 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
 
     virtual ~PhysicalGPUCountStar() = default;
 
-    void FinalizeSink() override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         int result =
             MPI_Allreduce(&local_count, &global_count, 1,
                           MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
@@ -421,7 +430,8 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
         }
     }
 
-    void FinalizeSource() override {}
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {}
 
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,

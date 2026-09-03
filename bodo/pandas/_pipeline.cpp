@@ -432,7 +432,7 @@ bool Pipeline::midPipelineExecute(
     }
 }
 
-uint64_t Pipeline::Execute(int rank, std::ostream &out) {
+uint64_t Pipeline::Execute(size_t pipeline_num, int rank, std::ostream &out) {
     // TODO: Do we need an explicit Init phase to measure initialization time
     // outside of the time spend in constructors?
 
@@ -514,14 +514,28 @@ uint64_t Pipeline::Execute(int rank, std::ostream &out) {
 
     DEBUG_PIPELINE_FINALIZE(rank, source, out);
     // Finalize
-    std::visit([&](auto &vop) { vop->FinalizeSource(); }, source);
+    int position_in_pipeline = 0;
+    std::visit(
+        [&](auto &vop) {
+            vop->FinalizeSource(pipeline_num, position_in_pipeline++);
+        },
+        source);
 
     for (auto &op : between_ops) {
         DEBUG_PIPELINE_FINALIZE(rank, op, out);
-        std::visit([&](auto &vop) { vop->FinalizeProcessBatchCommon(); }, op);
+        std::visit(
+            [&](auto &vop) {
+                vop->FinalizeProcessBatchCommon(pipeline_num,
+                                                position_in_pipeline++);
+            },
+            op);
     }
     DEBUG_PIPELINE_FINALIZE(rank, sink, out);
-    std::visit([&](auto &vop) { vop->FinalizeSinkCommon(); }, sink);
+    std::visit(
+        [&](auto &vop) {
+            vop->FinalizeSinkCommon(pipeline_num, position_in_pipeline++);
+        },
+        sink);
 
     executed = true;
     return batches_processed;

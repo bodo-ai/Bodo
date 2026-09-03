@@ -254,7 +254,8 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
 
     virtual ~PhysicalGPUReadIceberg();
 
-    void FinalizeSource() override;
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override;
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(
         std::shared_ptr<StreamAndEvent> se) override;

@@ -181,8 +181,10 @@ void QueryProfileCollector::RegisterOperatorStageMetrics(
     operator_stage_t op_stage, std::vector<MetricBase> metrics) {
     if (operator_stage_metrics.count(op_stage) == 0) {
         operator_stage_metrics[op_stage] = metrics;
+    } else {
+        auto& prev_metrics = operator_stage_metrics[op_stage];
+        prev_metrics.insert(prev_metrics.end(), metrics.begin(), metrics.end());
     }
-    // TODO(aneesh) error when metrics are resubmitted
 }
 
 template <MetricTypes::TypeEnum metric_type>

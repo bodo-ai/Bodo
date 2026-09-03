@@ -41,7 +41,8 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
                        : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void FinalizeSink() override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
@@ -51,6 +52,7 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
         // Write doesn't produce rows
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1), 0);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {

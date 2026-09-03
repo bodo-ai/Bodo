@@ -135,7 +135,7 @@ class Pipeline {
      * @brief Execute the pipeline and return the result (placeholder for now).
      * @return - number of batches processed
      */
-    uint64_t Execute(int rank, std::ostream &out);
+    uint64_t Execute(size_t pipeline_num, int rank, std::ostream &out);
 
     /// @brief Get the final result. Result collector returns table_info,
     // Parquet write returns null table_info pointer, and Iceberg write

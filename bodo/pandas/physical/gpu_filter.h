@@ -83,7 +83,8 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
 
     virtual ~PhysicalGPUFilter() = default;
 
-    void FinalizeProcessBatch() override {
+    void FinalizeProcessBatch(long pipeline_num,
+                              long pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
@@ -92,6 +93,7 @@ class PhysicalGPUFilter : public PhysicalGPUProcessBatch {
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.output_row_count);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     /**

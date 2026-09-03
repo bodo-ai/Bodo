@@ -67,7 +67,8 @@ class PhysicalFilter : public PhysicalProcessBatch {
 
     virtual ~PhysicalFilter() = default;
 
-    void FinalizeProcessBatch() override {
+    void FinalizeProcessBatch(long pipeline_num,
+                              long pipeline_position) override {
         expression->Finalize();
 
         std::vector<MetricBase> metrics_out;
@@ -78,6 +79,7 @@ class PhysicalFilter : public PhysicalProcessBatch {
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.output_row_count);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     /**

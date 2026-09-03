@@ -23,19 +23,28 @@ class PhysicalUnionAll : public PhysicalProcessBatch, public PhysicalSink {
 
     virtual ~PhysicalUnionAll() = default;
 
-    void FinalizeSink() override {}
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
+        build_pipeline_num = pipeline_num;
+        build_pipeline_position = pipeline_position;
+    }
 
-    void FinalizeProcessBatch() override {
+    void FinalizeProcessBatch(long pipeline_num,
+                              long pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
                                                        1),
             std::move(metrics_out));
+        PhysicalProcessBatch::addPipelineInfo(1, build_pipeline_num,
+                                              build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
                                                        2),
             this->metrics.output_row_count);
+        PhysicalProcessBatch::addPipelineInfo(2, pipeline_num,
+                                              pipeline_position);
     }
 
     /**
@@ -132,4 +141,5 @@ class PhysicalUnionAll : public PhysicalProcessBatch, public PhysicalSink {
 
         // No metrics to report for union all
     }
+    long build_pipeline_num, build_pipeline_position;
 };

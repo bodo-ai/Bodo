@@ -47,7 +47,8 @@ class PhysicalProjection : public PhysicalProcessBatch {
 
     virtual ~PhysicalProjection() = default;
 
-    void FinalizeProcessBatch() override {
+    void FinalizeProcessBatch(long pipeline_num,
+                              long pipeline_position) override {
         for (const std::shared_ptr<PhysicalExpression>& expr :
              this->physical_exprs) {
             expr->Finalize();
@@ -69,6 +70,7 @@ class PhysicalProjection : public PhysicalProcessBatch {
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.output_row_count);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     /**

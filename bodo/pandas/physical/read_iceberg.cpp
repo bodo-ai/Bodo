@@ -68,7 +68,8 @@ PhysicalReadIceberg::ProduceBatch() {
     return std::make_pair(std::shared_ptr<table_info>(batch), result);
 }
 
-void PhysicalReadIceberg::FinalizeSource() {
+void PhysicalReadIceberg::FinalizeSource(int64_t pipeline_num,
+                                         int64_t pipeline_position) {
     std::vector<MetricBase> metrics;
     this->internal_reader->ReportReadStageMetrics(metrics);
 
@@ -86,6 +87,7 @@ void PhysicalReadIceberg::FinalizeSource() {
     QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
         QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
         this->metrics.rows_read);
+    addPipelineInfo(1, pipeline_num, pipeline_position);
 }
 
 const std::shared_ptr<bodo::Schema> PhysicalReadIceberg::getOutputSchema() {

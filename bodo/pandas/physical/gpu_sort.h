@@ -142,9 +142,15 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
 
     virtual ~PhysicalGPUSortOperator() = default;
 
-    void FinalizeSink() override { cuda_sort_state->FinalizeSort(); }
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
+        cuda_sort_state->FinalizeSort();
+        build_pipeline_num = pipeline_num;
+        build_pipeline_position = pipeline_position;
+    }
 
-    void FinalizeSource() override {
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
@@ -153,12 +159,15 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.consume_time);
+        PhysicalGPUSource::addPipelineInfo(1, build_pipeline_num,
+                                           build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.produce_time);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
+        PhysicalGPUSource::addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     OperatorResult ConsumeBatchGPU(
@@ -244,6 +253,7 @@ class PhysicalGPUSortOperator : public PhysicalGPUSource,
     std::vector<int64_t> kept_cols;
 
     PhysicalGPUSortMetrics metrics;
+    long build_pipeline_num, build_pipeline_position;
 };
 
 #endif

@@ -368,7 +368,8 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
         return std::shared_ptr<table_info>(nullptr);
     }
 
-    void FinalizeSink() override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
@@ -384,6 +385,7 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
             std::move(metrics_out));
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1), 0);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
    private:

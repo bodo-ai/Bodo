@@ -766,7 +766,8 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         }
     }
 
-    void FinalizeSource() override {
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
@@ -783,6 +784,7 @@ class PhysicalGPUReadParquet : public PhysicalGPUSource {
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.rows_read);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatchGPU(

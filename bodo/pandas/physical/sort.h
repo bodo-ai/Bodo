@@ -139,13 +139,17 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalSort() = default;
 
-    void FinalizeSink() override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         time_pt start_finalize_build = start_timer();
         stream_sorter->FinalizeBuild();
         this->metrics.consume_time += end_timer(start_finalize_build);
+        build_pipeline_num = pipeline_num;
+        build_pipeline_position = pipeline_position;
     }
 
-    void FinalizeSource() override {
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
@@ -154,12 +158,15 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.consume_time);
+        PhysicalSource::addPipelineInfo(1, build_pipeline_num,
+                                        build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.produce_time);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
+        PhysicalSource::addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**
@@ -233,7 +240,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
     std::string ToString() override { return PhysicalSink::ToString(); }
 
-    int64_t getOpId() const { return PhysicalSink::getOpId(); }
+    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
 
    private:
     static void bidirectionalColumnMapping(
@@ -254,4 +261,5 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     std::vector<uint64_t> kept_cols;
 
     PhysicalSortMetrics metrics;
+    long build_pipeline_num, build_pipeline_position;
 };
