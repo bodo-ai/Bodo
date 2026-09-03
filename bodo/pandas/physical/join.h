@@ -379,7 +379,8 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     virtual ~PhysicalJoin() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         build_pipeline_num = pipeline_num;
         build_pipeline_position = pipeline_position;
     }
@@ -660,7 +661,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
     std::string ToString() override { return PhysicalSink::ToString(); }
 
-    int64_t getOpId() const { return PhysicalSink::getOpId(); }
+    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
 
     /**
      * @brief Get pointer to JoinState used in join filters

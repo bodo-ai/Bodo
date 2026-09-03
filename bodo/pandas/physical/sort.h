@@ -238,7 +238,7 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
 
     std::string ToString() override { return PhysicalSink::ToString(); }
 
-    int64_t getOpId() const { return PhysicalSink::getOpId(); }
+    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
 
    private:
     static void bidirectionalColumnMapping(

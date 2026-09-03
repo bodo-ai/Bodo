@@ -242,7 +242,8 @@ class PhysicalOperator {
 
     virtual int64_t getOpId() const { return op_id; }
 
-    void addPipelineInfo(int stage, long pipeline_num, long pipeline_position) {
+    void addPipelineInfo(int stage, int64_t pipeline_num,
+                         int64_t pipeline_position) {
         std::vector<MetricBase> metrics;
         metrics.emplace_back(StatMetric("pipeline_num", pipeline_num, true));
         metrics.emplace_back(
@@ -273,7 +274,8 @@ class PhysicalSource : public PhysicalOperator {
     // Constructor is always required for initialization
     // We should have a separate Finalize step that can throw an exception
     // as well as the destructor for cleanup
-    virtual void FinalizeSource(long pipeline_num, long pipeline_position) = 0;
+    virtual void FinalizeSource(int64_t pipeline_num,
+                                int64_t pipeline_position) = 0;
 
     /**
      * @brief Get the physical schema of the source data
@@ -300,13 +302,14 @@ class PhysicalSink : public PhysicalOperator {
     virtual std::variant<std::shared_ptr<table_info>, PyObject *>
     GetResult() = 0;
 
-    virtual void FinalizeSink(long pipeline_num, long pipeline_position) = 0;
+    virtual void FinalizeSink(int64_t pipeline_num,
+                              int64_t pipeline_position) = 0;
 
     /**
      * @brief Execute common finalization logic and call operator FinalizeSink.
      *
      */
-    void FinalizeSinkCommon(long pipeline_num, long pipeline_position) {
+    void FinalizeSinkCommon(int64_t pipeline_num, int64_t pipeline_position) {
 #ifdef USE_CUDF
         gpu_to_cpu_exchange.Finalize();
 #endif
@@ -347,7 +350,8 @@ class PhysicalProcessBatch : public PhysicalOperator {
      * FinalizeProcessBatch.
      *
      */
-    void FinalizeProcessBatchCommon(long pipeline_num, long pipeline_position) {
+    void FinalizeProcessBatchCommon(int64_t pipeline_num,
+                                    int64_t pipeline_position) {
 #ifdef USE_CUDF
         gpu_to_cpu_exchange.Finalize();
 #endif
@@ -388,7 +392,8 @@ class PhysicalGPUSource : public PhysicalOperator {
     // Constructor is always required for initialization
     // We should have a separate Finalize step that can throw an exception
     // as well as the destructor for cleanup
-    virtual void FinalizeSource(long pipeline_num, long pipeline_position) = 0;
+    virtual void FinalizeSource(int64_t pipeline_num,
+                                int64_t pipeline_position) = 0;
 
     /**
      * @brief Replace numpy array types with nullable int bool type in the
@@ -452,13 +457,14 @@ class PhysicalGPUSink : public PhysicalOperator {
     virtual std::variant<std::shared_ptr<table_info>, PyObject *>
     GetResult() = 0;
 
-    virtual void FinalizeSink(long pipeline_num, long pipeline_position) = 0;
+    virtual void FinalizeSink(int64_t pipeline_num,
+                              int64_t pipeline_position) = 0;
 
     /**
      * @brief Execute common finalization logic and call operator FinalizeSink.
      *
      */
-    void FinalizeSinkCommon(long pipeline_num, long pipeline_position) {
+    void FinalizeSinkCommon(int64_t pipeline_num, int64_t pipeline_position) {
 #ifdef USE_CUDF
         cpu_to_gpu_exchange.Finalize();
 #endif
@@ -502,7 +508,8 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
      * FinalizeProcessBatch.
      *
      */
-    void FinalizeProcessBatchCommon(long pipeline_num, long pipeline_position) {
+    void FinalizeProcessBatchCommon(int64_t pipeline_num,
+                                    int64_t pipeline_position) {
 #ifdef USE_CUDF
         cpu_to_gpu_exchange.Finalize();
 #endif

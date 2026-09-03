@@ -239,12 +239,14 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalAggregate() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         build_pipeline_num = pipeline_num;
         build_pipeline_position = pipeline_position;
     }
 
-    void FinalizeSource(long pipeline_num, long pipeline_position) override {
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
         QueryProfileCollector::Default().SubmitOperatorStageTime(
@@ -318,7 +320,7 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     std::string ToString() override { return PhysicalSink::ToString(); }
 
-    int64_t getOpId() const { return PhysicalSink::getOpId(); }
+    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
 
    private:
     /**
@@ -425,7 +427,8 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalCountStar() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         int result =
             MPI_Allreduce(&local_count, &global_count, 1,
                           MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
@@ -435,7 +438,8 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
         }
     }
 
-    void FinalizeSource(long pipeline_num, long pipeline_position) override {}
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {}
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {

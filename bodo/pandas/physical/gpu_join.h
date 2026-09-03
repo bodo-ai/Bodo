@@ -357,7 +357,8 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
 
     virtual ~PhysicalGPUJoin() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         time_pt start_consume = start_timer();
         cuda_join->FinalizeBuild();
         this->metrics.consume_time += end_timer(start_consume);

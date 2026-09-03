@@ -24,7 +24,8 @@ class PhysicalCTE : public PhysicalSink {
 
     virtual ~PhysicalCTE() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {}
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {}
 
     /**
      * @brief process input tables to build side of join (populate the hash
@@ -54,7 +55,7 @@ class PhysicalCTE : public PhysicalSink {
 
     std::string ToString() override { return PhysicalSink::ToString(); }
 
-    int64_t getOpId() const { return PhysicalSink::getOpId(); }
+    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
 
    private:
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
@@ -98,9 +99,10 @@ class PhysicalCTERef : public PhysicalSource {
 
     std::string ToString() override { return PhysicalSource::ToString(); }
 
-    int64_t getOpId() const { return PhysicalSource::getOpId(); }
+    int64_t getOpId() const override { return PhysicalSource::getOpId(); }
 
-    void FinalizeSource(long pipeline_num, long pipeline_position) override {}
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {}
 
    private:
     std::shared_ptr<PhysicalCTE> cte;

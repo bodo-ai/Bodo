@@ -154,7 +154,8 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalReduce() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         for (auto& reduction_function : reduction_functions) {
             reduction_function->Finalize();
         }
@@ -162,7 +163,8 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         build_pipeline_position = pipeline_position;
     }
 
-    void FinalizeSource(long pipeline_num, long pipeline_position) override {
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(

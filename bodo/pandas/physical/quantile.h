@@ -68,7 +68,8 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
     virtual ~PhysicalQuantile() = default;
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         if (collected) {
             return;
         }
@@ -157,7 +158,8 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
         PhysicalSink::addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
-    void FinalizeSource(long pipeline_num, long pipeline_position) override {}
+    void FinalizeSource(int64_t pipeline_num,
+                        int64_t pipeline_position) override {}
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         throw std::runtime_error("GetResult called on a quantile node.");
