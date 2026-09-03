@@ -202,6 +202,10 @@ def create_queries(queries, scale_factor, use_parquet, sql_dir="../sql"):
         # Calculate those f-string expressions if present.
         sql_text = eval(sql_text)
 
+        debug_text = ""
+        if os.environ.get("BODOSQL_TESTING_DEBUG", False):
+            debug_text = "    print(bc.generate_plan(tpch_query, None, None))\n"
+
         # Build the function source string
         func_src = (
             f"""
@@ -210,11 +214,10 @@ def {func_name}(tpch_data):
             + "'''\\\n"
             + sql_text
             + "\\\n'''\n"
-            + f"    bc = BodoSQLContext({data_param}, default_tz=None)"
-            + """
-    bodosql_output = bc.sql(tpch_query, None, None, {})
-    return bodosql_output
-"""
+            + f"    bc = BodoSQLContext({data_param}, default_tz=None)\n"
+            + "    bodosql_output = bc.sql(tpch_query, None, None, {})\n"
+            + debug_text
+            + "    return bodosql_output\n"
         )
 
         # Execute into provided globals (or module globals)
