@@ -3445,6 +3445,17 @@ def round_half_always_up(x, places):
     Returns:
         integer/float: x rounded to the specified number of places (same type as x)
     """
+
+    if isinstance(x, bodo.types.Decimal128Type):
+        # Importing bodosql is ok since round_half_always_up with decimal is only used
+        # in bodosql kernels.
+        import bodosql
+
+        def impl(x, places):  # pragma: no cover
+            return bodosql.kernels.numeric_array_kernels.round_decimal(x, places)
+
+        return impl
+
     func_text = "def impl(x, places):\n"
     func_text += "  sign = -1 if x < 0 else 1\n"
     func_text += "  x = abs(x)\n"

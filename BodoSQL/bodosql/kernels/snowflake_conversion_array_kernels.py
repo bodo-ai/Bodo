@@ -2283,7 +2283,12 @@ def to_number_util_overload(
             # Otherwise, we need to round it
             scalar_text += f"  res[i] = np.{cast_str}(round_half_always_up(arg0, 0))\n"
     else:
-        scalar_text += f"  res[i] = np.float64(round_half_always_up(arg0, {scale}))\n"
+        cast_func = (
+            "bodo.libs.decimal_arr_ext.decimal_to_float64"
+            if isinstance(expr, bodo.types.DecimalArrayType)
+            else "np.float64"
+        )
+        scalar_text += f"  res[i] = {cast_func}(round_half_always_up(arg0, {scale}))\n"
 
     use_dict_caching = not is_overload_none(dict_encoding_state)
     return gen_vectorized(
