@@ -17,6 +17,9 @@ def main(argv: list[str]):  # pragma: no cover
     parser = argparse.ArgumentParser()
     parser.add_argument("dir", type=Path)
     parser.add_argument("--print", dest="print", default=False, action="store_true")
+    parser.add_argument(
+        "--write-all-data", dest="write_all_data", default=False, action="store_true"
+    )
     args = parser.parse_args(argv[1:])
     assert args.dir.is_dir(), f"'{args.dir}' is not a directory."
 
@@ -28,7 +31,7 @@ def main(argv: list[str]):  # pragma: no cover
             data = json.load(f)
         logs.append(data)
 
-    aggregated = json.dumps(aggregate(logs), indent=4)
+    aggregated = json.dumps(aggregate(logs, args.write_all_data), indent=4)
     if args.print:
         print(aggregated)
     with open(args.dir / "aggregated.json", "w") as f:
