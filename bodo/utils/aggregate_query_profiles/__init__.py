@@ -280,7 +280,7 @@ def aggregate_helper(
 
 
 def aggregate(
-    profiles: list[dict[str, Any]], write_all_data: bool = False
+    profiles: list[dict[str, Any]], write_all_data: bool = True
 ) -> dict[str, Any]:
     """Given a set of query profiles from different ranks, aggregate them into a
     single profile, summarizing the data as necessary"""
