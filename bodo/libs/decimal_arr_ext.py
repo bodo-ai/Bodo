@@ -3188,6 +3188,17 @@ def _abs_decimal_scalar(typingctx, arr_t):
     return (output_decimal_type(arr_t), codegen)
 
 
+@overload(abs, no_unliteral=True)
+def overload_abs_decimal(value):
+    if not isinstance(value, Decimal128Type):
+        return
+
+    def impl(value):
+        return _abs_decimal_scalar(value)
+
+    return impl
+
+
 class DecimalArrayType(types.ArrayCompatible):
     def __init__(self, precision, scale):
         self.precision = precision
