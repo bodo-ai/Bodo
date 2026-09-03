@@ -41,7 +41,8 @@ class PhysicalWriteS3Vectors : public PhysicalSink {
                        : OperatorResult::NEED_MORE_INPUT;
     }
 
-    void FinalizeSink(long pipeline_num, long pipeline_position) override {
+    void FinalizeSink(int64_t pipeline_num,
+                      int64_t pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
                                                             ToString());
