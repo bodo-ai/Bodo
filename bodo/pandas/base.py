@@ -340,6 +340,7 @@ def read_iceberg(
             arrow_schema.get_field_index(field_name) for field_name in selected_fields
         ]
         empty_df = empty_df[list(selected_fields)]
+        arrow_schema = pa.schema([arrow_schema.field(i) for i in col_idxs])
     else:
         # Adds logical projection layer to enable rename.
         col_idxs = range(len(empty_df.columns))
@@ -350,6 +351,9 @@ def read_iceberg(
         plan,
         exprs,
     )
+    # Set arrow_schema explicitly to preserve field nullability
+    # Important for read-write codes to maintain nullability in the output table
+    plan.pa_schema = arrow_schema
 
     if limit is not None:
         plan = LogicalLimit(
@@ -357,6 +361,7 @@ def read_iceberg(
             plan,
             limit,
         )
+        plan.pa_schema = arrow_schema
 
     return wrap_plan(plan=plan)
 

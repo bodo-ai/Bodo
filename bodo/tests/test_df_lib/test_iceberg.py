@@ -172,6 +172,10 @@ def test_table_read_selected_fields(
         },
         selected_fields=("A", "C"),
     )
+    # Make sure nullablity is preserved during read
+    assert not bodo_out._plan.pa_schema.field("A").nullable, (
+        "Field 'A' should not be nullable"
+    )
 
     _test_equal(
         bodo_out,
@@ -254,6 +258,20 @@ def test_table_read_row_filter(
             pyiceberg.catalog.WAREHOUSE_LOCATION: warehouse_loc,
         },
         row_filter=filter_expr,
+    )
+
+    # Make sure nullablity is preserved during read
+    assert not bodo_out._plan.pa_schema.field("A").nullable, (
+        "Field 'A' should not be nullable"
+    )
+    assert not bodo_out._plan.pa_schema.field("B").nullable, (
+        "Field 'B' should not be nullable"
+    )
+    assert not bodo_out._plan.pa_schema.field("C").nullable, (
+        "Field 'C' should not be nullable"
+    )
+    assert not bodo_out._plan.pa_schema.field("D").nullable, (
+        "Field 'D' should not be nullable"
     )
 
     _test_equal(
