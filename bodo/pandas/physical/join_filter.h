@@ -152,12 +152,12 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
                 [&](const auto& join_state) {
                     if constexpr (std::is_same_v<
                                       std::decay_t<decltype(join_state)>,
-                                      JoinState*>) {
+                                      std::shared_ptr<JoinState>>) {
                         if (join_state->IsNestedLoopJoin()) {
                             return;
                         }
                         HashJoinState* hash_join_state =
-                            (HashJoinState*)join_state;
+                            (HashJoinState*)join_state.get();
 
                         applied_any_filter = applied_any_filter ||
                                              hash_join_state->RuntimeFilter(

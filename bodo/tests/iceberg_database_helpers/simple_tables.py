@@ -175,7 +175,7 @@ BASE_MAP: dict[str, tuple[dict, list]] = {
             ),
         },
         [
-            ("A", "string", True),
+            ("A", "string", False),
             ("B", "string", True),
             ("C", "string", True),
             ("D", "string", True),
