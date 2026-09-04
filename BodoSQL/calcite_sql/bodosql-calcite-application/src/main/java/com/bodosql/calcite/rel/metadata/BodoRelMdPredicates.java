@@ -85,9 +85,11 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
 
   public RelOptPredicateList getPredicates(RelSubset r, RelMetadataQuery mq) {
     if (!Bug.CALCITE_1048_FIXED) {
-      // Bodo Change: Keep Calcite <1.39 behavior of returning an empty list
-      // to prevent regressions in planner tests.
-      // TODO(BSE-5568) Return non-empty predicates list.
+      if (Boolean.parseBoolean(System.getenv().getOrDefault("BODOSQL_PREDICATE_PULLUP", "true"))) {
+        // System.out.println("Getting pulled up MD");
+        return mq.getPulledUpPredicates(r.stripped());
+      }
+      // System.out.println("Getting empty MD");
       return RelOptPredicateList.EMPTY;
     }
     final RexBuilder rexBuilder = r.getCluster().getRexBuilder();
