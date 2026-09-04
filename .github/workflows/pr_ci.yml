@@ -246,12 +246,16 @@ jobs:
     name: Mac ARM Build
     needs: [validate, get_version]
     if: needs.validate.outputs.cpp == 'true'
-    uses: ./.github/workflows/_build_bodo_pip.yml
-    with:
-      os: macos-latest
-      name: macos-arm
-      bodo_version: ${{ needs.get_version.outputs.bodo_version }}
-      python_version: '3.14'
+    runs-on: macos-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build from Source
+        uses: ./.github/actions/build-source
+        with:
+          build-all: false
 
   # 5) Collect and combine any results from runs
   collect-results:
