@@ -443,6 +443,21 @@ public class RexUtil {
     if (!isConstant(right)) {
       return;
     }
+    /** Bodo Change:
+     * Avoid literal-to-literal entries in the constant map.
+     *
+     * predicateConstants considers equalicty constraints in both directions.
+     * For equivalent literals with different Rex representations, this can
+     * create cyclic mappings such as A -> B and B -> A.
+     *
+     * ReduceExpressionsRule may then alternate between the two representations.
+     * Because the rule prunes the expression it replaces, this can leave a
+     * Volcano subset without a usable expression and cause a
+     * CannotPlanException.
+     */
+    if (left instanceof RexLiteral) {
+      return;
+    }
     C constant = clazz.cast(right);
     if (excludeSet.contains(left)) {
       return;

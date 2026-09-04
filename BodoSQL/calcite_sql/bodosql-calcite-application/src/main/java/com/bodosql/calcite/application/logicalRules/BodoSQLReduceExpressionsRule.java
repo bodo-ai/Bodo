@@ -17,8 +17,6 @@ package com.bodosql.calcite.application.logicalRules;
  * limitations under the License.
  */
 
-import static com.bodosql.calcite.application.logicalRules.FilterRulesCommon.rexNodeContainsCase;
-
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.application.utils.RexNormalizer;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
@@ -115,10 +113,6 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
     @Override
     public void onMatch(RelOptRuleCall call) {
       final Filter filter = call.rel(0);
-      // Bodo Change: Do not reduce filters that contain Case statements.
-      if (rexNodeContainsCase(filter.getCondition())) {
-        return;
-      }
       final List<RexNode> expList = Lists.newArrayList(filter.getCondition());
       RexNode newConditionExp;
       boolean reduced;
