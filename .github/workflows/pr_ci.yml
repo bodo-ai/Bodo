@@ -244,7 +244,7 @@ jobs:
 
   mac-arm-build:
     name: Mac ARM Build
-    needs: [validate, get_version]
+    needs: [validate]
     if: needs.validate.outputs.cpp == 'true'
     runs-on: macos-latest
     permissions:
