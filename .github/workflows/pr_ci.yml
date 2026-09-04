@@ -48,6 +48,7 @@ jobs:
       run_gpu: ${{ contains(github.event.pull_request.title, '[GPU]') || github.event_name == 'workflow_dispatch' }}
       run_bodosql_customer_tests: ${{ steps.changes.outputs.bodosql_customer_tests || github.event_name == 'workflow_dispatch' }}
       not_docs: ${{ steps.changes.outputs.not_docs }}
+      cpp: ${{ steps.changes.outputs.cpp }}
       skip_flag: ${{ contains(steps.check_msg.outputs.commit_message, '[skip]') }}
 
     steps:
@@ -65,6 +66,11 @@ jobs:
               - 'BodoSQL/calcite_sql/**'
             not_docs:
               - '!docs/**'
+            cpp:
+              - '**/*.cpp'
+              - '**/*.hpp'
+              - '**/*.c'
+              - '**/*.h'
 
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v5
@@ -236,7 +242,16 @@ jobs:
       needs.validate.outputs.run_bodosql_customer_tests == 'true'
     uses: ./.github/workflows/_test_java_source.yml
 
-
+  mac-arm-build:
+    name: Mac ARM Build
+    needs: [validate, get_version]
+    if: needs.validate.outputs.cpp == 'true'
+    uses: ./.github/workflows/_build_bodo_pip.yml
+    with:
+      os: macos-latest
+      name: macos-arm
+      bodo_version: ${{ needs.get_version.outputs.bodo_version }}
+      python_version: '3.14'
 
   # 5) Collect and combine any results from runs
   collect-results:
@@ -328,5 +343,11 @@ jobs:
         if: ${{ (needs.validate.outputs.not_docs == 'true') && (needs.validate.outputs.skip_flag != 'true') }}
         uses: re-actors/alls-green@release/v1
         with:
-          allowed-skips: ${{ needs.validate.outputs.run_gpu != 'true' && 'gpu-ci' || '' }}
+          allowed-skips: >-
+            ${{ 
+              (needs.validate.outputs.run_gpu != 'true' && needs.validate.outputs.cpp != 'true' && 'gpu-ci,mac-arm-build') ||
+              (needs.validate.outputs.run_gpu != 'true' && 'gpu-ci') ||
+              (needs.validate.outputs.cpp != 'true' && 'mac-arm-build') ||
+              ''
+            }}
           jobs: ${{ toJSON(needs) }}
