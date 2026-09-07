@@ -19,10 +19,10 @@ Returns the first *n* rows of the BodoSeries.
 import bodo.pandas as bd
 
 bdf = bd.DataFrame(
-        {
-            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
-        }
-    )
+    {
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
+    }
+)
 
 bodo_ser_head = bdf.A.head(3)
 print(type(bodo_ser_head))

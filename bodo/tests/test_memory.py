@@ -268,19 +268,21 @@ def test_default_memory_options(tmp_path: Path):
 
     # Verify that it raises an error when spill-on-unpin is set but
     # no spilling locations are provided.
-    with temp_env_override(
-        {
-            "BODO_BUFFER_POOL_SPILL_ON_UNPIN": "1",
-            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": None,
-            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": None,
-            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": None,
-        }
-    ):
-        with pytest.raises(
+    with (
+        temp_env_override(
+            {
+                "BODO_BUFFER_POOL_SPILL_ON_UNPIN": "1",
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": None,
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": None,
+                "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": None,
+            }
+        ),
+        pytest.raises(
             RuntimeError,
             match="Must specify at least one storage location when setting spill_on_unpin",
-        ):
-            options = BufferPoolOptions.defaults()
+        ),
+    ):
+        options = BufferPoolOptions.defaults()
 
     # Verify that setting spill-on-unpin works as expected.
     with temp_env_override(
@@ -3187,13 +3189,13 @@ def test_buffer_pool_eq():
     # Test with "not" of inverse everywhere to ensure
     # that both eq and ne are working correctly.
     assert default_pool1 == default_pool2
-    assert not (default_pool1 != default_pool2)
+    assert default_pool1 == default_pool2
     assert pool1 == pool3
-    assert not (pool1 != pool3)
+    assert pool1 == pool3
     assert pool1 != pool2
-    assert not (pool1 == pool2)
+    assert pool1 != pool2
     assert default_pool1 != pool1
-    assert not (default_pool1 == pool1)
+    assert default_pool1 != pool1
 
     del pool1
     del pool2
@@ -5463,7 +5465,7 @@ def test_array_unpinned():
     """
     from numba.core import types
 
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.array import array_info_type
     from bodo.utils.typing import BodoWarning
 

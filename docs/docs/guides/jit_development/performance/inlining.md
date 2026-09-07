@@ -47,6 +47,7 @@ of the same JIT compilation. If we have the following:
 def read_data(fname):
     return pd.read_parquet(fname)
 
+
 @bodo.jit
 def query():
     df = read_data("data.pq")
@@ -67,6 +68,7 @@ For example:
 @bodo.jit(inline="always")
 def read_data(fname):
     return pd.read_parquet(fname)
+
 
 @bodo.jit
 def query():

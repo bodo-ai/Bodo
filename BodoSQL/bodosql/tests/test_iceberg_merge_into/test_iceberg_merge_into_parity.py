@@ -43,11 +43,9 @@ def _create_and_init_table(table_name, types, df, source=None):
 
     return bodosql.BodoSQLContext(
         {
-            **{
-                table_name: bodosql.TablePath(
-                    table_name, "sql", conn_str=conn, db_schema=db_schema
-                )
-            },
+            table_name: bodosql.TablePath(
+                table_name, "sql", conn_str=conn, db_schema=db_schema
+            ),
             **({"SOURCE": source} if source is not None else {}),
         }
     )

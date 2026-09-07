@@ -188,7 +188,7 @@ def test_series_fillna_series_val(series_val):
 
 def test_string_series_fillna_inplace():
     """tests fillna on string series with inplace = True"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -252,7 +252,7 @@ def test_binary_series_fillna_inplace():
 
 def test_str_binary_series_fillna_inplace_mismatch():
     """test that fillna doesn't accept mismatched sizes"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -1340,7 +1340,7 @@ def test_series_loc_getitem_int_range(memory_leak_check):
 @pytest.mark.slow
 def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     """Tests that setitem with Series.loc works with a Boolean List index"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
     from bodo.utils.typing import BodoError
 
     if bodo.hiframes.boxing._use_dict_str_type:
@@ -1524,7 +1524,7 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc and Series with bool arr/list idx.
     """
-    import bodo.decorators  # noqa
+    import bodo.decorators
     from bodo.utils.typing import BodoError
 
     if series_val.dtype in (np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")):
@@ -2113,7 +2113,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
 
 def test_series_loc_setitem_bool(memory_leak_check):
     """test Series.loc[bool_arr] setitem"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -2292,7 +2292,7 @@ def test_series_explicit_binary_op_nullable_int_bool(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_binary_op(memory_leak_check):
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
         op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
@@ -2310,7 +2310,7 @@ def test_series_binary_op(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_inplace_binary_op(memory_leak_check):
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     for op in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
         op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]

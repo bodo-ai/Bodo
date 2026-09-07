@@ -80,14 +80,11 @@ def main(
         file_permission = "a" if append or not is_first_batch else "w"
         # Write the results
         with open(tables_file, file_permission) as f:
-            for table in used_tables:
-                f.write(f"{table}\n")
+            f.writelines(f"{table}\n" for table in used_tables)
         with open(success_file, file_permission) as f:
-            for success in successful_files:
-                f.write(f"{success}\n")
+            f.writelines(f"{success}\n" for success in successful_files)
         with open(fail_file, file_permission) as f:
-            for fail in failed_files:
-                f.write(f"{fail}\n")
+            f.writelines(f"{fail}\n" for fail in failed_files)
         print(f"Finished processing queries at offset {i}")
         is_first_batch = False
 

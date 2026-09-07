@@ -645,7 +645,7 @@ def test_re_syntax(case, memory_leak_check):
     # Test flags
     import re
 
-    flag = re.M.value
+    flag = re.MULTILINE.value
 
     def test_impl15(S):
         return S.str.contains(r"foo*", regex=True, case=case, flags=flag)
@@ -1339,7 +1339,7 @@ def test_split_non_ascii(memory_leak_check):
 def test_setitem_unichar_arr(memory_leak_check):
     """test Series setitem when the string array comes from Numpy
     UnicodeSeq Arrays"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -1581,7 +1581,7 @@ def test_casefold(S, memory_leak_check):
     [
         pytest.param("ab|abcdef", id="ab_or"),
         pytest.param("ab.*", id="ab_kleene"),
-        pytest.param("[a-b | \d]+", id="letters_numbers"),
+        pytest.param(r"[a-b | \d]+", id="letters_numbers"),
         pytest.param("🏈.+", id="emoji"),
         pytest.param(".*구림", id="korean"),
     ],

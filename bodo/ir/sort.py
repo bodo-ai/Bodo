@@ -119,10 +119,7 @@ class Sort(ir.Stmt):
                 self.na_position_b = (False,) * len(key_inds)
         else:
             self.na_position_b = tuple(
-                [
-                    True if col_na_position == "last" else False
-                    for col_na_position in na_position
-                ]
+                [col_na_position == "last" for col_na_position in na_position]
             )
 
         # normalize ascending to list of bools (per key)

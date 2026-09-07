@@ -94,6 +94,7 @@ df = bd.DataFrame(
     }
 )
 
+
 def train_loop(data, config):
     import torch
     import torch.distributed.checkpoint
@@ -143,6 +144,7 @@ def train_loop(data, config):
             checkpoint_id=config["checkpoint_dir"],
         )
     print(f"Epoch {epoch}, Loss: {loss.item()}")
+
 
 bodo.ai.train.torch_train(
     train_loop,

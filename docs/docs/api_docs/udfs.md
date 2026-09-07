@@ -19,19 +19,23 @@ current month.
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def jit_udf(x):
     return x + pd.tseries.offsets.MonthEnd(n=0, normalize=True)
+
 
 @bodo.jit
 def jit_example(S):
     return S.map(jit_udf)
 
+
 @bodo.jit
 def lambda_example(S):
     return S.map(lambda x: x + pd.tseries.offsets.MonthEnd(n=0, normalize=True))
 
-S = pd.Series(pd.date_range(start='1/1/2021', periods=100))
+
+S = pd.Series(pd.date_range(start="1/1/2021", periods=100))
 pd.testing.assert_series_equal(jit_example(S), lambda_example(S))
 ```
 
@@ -83,9 +87,11 @@ to use the `args` argument to `Series.apply()`.
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def add_suffix(S, suffix):
     return S.apply(lambda x, suf: x + suf, args=(suffix,))
+
 
 S = pd.Series(["abc", "edf", "32", "Vew3", "er3r2"] * 10)
 suffix = "_"
@@ -115,9 +121,11 @@ the method name as a string.
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def ex(S):
     return S.apply("nunique")
+
 
 S = pd.Series(list(np.arange(100) + list(np.arange(100))))
 ex(S)
@@ -131,12 +139,15 @@ import numpy as np
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def ex_str(S):
     return S.apply("sin")
 
+
 def ex_func(S):
     return S.apply(np.sin)
+
 
 S = pd.Series(list(np.arange(100) + list(np.arange(100))))
 pd.testing.assert_series_equal(ex_str(S), ex_func(S))
@@ -179,9 +190,11 @@ Here is an example using`Series.apply` to return a DataFrame.
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def series_ex(S):
     return S.apply(lambda x: pd.Series((1, x)))
+
 
 S = pd.Series(list(np.arange(100) + list(np.arange(100))))
 series_ex(S)
@@ -200,18 +213,15 @@ Starting in Pandas 3.0, users will be able to pass a Bodo jit decorator as the `
 import pandas as pd
 import bodo
 
+
 def update_score(S, answer, num_points):
     if S.guess == answer:
         return S.score + num_points
     else:
         return S.score
 
-df = pd.DataFrame(
-    {
-        "guess": ["A", "B", "C", "D", "A"],
-        "score": [0, 3, 4, 2, 1]
-    }
-)
+
+df = pd.DataFrame({"guess": ["A", "B", "C", "D", "A"], "score": [0, 3, 4, 2, 1]})
 
 df["updated_score"] = df.apply(update_score, axis=1, args=("A", 3), engine=bodo.jit)
 ```
@@ -221,22 +231,20 @@ Note that the same restrictions related to type stability discussed in the previ
 import pandas as pd
 import bodo
 
+
 def update_score(S, answer, num_points):
     if S.guess == answer:
         return S.score + num_points
     else:
         return S.score
 
+
 @bodo.jit
 def apply_update_scores(df, answer, num_points):
     return df.apply(update_score, axis=1, args=(answer, num_points))
 
-df = pd.DataFrame(
-    {
-        "guess": ["A", "B", "C", "D", "A"],
-        "score": [0, 3, 4, 2, 1]
-    }
-)
+
+df = pd.DataFrame({"guess": ["A", "B", "C", "D", "A"], "score": [0, 3, 4, 2, 1]})
 
 df["updated_score"] = apply_update_scores(df, "A", 3)
 ```

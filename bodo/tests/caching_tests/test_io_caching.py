@@ -4,7 +4,7 @@ import pytest
 from caching_tests_common import fn_distribution  # noqa
 
 import bodo
-import bodo.decorators  # noqa
+import bodo.decorators
 from bodo.spawn.utils import run_rank0
 from bodo.tests.utils import (
     check_caching,

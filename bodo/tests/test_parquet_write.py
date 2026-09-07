@@ -41,7 +41,7 @@ def check_write_func(
     check_index: list[str] | None = None,
     pandas_fn=None,
 ):
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.spawn.utils import run_rank0
 
     DISTRIBUTIONS = {
@@ -349,9 +349,9 @@ def gen_dataframe(num_elements, write_index):
             ]
             df[col_name] = pd.array(data, pd.ArrowDtype(pa.large_binary()))
         elif dtype == "bool":
-            data = [True if x % 2 == 0 else False for x in range(num_elements)]
+            data = [x % 2 == 0 for x in range(num_elements)]
             df[col_name] = np.array(data, dtype="bool")
-        elif dtype.startswith("Int") or dtype.startswith("UInt"):
+        elif dtype.startswith(("Int", "UInt")):
             # missing values every 5 elements
             data = [x if x % 5 != 0 else np.nan for x in range(num_elements)]
             df[col_name] = pd.Series(data, dtype=dtype)

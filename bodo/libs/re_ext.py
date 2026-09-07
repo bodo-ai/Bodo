@@ -299,7 +299,6 @@ def overload_re_purge():
     def _re_purge_impl():  # pragma: no cover
         with numba.objmode():
             re.purge()
-        return
 
     return _re_purge_impl
 

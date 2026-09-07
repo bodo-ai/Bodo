@@ -305,10 +305,10 @@ from bodo.tests.utils import check_func, no_default
                         Decimal("0.0"),
                         Decimal("-0.222"),
                         Decimal("1111.316"),
-                        Decimal("1"),
+                        Decimal(1),
                         Decimal("5.1"),
-                        Decimal("-1"),
-                        Decimal("-1"),
+                        Decimal(-1),
+                        Decimal(-1),
                     ]
                 ),
             ),
@@ -583,10 +583,10 @@ def test_cbrt(num_arr):
                 Decimal("0.0"),
                 Decimal("-0.222"),
                 Decimal("1111.316"),
-                Decimal("1"),
+                Decimal(1),
                 Decimal("5.1"),
-                Decimal("-1"),
-                Decimal("-1"),
+                Decimal(-1),
+                Decimal(-1),
             ]
         ),
         pd.array(
@@ -1095,8 +1095,7 @@ def test_np_select(arr_tuple_val, memory_leak_check):
         pytest.skip("need support for np.where with datetime date types see BE-1494")
 
     minsize = arr_tuple_val[0].size
-    if minsize > arr_tuple_val[1].size:
-        minsize = arr_tuple_val[1].size
+    minsize = min(minsize, arr_tuple_val[1].size)
 
     cond1 = np.random.randint(2, size=minsize).astype(bool)
     cond2 = np.random.randint(2, size=minsize).astype(bool)
@@ -1158,8 +1157,7 @@ def test_np_select_nullable(arr_tuple_val, memory_leak_check):
         pytest.skip("need support for np.where with datetime date types see BE-1494")
 
     minsize = arr_tuple_val[0].size
-    if minsize > arr_tuple_val[1].size:
-        minsize = arr_tuple_val[1].size
+    minsize = min(minsize, arr_tuple_val[1].size)
 
     cond1 = np.random.randint(2, size=minsize).astype(bool)
     cond2 = np.random.randint(2, size=minsize).astype(bool)
@@ -1226,8 +1224,7 @@ def test_np_where_impl(arr_tuple_val, memory_leak_check):
         pytest.skip("need support for np.where with datetime date types see BE-1494")
 
     minsize = arr_tuple_val[0].size
-    if minsize > arr_tuple_val[1].size:
-        minsize = arr_tuple_val[1].size
+    minsize = min(minsize, arr_tuple_val[1].size)
 
     cond = np.random.randint(2, size=minsize).astype(bool)
 
@@ -1244,8 +1241,7 @@ def test_np_where_impl_nullable(arr_tuple_val, memory_leak_check):
         pytest.skip("need support for np.where with datetime date types see BE-1494")
 
     minsize = arr_tuple_val[0].size
-    if minsize > arr_tuple_val[1].size:
-        minsize = arr_tuple_val[1].size
+    minsize = min(minsize, arr_tuple_val[1].size)
 
     cond = np.random.randint(2, size=minsize).astype(bool)
 
@@ -1280,8 +1276,7 @@ def test_np_select_none_default(arr_tuple_val, memory_leak_check):
         pytest.skip("need support for np.where with datetime date types see BE-1494")
 
     minsize = arr_tuple_val[0].size
-    if minsize > arr_tuple_val[1].size:
-        minsize = arr_tuple_val[1].size
+    minsize = min(minsize, arr_tuple_val[1].size)
 
     cond1 = np.random.randint(2, size=minsize).astype(bool)
     cond2 = np.random.randint(2, size=minsize).astype(bool)
@@ -1324,8 +1319,7 @@ def test_np_select_set_default(arr_tuple_val, memory_leak_check):
         pytest.skip("need support for np.where with datetime date types see BE-1494")
 
     minsize = arr_tuple_val[0].size
-    if minsize > arr_tuple_val[1].size:
-        minsize = arr_tuple_val[1].size
+    minsize = min(minsize, arr_tuple_val[1].size)
 
     cond1 = np.random.randint(2, size=minsize).astype(bool)
     cond2 = np.random.randint(2, size=minsize).astype(bool)

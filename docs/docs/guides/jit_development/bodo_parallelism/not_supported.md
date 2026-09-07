@@ -28,6 +28,7 @@ def f(a):
 
     return df.mean()
 
+
 print(f([2, 3]))
 # TypeError: Cannot unify dataframe((array(int64, 1d, C),), RangeIndexType(none), ('A',), False)
 # and dataframe((array(int64, 1d, C), array(int64, 1d, C)), RangeIndexType(none), ('A', 'C'), False) for 'df'
@@ -45,12 +46,14 @@ def f1():
     df = pd.DataFrame({"A": [1, 2, 3]})
     return df.mean()
 
+
 @bodo.jit
 def f2():
     df = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"A": [1, 3, 4], "C": [-1, -2, -3]})
     df = df.merge(df2)
     return df.mean()
+
 
 a = [2, 3]
 if len(a) > 3:
@@ -74,6 +77,7 @@ def f(a, i):
     df = pd.DataFrame({"A": [1, 2, 1], "B": [4, 5, 6]})
     return df.groupby(column_list).sum()
 
+
 a = ["A", "B"]
 i = 1
 f(a, i)
@@ -88,6 +92,7 @@ the result is passed as a function argument:
 def f(column_list):
     df = pd.DataFrame({"A": [1, 2, 1], "B": [4, 5, 6]})
     return df.groupby(column_list).sum()
+
 
 a = ["A", "B"]
 i = 1
@@ -120,6 +125,7 @@ def f(df):
         s += df[c].sum()
     return s
 
+
 f(pd.DataFrame({"A": [1, 2, 1], "B": [4, 5, 6]}))
 # BodoError: df[] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/programming_with_bodo/require_constants.html
 ```
@@ -130,7 +136,6 @@ The example below is not type stable since variable `a` can be both a
 float and an array of floats:
 
 ```py
-
 if flag:
     a = 1.0
 else:
@@ -167,6 +172,8 @@ In these cases, Bodo assumes the value is not NA and returns an
 @bodo.jit
 def f(S, i):
     return S.iloc[i]  # not type stable
+
+
 S = pd.Series(["A", None, "CC"])
 f(S, 1)  # returns ""
 ```
@@ -180,6 +187,8 @@ def f(S, i):
     if pd.isna(S.iloc[i]):
         return "NA"
     return S.iloc[i]
+
+
 S = pd.Series(["A", None, "CC"])
 f(S, 1)  # returns "NA"
 ```

@@ -27,9 +27,7 @@ each worker will call *func* on their entire local chunk of the input Series.
 ``` py
 import bodo.pandas as bd
 
-bs = bd.Series(
-    range(15)
-   )
+bs = bd.Series(range(15))
 
 bs_mapped = bs.map_partitions(lambda ser: ser + 15)
 print(bs_mapped)

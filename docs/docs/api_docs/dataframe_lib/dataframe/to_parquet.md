@@ -1,6 +1,15 @@
 # bodo.pandas.BodoDataFrame.to\_parquet
 ``` py
-BodoDataFrame.to_parquet(path=None, engine="auto", compression="snappy", index=None, partition_cols=None, storage_options=None, row_group_size=-1, **kwargs)
+BodoDataFrame.to_parquet(
+    path=None,
+    engine="auto",
+    compression="snappy",
+    index=None,
+    partition_cols=None,
+    storage_options=None,
+    row_group_size=-1,
+    **kwargs,
+)
 ```
 **GPU:** ✔ Supported
 

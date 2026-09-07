@@ -685,10 +685,9 @@ class DistributedPass:
                     bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
                 ),
             )
-        ):
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                set_last_arg_to_true(self, assign.value)
-                return [assign]
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
         if (
             func_name == "fit_transform"
             and (
@@ -764,136 +763,127 @@ class DistributedPass:
         if (
             func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "precision_score"
-        ):
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                import sklearn
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            import sklearn
 
-                rhs = assign.value
-                kws = dict(rhs.kws)
-                nodes = []
+            rhs = assign.value
+            kws = dict(rhs.kws)
+            nodes = []
 
-                y_true = get_call_expr_arg(
-                    "sklearn.metrics.precision_score", rhs.args, kws, 0, "y_true"
-                )
-                y_pred = get_call_expr_arg(
-                    "sklearn.metrics.precision_score", rhs.args, kws, 1, "y_pred"
-                )
+            y_true = get_call_expr_arg(
+                "sklearn.metrics.precision_score", rhs.args, kws, 0, "y_true"
+            )
+            y_pred = get_call_expr_arg(
+                "sklearn.metrics.precision_score", rhs.args, kws, 1, "y_pred"
+            )
 
-                # TODO other arguments
-                average_var = ir.Var(
-                    assign.target.scope,
-                    mk_unique_var("precision_score_average"),
-                    rhs.loc,
-                )
-                nodes.append(
-                    ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc)
-                )
-                self.typemap[average_var.name] = types.StringLiteral("binary")
-                # average cannot be specified positionally
-                average = get_call_expr_arg(
-                    "precision_score", rhs.args, kws, 1e6, "average", average_var
-                )
+            # TODO other arguments
+            average_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("precision_score_average"),
+                rhs.loc,
+            )
+            nodes.append(ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc))
+            self.typemap[average_var.name] = types.StringLiteral("binary")
+            # average cannot be specified positionally
+            average = get_call_expr_arg(
+                "precision_score", rhs.args, kws, 1e6, "average", average_var
+            )
 
-                f = eval(
-                    "lambda y_true, y_pred, average: sklearn.metrics.precision_score("
-                    "    y_true, y_pred, average=average, _is_data_distributed=True"
-                    ")"
-                )
-                return nodes + compile_func_single_block(
-                    f,
-                    [y_true, y_pred, average],
-                    assign.target,
-                    self,
-                    extra_globals={"sklearn": sklearn},
-                )
+            f = eval(
+                "lambda y_true, y_pred, average: sklearn.metrics.precision_score("
+                "    y_true, y_pred, average=average, _is_data_distributed=True"
+                ")"
+            )
+            return nodes + compile_func_single_block(
+                f,
+                [y_true, y_pred, average],
+                assign.target,
+                self,
+                extra_globals={"sklearn": sklearn},
+            )
 
         if (
             func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "recall_score"
-        ):
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                import sklearn
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            import sklearn
 
-                rhs = assign.value
-                kws = dict(rhs.kws)
-                nodes = []
+            rhs = assign.value
+            kws = dict(rhs.kws)
+            nodes = []
 
-                y_true = get_call_expr_arg(
-                    "sklearn.metrics.recall_score", rhs.args, kws, 0, "y_true"
-                )
-                y_pred = get_call_expr_arg(
-                    "sklearn.metrics.recall_score", rhs.args, kws, 1, "y_pred"
-                )
+            y_true = get_call_expr_arg(
+                "sklearn.metrics.recall_score", rhs.args, kws, 0, "y_true"
+            )
+            y_pred = get_call_expr_arg(
+                "sklearn.metrics.recall_score", rhs.args, kws, 1, "y_pred"
+            )
 
-                # TODO other arguments
-                average_var = ir.Var(
-                    assign.target.scope, mk_unique_var("recall_score_average"), rhs.loc
-                )
-                nodes.append(
-                    ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc)
-                )
-                self.typemap[average_var.name] = types.StringLiteral("binary")
-                # average cannot be specified positionally
-                average = get_call_expr_arg(
-                    "recall_score", rhs.args, kws, 1e6, "average", average_var
-                )
+            # TODO other arguments
+            average_var = ir.Var(
+                assign.target.scope, mk_unique_var("recall_score_average"), rhs.loc
+            )
+            nodes.append(ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc))
+            self.typemap[average_var.name] = types.StringLiteral("binary")
+            # average cannot be specified positionally
+            average = get_call_expr_arg(
+                "recall_score", rhs.args, kws, 1e6, "average", average_var
+            )
 
-                f = eval(
-                    "lambda y_true, y_pred, average: sklearn.metrics.recall_score("
-                    "    y_true, y_pred, average=average, _is_data_distributed=True"
-                    ")"
-                )
-                return nodes + compile_func_single_block(
-                    f,
-                    [y_true, y_pred, average],
-                    assign.target,
-                    self,
-                    extra_globals={"sklearn": sklearn},
-                )
+            f = eval(
+                "lambda y_true, y_pred, average: sklearn.metrics.recall_score("
+                "    y_true, y_pred, average=average, _is_data_distributed=True"
+                ")"
+            )
+            return nodes + compile_func_single_block(
+                f,
+                [y_true, y_pred, average],
+                assign.target,
+                self,
+                extra_globals={"sklearn": sklearn},
+            )
 
         if (
             func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "f1_score"
-        ):
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                import sklearn
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            import sklearn
 
-                rhs = assign.value
-                kws = dict(rhs.kws)
-                nodes = []
+            rhs = assign.value
+            kws = dict(rhs.kws)
+            nodes = []
 
-                y_true = get_call_expr_arg(
-                    "sklearn.metrics.f1_score", rhs.args, kws, 0, "y_true"
-                )
-                y_pred = get_call_expr_arg(
-                    "sklearn.metrics.f1_score", rhs.args, kws, 1, "y_pred"
-                )
+            y_true = get_call_expr_arg(
+                "sklearn.metrics.f1_score", rhs.args, kws, 0, "y_true"
+            )
+            y_pred = get_call_expr_arg(
+                "sklearn.metrics.f1_score", rhs.args, kws, 1, "y_pred"
+            )
 
-                # TODO other arguments
-                average_var = ir.Var(
-                    assign.target.scope, mk_unique_var("f1_score_average"), rhs.loc
-                )
-                nodes.append(
-                    ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc)
-                )
-                self.typemap[average_var.name] = types.StringLiteral("binary")
-                # average cannot be specified positionally
-                average = get_call_expr_arg(
-                    "f1_score", rhs.args, kws, 1e6, "average", average_var
-                )
+            # TODO other arguments
+            average_var = ir.Var(
+                assign.target.scope, mk_unique_var("f1_score_average"), rhs.loc
+            )
+            nodes.append(ir.Assign(ir.Const("binary", rhs.loc), average_var, rhs.loc))
+            self.typemap[average_var.name] = types.StringLiteral("binary")
+            # average cannot be specified positionally
+            average = get_call_expr_arg(
+                "f1_score", rhs.args, kws, 1e6, "average", average_var
+            )
 
-                f = eval(
-                    "lambda y_true, y_pred, average: sklearn.metrics.f1_score("
-                    "    y_true, y_pred, average=average, _is_data_distributed=True"
-                    ")"
-                )
-                return nodes + compile_func_single_block(
-                    f,
-                    [y_true, y_pred, average],
-                    assign.target,
-                    self,
-                    extra_globals={"sklearn": sklearn},
-                )
+            f = eval(
+                "lambda y_true, y_pred, average: sklearn.metrics.f1_score("
+                "    y_true, y_pred, average=average, _is_data_distributed=True"
+                ")"
+            )
+            return nodes + compile_func_single_block(
+                f,
+                [y_true, y_pred, average],
+                assign.target,
+                self,
+                extra_globals={"sklearn": sklearn},
+            )
 
         if (
             func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
@@ -2068,7 +2058,7 @@ class DistributedPass:
         ):
             # If describe is parallel, replace with a bodo compiled implementation
             # to handle parallelism.
-            import bodo.libs.parallel_ops as parallel_ops
+            from bodo.libs import parallel_ops
 
             impl = parallel_ops.get_array_op_describe_dispatcher(
                 self.typemap[rhs.args[0].name]
@@ -2086,7 +2076,7 @@ class DistributedPass:
         ):
             # If array_op_nbytes is parallel, replace with a bodo compiled implementation
             # to handle parallelism.
-            import bodo.libs.parallel_ops as parallel_ops
+            from bodo.libs import parallel_ops
 
             impl = parallel_ops.array_op_nbytes_parallel
             return compile_func_single_block(
@@ -2146,13 +2136,17 @@ class DistributedPass:
             set_last_arg_to_true(self, assign.value)
             return [assign]
 
-        if func_name == "random_shuffle" and func_mod in {
-            "bodo.libs.distributed_api",
-            "bodo",
-        }:
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                set_last_arg_to_true(self, assign.value)
-                return [assign]
+        if (
+            func_name == "random_shuffle"
+            and func_mod
+            in {
+                "bodo.libs.distributed_api",
+                "bodo",
+            }
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            set_last_arg_to_true(self, assign.value)
+            return [assign]
 
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
@@ -2632,13 +2626,12 @@ class DistributedPass:
     def _run_call_boolean_array(self, arr, func_name, assign):
         """transform distributed BooleanArray.func calls"""
         out = [assign]
-        if func_name == "all":
-            if self._is_1D_or_1D_Var_arr(arr.name):
-                reduce_op = Reduce_Type.Logical_And
-                reduce_var = assign.target
-                scope = assign.target.scope
-                loc = assign.loc
-                return out + self._gen_reduce(reduce_var, reduce_op, scope, loc)
+        if func_name == "all" and self._is_1D_or_1D_Var_arr(arr.name):
+            reduce_op = Reduce_Type.Logical_And
+            reduce_var = assign.target
+            scope = assign.target.scope
+            loc = assign.loc
+            return out + self._gen_reduce(reduce_var, reduce_op, scope, loc)
 
         return out
 
@@ -2815,9 +2808,7 @@ class DistributedPass:
                     raise BodoError(
                         "orient argument in to_json() must be a constant string"
                     )
-                is_records = (
-                    True if get_overload_const_str(orient_val) == "records" else False
-                )
+                is_records = get_overload_const_str(orient_val) == "records"
 
             is_lines = False
             if "lines" in kws:
@@ -4777,7 +4768,6 @@ class DistributedPass:
         topo_order = find_topo_order(blocks)
         first_block = blocks[topo_order[0]]
         first_block.body = nodes + first_block.body
-        return
 
     def _set_ith_arg_to_unliteral(self, rhs: ir.Expr, i: int) -> None:
         """Set the ith argument of call expr 'rhs' to a nonliteral version.

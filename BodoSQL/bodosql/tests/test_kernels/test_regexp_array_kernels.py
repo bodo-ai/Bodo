@@ -288,7 +288,7 @@ def get_pattern_array(length):
     pattern = np.array(
         [
             r"[aeiou][a-z]*a",
-            r"[aeiou][a-z ]*" r"\b[A-Z]*a\b",
+            (r"[aeiou][a-z ]*" r"\b[A-Z]*a\b"),
             r"\b([A-Z]*)a\b",
             r"\bs.*y\b",
             r"^I.*",
@@ -317,40 +317,43 @@ def get_pattern_array(length):
     "args",
     [
         pytest.param((("", ""), ("", 0)), id="empty"),
-        pytest.param(((r"\w+", "e"), ("\w+", 0)), id="no_effect"),
+        pytest.param(((r"\w+", "e"), (r"\w+", 0)), id="no_effect"),
         pytest.param(
-            ((r"[[:alpha:]]{3}\d", "i"), ("[A-Za-z]{3}\d", re.I)),
+            ((r"[[:alpha:]]{3}\d", "i"), (r"[A-Za-z]{3}\d", re.IGNORECASE)),
             id="alpha_ignorecase",
         ),
         pytest.param(
             (
                 (r"[[:ascii:]]{1,2}[[:punct:]]", "ce"),
-                ("[\x01-\x7f]{1,2}[\]\[!\"#$%&'()*+,./:;<=>?@\^_`{|}~-]", 0),
+                ("[\x01-\x7f]{1,2}[\\]\\[!\"#$%&'()*+,./:;<=>?@\\^_`{|}~-]", 0),
             ),
             id="ascii_capitalize",
         ),
         pytest.param(
-            ((r"[^[:word:]][[:blank:]]", "ci"), ("[^A-Za-z0-9_][ \t]", re.I)),
+            ((r"[^[:word:]][[:blank:]]", "ci"), ("[^A-Za-z0-9_][ \t]", re.IGNORECASE)),
             id="word_blank_capitalize_capital_ignore",
         ),
         pytest.param(
             (
                 (r"[[:lower:]][[:digit:][:upper:]]*", "icm"),
-                ("[a-z][0-9A-Z]*", re.M),
+                ("[a-z][0-9A-Z]*", re.MULTILINE),
             ),
             id="lower_digit_upper_ignore_capital_multiline",
         ),
         pytest.param(
             (
                 (r"^[[:xdigit:]]+.[[:space:]]+[[:alnum:]]", "ems"),
-                ("^[A-Fa-f0-9]+.[ \t\r\n\v\f]+[A-Za-z0-9]", re.M | re.S),
+                ("^[A-Fa-f0-9]+.[ \t\r\n\v\f]+[A-Za-z0-9]", re.MULTILINE | re.DOTALL),
             ),
             id="xdigit_space_alnum_dotall_multiline",
         ),
         pytest.param(
             (
                 (r"[[:graph:]][[:cntrl:]][[:print:]]", "csaebcidcifsmgie"),
-                ("[\x21-\x7e][\x01-\x1f\x7f][\x20-\x7e]", re.M | re.S | re.I),
+                (
+                    "[\x21-\x7e][\x01-\x1f\x7f][\x20-\x7e]",
+                    re.MULTILINE | re.DOTALL | re.IGNORECASE,
+                ),
             ),
             id="graph_ctrl_print_all_flags_plus_garbage",
         ),
@@ -1097,7 +1100,7 @@ def test_regexp_replace_optimized(memory_leak_check):
 
     def impl(arr, replacement):
         return bodosql.kernels.regexp_replace(
-            arr, "[^\-a-zA-Z0-9 ]+", replacement, 1, 0, ""
+            arr, r"[^\-a-zA-Z0-9 ]+", replacement, 1, 0, ""
         )
 
     arr = pd.Series(["ajg", "&b", "^c", "%d", "e//>", "f", None, "g", "h", None]).values

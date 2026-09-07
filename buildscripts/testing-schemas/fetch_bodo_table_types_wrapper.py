@@ -14,7 +14,7 @@ import textwrap
 
 def main(input_file: str, catalog_creds: str):
     with open(input_file) as f:
-        for line in f.readlines():
+        for line in f:
             database_name, schema_name, table_name = line.strip().split(".")
             # Call request_schema.py
             file_path = os.path.dirname(__file__) + "/fetch_bodo_schemas.py"
@@ -35,7 +35,7 @@ def main(input_file: str, catalog_creds: str):
             except Exception as e:
                 # Print errors but don't halt the process.
                 print(
-                    f"Error with collecting schema for table: {line}. Error encountered: {str(e)}"
+                    f"Error with collecting schema for table: {line}. Error encountered: {e!s}"
                 )
 
 

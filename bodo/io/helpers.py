@@ -697,12 +697,11 @@ def update_file_contents(
     comm = MPI.COMM_WORLD
 
     old_content = None
-    if (not is_parallel) or (comm.Get_rank() == 0):
-        if os.path.exists(fname):
-            # If the file does exist, get
-            # its contents
-            with open(fname) as f:
-                old_content = f.read()
+    if ((not is_parallel) or (comm.Get_rank() == 0)) and os.path.exists(fname):
+        # If the file does exist, get
+        # its contents
+        with open(fname) as f:
+            old_content = f.read()
     if is_parallel:
         old_content = comm.bcast(old_content)
 
@@ -1027,7 +1026,7 @@ def overload_get_storage_options_pyobject(storage_options):
     storage_options_val = get_overload_constant_dict(storage_options)
     func_text = "def impl(storage_options):\n"
     func_text += "  with bodo.ir.object_mode.no_warning_objmode(storage_options_py='storage_options_dict_type'):\n"
-    func_text += f"    storage_options_py = {str(storage_options_val)}\n"
+    func_text += f"    storage_options_py = {storage_options_val!s}\n"
     func_text += "  return storage_options_py\n"
     loc_vars = {}
     exec(func_text, globals(), loc_vars)

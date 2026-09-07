@@ -21,12 +21,12 @@ import pyarrow.parquet as pq
 from mpi4py import MPI
 
 import bodo
-import bodo.utils.tracing as tracing
 from bodo.io.fs_io import (
     expand_path_globs,
     getfs,
     parse_fpath,
 )
+from bodo.utils import tracing
 
 if pt.TYPE_CHECKING:
     import pyarrow.compute as pc
@@ -460,7 +460,7 @@ def get_bodo_pq_dataset_from_fpath(
         return dataset
     except Exception as e:
         # Import compiler lazily to access BodoError
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
 
         # See note in pa_fs_list_dir_fnames
         # In some cases, OSError/FileNotFoundError can propagate
@@ -476,7 +476,7 @@ def get_bodo_pq_dataset_from_fpath(
             e = bodo.utils.typing.BodoError(str(e) + LIST_OF_FILES_ERROR_MSG)
         else:
             e = bodo.utils.typing.BodoError(
-                f"error from pyarrow: {type(e).__name__}: {str(e)}\n"
+                f"error from pyarrow: {type(e).__name__}: {e!s}\n"
             )
         return e
     finally:
@@ -538,9 +538,9 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
         for error in comm.allgather(error):
             if error:
                 # Import compiler lazily to access BodoError
-                import bodo.decorators  # isort:skip # noqa
+                import bodo.decorators  # isort:skip
 
-                msg = f"Schema in some files were different.\n{str(error)}"
+                msg = f"Schema in some files were different.\n{error!s}"
                 raise bodo.utils.typing.BodoError(msg)
     ev.finalize()
 
@@ -573,7 +573,7 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
     added_columns = fileset_schema_names - dataset_schema_names
     if added_columns:
         # Import compiler lazily to access BodoError
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
 
         msg = f"Schema in {piece} was different. File contains column(s) {added_columns} not expected in the dataset.\n"
         raise bodo.utils.typing.BodoError(msg)
@@ -581,9 +581,9 @@ def unify_fragment_schema(dataset: ParquetDataset, piece: ParquetPiece, frag):
         dataset.schema = unify_schemas([dataset.schema, file_schema], "permissive")
     except Exception as e:
         # Import compiler lazily to access BodoError
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
 
-        msg = f"Schema in {piece} was different.\n{str(e)}"
+        msg = f"Schema in {piece} was different.\n{e!s}"
         raise bodo.utils.typing.BodoError(msg)
 
 
@@ -707,7 +707,7 @@ def populate_row_counts_in_pq_dataset_pieces(
                     error, (OSError, FileNotFoundError)
                 ):
                     # Import compiler lazily to access BodoError
-                    import bodo.decorators  # isort:skip # noqa
+                    import bodo.decorators  # isort:skip
 
                     raise bodo.utils.typing.BodoError(
                         str(error) + LIST_OF_FILES_ERROR_MSG
@@ -1115,7 +1115,7 @@ def _add_categories_to_pq_dataset(pq_dataset):
     # NOTE: shouldn't be possible
     if len(pq_dataset.pieces) < 1:  # pragma: no cover
         # Import compiler lazily to access BodoError
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
 
         raise bodo.utils.typing.BodoError(
             "No pieces found in Parquet dataset. Cannot get read categorical values"
@@ -1147,7 +1147,7 @@ def _add_categories_to_pq_dataset(pq_dataset):
             del table_sample  # release I/O resources ASAP
         except Exception as e:
             comm.bcast(e)
-            raise e
+            raise
 
         comm.bcast(category_info)
     else:
@@ -1175,19 +1175,15 @@ def get_pandas_metadata(schema) -> tuple[list[str | dict], dict[str, bool | None
         index_cols = pandas_metadata["index_columns"]
         # ignore non-str/dict index metadata
         index_cols = [
-            index_col
-            for index_col in index_cols
-            if isinstance(index_col, str) or isinstance(index_col, dict)
+            index_col for index_col in index_cols if isinstance(index_col, (str, dict))
         ]
 
         for col_dict in pandas_metadata["columns"]:
             col_name = col_dict["name"]
             col_pd_type = col_dict["pandas_type"]
-            if (
-                col_pd_type.startswith("int") or col_pd_type.startswith("float")
-            ) and col_name is not None:
+            if (col_pd_type.startswith(("int", "float"))) and col_name is not None:
                 col_np_type = col_dict["numpy_type"]
-                if col_np_type.startswith("Int") or col_np_type.startswith("Float"):
+                if col_np_type.startswith(("Int", "Float")):
                     nullable_from_metadata[col_name] = True
                 else:
                     nullable_from_metadata[col_name] = False
@@ -1385,7 +1381,7 @@ def parquet_file_schema(
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
     # Import compiler lazily to access BodoError
     import bodo
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.io.helpers import _get_numba_typ_from_pa_typ
     from bodo.libs.dict_arr_ext import dict_str_arr_type
 
@@ -1496,7 +1492,7 @@ def parquet_file_schema(
     for c in selected_columns:
         if c not in col_names_map:
             # Import compiler lazily to access BodoError
-            import bodo.decorators  # isort:skip # noqa
+            import bodo.decorators  # isort:skip
 
             raise bodo.utils.typing.BodoError(
                 f"Selected column {c} not in Parquet file schema"
@@ -1547,7 +1543,7 @@ def _get_partition_cat_dtype(dictionary):
 
     # Import compiler lazily
     import bodo
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.pd_categorical_ext import (
         CategoricalArrayType,
         PDCategoricalDtype,

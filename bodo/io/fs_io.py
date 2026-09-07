@@ -224,7 +224,7 @@ def get_gcs_fs(path, storage_options=None):
             e
         ):
             return GcsFileSystem(anonymous=True, **options)
-        raise e
+        raise
 
 
 def get_hf_fs(storage_options=None):
@@ -281,9 +281,7 @@ def pa_fs_is_directory(fs, path):
         path_info = fs.get_file_info(path)
         if path_info.type in (pa_fs.FileType.NotFound, pa_fs.FileType.Unknown):
             raise FileNotFoundError(f"{path} is a non-existing or unreachable file")
-        if (not path_info.size) and path_info.type == pa_fs.FileType.Directory:
-            return True
-        return False
+        return bool(not path_info.size and path_info.type == pa_fs.FileType.Directory)
     except (FileNotFoundError, OSError):
         raise
     except ValueError:  # pragma: no cover
@@ -293,7 +291,7 @@ def pa_fs_is_directory(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise ValueError(
-            f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+            f"error from pyarrow FileSystem: {type(e).__name__}: {e!s}\n{bodo_error_msg}"
         )
 
 
@@ -329,7 +327,7 @@ def pa_fs_list_dir_fnames(fs, path):
             # credential issues, region issues, etc. in pyarrow (unlike s3fs).
             # So we include a blanket message to verify these details.
             raise ValueError(
-                f"error from pyarrow FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
+                f"error from pyarrow FileSystem: {type(e).__name__}: {e!s}\n{bodo_error_msg}"
             )
 
     return file_names
@@ -629,15 +627,12 @@ def directory_of_files_common_filter(fname):
     # Ignore the same files as pyarrow,
     # https://github.com/apache/arrow/blob/4beb514d071c9beec69b8917b5265e77ade22fb3/python/pyarrow/parquet.py#L1039
     return not (
-        fname.endswith(".crc")  # Checksums
-        or fname.endswith("_$folder$")  # HDFS directories in S3
-        or (
-            fname.startswith(".")
-            and not fname.startswith("./")
-            and not fname.startswith("../")
-            and not fname.startswith(".\\")
-            and not fname.startswith("..\\\\")
-        )  # Hidden files starting with .
+        fname.endswith((".crc", "_$folder$"))
+        or fname.startswith(".")
+        and not fname.startswith("./")
+        and not fname.startswith("../")
+        and not fname.startswith(".\\")
+        and not fname.startswith("..\\\\")
         or fname.startswith("_")
         and fname != "_delta_log"  # Hidden files starting with _ skip deltalake
     )
@@ -801,6 +796,6 @@ def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     # every file is in the same region
     if isinstance(s3_filepath, list):
         s3_filepath = s3_filepath[0]
-    if s3_filepath.startswith("s3://") or s3_filepath.startswith("s3a://"):
+    if s3_filepath.startswith(("s3://", "s3a://")):
         bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc

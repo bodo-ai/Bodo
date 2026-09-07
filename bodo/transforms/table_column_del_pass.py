@@ -188,11 +188,11 @@ class TableColumnDelPass:
         # The alias_sets and table_name in livecol_map share a common representative
         # variable.
         livecol_map = {}
-        for offset in blocks.keys():
+        for offset in blocks:
             block_column_liveness = column_live_map[offset]
             # Group live columns within an alias set.
             livecol_map[offset] = set_dict = {}
-            for table_key in alias_sets.keys():
+            for table_key in alias_sets:
                 used_columns, use_all, _ = get_live_column_nums_block(
                     block_column_liveness, equiv_vars, table_key
                 )
@@ -232,10 +232,10 @@ class TableColumnDelPass:
         escaping_dead = defaultdict(
             lambda: defaultdict(set)
         )  # {block -> {set_table -> set of del columns}}
-        for offset in blocks.keys():
+        for offset in blocks:
             internal_dead[offset] = col_back_map = {}
             block_livecols = alias_set_livecol_map[offset]
-            for table_key, aliases in alias_sets.items():
+            for table_key in alias_sets:
                 # Get the type information for the current group.
                 var_type = typemap[table_key[0]]
                 if table_key[1] is None:
@@ -470,7 +470,7 @@ def _find_table_alias_sets(source_live_cols, equiv_vars):
     """
     seen_keys = set()
     alias_sets = {}
-    for table_key in source_live_cols.keys():
+    for table_key in source_live_cols:
         if table_key not in seen_keys:
             # Mark all members of the alias set as seen
             seen_keys.add(table_key)

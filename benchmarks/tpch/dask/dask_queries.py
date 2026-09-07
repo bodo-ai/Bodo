@@ -1425,10 +1425,9 @@ def main():
     if args.queries is not None:
         queries = args.queries
 
-    if args.log_timings is not None:
-        if not os.path.exists(args.log_timings):
-            with open(args.log_timings, "w") as f:
-                f.write("implementation,query,n_gpus,execution_time\n")
+    if args.log_timings is not None and not os.path.exists(args.log_timings):
+        with open(args.log_timings, "w") as f:
+            f.write("implementation,query,n_gpus,execution_time\n")
 
     dask.config.set({"dataframe.backend": args.backend})
     dask.config.set({"distributed.comm.timeouts.tcp": "900s"})

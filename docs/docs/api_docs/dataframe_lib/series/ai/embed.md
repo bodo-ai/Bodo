@@ -61,7 +61,9 @@ import bodo.pandas as pd
 from bodo.ai.backend import Backend
 
 # Example series
-a = pd.Series(["bodo.ai will improve your workflows.", "This is a professional sentence."])
+a = pd.Series(
+    ["bodo.ai will improve your workflows.", "This is a professional sentence."]
+)
 # Define the LLM base_url and API key
 base_url = "https://api.example.com/v1"
 api_key = "your_api_key_here"
@@ -70,7 +72,7 @@ b = a.ai.embed(
     api_key=api_key,
     model="text-embedding-3-small",
     base_url=base_url,
-    backend=Backend.OPENAI
+    backend=Backend.OPENAI,
 )
 print(b)
 ```
@@ -91,12 +93,12 @@ import bodo.pandas as pd
 from bodo.ai.backend import Backend
 
 # Example series
-a = pd.Series(["bodo.ai will improve your workflows.", "This is a professional sentence."])
+a = pd.Series(
+    ["bodo.ai will improve your workflows.", "This is a professional sentence."]
+)
 # Generate embeddings using the Bedrock model
 b = a.ai.embed(
-    model="amazon.titan-embed-text-v2:0",
-    backend=Backend.BEDROCK,
-    region="us-west-2"
+    model="amazon.titan-embed-text-v2:0", backend=Backend.BEDROCK, region="us-west-2"
 )
 print(b)
 ```

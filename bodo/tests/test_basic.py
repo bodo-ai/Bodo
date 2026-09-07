@@ -1022,7 +1022,7 @@ def test_objmode_types():
     """
     Test creating types in JIT code and passing to objmode
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.boxing import _use_dict_str_type
 
     if _use_dict_str_type:
@@ -1096,7 +1096,7 @@ def test_dict_list(memory_leak_check):
             print(i)
         return 0
 
-    bang({"numbers": list(range(0, 10))})
+    bang({"numbers": list(range(10))})
 
 
 # TODO: Add memory_leak_check after memory leak is solved.

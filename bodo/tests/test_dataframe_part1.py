@@ -13,7 +13,7 @@ import pytest
 from numba.core.ir_utils import find_callname, guard  # noqa TID253
 
 import bodo
-from bodo.tests.dataframe_common import *  # noqa
+from bodo.tests.dataframe_common import *
 from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal,
@@ -2724,7 +2724,7 @@ def test_dataframe_binary_add(memory_leak_check):
 
 @pytest.mark.slow
 def test_dataframe_binary_op(memory_leak_check):
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
         # TODO: test parallelism
@@ -2820,7 +2820,7 @@ def test_dataframe_binary_iadd(memory_leak_check):
 
 @pytest.mark.slow
 def test_dataframe_inplace_binary_op(memory_leak_check):
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     for op in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
         op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]

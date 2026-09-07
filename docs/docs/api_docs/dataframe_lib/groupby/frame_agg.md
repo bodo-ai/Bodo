@@ -36,11 +36,9 @@ Apply one or more aggregate functions to groups of data in a BodoDataFrame. This
 ``` py
 import bodo.pandas as bd
 
-bdf1 = bd.DataFrame({
-    "A": ["foo", "foo", "bar", "bar"],
-    "C": [1, 2, 3, 4],
-    "D": ["A", "A", "C", "D"]
-})
+bdf1 = bd.DataFrame(
+    {"A": ["foo", "foo", "bar", "bar"], "C": [1, 2, 3, 4], "D": ["A", "A", "C", "D"]}
+)
 
 bdf2 = bdf1.groupby("A").agg("sum")
 
@@ -82,7 +80,9 @@ foo  1.5  1
 ```
 ---
 ``` py
-bdf5 = bdf1.groupby("A").agg(mean_C=bd.NamedAgg("C", "mean"), sum_D=bd.NamedAgg("D", "sum"))
+bdf5 = bdf1.groupby("A").agg(
+    mean_C=bd.NamedAgg("C", "mean"), sum_D=bd.NamedAgg("D", "sum")
+)
 
 print(bdf5)
 ```

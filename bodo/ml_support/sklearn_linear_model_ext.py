@@ -182,8 +182,7 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
             no_improvement_count += 1
         else:
             no_improvement_count = 0
-        if cur_loss < best_loss:
-            best_loss = cur_loss
+        best_loss = min(best_loss, cur_loss)
         if no_improvement_count >= m.n_iter_no_change:
             break
 

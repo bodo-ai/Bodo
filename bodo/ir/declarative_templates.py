@@ -277,9 +277,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         if not self.is_matching_template(attr):
             return None
 
-        if isinstance(typ, types.TypeRef):
-            assert typ == self.key
-        elif isinstance(typ, types.Callable):
+        if isinstance(typ, (types.TypeRef, types.Callable)):
             assert typ == self.key
         else:
             assert isinstance(typ, self.key)
@@ -348,16 +346,7 @@ class _OverloadDeclarativeAttributeTemplate(
                 f"No example found for {self.path}: example must be manually embedded in {doc_path}."
             )
 
-        documentation = "".join(
-            [
-                title_str,
-                hyperlink_str,
-                path_str,
-                supported_types,
-                description_str,
-                example_str,
-            ]
-        )
+        documentation = f"{title_str}{hyperlink_str}{path_str}{supported_types}{description_str}{example_str}"
 
         if write_out:
             with open(doc_path, "w") as f:

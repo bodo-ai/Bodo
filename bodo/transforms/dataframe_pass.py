@@ -24,7 +24,7 @@ from numba.core.ir_utils import (
 from pandas.core.common import flatten
 
 import bodo
-import bodo.hiframes.dataframe_impl  # noqa # side effect: install DataFrame overloads
+import bodo.hiframes.dataframe_impl  # side effect: install DataFrame overloads
 import bodo.hiframes.pd_rolling_ext
 from bodo.hiframes.dataframe_indexing import (
     DataFrameIatType,
@@ -324,36 +324,30 @@ class DataFramePass:
             ):  # pragma: no cover
                 return self._convert_op_call_to_expr(assign, rhs, func_def.value)
             # input to _bodo_groupby_apply_impl() is a UDF dispatcher
-            elif isinstance(func_def, ir.Arg) and isinstance(
-                self.typemap[rhs.func.name], types.Dispatcher
-            ):
-                return [assign]
-            # If df.apply fails to inline an externally compiled JIT
-            # function, then we may have a CPUDispatcher
-            # (see test_df_apply_heterogeneous_series).
-            elif isinstance(func_def, ir.Const) and isinstance(
-                self.typemap[rhs.func.name], types.Dispatcher
-            ):
-                return [assign]
-            # Cases like dtype(value) in np.linspace implementation
-            elif isinstance(
-                func_def, (ir.Const, ir.FreeVar, ir.Global)
-            ) and func_def.value in (
-                int,
-                np.int8,
-                np.int16,
-                np.int32,
-                np.int64,
-                np.uint8,
-                np.uint16,
-                np.uint32,
-                np.uint64,
-                float,
-                np.float32,
-                np.float64,
-                complex,
-                np.complex64,
-                np.complex128,
+            elif (
+                isinstance(func_def, ir.Arg)
+                and isinstance(self.typemap[rhs.func.name], types.Dispatcher)
+                or isinstance(func_def, ir.Const)
+                and isinstance(self.typemap[rhs.func.name], types.Dispatcher)
+                or isinstance(func_def, (ir.Const, ir.FreeVar, ir.Global))
+                and func_def.value
+                in (
+                    int,
+                    np.int8,
+                    np.int16,
+                    np.int32,
+                    np.int64,
+                    np.uint8,
+                    np.uint16,
+                    np.uint32,
+                    np.uint64,
+                    float,
+                    np.float32,
+                    np.float64,
+                    complex,
+                    np.complex64,
+                    np.complex128,
+                )
             ):
                 return [assign]
 
@@ -1223,7 +1217,7 @@ class DataFramePass:
 
         # data frame column inputs
         nodes = []
-        args = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols.keys()]
+        args = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         args.append(self._gen_array_from_index(df_var, nodes))
         # local referenced variables
         args += [ir.Var(lhs.scope, v, lhs.loc) for v in loc_ref_vars.values()]

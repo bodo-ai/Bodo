@@ -244,8 +244,8 @@ BASE_MAP: dict[str, tuple[dict, list]] = {
     ),
     "DECIMALS_TABLE": (
         {
-            "A": np.array([Decimal(1.0), Decimal(2.0)] * 25),
-            "B": np.array([Decimal(5.0), Decimal(10.0)] * 25),
+            "A": np.array([Decimal("1.0"), Decimal("2.0")] * 25),
+            "B": np.array([Decimal("5.0"), Decimal("10.0")] * 25),
         },
         [("A", "decimal(10,5)", True), ("B", "decimal(38,18)", True)],
     ),
@@ -408,4 +408,4 @@ if __name__ == "__main__":
 
     else:
         print("Invalid Number of Arguments")
-        exit(1)
+        sys.exit(1)

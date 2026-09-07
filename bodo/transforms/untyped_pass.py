@@ -582,13 +582,11 @@ class UntypedPass:
                 func_mod = func_def.value
                 func_name = func_def.attr
             # ignore objmode block calls
-            elif isinstance(func_def, ir.Const) and isinstance(
-                func_def.value, numba.core.dispatcher.ObjModeLiftedWith
-            ):
-                return [assign]
-            # input to _bodo_groupby_apply_impl() is a UDF dispatcher
-            elif isinstance(func_def, ir.Arg) and isinstance(
-                self.args[func_def.index], types.Dispatcher
+            elif (
+                isinstance(func_def, ir.Const)
+                and isinstance(func_def.value, numba.core.dispatcher.ObjModeLiftedWith)
+                or isinstance(func_def, ir.Arg)
+                and isinstance(self.args[func_def.index], types.Dispatcher)
             ):
                 return [assign]
             else:
@@ -2391,11 +2389,10 @@ class UntypedPass:
         }
 
         passed_unsupported = unsupported_args.intersection(kws.keys())
-        if len(passed_unsupported) > 0:
-            if unsupported_args:
-                raise BodoError(
-                    f"read_json() arguments {passed_unsupported} not supported yet"
-                )
+        if len(passed_unsupported) > 0 and unsupported_args:
+            raise BodoError(
+                f"read_json() arguments {passed_unsupported} not supported yet"
+            )
 
         supported_compression_options = {"infer", "gzip", "bz2", None}
         if compression not in supported_compression_options:
@@ -3223,7 +3220,7 @@ def _dtype_val_to_arr_type(t, func_name, loc):
         return string_array_type
 
     if isinstance(t, str):
-        if t.startswith("Int") or t.startswith("UInt"):
+        if t.startswith(("Int", "UInt")):
             dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(
                 pd.api.types.pandas_dtype(t), None
             )
@@ -3456,7 +3453,7 @@ def _get_json_df_type_from_file(
     # raise error on all processors if found (not just rank 0 which would cause hangs)
     if isinstance(df_type_or_e, Exception):
         raise BodoError(
-            f"error from: {type(df_type_or_e).__name__}: {str(df_type_or_e)}\n"
+            f"error from: {type(df_type_or_e).__name__}: {df_type_or_e!s}\n"
         )
 
     df_type_or_e = df_type_or_e.copy(
@@ -3727,13 +3724,12 @@ def _get_sql_df_type_from_db(
             "Snowflake table reads"
         )
 
-    if _bodo_read_as_dict and db_type != "snowflake":
-        if bodo.get_rank() == 0:
-            warnings.warn(
-                BodoWarning(
-                    "_bodo_read_as_dict is only supported when reading from Snowflake."
-                )
+    if _bodo_read_as_dict and db_type != "snowflake" and bodo.get_rank() == 0:
+        warnings.warn(
+            BodoWarning(
+                "_bodo_read_as_dict is only supported when reading from Snowflake."
             )
+        )
 
     # No need to try `import snowflake.connector` here, since the import
     # is handled by bodo.io.snowflake.snowflake_connect()
@@ -4070,7 +4066,7 @@ def _get_csv_df_type_from_file(
     # raise error on all processors if found (not just rank 0 which would cause hangs)
     if isinstance(df_type_or_e, Exception):
         raise BodoError(
-            f"error from: {type(df_type_or_e).__name__}: {str(df_type_or_e)}\n"
+            f"error from: {type(df_type_or_e).__name__}: {df_type_or_e!s}\n"
         )
 
     return df_type_or_e

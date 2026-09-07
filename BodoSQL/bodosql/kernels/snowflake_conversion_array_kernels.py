@@ -507,10 +507,7 @@ def create_timestamp_cast_util(func, error_on_fail):
             scalar_text += "   else:\n"
             scalar_text += f"      res[i] = {unbox_str}(tmp_val{localize_str})\n"
 
-        elif is_valid_int_arg(conversion_val):
-            scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0 * (10 ** (9 - arg3))){localize_str})\n"
-
-        elif is_valid_float_arg(conversion_val):
+        elif is_valid_int_arg(conversion_val) or is_valid_float_arg(conversion_val):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0 * (10 ** (9 - arg3))){localize_str})\n"
 
         elif is_valid_tz_aware_datetime_arg(conversion_val):
@@ -720,7 +717,7 @@ def to_timestamptz_string_parser(str_val):
             if ":" in offset_str:
                 # parse offset as one of HH:MM, H:MM, HH:M
                 parts = offset_str.split(":")
-                if not len(parts) == 2:
+                if len(parts) != 2:
                     return None
                 hours, minutes = parts
                 if not hours.isdigit() or not minutes.isdigit():
@@ -1084,13 +1081,7 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
             scalar_text += f"if not bodo.libs.struct_arr_ext.is_field_value_null(arg0, {name_w_quotes}):\n"
             scalar_text += f"  arr_str += ',{name_w_quotes}:' + bodosql.kernels.snowflake_conversion_array_kernels.to_char_helper(arg0[{name_w_quotes}], arg1)\n"
         scalar_text += "res[i] = '{' + arr_str[1:] + '}'"
-    elif isinstance(inner_type, types.DictType):
-        scalar_text = "arr_str = ''\n"
-        scalar_text += "for idx0 in range(len(arg0._keys)):\n"
-        scalar_text += "  if not bodo.libs.array_kernels.isna(arg0._keys, idx0) and not bodo.libs.array_kernels.isna(arg0._values, idx0):\n"
-        scalar_text += "    arr_str += ',' + bodosql.kernels.snowflake_conversion_array_kernels.to_char_helper(arg0._keys[idx0], arg1) + ':' + bodosql.kernels.snowflake_conversion_array_kernels.to_char_helper(arg0._values[idx0], arg1)\n"
-        scalar_text += "res[i] = '{' + arr_str[1:] + '}'"
-    elif isinstance(inner_type, bodo.libs.map_arr_ext.MapScalarType):
+    elif isinstance(inner_type, (types.DictType, bodo.libs.map_arr_ext.MapScalarType)):
         scalar_text = "arr_str = ''\n"
         scalar_text += "for idx0 in range(len(arg0._keys)):\n"
         scalar_text += "  if not bodo.libs.array_kernels.isna(arg0._keys, idx0) and not bodo.libs.array_kernels.isna(arg0._values, idx0):\n"
@@ -2115,10 +2106,7 @@ def _is_string_numeric(expr):  # pragma: no cover
         if len(expr) == 0:
             return False
 
-        if not expr.isdigit():
-            return False
-
-        return True
+        return expr.isdigit()
 
     return impl
 
