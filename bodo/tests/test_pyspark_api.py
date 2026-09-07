@@ -172,7 +172,7 @@ def test_create_dataframe(memory_leak_check):
         )
     with pytest.raises(
         BodoError,
-        match="createDataFrame\(\): 'data' should be a Pandas dataframe or list of Rows",
+        match=r"createDataFrame\(\): 'data' should be a Pandas dataframe or list of Rows",
     ):
         bodo.jit(impl)(3)
 
@@ -477,7 +477,7 @@ def test_functions_col(memory_leak_check):
     )
     with pytest.raises(
         BodoError,
-        match="functions\.col\(\): column name should be a constant string",
+        match=r"functions\.col\(\): column name should be a constant string",
     ):
         bodo.jit(distributed=["df"])(impl_err)(df)
 
@@ -521,6 +521,6 @@ def test_functions_sum(memory_leak_check):
     )
     with pytest.raises(
         BodoError,
-        match="functions\.sum\(\): input should be a Column object or a constant string",
+        match=r"functions\.sum\(\): input should be a Column object or a constant string",
     ):
         bodo.jit(distributed=["df"])(impl_err)(df)

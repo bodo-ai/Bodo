@@ -336,7 +336,7 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
 
 def test_del_func_called_if_not_collected(pandas_managers, head_df, collect_func):
     """Tests that the del function is called when the manager is deleted if the data hasn't been collected yet"""
-    lazy_manager, pandas_manager = pandas_managers
+    lazy_manager, _pandas_manager = pandas_managers
     del_called = False
 
     def del_func(_):
@@ -358,7 +358,7 @@ def test_del_func_called_if_not_collected(pandas_managers, head_df, collect_func
 
 def test_del_func_not_called_if_collected(pandas_managers, head_df, collect_func):
     """Tests that the del function is not called when the manager is deleted if the data has been collected"""
-    lazy_manager, pandas_manager = pandas_managers
+    lazy_manager, _pandas_manager = pandas_managers
     del_called = False
 
     def del_func(_):
@@ -381,7 +381,7 @@ def test_del_func_not_called_if_collected(pandas_managers, head_df, collect_func
 
 def test_len(pandas_managers, head_df, collect_func):
     """Tests that len() returns the right value and does not trigger data fetch"""
-    lazy_manager, pandas_manager = pandas_managers
+    lazy_manager, _pandas_manager = pandas_managers
 
     lam = lazy_manager(
         [],
@@ -411,7 +411,7 @@ def test_len(pandas_managers, head_df, collect_func):
 
 def test_slice(pandas_managers, head_df, collect_func):
     """Tests that slicing returns the correct value and does not trigger data fetch unnecessarily"""
-    lazy_manager, pandas_manager = pandas_managers
+    lazy_manager, _pandas_manager = pandas_managers
 
     lam = lazy_manager(
         [],

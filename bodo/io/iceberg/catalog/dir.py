@@ -105,7 +105,6 @@ class DirCatalog(Catalog):
             raise NotImplementedError("Namespace properties are not supported")
 
         # Namespaces are just directories, so we don't need to do anything
-        return
 
     def register_table(
         self, identifier: str | Identifier, metadata_location: str

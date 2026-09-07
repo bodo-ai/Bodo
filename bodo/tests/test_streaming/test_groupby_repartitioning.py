@@ -7,7 +7,7 @@ import pytest
 
 import bodo
 
-import bodo.decorators  # isort:skip # noqa
+import bodo.decorators  # isort:skip
 from mpi4py import MPI
 
 import bodo.io.snowflake
@@ -1499,7 +1499,7 @@ def test_rank_skew_repartition(capfd):
     df = pd.DataFrame(
         {
             "A": np.array(
-                [7790324] * (2 * WINDOW_PARTITION_ROWS) + (list(range(0, 5))),
+                [7790324] * (2 * WINDOW_PARTITION_ROWS) + (list(range(5))),
                 dtype=np.int64,
             ),
             "B": np.arange(0, (2 * WINDOW_PARTITION_ROWS) + 5),
@@ -1547,7 +1547,7 @@ def test_rank_skew_repartition(capfd):
             f"Potential memory leak! bytes_before ({bytes_before}) != bytes_after ({bytes_after})"
         )
 
-    output, err = capfd.readouterr()
+    _output, err = capfd.readouterr()
     # Uncomment to view the output for debugging.
     # with capfd.disabled():
     #     for i in range(bodo.get_size()):

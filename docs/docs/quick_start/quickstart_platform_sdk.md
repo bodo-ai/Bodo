@@ -41,11 +41,9 @@ my_workspace = BodoWorkspaceClient(
 )
 
 my_cluster = my_workspace.ClusterClient.create(
-    name='My first cluster',
-    instance_type='c6i.large',
-    workers_quantity=1
+    name="My first cluster", instance_type="c6i.large", workers_quantity=1
 )
-my_cluster.wait_for_status(['RUNNING'])
+my_cluster.wait_for_status(["RUNNING"])
 print(my_cluster.id)
 ```
 
@@ -60,13 +58,15 @@ import bodo
 import time
 import numpy as np
 
+
 @bodo.jit
 def calc_pi(n):
     t1 = time.time()
     x = 2 * np.random.ranf(n) - 1
     y = 2 * np.random.ranf(n) - 1
     pi = 4 * np.sum(x**2 + y**2 < 1) / n
-    print("Execution time:", time.time()-t1, "\nresult:", pi)
+    print("Execution time:", time.time() - t1, "\nresult:", pi)
+
 
 calc_pi(2 * 10**6)
 ```
@@ -86,13 +86,11 @@ my_workspace = BodoWorkspaceClient(
 
 my_cluster = my_workspace.ClusterClient.get("cluster_id")
 my_job = my_cluster.run_job(
-    code_type='PYTHON',
-    source={'type': 'WORKSPACE', 'path': '/'},
-    exec_file='test.py'
+    code_type="PYTHON", source={"type": "WORKSPACE", "path": "/"}, exec_file="test.py"
 )
 
 # Print stdout from job
-print(my_job.wait_for_status(['SUCCEEDED']).get_stdout())
+print(my_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 ```
 
 
@@ -108,14 +106,14 @@ my_workspace = BodoWorkspaceClient(
 
 my_cluster = my_workspace.ClusterClient.get("cluster_id")
 my_job = my_cluster.run_job(
-    code_type='SQL',
-    source={'type': 'WORKSPACE', 'path': '/'},
-    exec_file='test.sql',
-    catalog="MyCatalog"
+    code_type="SQL",
+    source={"type": "WORKSPACE", "path": "/"},
+    exec_file="test.sql",
+    catalog="MyCatalog",
 )
 
 # Print stdout from job
-print(my_sql_job.wait_for_status(['SUCCEEDED']).get_stdout())
+print(my_sql_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 ```
 
 ### Execute SQL query
@@ -135,7 +133,7 @@ my_cluster = my_workspace.ClusterClient.get("cluster_id")
 my_sql_job = my_cluster.run_sql_query(sql_query="SELECT 1", catalog="MyCatalog")
 
 # Print stdout from job
-print(my_sql_job.wait_for_status(['SUCCEEDED']).get_stdout())
+print(my_sql_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 ```
 
 ### Connector
@@ -152,7 +150,7 @@ my_workspace = BodoWorkspaceClient(
 my_cluster = my_workspace.ClusterClient.get("cluster_id")
 
 # Connect and execute query
-connection = my_cluster.connect('MyCatalog')
+connection = my_cluster.connect("MyCatalog")
 result = connection.cursor().execute("SELECT 1").fetchone()
 print(result)
 ```

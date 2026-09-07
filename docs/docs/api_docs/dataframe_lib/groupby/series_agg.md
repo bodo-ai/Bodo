@@ -39,11 +39,9 @@ Apply one or more aggregate functions to groups of data in a single column from 
 ``` py
 import bodo.pandas as bd
 
-bdf1 = bd.DataFrame({
-    "A": ["foo", "foo", "bar", "bar"],
-    "C": [1, 2, 3, 4],
-    "D": ["A", "A", "C", "D"]
-})
+bdf1 = bd.DataFrame(
+    {"A": ["foo", "foo", "bar", "bar"], "C": [1, 2, 3, 4], "D": ["A", "A", "C", "D"]}
+)
 
 bdf2 = bdf1.groupby("A")["C"].agg("sum")
 

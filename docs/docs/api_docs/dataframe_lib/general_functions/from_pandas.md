@@ -20,12 +20,12 @@ import pandas as pd
 import bodo.pandas as bodo_pd
 
 df = pd.DataFrame(
-        {
-            "a": [1, 2, 3, 7] * 3,
-            "b": [4, 5, 6, 8] * 3,
-            "c": ["a", "b", None, "abc"] * 3,
-        },
-    )
+    {
+        "a": [1, 2, 3, 7] * 3,
+        "b": [4, 5, 6, 8] * 3,
+        "c": ["a", "b", None, "abc"] * 3,
+    },
+)
 
 bdf = bodo_pd.from_pandas(df)
 print(type(bdf))

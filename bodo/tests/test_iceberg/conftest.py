@@ -113,9 +113,9 @@ def polaris_server():
                     wait_for_logs(polaris.start(), "Listening on")
                     time.sleep(2**i)
                     break
-                except Exception as e:
+                except Exception:
                     if i == n_retries - 1:
-                        raise e
+                        raise
                     continue
         except Exception as e:
             err = e
@@ -171,7 +171,7 @@ def polaris_token(polaris_server, polaris_package):
 
     from bodo.spawn.utils import run_rank0
 
-    host, port, user, password = polaris_server
+    host, port, _user, _password = polaris_server
 
     @run_rank0
     def get_token():

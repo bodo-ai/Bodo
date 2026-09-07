@@ -14,9 +14,7 @@ def getColumnNameString(df, i):
 def getBodoSQLColumnDataTypeString(df, i):
     snowflakeTypeName = df["type"].iloc[i]
 
-    if snowflakeTypeName.startswith("VARCHAR"):
-        return "BodoSQLColumnDataType.STRING"
-    elif snowflakeTypeName.startswith("CHAR"):
+    if snowflakeTypeName.startswith(("VARCHAR", "CHAR")):
         return "BodoSQLColumnDataType.STRING"
     elif snowflakeTypeName.startswith("TIMESTAMP_NTZ"):
         return "BodoSQLColumnDataType.DATETIME"

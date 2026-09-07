@@ -1029,7 +1029,7 @@ def test_str_contains_regex(memory_leak_check, test_unicode_dict_str_arr, case):
     # Test flags (and hence `str_series_contains_regex`)
     import re
 
-    flag = re.M.value
+    flag = re.MULTILINE.value
 
     def impl4(A):
         return pd.Series(A).str.contains(r"ab*", regex=True, case=case, flags=flag)
@@ -1164,7 +1164,7 @@ def test_str_match(memory_leak_check, test_unicode_dict_str_arr, case):
     # Test flags (and hence `str_match` in dict_arr_ext.py)
     import re
 
-    flag = re.M.value
+    flag = re.MULTILINE.value
 
     def impl7(A):
         return pd.Series(A).str.match(r"ab*", case=case, flags=flag)

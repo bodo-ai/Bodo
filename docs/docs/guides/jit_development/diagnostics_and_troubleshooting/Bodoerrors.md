@@ -64,8 +64,9 @@ on how to proceed with resolving them.
     ```py
     @bodo.jit
     def obj_in_array():
-        df = pd.DataFrame({'col1': ["1", "2"], 'col2': [3, 4]})
-        return df.select_dtypes(include='object')
+        df = pd.DataFrame({"col1": ["1", "2"], "col2": [3, 4]})
+        return df.select_dtypes(include="object")
+
 
     a = obj_in_array()
     print(a)

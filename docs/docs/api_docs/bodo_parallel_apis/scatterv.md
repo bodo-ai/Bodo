@@ -30,6 +30,7 @@ Distribute data manually by *scattering* data from one process to all processes.
       x = df.power.mean()
       return x
 
+
   df = None
   # only rank 0 reads the data
   if bodo.get_rank() == 0:
@@ -96,13 +97,16 @@ Distribute data manually by *scattering* data from one process to all processes.
   import bodo
   import pandas as pd
 
+
   @bodo.jit(spawn=False)
   def impl():
       if bodo.get_rank() == 0:
-          df = pd.DataFrame({"A": [1,2,3,4,5,6,7,8]})
+          df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6, 7, 8]})
       else:
-          df = pd.DataFrame({"A": [-1]*8})
+          df = pd.DataFrame({"A": [-1] * 8})
       return bodo.scatterv(df)
+
+
   print(impl())
   ```
 

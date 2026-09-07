@@ -162,14 +162,10 @@ def parse_query_into_map_overload(data):
             if equality_idx != -1:
                 key = substr[:equality_idx]
                 value = substr[equality_idx + 1 :]
-                if key in keys_with_null_values:
-                    # remove from keys_with_null_values set to prevent double counting the same key
-                    keys_with_null_values.remove(key)
+                keys_with_null_values.discard(key)
                 key_value_map[key] = value
             else:
-                if substr in key_value_map:
-                    # remove from key_value_map set to prevent double counting the same key
-                    del key_value_map[substr]
+                key_value_map.pop(substr, None)
                 keys_with_null_values.add(substr)
 
         # Now that we know the number of key/value pairs, allocate the output arrays

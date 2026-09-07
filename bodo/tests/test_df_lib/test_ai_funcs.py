@@ -221,13 +221,21 @@ def test_llm_generate_ollama():
 
     try:
         spawn_process_on_nodes(
-            "docker run -v ollama:/root/.ollama -p 11434:11434 --name bodo_test_ollama ollama/ollama:latest".split(
-                " "
-            )
+            [
+                "docker",
+                "run",
+                "-v",
+                "ollama:/root/.ollama",
+                "-p",
+                "11434:11434",
+                "--name",
+                "bodo_test_ollama",
+                "ollama/ollama:latest",
+            ]
         )
         wait_for_ollama("http://localhost:11434")
         spawn_process_on_nodes(
-            "docker exec bodo_test_ollama ollama run smollm:135m".split(" ")
+            ["docker", "exec", "bodo_test_ollama", "ollama", "run", "smollm:135m"]
         )
         wait_for_ollama_model("http://localhost:11434", "smollm:135m")
         res = prompts.ai.llm_generate(
@@ -241,7 +249,7 @@ def test_llm_generate_ollama():
         assert all(isinstance(x, str) for x in res)
 
     finally:
-        spawn_process_on_nodes("docker rm bodo_test_ollama -f".split(" "))
+        spawn_process_on_nodes(["docker", "rm", "bodo_test_ollama", "-f"])
 
 
 @pytest.mark.skip("TODO: Fix flakey test.")
@@ -256,13 +264,28 @@ def test_embed_ollama():
 
     try:
         spawn_process_on_nodes(
-            "docker run -v ollama:/root/.ollama -p 11435:11434 --name bodo_test_ollama_embed ollama/ollama:latest".split(
-                " "
-            )
+            [
+                "docker",
+                "run",
+                "-v",
+                "ollama:/root/.ollama",
+                "-p",
+                "11435:11434",
+                "--name",
+                "bodo_test_ollama_embed",
+                "ollama/ollama:latest",
+            ]
         )
         wait_for_ollama("http://localhost:11435")
         spawn_process_on_nodes(
-            "docker exec bodo_test_ollama_embed ollama pull all-minilm:22m".split(" ")
+            [
+                "docker",
+                "exec",
+                "bodo_test_ollama_embed",
+                "ollama",
+                "pull",
+                "all-minilm:22m",
+            ]
         )
         wait_for_ollama_model("http://localhost:11435", "all-minilm:22m")
         res = prompts.ai.embed(
@@ -274,7 +297,7 @@ def test_embed_ollama():
         assert res.dtype.pyarrow_dtype.equals(pa.list_(pa.float64()))
 
     finally:
-        spawn_process_on_nodes("docker rm bodo_test_ollama_embed -f".split(" "))
+        spawn_process_on_nodes(["docker", "rm", "bodo_test_ollama_embed", "-f"])
 
 
 @pytest.mark.jit_dependency
@@ -415,7 +438,7 @@ def test_torch_train():
     def train_loop(data, config):
         import torch
         import torch.distributed.checkpoint
-        import torch.nn as nn
+        from torch import nn
 
         # Simple linear regression model
         class SimpleModel(nn.Module):

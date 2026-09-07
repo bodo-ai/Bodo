@@ -5752,8 +5752,8 @@ def init_index_from_index(I, name):
 
     if isinstance(I, PeriodIndexType):
         freq = I.freq
-        return (
-            lambda I, name, inplace=False: bodo.hiframes.pd_index_ext.init_period_index(
+        return lambda I, name, inplace=False: (
+            bodo.hiframes.pd_index_ext.init_period_index(
                 bodo.hiframes.pd_index_ext.get_index_data(I).copy(),
                 name,
                 freq,
@@ -5761,8 +5761,8 @@ def init_index_from_index(I, name):
         )  # pragma: no cover
 
     if isinstance(I, HeterogeneousIndexType):
-        return (
-            lambda I, name, inplace=False: bodo.hiframes.pd_index_ext.init_heter_index(
+        return lambda I, name, inplace=False: (
+            bodo.hiframes.pd_index_ext.init_heter_index(
                 bodo.hiframes.pd_index_ext.get_index_data(I),
                 name,
             )

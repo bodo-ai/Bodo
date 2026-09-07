@@ -250,7 +250,7 @@ def lower_join_dummy(context, builder, sig, args):
 T = TypeVar("T")
 
 
-class FilterVisitor(Generic[T], ABC):
+class FilterVisitor(ABC, Generic[T]):
     """
     Visitor Pattern for Bodo IR Filter Expression
     Can be used to traverse and transform a filter object

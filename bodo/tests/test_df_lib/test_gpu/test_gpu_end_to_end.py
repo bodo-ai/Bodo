@@ -50,19 +50,18 @@ def test_project_filter1(datapath, broadcast):
         filt_df = proj_df[proj_df.D > 30]
         filt_df.to_parquet(out_path)
 
-    with set_broadcast_join(broadcast):
-        with tempfile.TemporaryDirectory() as tmp:
-            df1_bodo = bd.read_parquet(df1_path)
-            out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-            filter_impl(df1_bodo, out_path_bodo)
+    with set_broadcast_join(broadcast), tempfile.TemporaryDirectory() as tmp:
+        df1_bodo = bd.read_parquet(df1_path)
+        out_path_bodo = os.path.join(tmp, "out_bodo.pq")
+        filter_impl(df1_bodo, out_path_bodo)
 
-            df1_pd = pd.read_parquet(df1_path)
-            out_path_pd = os.path.join(tmp, "out_pd.pq")
-            filter_impl(df1_pd, out_path_pd)
+        df1_pd = pd.read_parquet(df1_path)
+        out_path_pd = os.path.join(tmp, "out_pd.pq")
+        filter_impl(df1_pd, out_path_pd)
 
-            result_bodo = pd.read_parquet(out_path_bodo)
-            result_pd = pd.read_parquet(out_path_pd)
-            _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
+        result_bodo = pd.read_parquet(out_path_bodo)
+        result_pd = pd.read_parquet(out_path_pd)
+        _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
 
 
 @pytest.mark.parametrize(
@@ -192,22 +191,21 @@ def test_gpu_join_bloom_filter(datapath, broadcast):
             orders_df, how="inner", left_on=["C_CUSTKEY"], right_on=["O_CUSTKEY"]
         )
 
-    with set_broadcast_join(broadcast):
-        with tempfile.TemporaryDirectory() as tmp:
-            cust_bodo = bd.read_parquet(cust_path)
-            orders_bodo = bd.read_parquet(orders_path)
-            out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-            merged_bodo = merge_impl(cust_bodo, orders_bodo)
-            merged_bodo.to_parquet(out_path_bodo)
+    with set_broadcast_join(broadcast), tempfile.TemporaryDirectory() as tmp:
+        cust_bodo = bd.read_parquet(cust_path)
+        orders_bodo = bd.read_parquet(orders_path)
+        out_path_bodo = os.path.join(tmp, "out_bodo.pq")
+        merged_bodo = merge_impl(cust_bodo, orders_bodo)
+        merged_bodo.to_parquet(out_path_bodo)
 
-            cust_pd = pd.read_parquet(cust_path)
-            orders_pd = pd.read_parquet(orders_path)
-            out_path_pd = os.path.join(tmp, "out_pd.pq")
-            merge_impl(cust_pd, orders_pd).to_parquet(out_path_pd)
+        cust_pd = pd.read_parquet(cust_path)
+        orders_pd = pd.read_parquet(orders_path)
+        out_path_pd = os.path.join(tmp, "out_pd.pq")
+        merge_impl(cust_pd, orders_pd).to_parquet(out_path_pd)
 
-            result_bodo = pd.read_parquet(out_path_bodo)
-            result_pd = pd.read_parquet(out_path_pd)
-            _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
+        result_bodo = pd.read_parquet(out_path_bodo)
+        result_pd = pd.read_parquet(out_path_pd)
+        _test_equal(result_bodo, result_pd, sort_output=True, reset_index=True)
 
 
 def test_head(datapath):
@@ -216,9 +214,7 @@ def test_head(datapath):
         df1_path = datapath("dataframe_library/df1.parquet")
         df1_bodo = bd.read_parquet(df1_path)
         out_path_bodo = os.path.join(tmp, "out_bodo.pq")
-        df1_agg = getattr(
-            df1_bodo.groupby("D", as_index=False, sort=False)["A"], "sum"
-        )().head(3)
+        df1_agg = df1_bodo.groupby("D", as_index=False, sort=False)["A"].sum().head(3)
         df1_agg.to_parquet(out_path_bodo)
 
         result_bodo = pd.read_parquet(out_path_bodo)

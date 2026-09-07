@@ -26,9 +26,7 @@ class _OverloadUnsupportedMethodTemplate(_UnsupportedTemplate, AttributeTemplate
         if not self.is_matching_template(attr):
             return None
 
-        if isinstance(typ, types.TypeRef):
-            assert typ == self.key
-        elif isinstance(typ, types.Callable):
+        if isinstance(typ, (types.TypeRef, types.Callable)):
             assert typ == self.key
         else:
             assert isinstance(typ, self.key)
@@ -54,7 +52,7 @@ class _OverloadUnsupportedAttributeTemplate(_UnsupportedTemplate, AttributeTempl
 
     def _resolve(self, typ, attr):
         if not self.is_matching_template(attr):
-            return None
+            return
 
         raise BodoError(f"{self.path_name}{self.extra_info} not supported yet.")
 

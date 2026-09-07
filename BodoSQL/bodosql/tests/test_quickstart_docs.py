@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.test_docs]
 @pytest_mark_one_rank
 def test_quickstart_local_sql():
     """Test example equivalent to docs/quick_start/quickstart_local_sql.md"""
-    import bodosql.compiler  # isort:skip # noqa
+    import bodosql.compiler  # isort:skip
 
     NUM_GROUPS = 30
     NUM_ROWS = 2_000

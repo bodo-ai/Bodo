@@ -244,13 +244,13 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
             f"Table type is not as expected. Expected MANAGED but found {output_table_type}"
         )
 
-    except Exception as e:
+    except Exception:
         # In the case that another exception ocurred within the body of the try,
         # We may not have created a table to drop.
         # because of this, we call drop_snowflake_table in a try/except, to avoid
         # masking the original exception
         exception_occurred_in_test_body = True
-        raise e
+        raise
     finally:
         if exception_occurred_in_test_body:
             try:

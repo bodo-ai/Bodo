@@ -66,9 +66,7 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.create(
-    name='My first cluster',
-    instance_type='c5.large',
-    workers_quantity=1
+    name="My first cluster", instance_type="c5.large", workers_quantity=1
 )
 ```
 
@@ -81,11 +79,9 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.create(
-    name='My first cluster',
-    instance_type='c5.large',
-    workers_quantity=1
+    name="My first cluster", instance_type="c5.large", workers_quantity=1
 )
-my_cluster.wait_for_status(['RUNNING'])
+my_cluster.wait_for_status(["RUNNING"])
 ```
 
 This method will wait until either the cluster reaches any of the provided status, or fails (goes into the `FAILED`
@@ -102,17 +98,12 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.create(
-    name='My first cluster',
-    instance_type='c5.large',
-    workers_quantity=1
+    name="My first cluster", instance_type="c5.large", workers_quantity=1
 )
 
-my_cluster.wait_for_status(['RUNNING'])
+my_cluster.wait_for_status(["RUNNING"])
 my_cluster.update(
-    description='My description',
-    name="My updated cluster",
-    auto_pause=15,
-    auto_stop=30
+    description="My description", name="My updated cluster", auto_pause=15, auto_stop=30
 )
 ```
 
@@ -123,9 +114,9 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.get("cluster_id")
-if my_cluster.status != 'STOPPED':
+if my_cluster.status != "STOPPED":
     my_cluster.stop(wait=True)
-my_cluster.update(instance_type='c5.2xlarge', workers_quantity=2)
+my_cluster.update(instance_type="c5.2xlarge", workers_quantity=2)
 ```
 
 ### Create a Job
@@ -143,10 +134,7 @@ import time
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
-df = pd.DataFrame({
-    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-    "B": np.arange(NUM_ROWS)
-})
+df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
 df.to_parquet("my_data.pq")
 time.sleep(1)  # wait till file will be available on all nodes
 
@@ -155,9 +143,12 @@ time.sleep(1)  # wait till file will be available on all nodes
 def computation():
     t1 = time.time()
     df = pd.read_parquet("my_data.pq")
-    df2 = pd.DataFrame({"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)})
+    df2 = pd.DataFrame(
+        {"A": df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)}
+    )
     df2.to_parquet("out.pq")
     print("Execution time:", time.time() - t1)
+
 
 computation()
 ```
@@ -170,11 +161,9 @@ from bodosdk import BodoWorkspaceClient
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.get("cluster_id")
 my_job = my_cluster.run_job(
-    code_type='PYTHON',
-    source={'type': 'WORKSPACE', 'path': '/'},
-    exec_file='test.py'
+    code_type="PYTHON", source={"type": "WORKSPACE", "path": "/"}, exec_file="test.py"
 )
-print(my_job.wait_for_status(['SUCCEEDED']).get_stdout())
+print(my_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 ```
 
 You can use almost the same configuration to run a SQL file. All you need is to define your `test.sql` file and a
@@ -186,13 +175,12 @@ from bodosdk import BodoWorkspaceClient
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.get("cluster_id")
 my_job = my_cluster.run_job(
-    code_type='SQL',
-    source={'type': 'WORKSPACE', 'path': '/'},
-    exec_file='test.sql',
-    catalog="MyCatalog"
+    code_type="SQL",
+    source={"type": "WORKSPACE", "path": "/"},
+    exec_file="test.sql",
+    catalog="MyCatalog",
 )
-print(my_job.wait_for_status(['SUCCEEDED']).get_stdout())
-
+print(my_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 ```
 
 ### Cluster List and executing jobs on multiple clusters
@@ -206,29 +194,29 @@ import random
 my_workspace = BodoWorkspaceClient()
 
 random_val = random.random()  # just to avoid conflicts on name
-clusters_conf = [('c5.large', 8), ('c5.xlarge', 4), ('c5.2xlarge', 2)]
+clusters_conf = [("c5.large", 8), ("c5.xlarge", 4), ("c5.2xlarge", 2)]
 for i, conf in enumerate(clusters_conf):
     my_workspace.ClusterClient.create(
-        name=f'Test {i}',
+        name=f"Test {i}",
         instance_type=conf[0],
         workers_quantity=conf[1],
-        custom_tags={'test_tag': f'perf_test{random_val}'}  # let's add tag to easy filter our clusters
+        custom_tags={
+            "test_tag": f"perf_test{random_val}"
+        },  # let's add tag to easy filter our clusters
     )
 
 # get list by tag
-clusters = my_workspace.ClusterClient.list(filters={
-    'tags': {'test_tag': f'perf_test{random_val}'}
-})
+clusters = my_workspace.ClusterClient.list(
+    filters={"tags": {"test_tag": f"perf_test{random_val}"}}
+)
 
 # run same job 3 times, once per each cluster
 jobs = clusters.run_job(
-    code_type='PYTHON',
-    source={'type': 'WORKSPACE', 'path': '/'},
-    exec_file='test.py'
+    code_type="PYTHON", source={"type": "WORKSPACE", "path": "/"}, exec_file="test.py"
 )
 
 # wait for jobs to finish and print results
-for job in jobs.wait_for_status(['SUCCEEDED']):
+for job in jobs.wait_for_status(["SUCCEEDED"]):
     print(job.name, job.cluster.name)
     print(job.get_stdout())
 
@@ -245,15 +233,15 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 my_sql_job = my_workspace.JobClient.run_sql_query(
-    sql_query="SELECT 1", 
-    catalog="MyCatalog", 
+    sql_query="SELECT 1",
+    catalog="MyCatalog",
     cluster={
-        "name": 'Temporary cluster',
-        "instance_type": 'c5.large',
-        "workers_quantity": 1
-    }
+        "name": "Temporary cluster",
+        "instance_type": "c5.large",
+        "workers_quantity": 1,
+    },
 )
-print(my_sql_job.wait_for_status(['SUCCEEDED']).get_stdout())
+print(my_sql_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 ```
 
 In this case, when you provide a cluster configuration rather than an existing cluster, the created cluster will be
@@ -267,12 +255,10 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.create(
-    name='My cluster',
-    instance_type='c5.large',
-    workers_quantity=1
+    name="My cluster", instance_type="c5.large", workers_quantity=1
 )
 my_sql_job = my_cluster.run_sql_query(sql_query="SELECT 1", catalog="MyCatalog")
-print(my_sql_job.wait_for_status(['SUCCEEDED']).get_stdout())
+print(my_sql_job.wait_for_status(["SUCCEEDED"]).get_stdout())
 ```
 
 ### Connector
@@ -284,12 +270,11 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.create(
-    name='My cluster',
-    instance_type='c5.large',
-    workers_quantity=1
+    name="My cluster", instance_type="c5.large", workers_quantity=1
 )
 connection = my_cluster.connect(
-    'MyCatalog')  # or connection = my_workspace.ClusterClient.connect('MyCatalog', 'cluster_id')
+    "MyCatalog"
+)  # or connection = my_workspace.ClusterClient.connect('MyCatalog', 'cluster_id')
 print(connection.cursor().execute("SELECT 1").fetchone())
 my_cluster.delete()
 ```
@@ -303,23 +288,23 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 tpl = my_workspace.JobTemplateClient.create(
-    name='My template',
-    cluster={
-        'instance_type': 'c5.xlarge',
-        'workers_quantity': 1
-    },
+    name="My template",
+    cluster={"instance_type": "c5.xlarge", "workers_quantity": 1},
     code_type="SQL",
     catalog="MyCatalog",
-    exec_text="SELECT 1"
+    exec_text="SELECT 1",
 )
 job1 = tpl.run()  # you can simply run it
 job2 = tpl.run(exec_text="SELECT 2")  # or run it with overriding template values
-job3 = tpl.run(cluster={'instance_type': 'c5.large'})  # you can override even part of cluster configuration
+job3 = tpl.run(
+    cluster={"instance_type": "c5.large"}
+)  # you can override even part of cluster configuration
 
-jobs = my_workspace.JobClient.list(filters={'template_ids': [tpl.id]})  # you can filter jobs by its template_id
-for job in jobs.wait_for_status(['SUCCEEDED']):
+jobs = my_workspace.JobClient.list(
+    filters={"template_ids": [tpl.id]}
+)  # you can filter jobs by its template_id
+for job in jobs.wait_for_status(["SUCCEEDED"]):
     print(job.name, job.cluster.instance_type, job.get_stdout())
-
 ```
 
 You can also run your template on specific clusters:
@@ -329,13 +314,17 @@ from bodosdk import BodoWorkspaceClient
 from bodosdk.models import JobTemplateFilter
 
 my_workspace = BodoWorkspaceClient()
-tpls = my_workspace.JobTemplateClient.list(filters=JobTemplateFilter(names=['My template']))
-my_cluster = my_workspace.ClusterClient.create(
-    name='My cluster',
-    instance_type='c5.large',
-    workers_quantity=1
+tpls = my_workspace.JobTemplateClient.list(
+    filters=JobTemplateFilter(names=["My template"])
 )
-print(my_cluster.run_job(template_id=tpls[0].id).wait_for_status(['SUCCEEDED']).get_stdout())
+my_cluster = my_workspace.ClusterClient.create(
+    name="My cluster", instance_type="c5.large", workers_quantity=1
+)
+print(
+    my_cluster.run_job(template_id=tpls[0].id)
+    .wait_for_status(["SUCCEEDED"])
+    .get_stdout()
+)
 my_cluster.delete()
 ```
 
@@ -399,7 +388,7 @@ from bodosdk.models import WorkspaceFilter
 
 my_org = BodoOrganizationClient()
 
-for w in my_org.list_workspaces(filters=WorkspaceFilter(statuses=['READY'])):
+for w in my_org.list_workspaces(filters=WorkspaceFilter(statuses=["READY"])):
     print(w.name)
 ```
 
@@ -410,7 +399,7 @@ from bodosdk import BodoOrganizationClient
 
 my_org = BodoOrganizationClient()
 
-for w in my_org.list_workspaces(filters={"statuses": ['READY']}):
+for w in my_org.list_workspaces(filters={"statuses": ["READY"]}):
     print(w.name)
 ```
 
@@ -422,11 +411,16 @@ from bodosdk import BodoOrganizationClient
 my_org = BodoOrganizationClient()
 my_workspace = my_org.create_workspace(
     name="SDK test",
-    region='us-east-2',
+    region="us-east-2",
     cloud_config_id="a0d1242c-3091-42de-94d9-548e2ae33b73",
-    storage_endpoint_enabled=True
-).wait_for_status(['READY'])
-assert my_workspace.id == my_org.list_workspaces(filters={"names": ['SDK test'], "statuses": ['READY']})[0].id
+    storage_endpoint_enabled=True,
+).wait_for_status(["READY"])
+assert (
+    my_workspace.id
+    == my_org.list_workspaces(filters={"names": ["SDK test"], "statuses": ["READY"]})[
+        0
+    ].id
+)
 my_workspace.delete()  # remove workspace at the end
 ```
 
@@ -439,7 +433,9 @@ apply fresh changes to workspace infrastructure. You can do it as follows:
 from bodosdk import BodoOrganizationClient
 
 my_org = BodoOrganizationClient()
-my_org.list_workspaces(filters={'ids': ['workspace_to_update1_id', 'workspace_to_update2_id']}).update_infra()
+my_org.list_workspaces(
+    filters={"ids": ["workspace_to_update1_id", "workspace_to_update2_id"]}
+).update_infra()
 ```
 
 ## Advanced
@@ -462,10 +458,10 @@ my_workspace = my_org.create_workspace(
     region="us-east-1",
     storage_endpoint_enabled=True,
     vpc_id="existing-vpc-id",
-    private_subnets_ids=['subnet1', 'subnet2'],
-    public_subnets_ids=['subnet3']
+    private_subnets_ids=["subnet1", "subnet2"],
+    public_subnets_ids=["subnet3"],
 )
-my_workspace.wait_for_status(['READY'])
+my_workspace.wait_for_status(["READY"])
 ```
 
 ### Spot instances and Auto-AZ
@@ -483,8 +479,8 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 my_cluster = my_workspace.ClusterClient.create(
-    name='Spot cluster',
-    instance_type='c5.large',
+    name="Spot cluster",
+    instance_type="c5.large",
     workers_quantity=1,
     use_spot_instance=True,
     auto_az=True,
@@ -503,10 +499,12 @@ from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
 
-accelerated_networking_instances = [x for x in my_workspace.ClusterClient.get_instances() if x.accelerated_networking]
+accelerated_networking_instances = [
+    x for x in my_workspace.ClusterClient.get_instances() if x.accelerated_networking
+]
 
 my_cluster = my_workspace.ClusterClient.create(
-    name='Spot cluster',
+    name="Spot cluster",
     instance_type=accelerated_networking_instances[0].name,
     workers_quantity=1,
 )
@@ -546,32 +544,30 @@ from bodosdk.models import ClusterFilter
 my_workspace = BodoWorkspaceClient()
 
 clusters_conf = {
-    'Team A': {
-        'instance_type': 'c5.2xlarge',
-        'workers': 4,
+    "Team A": {
+        "instance_type": "c5.2xlarge",
+        "workers": 4,
     },
-    'Team b': {
-        'instance_type': 'c5.xlarge',
-        'workers': 2,
+    "Team b": {
+        "instance_type": "c5.xlarge",
+        "workers": 2,
     },
-    'Team C': {
-        'instance_type': 'c5.16xlarge',
-        'workers': 2,
-    }
+    "Team C": {
+        "instance_type": "c5.16xlarge",
+        "workers": 2,
+    },
 }
 for owner, conf in clusters_conf.items():
     my_workspace.ClusterClient.create(
         name=f"{owner} Cluster",
-        instance_type=conf['instance_type'],
-        workers_quantity=conf['workers'],
-        custom_tags={'owner': owner, 'purpose': 'test'}
+        instance_type=conf["instance_type"],
+        workers_quantity=conf["workers"],
+        custom_tags={"owner": owner, "purpose": "test"},
     )
 
 my_workspace.ClusterClient.list(
-    filters=ClusterFilter(tags={'purpose': 'test'})
-).wait_for_status(
-    ['RUNNING', 'INITIALIZING']
-).pause().wait_for_status(['PAUSED'])
+    filters=ClusterFilter(tags={"purpose": "test"})
+).wait_for_status(["RUNNING", "INITIALIZING"]).pause().wait_for_status(["PAUSED"])
 ```
 
 ### Run a job using a cluster as template
@@ -584,10 +580,12 @@ job:
 from bodosdk import BodoWorkspaceClient
 
 my_workspace = BodoWorkspaceClient()
-my_cluster = my_workspace.ClusterClient.get('existing_cluster')
+my_cluster = my_workspace.ClusterClient.get("existing_cluster")
 cluster_conf = my_cluster.dict()
-del cluster_conf['uuid']
-my_sql_job = my_workspace.JobClient.run_sql_query(sql_query="SELECT 1", catalog="MyCatalog", cluster=cluster_conf)
+del cluster_conf["uuid"]
+my_sql_job = my_workspace.JobClient.run_sql_query(
+    sql_query="SELECT 1", catalog="MyCatalog", cluster=cluster_conf
+)
 ```
 
 A new cluster will be created with the same configuration as the existing cluster, and the job will be run on it. The

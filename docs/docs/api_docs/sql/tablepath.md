@@ -13,6 +13,7 @@ bc = bodosql.BodoSQLContext(
     }
 )
 
+
 @bodo.jit
 def f(bc):
     return bc.sql("select t1.A, t2.B from t1, t2 where t1.C > 5 and t1.D = t2.D")

@@ -20,6 +20,7 @@ import bodo
 import pandas as pd
 import os
 
+
 def get_filename():
     if os.path.exists("input.parquet"):
         return "input.parquet"
@@ -27,10 +28,12 @@ def get_filename():
         return os.environ["INPUT_FILE"]
     raise Exception("Input file name not found")
 
+
 @bodo.jit
 def f(fname):
     df = pd.read_parquet(fname)
     print(df.sum())
+
 
 fname = get_filename()
 f(fname)

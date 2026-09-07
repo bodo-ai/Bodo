@@ -25,10 +25,12 @@ Below is an example using the `verbose mode` to verify that Bodo is only loading
 ```py
 bodo.set_verbose_level(1)
 
+
 @bodo.jit
 def load_data(filename):
     df = pd.read_parquet(filename)
     return df.id
+
 
 load_data("my_file.pq")
 ```
@@ -69,10 +71,12 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.FileHandler("example.log"))
 bodo.set_bodo_verbose_logger(logger)
 
+
 @bodo.jit
 def load_data(filename):
     df = pd.read_parquet(filename)
     return df.id
+
 
 load_data("my_file.pq")
 ```

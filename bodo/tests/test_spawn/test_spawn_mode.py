@@ -269,7 +269,7 @@ def test_args():
     # Test BodoSQLContext if bodosql installed in test environment
     try:
         import bodosql
-        import bodosql.compiler  # isort:skip # noqa
+        import bodosql.compiler  # isort:skip
 
         bodo.spawn.utils.import_bodosql_compiler_on_workers()
 
