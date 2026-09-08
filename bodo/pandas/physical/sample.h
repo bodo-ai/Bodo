@@ -32,6 +32,8 @@ class PhysicalSample : public PhysicalProcessBatch {
         std::vector<MetricBase> metrics_out;
         metrics_out.emplace_back(
             TimerMetric("sample_time", this->metrics.sample_time));
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));

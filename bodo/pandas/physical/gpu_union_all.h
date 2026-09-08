@@ -44,6 +44,8 @@ class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
                               long pipeline_position) override {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().SubmitOperatorName(
+            PhysicalGPUSink::getOpId(), PhysicalGPUSink::ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(
                 PhysicalGPUSink::getOpId(), 1),

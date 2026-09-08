@@ -25,7 +25,10 @@ class PhysicalCTE : public PhysicalSink {
     virtual ~PhysicalCTE() = default;
 
     void FinalizeSink(int64_t pipeline_num,
-                      int64_t pipeline_position) override {}
+                      int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+    }
 
     /**
      * @brief process input tables to build side of join (populate the hash
@@ -102,7 +105,10 @@ class PhysicalCTERef : public PhysicalSource {
     int64_t getOpId() const override { return PhysicalSource::getOpId(); }
 
     void FinalizeSource(int64_t pipeline_num,
-                        int64_t pipeline_position) override {}
+                        int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+    }
 
    private:
     std::shared_ptr<PhysicalCTE> cte;

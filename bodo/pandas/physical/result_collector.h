@@ -46,7 +46,10 @@ class PhysicalResultCollector : public PhysicalSink {
     }
 
     void FinalizeSink(int64_t pipeline_num,
-                      int64_t pipeline_position) override {}
+                      int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+    }
 
     std::variant<std::shared_ptr<table_info>, PyObject*> GetResult() override {
         return buffer->data_table;
