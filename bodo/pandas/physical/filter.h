@@ -73,6 +73,8 @@ class PhysicalFilter : public PhysicalProcessBatch {
 
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));

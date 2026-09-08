@@ -147,6 +147,8 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
 
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
+        QueryProfileCollector::Default().SubmitOperatorName(
+            PhysicalSink::getOpId(), PhysicalSink::ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
                                                        1),

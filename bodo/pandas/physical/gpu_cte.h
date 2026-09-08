@@ -23,7 +23,10 @@ class PhysicalGPUCTE : public PhysicalGPUSink {
     virtual ~PhysicalGPUCTE() = default;
 
     void FinalizeSink(int64_t pipeline_num,
-                      int64_t pipeline_position) override {}
+                      int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+    }
 
     /**
      * @brief process input tables to build side of join (populate the hash
@@ -106,7 +109,10 @@ class PhysicalGPUCTERef : public PhysicalGPUSource {
     int64_t getOpId() const { return PhysicalGPUSource::getOpId(); }
 
     void FinalizeSource(int64_t pipeline_num,
-                        int64_t pipeline_position) override {}
+                        int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+    }
 
    private:
     std::shared_ptr<PhysicalGPUCTE> cte;

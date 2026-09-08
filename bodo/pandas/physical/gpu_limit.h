@@ -74,7 +74,10 @@ class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
     }
 
     void FinalizeSource(int64_t pipeline_num,
-                        int64_t pipeline_position) override {}
+                        int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(
+            PhysicalGPUSink::getOpId(), PhysicalGPUSink::ToString());
+    }
 
     /**
      * @brief Do limit.

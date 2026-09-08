@@ -439,7 +439,10 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
     }
 
     void FinalizeSource(int64_t pipeline_num,
-                        int64_t pipeline_position) override {}
+                        int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(
+            PhysicalSink::getOpId(), PhysicalSink::ToString());
+    }
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                 OperatorResult prev_op_result) override {
