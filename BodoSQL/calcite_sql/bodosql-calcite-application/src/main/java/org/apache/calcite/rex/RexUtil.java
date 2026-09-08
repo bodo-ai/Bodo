@@ -446,14 +446,11 @@ public class RexUtil {
     /** Bodo Change:
      * Avoid literal-to-literal entries in the constant map.
      *
-     * predicateConstants considers equalicty constraints in both directions.
-     * For equivalent literals with different Rex representations, this can
-     * create cyclic mappings such as A -> B and B -> A.
-     *
-     * ReduceExpressionsRule may then alternate between the two representations.
-     * Because the rule prunes the expression it replaces, this can leave a
-     * Volcano subset without a usable expression and cause a
-     * CannotPlanException.
+     * During optimization, the planner may generate predicates like: 'a' = 'a':VARCHAR
+     * through ordinary expression transformations. These predicates create cycles in the
+     * Volcano optimizer. For example, the condition =($0, 'a') might alternate between
+     * =('a', 'a') and =('a':VARCHAR, 'a':VARCHAR) in the FilterReduceExpression rule,
+     * leading to the planner to prune both expressions and throw a CannotPlanException.
      */
     if (left instanceof RexLiteral) {
       return;
