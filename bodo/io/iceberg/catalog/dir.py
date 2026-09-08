@@ -305,3 +305,27 @@ class DirCatalog(Catalog):
 
     def view_exists(self, identifier: str | Identifier) -> bool:
         raise NotImplementedError("Views are not supported in DirCatalog")
+
+    def register_view(self, identifier: str | Identifier, metadata_location: str):
+        raise NotImplementedError("Views are not supported in DirCatalog")
+
+    def drop_view(self, identifier: str | Identifier) -> None:
+        raise NotImplementedError("Views are not supported in DirCatalog")
+
+    def create_view(
+        self,
+        identifier: str | Identifier,
+        schema: Schema | pa.Schema,
+        view_version,
+        location: str | None = None,
+        properties: Properties = EMPTY_DICT,
+    ):
+        raise NotImplementedError("Views are not supported in DirCatalog")
+
+    def load_view(self, identifier: str | Identifier):
+        raise NotImplementedError("Views are not supported in DirCatalog")
+
+    def supports_server_side_planning(
+        self, table_config: Properties = EMPTY_DICT
+    ) -> bool:
+        return False
