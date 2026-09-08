@@ -175,6 +175,28 @@ BASE_MAP: dict[str, tuple[dict, list]] = {
             ),
         },
         [
+            ("A", "string", True),
+            ("B", "string", True),
+            ("C", "string", True),
+            ("D", "string", True),
+        ],
+    ),
+    "STRING_TABLE_NOTNULL": (
+        {
+            "A": np.array(["A", "B", "C", "D"] * 25),
+            "B": np.array(["lorem", "ipsum", "loden", "ion"] * 25),
+            "C": np.array((["A"] * 10) + (["b"] * 90)),
+            "D": np.array(
+                ["four hundred"] * 10
+                + ["five"] * 20
+                + [None] * 10
+                + ["forty-five"] * 10
+                + ["four"] * 20
+                + ["fifeteen"] * 20
+                + ["f"] * 10
+            ),
+        },
+        [
             ("A", "string", False),
             ("B", "string", True),
             ("C", "string", True),

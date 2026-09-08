@@ -151,7 +151,7 @@ def test_table_read_head(
 @pytest.mark.parametrize(
     "table_name",
     [
-        "SIMPLE_STRING_TABLE",
+        "SIMPLE_STRING_TABLE_NOTNULL",
     ],
 )
 @pytest.mark.gpu
