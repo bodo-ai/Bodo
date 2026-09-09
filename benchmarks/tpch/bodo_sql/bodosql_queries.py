@@ -60,6 +60,17 @@ required_tables = {
     22: ["CUSTOMER", "ORDERS"],
 }
 
+primaryKeys = {
+    "CUSTOMER": ["C_CUSTKEY"],
+    "ORDERS": ["O_ORDERKEY"],
+    "LINEITEM": ["L_ORDERKEY", "L_LINENUMBER"],
+    "NATION": ["N_NATIONKEY"],
+    "REGION": ["R_REGIONKEY"],
+    "SUPPLIER": ["S_SUPPKEY"],
+    "PART": ["P_PARTKEY"],
+    "PARTSUPP": ["PS_PARTKEY", "PS_SUPPKEY"],
+}
+
 
 def timethis(
     q: Callable,
@@ -125,7 +136,7 @@ def run_queries(
     if use_parquet:
         tpch_data = get_tpch_data_parquet(root, use_stats)
     else:
-        tpch_data = FileSystemCatalog(root)
+        tpch_data = FileSystemCatalog(root, primaryKeys=primaryKeys)
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]

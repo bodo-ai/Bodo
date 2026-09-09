@@ -41,7 +41,8 @@ class FileSystemCatalog(
     connStr: String,
     private val writeDefault: WriteTarget.WriteTargetEnum,
     defaultSchema: String,
-) : IcebergCatalog<HadoopCatalog>(createHadoopCatalog(connStr)) {
+    tablePrimaryKeys: MutableMap<String, MutableList<String>> = mutableMapOf(),
+) : IcebergCatalog<HadoopCatalog>(createHadoopCatalog(connStr), tablePrimaryKeys) {
     private val fs = createFileSystem(connStr)
     private val rootPath = fs.resolvePath(Path("."))
     private val defaultSchemaList = parseDefaultSchema(defaultSchema)

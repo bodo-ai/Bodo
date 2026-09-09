@@ -14,6 +14,7 @@ import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Statistic
+import org.apache.calcite.util.ImmutableBitSet
 import org.apache.iceberg.catalog.Catalog
 import org.apache.iceberg.catalog.SupportsNamespaces
 import java.util.Locale
@@ -23,15 +24,14 @@ class IcebergCatalogTable<T>(
     schemaPath: ImmutableList<String>,
     columns: List<BodoSQLColumn>,
     private val catalog: IcebergCatalog<T>,
+    primaryKeyColumns: MutableList<String>? = null,
 ) : CatalogTable(
         name,
         schemaPath,
         columns,
         catalog,
+        primaryKeyColumns,
     ) where T : Catalog, T : SupportsNamespaces {
-    // Hold the statistics for this table.
-    private val statistic: Statistic = StatisticImpl()
-
     /** Interface to get the Iceberg Catalog.  */
     override fun getCatalog(): IcebergCatalog<T> = catalog
 
@@ -75,7 +75,39 @@ class IcebergCatalogTable<T>(
         return baseRelNode
     }
 
-    override fun getStatistic(): Statistic = statistic
+    private inner class StatisticImpl(
+        private val primaryKeyColumnsBits: List<ImmutableBitSet>?,
+    ) : Statistic {
+        private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
+
+        override fun getKeys(): List<ImmutableBitSet>? {
+            println("IcebergCatalogTable getKeys()")
+            return primaryKeyColumnsBits
+        }
+
+        override fun isKey(columns: ImmutableBitSet): Boolean {
+            if (primaryKeyColumnsBits.isNullOrEmpty()) return false
+            return false
+            // return primaryKeyColumnsBits.any { pk -> columns.contains(pk) }
+        }
+
+        /**
+         * Retrieves the estimated row count for this table. This value is memoized.
+         *
+         * @return estimated row count for this table.
+         */
+        override fun getRowCount(): Double? = rowCount.get()
+
+        /**
+         * Retrieves the estimated row count for this table. It performs a query every time this is
+         * invoked.
+         *
+         * @return estimated row count for this table.
+         */
+        private fun estimateRowCount(): Double? = catalog.estimateIcebergTableRowCount(parentFullPath, name)
+    }
+
+    override fun getStatistic(): Statistic = StatisticImpl(primaryKeyColumnsBits)
 
     /**
      * Get the insert into write target for a particular table.
@@ -118,23 +150,4 @@ class IcebergCatalogTable<T>(
      * @return Estimated distinct count for this table.
      */
     override fun getColumnDistinctCount(column: Int): Double? = columnDistinctCount.apply(column)
-
-    private inner class StatisticImpl : Statistic {
-        private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
-
-        /**
-         * Retrieves the estimated row count for this table. This value is memoized.
-         *
-         * @return estimated row count for this table.
-         */
-        override fun getRowCount(): Double? = rowCount.get()
-
-        /**
-         * Retrieves the estimated row count for this table. It performs a query every time this is
-         * invoked.
-         *
-         * @return estimated row count for this table.
-         */
-        private fun estimateRowCount(): Double? = catalog.estimateIcebergTableRowCount(parentFullPath, name)
-    }
 }
