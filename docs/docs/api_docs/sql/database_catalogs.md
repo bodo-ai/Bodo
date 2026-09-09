@@ -182,7 +182,7 @@ run_query(bc)
 
 ### API Reference
 
-- `bodosql.FileSystemCatalog(root: str, default_write_format: str = "iceberg", default_schema: str = ".")`
+- `bodosql.FileSystemCatalog(root: str, default_write_format: str = "iceberg", default_schema: str = ".", primary_keys = None)`
 <br><br>
 
     Constructor for `FileSystemCatalog`. This allows users to try a file system as a database for querying
@@ -196,6 +196,12 @@ run_query(bc)
 
     - `default_schema`: The default schema to use when resolving tables. This should be a `.` separated string that represents the path to the default schema.
        Each value separated by a `.` should be treated as its own SQL identifier. If no default schema is provided the root directory is used.
+
+    - 'primary_keys': Allow the user to specify for each table which columns guarantee row uniqueness.  This can be thought of as the primary
+       key of the table.  This argument is either None, if there is no primary key information available, or a dictionary of lists of strings, i.e.,
+       dict[table_name, [column0_name, ..., columnN_name]], that specifies the columns that are the primary keys of the specified table.  It is not
+       necessary to specify an entry for each table in the catalog.  By specifying primary keys, the query optimizer is able to eliminate certain
+       deduplication steps.
 
 #### Supported Query Types
 

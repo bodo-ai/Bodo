@@ -87,8 +87,7 @@ class IcebergCatalogTable<T>(
 
         override fun isKey(columns: ImmutableBitSet): Boolean {
             if (primaryKeyColumnsBits.isNullOrEmpty()) return false
-            return false
-            // return primaryKeyColumnsBits.any { pk -> columns.contains(pk) }
+            return primaryKeyColumnsBits.any { pk -> columns.contains(pk) }
         }
 
         /**
