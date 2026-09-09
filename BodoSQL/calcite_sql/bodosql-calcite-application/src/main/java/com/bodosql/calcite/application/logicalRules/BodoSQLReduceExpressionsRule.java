@@ -294,24 +294,12 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
                   .collect(Collectors.toList());
           boolean changed = !project.getProjects().equals(finalExpList);
           if (changed) {
-            RelNode newProject =
+            call.transformTo(
                 call.builder()
                     .push(project.getInput())
                     .project(finalExpList, project.getRowType().getFieldNames())
-                    .build();
-            call.transformTo(newProject);
-            //            for (int i = 0; i < project.getProjects().size(); i++) {
-            //              RexNode before = project.getProjects().get(i);
-            //              RexNode after = finalExpList.get(i);
-            //
-            //              if (before instanceof RexInputRef
-            //                      && !(after instanceof RexInputRef)
-            //                      && !before.equals(after)) {
-            //                System.err.println("INPUT REF EXPANDED:");
-            //                System.err.println("  before: " + before);
-            //                System.err.println("  after:  " + after);
-            //              }
-            //            }
+                    .build());
+
             // New plan is absolutely better than old plan.
             call.getPlanner().prune(project);
           }
