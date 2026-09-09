@@ -431,7 +431,10 @@ class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
     }
 
     void FinalizeSource(int64_t pipeline_num,
-                        int64_t pipeline_position) override {}
+                        int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(
+            PhysicalGPUSink::getOpId(), PhysicalGPUSink::ToString());
+    }
 
     OperatorResult ConsumeBatchGPU(
         GPU_DATA input_batch, OperatorResult prev_op_result,

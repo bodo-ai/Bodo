@@ -1366,6 +1366,26 @@ public:
         return do_find(key);
     }
 
+    /**
+     * BODO CHANGE: Add this function
+     * Prefetch the bucket cache line that find() would touch for this key,
+     * so it can be issued a few iterations ahead of the actual lookup to
+     * hide part of the dependent cache miss. Read-only, and a no-op while
+     * the table is empty.
+     */
+    void prefetch_bucket(Key const& key) const {
+        #ifdef _MSC_VER
+            // MSVC doesn't support __builtin_prefetch, so just return
+            return;
+        #endif
+        if (ANKERL_UNORDERED_DENSE_UNLIKELY(empty())) {
+            return;
+        }
+        auto mh = mixed_hash(key);
+        auto bucket_idx = bucket_idx_from_hash(mh);
+        __builtin_prefetch(&at(m_buckets, static_cast<value_idx_type>(bucket_idx)), /*read only*/ 0, /*low locality*/1);
+    }
+
     auto find(Key const& key) const -> const_iterator {
         return do_find(key);
     }

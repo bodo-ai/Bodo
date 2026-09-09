@@ -80,7 +80,10 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     }
 
     void FinalizeSource(int64_t pipeline_num,
-                        int64_t pipeline_position) override {}
+                        int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(
+            PhysicalSink::getOpId(), PhysicalSink::ToString());
+    }
 
     /**
      * @brief get_n_rows - utility function to get a fixed number of rows from a

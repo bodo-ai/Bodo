@@ -680,6 +680,51 @@ inline size_t handle_probe_input_for_partition(
     return group_id;
 }
 
+// Prefetch distance (in rows) for the join probe hot loop: while looking up
+// row i, the bucket line of row i + JOIN_PROBE_PREFETCH_DIST is prefetched,
+// hiding part of the dependent cache miss chain. 0 disables prefetching.
+static const size_t JOIN_PROBE_PREFETCH_DIST = [] {
+    const char* dist_str = std::getenv("BODO_JOIN_PROBE_PREFETCH_DIST");
+    if (dist_str == nullptr) {
+        return size_t(16);
+    }
+    int dist = std::atoi(dist_str);
+    return dist > 0 ? static_cast<size_t>(dist) : size_t(0);
+}();
+
+/**
+ * @brief Prefetch the hash table bucket cache line of a probe row ahead of
+ * its lookup (see handle_probe_input_for_partition), to partially hide the
+ * dependent cache miss of the bucket load.
+ *
+ * @param ht Partition's pinned hash table to prefetch.
+ * @param i_row Row index in partition->probe_table to prefetch.
+ */
+inline void prefetch_probe_input_for_partition(
+    const bodo::pin_guard<bodo::pinnable<JoinPartition::hash_table_t>>& ht,
+    size_t i_row) {
+    ht->prefetch_bucket(-i_row - 1);
+}
+
+/**
+ * @brief Raw pointers into a partition's pinned probe state (group offsets,
+ * groups and build-side matched bitmap), extracted once per batch so
+ * produce_probe_output doesn't need per-row guard lookups.
+ */
+struct ProbePartitionState {
+    const size_t* groups_offsets;
+    const size_t* groups;
+    uint8_t* build_table_matched;
+};
+
+inline ProbePartitionState get_probe_partition_state(JoinPartition* partition) {
+    return ProbePartitionState{
+        .groups_offsets = partition->groups_offsets_guard.value()->data(),
+        .groups = partition->groups_guard.value()->data(),
+        .build_table_matched =
+            partition->build_table_matched_guard.value()->data()};
+}
+
 /**
  * @brief Helper function for join_probe_consume_batch and
  * FinalizeProbeForInactivePartition to update 'build_idxs'
@@ -716,13 +761,8 @@ inline size_t handle_probe_input_for_partition(
  * @param build_null_bitmaps
  * @param probe_null_bitmaps
  *
- * These parameters are for output generation with AppendJoinOutput (see
- * join_probe_consume_batch for more details):
- * @param output_buffer
- * @param build_table
- * @param probe_table
- * @param build_kept_cols
- * @param probe_kept_cols
+ * @param probe_state Raw pointers into the partition's pinned probe state
+ * (see ProbePartitionState).
  * @param[in, out] append_time -- Increment this with the time spent in
  * AppendJoinOutput.
  */
@@ -742,6 +782,7 @@ inline void produce_probe_output(
     const std::shared_ptr<table_info>& probe_table,
     const std::vector<uint64_t>& build_kept_cols,
     const std::vector<uint64_t>& probe_kept_cols,
+    const ProbePartitionState& probe_state,
     HashJoinMetrics::time_t& append_time, bool is_mark_join = false) {
     const int64_t group_id = group_ids[i_row - batch_start_row];
 
@@ -766,22 +807,14 @@ inline void produce_probe_output(
         return;
     }
 
-    // TODO Pass pinned groups_offsets vector instead of pinning for each
-    // row.
-    auto& partition_groups_offsets_ = partition->groups_offsets_guard.value();
-    const size_t group_start_idx = (*partition_groups_offsets_)[group_id - 1];
-    const size_t group_end_idx = (*partition_groups_offsets_)[group_id - 1 + 1];
+    const size_t group_start_idx = probe_state.groups_offsets[group_id - 1];
+    const size_t group_end_idx = probe_state.groups_offsets[group_id - 1 + 1];
     // Initialize to true for pure hash join so the final branch
     // is non-equality condition only.
     bool has_match = !non_equi_condition;
-    // TODO Pass pinned groups vector instead of pinning every time.
-    auto& partition_groups_ = partition->groups_guard.value();
-    // TODO Pass pinned build_table_matched instead of pinning every time.
-    auto& partition_build_table_matched_ =
-        partition->build_table_matched_guard.value();
 
     for (size_t idx = group_start_idx; idx < group_end_idx; idx++) {
-        const size_t j_build = (*partition_groups_)[idx];
+        const size_t j_build = probe_state.groups[idx];
         if constexpr (non_equi_condition) {
             // Check for matches with the non-equality portion.
             bool match =
@@ -795,7 +828,7 @@ inline void produce_probe_output(
             has_match = true;
         }
         if constexpr (build_table_outer) {
-            SetBitTo(partition_build_table_matched_->data(), j_build, true);
+            SetBitTo(probe_state.build_table_matched, j_build, true);
         }
         if constexpr (!is_anti_join) {
             build_idxs.push_back(j_build);
@@ -916,6 +949,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
         this->probe_table_buffer_chunked->chunks.size();
     // For ease of reference
     const auto& ht = this->build_hash_table_guard.value();
+    const ProbePartitionState probe_state = get_probe_partition_state(this);
     while (!this->probe_table_buffer_chunked->chunks.empty()) {
         start_pop = start_timer();
         auto [probe_table_chunk, probe_table_nrows] =
@@ -931,6 +965,10 @@ void JoinPartition::FinalizeProbeForInactivePartition(
         start_ht_probe = start_timer();
         group_ids.resize(this->probe_table->nrows());
         for (size_t i_row = 0; i_row < this->probe_table->nrows(); i_row++) {
+            if (i_row + JOIN_PROBE_PREFETCH_DIST < this->probe_table->nrows()) {
+                prefetch_probe_input_for_partition(
+                    ht, i_row + JOIN_PROBE_PREFETCH_DIST);
+            }
             group_ids[i_row] = handle_probe_input_for_partition(ht, i_row);
         }
         this->metrics.ht_probe_time += end_timer(start_ht_probe);
@@ -944,7 +982,7 @@ void JoinPartition::FinalizeProbeForInactivePartition(
                 probe_col_ptrs, build_null_bitmaps, probe_null_bitmaps,
                 output_buffer, this->build_table_buffer->data_table,
                 this->probe_table, build_kept_cols, probe_kept_cols,
-                append_time, this->is_mark_join);
+                probe_state, append_time, this->is_mark_join);
         }
         this->metrics.produce_probe_out_idxs_time +=
             end_timer(start_produce_probe) - append_time;
@@ -3593,6 +3631,10 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     const auto& active_partition_ht =
         active_partition.get()->build_hash_table_guard.value();
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        if (i_row + JOIN_PROBE_PREFETCH_DIST < in_table->nrows()) {
+            prefetch_probe_input_for_partition(
+                active_partition_ht, i_row + JOIN_PROBE_PREFETCH_DIST);
+        }
         // If just build_parallel = False then we have a broadcast join on
         // the build side. So process all rows.
         // If just probe_parallel = False and build_parallel = True then we
@@ -3635,6 +3677,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         }
     }
     join_state->metrics.ht_probe_time += end_timer(start_ht_probe);
+    const ProbePartitionState probe_state =
+        get_probe_partition_state(active_partition.get());
     HashJoinMetrics::time_t append_time = 0;
     time_pt start_produce_probe = start_timer();
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
@@ -3645,7 +3689,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
             probe_table_info_ptrs, build_col_ptrs, probe_col_ptrs,
             build_null_bitmaps, probe_null_bitmaps, join_state->output_buffer,
             active_partition->build_table_buffer->data_table, in_table,
-            build_kept_cols, probe_kept_cols, append_time,
+            build_kept_cols, probe_kept_cols, probe_state, append_time,
             join_state->is_mark_join);
     }
     join_state->metrics.produce_probe_out_idxs_time +=
@@ -3770,6 +3814,12 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                     start_ht_probe = start_timer();
                     group_ids.resize(nrows);
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
+                        if (i_row + JOIN_PROBE_PREFETCH_DIST < nrows) {
+                            prefetch_probe_input_for_partition(
+                                active_partition_ht,
+                                i_row + JOIN_PROBE_PREFETCH_DIST +
+                                    batch_start_row);
+                        }
                         if (active_partition->is_in_partition(
                                 batch_hashes_partition[i_row])) {
                             group_ids[i_row] = handle_probe_input_for_partition(
@@ -3784,6 +3834,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                     }
                     join_state->metrics.ht_probe_time +=
                         end_timer(start_ht_probe);
+                    const ProbePartitionState probe_state =
+                        get_probe_partition_state(active_partition.get());
                     append_time = 0;
                     start_produce_probe = start_timer();
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
@@ -3798,7 +3850,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                             probe_null_bitmaps, join_state->output_buffer,
                             active_partition->build_table_buffer->data_table,
                             new_data, build_kept_cols, probe_kept_cols,
-                            append_time, join_state->is_mark_join);
+                            probe_state, append_time, join_state->is_mark_join);
                     }
                     join_state->metrics.produce_probe_out_idxs_time +=
                         end_timer(start_produce_probe) - append_time;
@@ -3821,6 +3873,12 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                     start_ht_probe = start_timer();
                     group_ids.resize(nrows);
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
+                        if (i_row + JOIN_PROBE_PREFETCH_DIST < nrows) {
+                            prefetch_probe_input_for_partition(
+                                active_partition_ht,
+                                i_row + JOIN_PROBE_PREFETCH_DIST +
+                                    batch_start_row);
+                        }
                         group_ids[i_row] = handle_probe_input_for_partition(
                             active_partition_ht,
                             // Add offset to get the actual row index in the
@@ -3829,6 +3887,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                     }
                     join_state->metrics.ht_probe_time +=
                         end_timer(start_ht_probe);
+                    const ProbePartitionState probe_state =
+                        get_probe_partition_state(active_partition.get());
                     append_time = 0;
                     start_produce_probe = start_timer();
                     for (size_t i_row = 0; i_row < nrows; i_row++) {
@@ -3843,7 +3903,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                             probe_null_bitmaps, join_state->output_buffer,
                             active_partition->build_table_buffer->data_table,
                             new_data, build_kept_cols, probe_kept_cols,
-                            append_time, join_state->is_mark_join);
+                            probe_state, append_time, join_state->is_mark_join);
                     }
                     join_state->metrics.produce_probe_out_idxs_time +=
                         end_timer(start_produce_probe) - append_time;

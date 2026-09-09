@@ -103,7 +103,10 @@ class PhysicalReadPandas : public PhysicalSource {
     virtual ~PhysicalReadPandas() { Py_DECREF(df); }
 
     void FinalizeSource(int64_t pipeline_num,
-                        int64_t pipeline_position) override {}
+                        int64_t pipeline_position) override {
+        QueryProfileCollector::Default().SubmitOperatorName(getOpId(),
+                                                            ToString());
+    }
 
     std::pair<std::shared_ptr<table_info>, OperatorResult> ProduceBatch()
         override {
