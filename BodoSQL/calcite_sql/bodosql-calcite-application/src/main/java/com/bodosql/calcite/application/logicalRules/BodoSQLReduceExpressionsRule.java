@@ -17,6 +17,8 @@ package com.bodosql.calcite.application.logicalRules;
  * limitations under the License.
  */
 
+import static com.bodosql.calcite.application.logicalRules.FilterRulesCommon.rexNodeContainsCase;
+
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.application.utils.RexNormalizer;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
@@ -113,6 +115,10 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
     @Override
     public void onMatch(RelOptRuleCall call) {
       final Filter filter = call.rel(0);
+      // Bodo Change: Do not reduce filters that contain Case statements.
+      if (rexNodeContainsCase(filter.getCondition())) {
+        return;
+      }
       final List<RexNode> expList = Lists.newArrayList(filter.getCondition());
       RexNode newConditionExp;
       boolean reduced;
@@ -144,6 +150,13 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
       } catch (RuntimeException e) {
         // Bodo Change: If we hit an exception we cannot reduce this expression.
         // This rule should never break entirely as it's an optimization.
+        return;
+      }
+
+      // Bodo change: Do not rewrite a filter to introduce a CASE expression.
+      // FilterExtractCaseRule can extract the CASE back into a Project, causing
+      // repeated rewrites and Volcano rule explosion.
+      if (rexNodeContainsCase(newConditionExp)) {
         return;
       }
 
@@ -281,12 +294,24 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
                   .collect(Collectors.toList());
           boolean changed = !project.getProjects().equals(finalExpList);
           if (changed) {
-            call.transformTo(
+            RelNode newProject =
                 call.builder()
                     .push(project.getInput())
                     .project(finalExpList, project.getRowType().getFieldNames())
-                    .build());
-
+                    .build();
+            call.transformTo(newProject);
+            //            for (int i = 0; i < project.getProjects().size(); i++) {
+            //              RexNode before = project.getProjects().get(i);
+            //              RexNode after = finalExpList.get(i);
+            //
+            //              if (before instanceof RexInputRef
+            //                      && !(after instanceof RexInputRef)
+            //                      && !before.equals(after)) {
+            //                System.err.println("INPUT REF EXPANDED:");
+            //                System.err.println("  before: " + before);
+            //                System.err.println("  after:  " + after);
+            //              }
+            //            }
             // New plan is absolutely better than old plan.
             call.getPlanner().prune(project);
           }
