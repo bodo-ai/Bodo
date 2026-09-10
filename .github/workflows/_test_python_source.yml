@@ -94,7 +94,6 @@ jobs:
               key_path="$RUNNER_TEMP/snowflake_test_key.pem"
               printf '%s\n' "$SF_PRIVATE_KEY" > "$key_path"
               echo "SF_PRIVATE_KEY_FILE=$key_path" >> "$GITHUB_ENV"
-              echo "SF_PRIVATE_KEY_PWD=$SF_PRIVATE_KEY_PWD" >> "$GITHUB_ENV"
             fi
           shell: bash
         - name: Dump GPU Info
@@ -242,7 +241,7 @@ jobs:
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
             SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
             SF_PRIVATE_KEY_FILE: ${{ env.SF_PRIVATE_KEY_FILE }}
-            SF_PRIVATE_KEY_PWD: ${{ env.SF_PRIVATE_KEY_PWD }}
+            SF_PRIVATE_KEY_PWD: ${{ secrets.SF_PRIVATE_KEY_PWD }}
             SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
             SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
             SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
