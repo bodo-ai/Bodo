@@ -28,6 +28,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.fun.SqlCastFunction;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.BodoSqlTypeUtil;
 import org.apache.calcite.sql.type.SqlTypeCoercionRule;
@@ -2224,6 +2225,36 @@ public class RexSimplify {
         if (call.getOperands().get(1) instanceof RexLiteral) {
             RexLiteral literal = (RexLiteral) call.getOperands().get(1);
             final Sarg sarg = castNonNull(literal.getValueAs(Sarg.class));
+
+            // Bodo Change:
+            // Normalize:
+            //
+            //   SEARCH(CAST(x AS T NOT NULL), Sarg[..., ...])
+            //
+            // to
+            //
+            //   SEARCH(x, Sarg[..., NULL AS FALSE])
+            //
+            // in filter context. This allows equivalent SEARCH predicates that
+            // differ only due to a nullability cast to be deduplicated.
+            if (unknownAs == FALSE) {
+                final RexNode a2 = removeNullabilityCast(a);
+                if (a2 != a) {
+                    final Sarg sarg2 = Sarg.of(FALSE, sarg.rangeSet);
+                    final RexLiteral literal2 =
+                            rexBuilder.makeLiteral(
+                                    sarg2,
+                                    literal.getType(),
+                                    literal.getTypeName());
+
+                    return simplifySearch(
+                            call.clone(
+                                    call.type,
+                                    ImmutableList.of(a2, literal2)),
+                            unknownAs);
+                }
+            }
+
             if (sarg.isAll() || sarg.isNone()) {
                 RexNode rexNode = RexUtil.simpleSarg(rexBuilder, a, sarg, unknownAs);
                 return simplify(rexNode, unknownAs);
