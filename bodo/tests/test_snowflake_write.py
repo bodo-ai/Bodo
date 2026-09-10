@@ -740,7 +740,15 @@ def test_to_sql_wrong_password():
         pytest.raises(
             RuntimeError, match="Incorrect username or password was specified"
         ),
-        temp_env_override({"SF_PASSWORD": "wrong_password"}),
+        temp_env_override(
+            {
+                "SF_PASSWORD": "wrong_password",
+                # Force password auth since a key pair would otherwise take
+                # precedence and the expected error wouldn't occur.
+                "SF_PRIVATE_KEY_FILE": None,
+                "SF_PRIVATE_KEY_PWD": None,
+            }
+        ),
     ):
         impl(get_snowflake_connection_string("TEST_DB", "PUBLIC"))
 

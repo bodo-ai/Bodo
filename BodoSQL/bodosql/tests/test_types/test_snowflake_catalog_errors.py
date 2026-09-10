@@ -4,7 +4,10 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.tests.utils import pytest_snowflake
+from bodo.tests.utils import (
+    get_snowflake_keypair_connection_params,
+    pytest_snowflake,
+)
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest_snowflake
@@ -56,6 +59,7 @@ def test_snowflake_catalog_data_not_found_err():
             "bodopartner.us-east-1",
             "DEMO_WH",
             "SNOWFLAKE_SAMPLE_DATA",
+            connection_params=get_snowflake_keypair_connection_params(),
         )
     )
 

@@ -2872,6 +2872,37 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
                 )
 
 
+def get_snowflake_keypair_connection_params(
+    extra_params: dict[str, str] | None = None,
+) -> dict[str, str] | None:
+    """
+    Builds Snowflake connection parameters for key pair (JWT) authentication
+    if key pair credentials are configured via environment variables, otherwise
+    returns None (indicating password auth should be used).
+
+    Environment variables:
+        SF_PRIVATE_KEY_FILE: Path to the private key file (e.g. unencrypted PEM PKCS#8).
+        SF_PRIVATE_KEY_PWD: Optional passphrase if the private key file is encrypted.
+
+    Args:
+        extra_params (Optional[Dict[str, str]]): Existing connection parameters to
+            merge the key pair parameters into (key pair parameters take precedence).
+    """
+    if not (private_key_file := os.environ.get("SF_PRIVATE_KEY_FILE")):
+        return None
+
+    params = {
+        "authenticator": "snowflake_jwt",
+        "private_key_file": private_key_file,
+    }
+    if private_key_pwd := os.environ.get("SF_PRIVATE_KEY_PWD"):
+        params["private_key_pwd"] = private_key_pwd
+
+    if extra_params is not None:
+        params = {**extra_params, **params}
+    return params
+
+
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
 def get_snowflake_connection_string(
@@ -2884,6 +2915,8 @@ def get_snowflake_connection_string(
     Generates a common snowflake connection string. Some details (how to determine
     username and password) seem unlikely to change, whereas as some tests could require
     other details (db and schema) to change.
+    Supports key pair (JWT) authentication if SF_PRIVATE_KEY_FILE is set, otherwise
+    falls back to password authentication.
     """
     if user == 1:
         username = os.environ["SF_USERNAME"]
@@ -2900,10 +2933,14 @@ def get_snowflake_connection_string(
     else:
         raise ValueError("Invalid user")
 
-    params = {"warehouse": "DEMO_WH"} if conn_params is None else conn_params
-    conn = (
-        f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urlencode(params)}"
-    )
+    keypair_params = get_snowflake_keypair_connection_params(conn_params)
+    if keypair_params is not None:
+        # Key pair (JWT) authentication, password is not used.
+        params = keypair_params
+        conn = f"snowflake://{username}@{account}/{db}/{schema}?{urlencode(params)}"
+    else:
+        params = {"warehouse": "DEMO_WH"} if conn_params is None else conn_params
+        conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urlencode(params)}"
     return conn
 
 
