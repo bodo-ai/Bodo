@@ -154,8 +154,48 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
       }
 
       // Bodo change: Do not rewrite a filter to introduce a CASE expression.
-      // FilterExtractCaseRule can extract the CASE back into a Project, causing
-      // repeated rewrites and Volcano rule explosion.
+      //
+      // Consider:
+      //
+      //   SELECT colA
+      //   FROM t1
+      //   WHERE colA =
+      //       CASE 1
+      //         WHEN 1 THEN 'xxxx'
+      //         WHEN 2 THEN 'yyyy'
+      //       END;
+      //
+      // Our CASE-extraction HEP stage rewrites the filter into a form like:
+      //
+      //   Project(col0=$0)
+      //     Filter($0 = $1)
+      //       Project(col0=$0, col1=CASE(...))
+      //
+      // Because the CASE expression is constant with respect to the input rows,
+      // pulled-up predicate metadata may allow ReduceExpressionsRule to simplify
+      // the filter back to:
+      //
+      //   Filter($0 = CASE(...))
+      //
+      // This effectively undoes the CASE extraction. FilterExtractCaseRule can
+      // then extract the CASE again, introducing additional Projects:
+      //
+      //   Project(col0=$0)
+      //     Filter($0 = CASE(...))
+      //       Project(col0=$0, col1=CASE(...))
+      //
+      // becomes:
+      //
+      //   Project(col0=$0)
+      //     Project(...)
+      //       Filter($0 = $1)
+      //         Project(col0=$0, col1=CASE(...))
+      //           Project(...)
+      //
+      // creating a cycle and rule explosion in the Volcano planner.
+      if (rexNodeContainsCase(newConditionExp)) {
+        return;
+      }
       if (rexNodeContainsCase(newConditionExp)) {
         return;
       }
