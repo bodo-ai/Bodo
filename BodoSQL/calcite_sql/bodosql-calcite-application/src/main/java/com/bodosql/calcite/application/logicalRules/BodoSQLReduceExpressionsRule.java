@@ -196,9 +196,6 @@ public abstract class BodoSQLReduceExpressionsRule<C extends BodoSQLReduceExpres
       if (rexNodeContainsCase(newConditionExp)) {
         return;
       }
-      if (rexNodeContainsCase(newConditionExp)) {
-        return;
-      }
 
       // Even if no reduction, let's still test the original
       // predicate to see if it was already a constant,
