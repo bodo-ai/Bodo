@@ -247,6 +247,8 @@ pyzmq = "*"
 # Setting explicitly since Conda solve sets a newer version but PyIceberg installed from pip wants <15.0 (TODO: remove when unnecessary)
 rich = "<15.0"
 cachetools = ">=5.5,<7.0"
+# Needed for query profiler sunburst plots
+plotly = "*"
 
 [target.linux-64.dependencies]
 libutf8proc = "*"
@@ -405,13 +407,15 @@ transformers = "*"
 
 # Compilers and Related
 [feature.dev.target.linux-64.dependencies]
-gcc_linux-64 = ">=9"
-gxx_linux-64 = ">=9"
+# GCC 16 requires newer glibc than pixi's default 2.28 for pthread support
+# TODO(ehsan): avoid pthreads in duckdb or upgrade glibc to enable gcc 16
+gcc_linux-64 = ">=9,<16"
+gxx_linux-64 = ">=9,<16"
 mold = ">=2.40"
 
 [feature.dev.target.linux-aarch64.dependencies]
-gcc_linux-aarch64 = ">=9"
-gxx_linux-aarch64 = ">=9"
+gcc_linux-aarch64 = ">=9,<16"
+gxx_linux-aarch64 = ">=9,<16"
 mold = ">=2.40"
 
 [feature.dev.target.osx-64.dependencies]

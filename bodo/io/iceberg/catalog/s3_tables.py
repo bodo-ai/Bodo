@@ -490,6 +490,30 @@ class S3TablesCatalog(MetastoreCatalog):
     def view_exists(self, identifier: str | Identifier) -> bool:
         raise NotImplementedError
 
+    def register_view(self, identifier: str | Identifier, metadata_location: str):
+        raise NotImplementedError("Views are not supported in S3TablesCatalog")
+
+    def drop_view(self, identifier: str | Identifier) -> None:
+        raise NotImplementedError("Views are not supported in S3TablesCatalog")
+
+    def create_view(
+        self,
+        identifier: str | Identifier,
+        schema: Schema | pa.Schema,
+        view_version,
+        location: str | None = None,
+        properties: Properties = EMPTY_DICT,
+    ):
+        raise NotImplementedError("Views are not supported in S3TablesCatalog")
+
+    def load_view(self, identifier: str | Identifier):
+        raise NotImplementedError("Views are not supported in S3TablesCatalog")
+
+    def supports_server_side_planning(
+        self, table_config: Properties = EMPTY_DICT
+    ) -> bool:
+        return False
+
 
 def construct_catalog_properties(table_bucket_arn: str) -> dict[str, str]:
     """

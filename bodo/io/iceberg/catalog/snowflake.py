@@ -376,6 +376,30 @@ class SnowflakeCatalog(MetastoreCatalog):
             "Views are not supported for Snowflake-managed Iceberg tables"
         )
 
+    def register_view(self, identifier: str | Identifier, metadata_location: str):
+        raise NotImplementedError("Views are not supported in SnowflakeCatalog")
+
+    def drop_view(self, identifier: str | Identifier) -> None:
+        raise NotImplementedError("Views are not supported in SnowflakeCatalog")
+
+    def create_view(
+        self,
+        identifier: str | Identifier,
+        schema: Schema | pa.Schema,
+        view_version,
+        location: str | None = None,
+        properties: Properties = EMPTY_DICT,
+    ):
+        raise NotImplementedError("Views are not supported in SnowflakeCatalog")
+
+    def load_view(self, identifier: str | Identifier):
+        raise NotImplementedError("Views are not supported in SnowflakeCatalog")
+
+    def supports_server_side_planning(
+        self, table_config: Properties = EMPTY_DICT
+    ) -> bool:
+        return False
+
     def prefetch_metadata_paths(self, table_ids: pt.Sequence[str | Identifier]) -> None:
         """
         For a given list of tables (by their identifiers), start the initial
