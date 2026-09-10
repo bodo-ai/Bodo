@@ -443,6 +443,19 @@ public class RexUtil {
     if (!isConstant(right)) {
       return;
     }
+    /** Bodo Change:
+     * Avoid literal-to-literal entries in the constant map.
+     *
+     * During optimization, the planner may generate predicates like:
+     * 'a' = 'a':VARCHAR through ordinary expression transformations. These
+     * predicates create cycles that break the Volcano planner. For example, the
+     * condition =($0, 'a') might alternate between =('a', 'a') and
+     * =('a':VARCHAR, 'a':VARCHAR) in FilterReduceExpressionsRule, causing the
+     * planner to prune both expressions and throw a CannotPlanException.
+     */
+    if (left instanceof RexLiteral) {
+      return;
+    }
     C constant = clazz.cast(right);
     if (excludeSet.contains(left)) {
       return;
