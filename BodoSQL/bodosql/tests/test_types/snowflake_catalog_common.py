@@ -1,10 +1,12 @@
 """File with common fixtures used for testing snowflake catalog."""
 
 import os
+from urllib.parse import urlencode
 
 import pytest
 
 import bodosql
+from bodo.tests.utils import get_snowflake_keypair_connection_params
 
 
 @pytest.fixture(
@@ -15,7 +17,9 @@ import bodosql
             "bodopartner.us-east-1",
             "DEMO_WH",
             "TEST_DB",
-            connection_params={"schema": "PUBLIC"},
+            connection_params=get_snowflake_keypair_connection_params(
+                {"schema": "PUBLIC"}
+            ),
         )
     ]
 )
@@ -36,7 +40,9 @@ def test_db_snowflake_catalog(request):
             "bodopartner.us-east-1",
             "DEMO_WH",
             "TEST_DB",
-            connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+            connection_params=get_snowflake_keypair_connection_params(
+                {"schema": "PUBLIC", "role": "ACCOUNTADMIN"}
+            ),
             iceberg_volume="exvol",
         )
     ]
@@ -56,10 +62,12 @@ def test_db_snowflake_iceberg_catalog(request):
             "bodopartner.us-east-1",
             "DEMO_WH",
             "SNOWFLAKE_SAMPLE_DATA",
-            connection_params={
-                "schema": "TPCH_SF1",
-                "query_tag": "folder=folder1+ folder2&",
-            },
+            connection_params=get_snowflake_keypair_connection_params(
+                {
+                    "schema": "TPCH_SF1",
+                    "query_tag": "folder=folder1+ folder2&",
+                }
+            ),
         )
     ]
 )
@@ -80,7 +88,13 @@ def snowflake_sample_data_conn_str():
     """
     user = os.environ.get("SF_USERNAME", "")
     password = os.environ.get("SF_PASSWORD", "")
-    return f"snowflake://{user}:{password}@bodopartner.us-east-1/SNOWFLAKE_SAMPLE_DATA/TPCH_SF1?warehouse=DEMO_WH&query_tag=folder%3Dfolder1%2B+folder2%26"
+    params = {"warehouse": "DEMO_WH", "query_tag": "folder=folder1+ folder2&"}
+    keypair_params = get_snowflake_keypair_connection_params()
+    if keypair_params is not None:
+        # Key pair (JWT) authentication, password is not used.
+        password = ""
+        params.update(keypair_params)
+    return f"snowflake://{user}:{password}@bodopartner.us-east-1/SNOWFLAKE_SAMPLE_DATA/TPCH_SF1?{urlencode(params)}"
 
 
 @pytest.fixture(

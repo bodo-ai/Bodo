@@ -35,6 +35,7 @@ from bodo.tests.utils import (
     enable_timestamptz,
     gen_unique_table_id,
     get_snowflake_connection_string,
+    get_snowflake_keypair_connection_params,
     pytest_mark_one_rank,
     pytest_snowflake,
     temp_config_override,
@@ -728,7 +729,9 @@ def test_default_table_type(
             "bodopartner.us-east-1",
             "DEMO_WH",
             "E2E_TESTS_DB",
-            connection_params={"schema": "PUBLIC"},
+            connection_params=get_snowflake_keypair_connection_params(
+                {"schema": "PUBLIC"}
+            ),
         )
         db = "E2E_TESTS_DB"
         schema = "PUBLIC"
@@ -888,11 +891,13 @@ def test_snowflake_catalog_week_policy_parameters(params, answers, memory_leak_c
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
-        connection_params={
-            "schema": "PUBLIC",
-            "WEEK_START": week_start,
-            "WEEK_OF_YEAR_POLICY": week_of_year_policy,
-        },
+        connection_params=get_snowflake_keypair_connection_params(
+            {
+                "schema": "PUBLIC",
+                "WEEK_START": week_start,
+                "WEEK_OF_YEAR_POLICY": week_of_year_policy,
+            }
+        ),
     )
 
     extra_df = pd.DataFrame(
@@ -943,7 +948,7 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
         "bodopartner.us-east-1",
         "DEMO_WH",
         "E2E_TESTS_DB",
-        connection_params={"schema": "PUBLIC"},
+        connection_params=get_snowflake_keypair_connection_params({"schema": "PUBLIC"}),
     )
     db = "E2E_TESTS_DB"
     schema = "PUBLIC"
@@ -1643,9 +1648,9 @@ def test_snowflake_catalog_table_priority(args, memory_leak_check):
         "bodopartner.us-east-1",
         "DEMO_WH",
         default_db_name,
-        connection_params={
-            "schema": default_schema_name,
-        },
+        connection_params=get_snowflake_keypair_connection_params(
+            {"schema": default_schema_name}
+        ),
     )
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
@@ -1701,9 +1706,9 @@ def test_snowflake_catalog_table_priority_override(args, memory_leak_check):
         "bodopartner.us-east-1",
         "DEMO_WH",
         default_db_name,
-        connection_params={
-            "schema": default_schema_name,
-        },
+        connection_params=get_snowflake_keypair_connection_params(
+            {"schema": default_schema_name}
+        ),
     )
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
@@ -1744,6 +1749,7 @@ def test_snowflake_catalog_defaults_to_public(memory_leak_check):
         "bodopartner.us-east-1",
         "DEMO_WH",
         default_db_name,
+        connection_params=get_snowflake_keypair_connection_params(),
     )
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
@@ -1783,9 +1789,9 @@ def test_snowflake_catalog_table_not_found(memory_leak_check):
         "bodopartner.us-east-1",
         "DEMO_WH",
         default_db_name,
-        connection_params={
-            "schema": default_schema_name,
-        },
+        connection_params=get_snowflake_keypair_connection_params(
+            {"schema": default_schema_name}
+        ),
     )
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
@@ -1817,9 +1823,9 @@ def test_snowflake_catalog_table_find_able_if_not_default(memory_leak_check):
         "bodopartner.us-east-1",
         "DEMO_WH",
         default_db_name,
-        connection_params={
-            "schema": default_schema_name,
-        },
+        connection_params=get_snowflake_keypair_connection_params(
+            {"schema": default_schema_name}
+        ),
     )
 
     bc = bodosql.BodoSQLContext(catalog=catalog)
@@ -2814,7 +2820,7 @@ def test_current_database(snowflake_sample_data_snowflake_catalog, memory_leak_c
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
-        connection_params={"schema": "PUBLIC"},
+        connection_params=get_snowflake_keypair_connection_params({"schema": "PUBLIC"}),
     )
     bc = bodosql.BodoSQLContext(catalog=catalog)
     df2 = pd.DataFrame({"EXPR$0": ["TEST_DB"]})

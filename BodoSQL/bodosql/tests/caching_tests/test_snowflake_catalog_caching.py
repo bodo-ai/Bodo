@@ -26,6 +26,7 @@ from bodo.tests.utils import (
     check_caching,
     drop_snowflake_table,
     get_snowflake_connection_string,
+    get_snowflake_keypair_connection_params,
     pytest_mark_snowflake,
 )
 from bodo.tests.utils_jit import reduce_sum
@@ -58,7 +59,7 @@ def test_snowflake_catalog_caching(fn_distribution, is_cached):
         "bodopartner.us-east-1",
         "DEMO_WH",
         db,
-        connection_params={"schema": schema},
+        connection_params=get_snowflake_keypair_connection_params({"schema": schema}),
     )
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
@@ -95,7 +96,7 @@ def test_snowflake_catalog_write_caching(fn_distribution, is_cached):
         "bodopartner.us-east-1",
         "DEMO_WH",
         db,
-        connection_params={"schema": schema},
+        connection_params=get_snowflake_keypair_connection_params({"schema": schema}),
     )
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
@@ -203,7 +204,7 @@ def test_snowflake_runtime_join_filter_caching(is_cached):
         "bodopartner.us-east-1",
         "DEMO_WH",
         db,
-        connection_params={"schema": schema},
+        connection_params=get_snowflake_keypair_connection_params({"schema": schema}),
     )
     bc = bodosql.BodoSQLContext(catalog=catalog)
 

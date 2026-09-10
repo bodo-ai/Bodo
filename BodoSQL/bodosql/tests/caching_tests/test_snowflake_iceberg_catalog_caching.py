@@ -16,6 +16,7 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     check_caching,
+    get_snowflake_keypair_connection_params,
     pytest_snowflake,
 )
 
@@ -38,7 +39,9 @@ def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
             "bodopartner.us-east-1",
             "DEMO_WH",
             "TEST_DB",
-            connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+            connection_params=get_snowflake_keypair_connection_params(
+                {"schema": "PUBLIC", "role": "ACCOUNTADMIN"}
+            ),
             iceberg_volume="exvol",
         )
         bc = bodosql.BodoSQLContext(catalog=catalog)

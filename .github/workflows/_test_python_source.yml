@@ -83,6 +83,20 @@ jobs:
           if: ${{ inputs.test-type == 'NARWHALS' }}
           run: |
             pip install hypothesis polars sqlframe ibis-framework pyarrow-hotfix
+        - name: Setup Snowflake Key Pair
+          env:
+            SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY }}
+            SF_PRIVATE_KEY_PWD: ${{ secrets.SF_PRIVATE_KEY_PWD }}
+          run: |
+            # Write the private key (if configured) to a file and expose the
+            # path to the tests for key pair (JWT) authentication.
+            if [[ -n "$SF_PRIVATE_KEY" ]]; then
+              key_path="$RUNNER_TEMP/snowflake_test_key.pem"
+              printf '%s\n' "$SF_PRIVATE_KEY" > "$key_path"
+              echo "SF_PRIVATE_KEY_FILE=$key_path" >> "$GITHUB_ENV"
+              echo "SF_PRIVATE_KEY_PWD=$SF_PRIVATE_KEY_PWD" >> "$GITHUB_ENV"
+            fi
+          shell: bash
         - name: Dump GPU Info
           if: ${{ inputs.test-type == 'DF_LIB_GPU' }}
           run: |
@@ -227,6 +241,8 @@ jobs:
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
             SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+            SF_PRIVATE_KEY_FILE: ${{ env.SF_PRIVATE_KEY_FILE }}
+            SF_PRIVATE_KEY_PWD: ${{ env.SF_PRIVATE_KEY_PWD }}
             SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
             SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
             SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
