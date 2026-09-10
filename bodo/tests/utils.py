@@ -2881,7 +2881,7 @@ def get_snowflake_keypair_connection_params(
     returns None (indicating password auth should be used).
 
     Environment variables:
-        SF_PRIVATE_KEY_FILE: Path to the private key file (e.g. unencrypted PEM PKCS#8).
+        SF_PRIVATE_KEY_FILE: Path to the private key file (e.g. PEM PKCS#8).
         SF_PRIVATE_KEY_PWD: Optional passphrase if the private key file is encrypted.
 
     Args:
@@ -2891,12 +2891,18 @@ def get_snowflake_keypair_connection_params(
     if not (private_key_file := os.environ.get("SF_PRIVATE_KEY_FILE")):
         return None
 
+    # The Snowflake SQLAlchemy dialect refuses key pair parameters in URL query
+    # strings (plain pd.read_sql/to_sql calls in tests go through it). Allow
+    # them with a deprecation warning so both the Python connector and
+    # SQLAlchemy paths work with the same connection string.
+    os.environ.setdefault("SNOWFLAKE_SQLALCHEMY_LEGACY_URL_PARAMS", "true")
+
     params = {
         "authenticator": "snowflake_jwt",
         "private_key_file": private_key_file,
     }
     if private_key_pwd := os.environ.get("SF_PRIVATE_KEY_PWD"):
-        params["private_key_pwd"] = private_key_pwd
+        params["private_key_file_pwd"] = private_key_pwd
 
     if extra_params is not None:
         params = {**extra_params, **params}

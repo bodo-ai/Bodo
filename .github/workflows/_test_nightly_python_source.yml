@@ -293,6 +293,9 @@ jobs:
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
           SF_PRIVATE_KEY_FILE: ${{ env.SF_PRIVATE_KEY_FILE }}
           SF_PRIVATE_KEY_PWD: ${{ secrets.SF_PRIVATE_KEY_PWD }}
+          # Allow key pair auth parameters in snowflake:// URL query strings
+          # (otherwise plain pandas calls using SQLAlchemy reject them).
+          SNOWFLAKE_SQLALCHEMY_LEGACY_URL_PARAMS: "true"
           SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
           SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
           SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
