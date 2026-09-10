@@ -502,6 +502,14 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
      // calls.
      selectScope = getSelectScope(select);
      expanded = expandSelectExpr(selectItem, scope, select, expansions, selectItemIdx);
+
+     // Non-strict GROUP BY: wrap non-aggregated, non-grouped columns in ANY_VALUE()
+     if (isAggregate(select)
+         && config.conformance().isNonStrictGroupBy()
+         && isNonAggregatedNonGroupedColumn(expanded, select)) {
+       expanded =
+           SqlStdOperatorTable.ANY_VALUE.createCall(expanded.getParserPosition(), expanded);
+     }
     }
     final String alias =
         SqlValidatorUtil.alias(selectItem, aliases.size());
@@ -656,6 +664,35 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       return identifier;
     }
   }
+
+  /**
+   * Returns true if the node is a non-aggregated, non-grouped column in SELECT.
+   */
+  private boolean isNonAggregatedNonGroupedColumn(SqlNode node, SqlSelect select) {
+    if (aggFinder.findAgg(node) != null) {
+      return false;
+    }
+
+    if (node instanceof SqlIdentifier) {
+      SqlNodeList groupList = select.getGroup();
+      if (groupList == null) {
+        return true;
+      }
+      return groupList.getList().stream()
+          .noneMatch(groupItem -> groupItem != null
+              && node.equalsDeep(groupItem, Litmus.IGNORE));
+    }
+
+    if (node instanceof SqlCall) {
+      return ((SqlCall) node).getOperandList().stream()
+          .anyMatch(operand -> isNonAggregatedNonGroupedColumn(operand, select));
+    } else if (node instanceof SqlLiteral) {
+      return true;
+    }
+
+    return false;
+  }
+
   private static Map<String, String> getFieldAliases(final SelectScope scope) {
     final ImmutableMap.Builder<String, String> fieldAliases = new ImmutableMap.Builder<>();
 
@@ -1609,6 +1646,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       }
       // fall through
     case TABLE_REF:
+    case LATERAL:
     case TABLE_REF_WITH_ID:
     case SNAPSHOT:
     case OVER:
@@ -3145,8 +3183,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       return newNode;
 
     case LATERAL:
-      return registerFrom(
-          parentScope,
+      SqlBasicCall sbc = (SqlBasicCall) node;
+      registerFrom(parentScope,
           usingScope,
           register,
           ((SqlCall) node).operand(0),
@@ -3155,6 +3193,11 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
           extendList,
           forceNullable,
           true);
+      // Put the usingScope which is a JoinScope,
+      // in order to make visible the left items
+      // of the JOIN tree.
+      scopes.put(node, usingScope);
+      return sbc;
 
     case COLLECTION_TABLE:
       call = (SqlCall) node;
@@ -4061,7 +4104,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       final BigDecimal noTrailingZeros = bd.stripTrailingZeros();
       // If we don't strip trailing zeros we may reject values such as 1.000....0.
 
-      final int maxPrecision = typeSystem.getMaxNumericPrecision();
+      final int maxPrecision = typeSystem.getMaxPrecision(SqlTypeName.DECIMAL);
       if (noTrailingZeros.precision() > maxPrecision) {
         throw newValidationError(literal,
             RESOURCE.numberLiteralOutOfRange(bd.toString()));
@@ -4348,6 +4391,22 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     }
   }
 
+  /** Get the number of scopes referenced by the specified node; the node
+   * represents a computation that will be converted to a Rel node eventually. */
+  private int getScopeCount(SqlNode node) {
+    SqlValidatorScope scope = scopes.get(node);
+    if (scope == null) {
+      // Not all nodes have an associated scope; count these as "1".
+      // For example, a VALUES node.
+      return 1;
+    }
+    if (scope instanceof ListScope) {
+      ListScope join = (ListScope) scope;
+      return join.children.size();
+    }
+    return 1;
+  }
+
   protected void validateJoin(SqlJoin join, SqlValidatorScope scope) {
     // Bodo Change: Verify a table function is not part of the join condition.
     checkIfTableFunctionIsPartOfCondition(join.getCondition());
@@ -4457,8 +4516,10 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         throw newValidationError(condition, RESOURCE.asofConditionMustBeComparison());
       }
 
+      int leftScopeCount = getScopeCount(left);
       CompareFromBothSides validateCompare =
           new CompareFromBothSides(joinScope,
+              leftScopeCount,
               catalogReader, RESOURCE.asofConditionMustBeComparison());
       condition.accept(validateCompare);
 
@@ -4475,6 +4536,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
       // Change the exception in validateCompare when we validate the match condition
       validateCompare =
           new CompareFromBothSides(joinScope,
+              leftScopeCount,
               catalogReader, RESOURCE.asofMatchMustBeComparison());
       matchCondition.accept(validateCompare);
       break;
@@ -4492,16 +4554,21 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
    */
   private class CompareFromBothSides extends SqlShuttle {
     final SqlValidatorScope scope;
+    // Number of children scopes on the left side of the join.
+    // Used to determine whether an identifier is from the left input or the right input.
+    final int leftScopeCount;
     final SqlValidatorCatalogReader catalogReader;
     final Resources.ExInst<SqlValidatorException> exception;
 
     private CompareFromBothSides(
         SqlValidatorScope scope,
+        int leftScopeCount,
         SqlValidatorCatalogReader catalogReader,
         Resources.ExInst<SqlValidatorException> exception) {
       this.scope = scope;
       this.catalogReader = catalogReader;
       this.exception = exception;
+      this.leftScopeCount = leftScopeCount;
     }
 
     @Override public @Nullable SqlNode visit(final SqlCall call) {
@@ -4525,15 +4592,10 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
           scope.resolve(id.names.subList(0, id.names.size() - 1), nameMatcher, false, resolved);
           SqlValidatorScope.Resolve resolve = resolved.only();
           int index = resolve.path.steps().get(0).i;
-          if (index == 0) {
+          if (index < leftScopeCount) {
             leftFound = true;
-          }
-          if (index == 1) {
+          } else {
             rightFound = true;
-          }
-
-          if (!leftFound && !rightFound) {
-            throw newValidationError(call, this.exception);
           }
         }
         if (!leftFound || !rightFound) {
@@ -6296,6 +6358,10 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     // matched
     boolean isUpdateModifiableViewTable = false;
     if (query instanceof SqlUpdate) {
+      // Bodo change: unlike upstream Calcite, the source select of an UPDATE
+      // contains the full target row (via star expansion) followed by the SET
+      // expressions, so trim both row types to the SET expressions before
+      // comparing them.
       final SqlNodeList targetColumnList =
           requireNonNull(((SqlUpdate) query).getTargetColumnList());
       final int targetColumnCount = targetColumnList.size();
@@ -6427,6 +6493,14 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     checkTypeAssignment(scopes.get(select), table, sourceRowType, targetRowType,
         call);
 
+    // Set validated sourceExpressionList from the source select.
+    // The last elements of sourceSelect are the expression list.
+    List<SqlNode> sourceExpressionList =
+        Util.last(select.getSelectList(), call.getSourceExpressionList().size());
+    call.setOperand(
+        2, SqlUtil.stripListAs(
+        new SqlNodeList(sourceExpressionList,
+            call.getSourceExpressionList().getParserPosition())));
     checkConstraint(table, call, targetRowType);
 
     validateAccess(call.getTargetTable(), table, SqlAccessEnum.UPDATE);
@@ -9656,14 +9730,10 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     boolean shouldReplaceAliases(Config config) {
       switch (this) {
       case GROUP_BY:
-        return config.conformance().isGroupByAlias()
-                || (config.conformance().isSelectAlias()
-                != SqlConformance.SelectAliasLookup.UNSUPPORTED);
+        return config.conformance().isGroupByAlias();
 
       case HAVING:
-        return config.conformance().isHavingAlias()
-                || (config.conformance().isSelectAlias()
-                != SqlConformance.SelectAliasLookup.UNSUPPORTED);
+        return config.conformance().isHavingAlias();
 
       case QUALIFY:
       // Bodo Change: We always want to expand Select or WHERE

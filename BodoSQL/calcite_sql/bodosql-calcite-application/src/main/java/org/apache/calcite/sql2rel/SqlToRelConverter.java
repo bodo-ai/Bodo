@@ -38,6 +38,7 @@ import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelDistribution;
 import org.apache.calcite.rel.RelDistributions;
 import org.apache.calcite.rel.RelFieldCollation;
+import org.apache.calcite.rel.RelHomogeneousShuttle;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.RelShuttleImpl;
@@ -95,6 +96,7 @@ import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.rex.RexPatternFieldRef;
 import org.apache.calcite.rex.RexRangeRef;
 import org.apache.calcite.rex.RexShuttle;
+import org.apache.calcite.rex.RexSimplify;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexWindowBound;
@@ -1196,6 +1198,16 @@ public class SqlToRelConverter {
     return e;
   }
 
+  private RexNode simplifyPredicate(RexNode predicate) {
+    final RexNode converted =
+        RexUtil.removeNullabilityCast(typeFactory, predicate);
+    List<RexNode> conjuncts = RelOptUtil.conjunctions(converted);
+    List<RexNode> simplified = conjuncts.stream()
+        .map(e -> RexSimplify.simplifyComparisonWithNull(e, rexBuilder))
+        .collect(Collectors.toList());
+    return RexUtil.composeConjunction(rexBuilder, simplified);
+  }
+
   /**
    * Converts a WHERE clause.
    *
@@ -1211,8 +1223,7 @@ public class SqlToRelConverter {
     SqlNode newWhere = pushDownNotForIn(bb.scope, where);
     replaceSubQueries(bb, newWhere, RelOptUtil.Logic.UNKNOWN_AS_FALSE);
     final RexNode convertedWhere = bb.convertExpression(newWhere);
-    final RexNode convertedWhere2 =
-        RexUtil.removeNullabilityCast(typeFactory, convertedWhere);
+    final RexNode convertedWhere2 = simplifyPredicate(convertedWhere);
 
 
     //TODO: Support CSE in the where clause, https://bodo.atlassian.net/browse/BE-4092
@@ -2682,6 +2693,15 @@ public class SqlToRelConverter {
       convertCollectionTable(bb, call2);
       return;
 
+    case LATERAL:
+      call = (SqlCall) from;
+
+      // Extract and analyze lateral part of join call.
+      assert call.getOperandList().size() == 1;
+      final SqlCall callLateral = call.operand(0);
+      convertFrom(bb, callLateral, fieldNames, propagatingHints);
+      return;
+
     default:
       throw new AssertionError("not a join operator " + from);
     }
@@ -3564,7 +3584,7 @@ public class SqlToRelConverter {
 
 
     final JoinConditionType conditionType = join.getConditionType();
-    final RexNode condition;
+    RexNode condition;
     RelNode rightRel;
     if (join.isNatural()) {
       condition =
@@ -3592,6 +3612,7 @@ public class SqlToRelConverter {
         throw Util.unexpected(conditionType);
       }
     }
+    condition = simplifyPredicate(condition);
 
     // Finally, append the offsets to the parent blackboard to handle the recursive
     // case
@@ -3604,6 +3625,7 @@ public class SqlToRelConverter {
       Pair<RexNode, RelNode> conditionAndRightNode =
           convertOnCondition(fromBlackboard, join, leftRel, tempRightRel);
       RexNode matchCondition = conditionAndRightNode.left;
+      matchCondition = simplifyPredicate(matchCondition);
       rightRel = conditionAndRightNode.right;
       joinRel =
           createAsofJoin(join.getParserPosition(), fromBlackboard,
@@ -4824,19 +4846,27 @@ public class SqlToRelConverter {
       targetColumnNameList.add(field.getName());
     }
 
+    // `sourceSelect` should contain target columns values plus source expressions
+    if (sourceSelect.getSelectList().size()
+        != targetTable.getRowType().getFieldCount() + call.getSourceExpressionList().size()) {
+      throw new AssertionError(
+          "Unexpected select list size. Select list should contain both target table columns and "
+              + "set expressions");
+    }
+
     RelNode sourceRel = convertSelect(sourceSelect, false);
 
     bb.setRoot(sourceRel, false);
-    ImmutableList.Builder<RexNode> rexNodeSourceExpressionListBuilder =
-        ImmutableList.builder();
-    for (SqlNode n : call.getSourceExpressionList()) {
-      RexNode rn = bb.convertExpression(n);
-      rexNodeSourceExpressionListBuilder.add(rn);
-    }
+
+    // sourceRel already contains all source expressions. Only create references to those fields.
+    List<RexNode> rexExpressionList =
+        Util.transform(
+            Util.last(sourceRel.getRowType().getFieldList(), targetColumnNameList.size()),
+            expressionField -> new RexInputRef(expressionField.getIndex(),
+                expressionField.getType()));
 
     return LogicalTableModify.create(targetTable, catalogReader, sourceRel,
-        LogicalTableModify.Operation.UPDATE, targetColumnNameList,
-        rexNodeSourceExpressionListBuilder.build(), false);
+        LogicalTableModify.Operation.UPDATE, targetColumnNameList, rexExpressionList, false);
   }
 
 
@@ -5631,7 +5661,7 @@ public class SqlToRelConverter {
       case ARRAY_QUERY_CONSTRUCTOR:
       case MAP_QUERY_CONSTRUCTOR:
         final RelRoot root = convertQuery(call.operand(0), false, true);
-        input = root.rel;
+        input = root.project();
         break;
       default:
         lastList.add(operand);
@@ -6093,6 +6123,7 @@ public class SqlToRelConverter {
       mapping = null;
     }
 
+    List<RelDataTypeField> fields = targetRowType.getFieldList();
     for (SqlNode rowConstructor : values.getOperandList()) {
       SqlCall newRowConst = (SqlCall) rowConstructor;
       Blackboard tmpBb = createBlackboard(bb.scope, null, false);
@@ -6112,6 +6143,9 @@ public class SqlToRelConverter {
                   mapping[i], bb);
         } else {
           def = tmpBb.convertExpression(operand);
+        }
+        if (!(def instanceof RexDynamicParam) && !def.getType().equals(fields.get(i).getType())) {
+          def = rexBuilder.makeCast(operand.getParserPosition(), fields.get(i).getType(), def);
         }
         exps.add(def, SqlValidatorUtil.alias(operand, i));
       });
@@ -6806,20 +6840,20 @@ public class SqlToRelConverter {
           query = Iterables.getOnlyElement(call.getOperandList());
           // let top=true to make the query be top-level query,
           // then ORDER BY will be reserved.
-          root = convertQueryRecursive(query, true, null);
-          return RexSubQuery.array(root.rel);
+          root = convertQuery(query, false, true);
+          return RexSubQuery.array(root.project());
 
         case MAP_QUERY_CONSTRUCTOR:
           call = (SqlCall) expr;
           query = Iterables.getOnlyElement(call.getOperandList());
-          root = convertQueryRecursive(query, false, null);
-          return RexSubQuery.map(root.rel);
+          root = convertQuery(query, false, true);
+          return RexSubQuery.map(root.project());
 
         case MULTISET_QUERY_CONSTRUCTOR:
           call = (SqlCall) expr;
           query = Iterables.getOnlyElement(call.getOperandList());
-          root = convertQueryRecursive(query, false, null);
-          return RexSubQuery.multiset(root.rel);
+          root = convertQuery(query, false, true);
+          return RexSubQuery.multiset(root.project());
 
         default:
           break;
@@ -7022,14 +7056,14 @@ public class SqlToRelConverter {
       return false;
     }
 
-    @Override public int getGroupCount() {
+    @Override public boolean hasEmptyGroup() {
       if (agg != null) {
-        return agg.groupExprs.size();
+        return SqlValidatorUtil.hasEmptyGroup(agg.groupExprs);
       }
       if (window != null) {
-        return window.isAlwaysNonEmpty() ? 1 : 0;
+        return !window.isAlwaysNonEmpty();
       }
-      return -1;
+      return false;
     }
 
     @Override public RexBuilder getRexBuilder() {

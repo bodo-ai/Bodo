@@ -53,6 +53,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.UnsupportedCharsetException;
 import java.util.Calendar;
 import java.util.Objects;
+import java.util.UUID;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -1091,6 +1092,12 @@ public class SqlLiteral extends SqlNode {
       SqlParserPos pos) {
     NlsString slit = new NlsString(s, charSet, null);
     return new SqlCharStringLiteral(slit, pos);
+  }
+
+  public static SqlUuidLiteral createUuid(
+      UUID u,
+      SqlParserPos pos) {
+    return new SqlUuidLiteral(u, pos);
   }
 
   /**

@@ -68,6 +68,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.rex.RexUnknownAs.FALSE;
@@ -271,7 +273,7 @@ public class RexSimplify {
      * Verify adds an overhead that is only acceptable for a top-level call.
      */
     RexNode simplify(RexNode e, RexUnknownAs unknownAs) {
-        if (STRONG.isNull(e)) {
+        if (isSafeExpression(e) && STRONG.isNull(e)) {
             // Only boolean NULL (aka UNKNOWN) can be converted to FALSE. Even in
             // unknownAs=FALSE mode, we must not convert a NULL integer (say) to FALSE
             if (e.getType().getSqlTypeName() == SqlTypeName.BOOLEAN) {
@@ -302,6 +304,8 @@ public class RexSimplify {
             case CEIL:
             case FLOOR:
                 return simplifyCeilFloor((RexCall) e);
+            case TRIM:
+                return simplifyTrim((RexCall) e);
             case IS_NULL:
             case IS_NOT_NULL:
             case IS_TRUE:
@@ -506,14 +510,124 @@ public class RexSimplify {
     private RexNode simplifyLike(RexCall e, RexUnknownAs unknownAs) {
         if (e.operands.get(1) instanceof RexLiteral) {
             final RexLiteral literal = (RexLiteral) e.operands.get(1);
-            if ("%".equals(literal.getValueAs(String.class))) {
-                // "x LIKE '%'" simplifies to "x = x"
+            String likeStr = requireNonNull(literal.getValueAs(String.class));
+            Pattern pattern = Pattern.compile("%+");
+            String value = pattern.matcher(likeStr).replaceAll("%");
+            if ("%".equals(value)) {
+                // "x LIKE '%'" or "x LIKE '%...%'" simplifies to "x = x"
                 final RexNode x = e.operands.get(0);
                 return simplify(rexBuilder.makeCall(
                     e.getParserPosition(), SqlStdOperatorTable.EQUALS, x, x), unknownAs);
             }
+            // simplify "x LIKE '%%\%%a%%%'" to "x LIKE '%\%%a%'", default escape is '\'
+            if (e.operands.size() == 2) {
+                e = (RexCall) rexBuilder
+                    .makeCall(e.getParserPosition(), e.getOperator(), e.operands.get(0),
+                        rexBuilder.makeLiteral(simplifyLikeString(likeStr, '\\', '%')));
+            }
+            if (e.operands.size() == 3 && e.operands.get(2) instanceof RexLiteral) {
+                final RexLiteral escapeLiteral = (RexLiteral) e.operands.get(2);
+                Character escape = requireNonNull(escapeLiteral.getValueAs(Character.class));
+                e = (RexCall) rexBuilder
+                    .makeCall(e.getParserPosition(), e.getOperator(), e.operands.get(0),
+                        rexBuilder.makeLiteral(simplifyLikeString(likeStr, escape, '%')),
+                        escapeLiteral);
+            }
         }
         return simplifyGenericNode(e);
+    }
+
+    // string 'AA%%__%%AA' simplify to 'AA__%AA'
+    // string with even escapes 'AA\\\\%%__%%AA' simplify to 'AA\\__%AA'
+    // string with odd escapes 'AA\\\\\\%%__%%AA' simplify to 'AA\\\\\\%__%AA'
+    private String simplifyMixedWildcards(String str, char escape) {
+        Pattern pattern = Pattern.compile("[_%]+");
+        Matcher matcher = pattern.matcher(str);
+        StringBuilder builder = new StringBuilder();
+        int from = 0;
+        while (matcher.find()) {
+            int start = matcher.start();
+            String group = requireNonNull(matcher.group(0));
+            if (start > 0
+                && str.charAt(start - 1) == escape
+                && consecutiveSameCharCountBefore(str, start - 1, escape) % 2 == 1) {
+                builder.append(str.substring(from, start + 1));
+                builder.append(simplifyPercentAndUnderline(group.substring(1)));
+            } else {
+                builder.append(str.substring(from, start));
+                builder.append(simplifyPercentAndUnderline(group));
+            }
+            from = matcher.end();
+        }
+        if (from < str.length()) {
+            builder.append(str.substring(from));
+        }
+        return builder.toString();
+    }
+
+    // Tool method: count the number of consecutive identical characters before index
+    private int consecutiveSameCharCountBefore(String str, int index, char escape) {
+        int count = 0;
+        while (index >= 0) {
+            if (str.charAt(index) != escape) {
+                break;
+            }
+            count++;
+            index--;
+        }
+        return count;
+    }
+
+    // Tool method: simplified string mixed with '%' and '_'
+    private String simplifyPercentAndUnderline(String str) {
+        StringBuilder builder = new StringBuilder();
+        boolean containsPercent = false;
+        for (int index = 0; index < str.length(); index++) {
+            if (str.charAt(index) == '%') {
+                containsPercent = true;
+                continue;
+            }
+            if (str.charAt(index) == '_') {
+                builder.append('_');
+            }
+        }
+        if (containsPercent) {
+            builder.append('%');
+        }
+        return builder.toString();
+    }
+
+    /**
+     * Simplifies like string with escape.
+     * A like '%%#%%A%%' escape '#' should simplify to A like '%#%%A%' escape '#'.
+     */
+    private String simplifyLikeString(String content, char escape, char wildcard) {
+        int escapeCount = 0;
+        int wildcardCount = 0;
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < content.length(); index++) {
+            char c = content.charAt(index);
+            if (c == escape) {
+                builder.append(c);
+                escapeCount++;
+                wildcardCount = 0;
+                continue;
+            }
+            if (c == wildcard) {
+                if (escapeCount % 2 == 1) {
+                    builder.append(wildcard);
+                } else if (wildcardCount == 0) {
+                    builder.append(wildcard);
+                    wildcardCount++;
+                }
+                escapeCount = 0;
+                continue;
+            }
+            builder.append(c);
+            escapeCount = 0;
+            wildcardCount = 0;
+        }
+        return simplifyMixedWildcards(builder.toString(), escape);
     }
 
     // e must be a comparison (=, >, >=, <, <=, !=)
@@ -652,6 +766,11 @@ public class RexSimplify {
             }
         }
 
+        RexNode node = simplifyComparisonWithNull(e, unknownAs);
+        if (node instanceof RexLiteral) {
+            return node;
+        }
+
         // If none of the arguments were simplified, return the call unchanged.
         final RexNode e2;
         if (operands.equals(e.operands)) {
@@ -660,6 +779,41 @@ public class RexSimplify {
             e2 = rexBuilder.makeCall(e.getParserPosition(), e.op, operands);
         }
         return simplifyUsingPredicates(e2, clazz);
+    }
+
+
+    /**
+     * If this RexNode is a comparison against NULL, return FALSE, otherwise return it unchanged.
+     */
+    static RexNode simplifyComparisonWithNull(
+        RexNode e, RexBuilder rexBuilder, RexUnknownAs unknownAs) {
+        final RexSimplify.Comparison comparison = RexSimplify.Comparison.of(e);
+        if (comparison != null) {
+            boolean againstNull = comparison.literal.isNull();
+            // There is another possibility to check: in a comparison like 1 = null,
+            // the "non-literal" side of the Comparison can be null
+            if (comparison.ref instanceof RexLiteral) {
+                againstNull = againstNull || ((RexLiteral) comparison.ref).isNull();
+            }
+            if (againstNull) {
+                return unknownAs == FALSE
+                    ? rexBuilder.makeLiteral(false)
+                    : rexBuilder.makeNullLiteral(e.getType());
+            }
+        }
+        return e;
+    }
+
+    public static RexNode simplifyComparisonWithNull(RexNode e, RexBuilder rexBuilder) {
+        return RexSimplify.simplifyComparisonWithNull(e, rexBuilder, FALSE);
+    }
+
+    /**
+     * If this RexNode is a comparison against NULL, return a simplified form,
+     * otherwise return it unchanged.
+     */
+    public RexNode simplifyComparisonWithNull(RexNode e, RexUnknownAs unknownAs) {
+        return simplifyComparisonWithNull(e, this.rexBuilder, unknownAs);
     }
 
     /**
@@ -1367,11 +1521,18 @@ public class RexSimplify {
 
         @SuppressWarnings("ImmutableEnumChecker")
         private final Set<SqlKind> safeOps;
+        @SuppressWarnings("ImmutableEnumChecker")
+        private final ImmutableSet<SqlOperator> safeOperators;
 
         SafeRexVisitor() {
+            ImmutableSet.Builder<SqlOperator> builder = ImmutableSet.builder();
+            builder.addAll(SqlStdOperatorTable.QUANTIFY_OPERATORS);
+            safeOperators = builder.build();
+
             Set<SqlKind> safeOps = EnumSet.noneOf(SqlKind.class);
 
             safeOps.addAll(SqlKind.COMPARISON);
+            safeOps.add(SqlKind.ARRAY_VALUE_CONSTRUCTOR);
             safeOps.add(SqlKind.PLUS_PREFIX);
             safeOps.add(SqlKind.MINUS_PREFIX);
             safeOps.add(SqlKind.CHECKED_MINUS_PREFIX);
@@ -1422,10 +1583,34 @@ public class RexSimplify {
         }
 
         @Override public Boolean visitCall(RexCall call) {
-            if (!safeOps.contains(call.getKind())) {
+            SqlKind sqlKind = call.getKind();
+            SqlOperator sqlOperator = call.getOperator();
+
+            switch (sqlKind) {
+            case DIVIDE:
+            case MOD:
+                List<RexNode> operands = call.getOperands();
+                boolean isSafe = RexVisitorImpl.visitArrayAnd(this, ImmutableList.of(operands.get(0)));
+                if (!isSafe) {
+                    return false;
+                }
+                if (operands.get(1) instanceof RexLiteral) {
+                    RexLiteral literal = (RexLiteral) operands.get(1);
+                    return RexUtil.isNullLiteral(literal, true);
+                }
                 return false;
+            default:
+                break;
             }
-            return RexVisitorImpl.visitArrayAnd(this, call.operands);
+
+            if (sqlOperator.isSafeOperator()
+                || RexUtil.isLosslessCast(call)
+                || safeOps.contains(sqlKind)
+                || safeOperators.contains(sqlOperator)) {
+                return RexVisitorImpl.visitArrayAnd(this, call.operands);
+            }
+
+            return false;
         }
 
         @Override public Boolean visitOver(RexOver over) {
@@ -1465,6 +1650,10 @@ public class RexSimplify {
         }
 
         @Override public Boolean visitLambdaRef(RexLambdaRef lambdaRef) {
+            return true;
+        }
+
+        @Override public Boolean visitNodeAndFieldIndex(RexNodeAndFieldIndex nodeAndFieldIndex) {
             return true;
         }
     }
@@ -2220,17 +2409,20 @@ public class RexSimplify {
 
     private RexNode simplifySearch(RexCall call, RexUnknownAs unknownAs) {
         assert call.getKind() == SqlKind.SEARCH;
-        final RexNode a = call.getOperands().get(0);
+        final RexNode operand = call.getOperands().get(0);
+        final RexNode simplifiedOperand = simplify(operand, unknownAs);
+        final boolean operandUnchanged = operand.equals(simplifiedOperand);
+        final RexNode searchOperand = operandUnchanged ? operand : simplifiedOperand;
         if (call.getOperands().get(1) instanceof RexLiteral) {
             RexLiteral literal = (RexLiteral) call.getOperands().get(1);
             final Sarg sarg = castNonNull(literal.getValueAs(Sarg.class));
             if (sarg.isAll() || sarg.isNone()) {
-                RexNode rexNode = RexUtil.simpleSarg(rexBuilder, a, sarg, unknownAs);
+                RexNode rexNode = RexUtil.simpleSarg(rexBuilder, searchOperand, sarg, unknownAs);
                 return simplify(rexNode, unknownAs);
             }
             // Remove null from sarg if the left-hand side is never null
             if (sarg.nullAs != UNKNOWN) {
-                final RexNode simplified = simplifyIs1(SqlKind.IS_NULL, a, unknownAs);
+                final RexNode simplified = simplifyIs1(SqlKind.IS_NULL, searchOperand, unknownAs);
                 if (simplified != null
                         && simplified.isAlwaysFalse()) {
                     final Sarg sarg2 = Sarg.of(UNKNOWN, sarg.rangeSet);
@@ -2239,20 +2431,22 @@ public class RexSimplify {
                                     literal.getTypeName());
                     // Now we've strengthened the Sarg, try to simplify again
                     return simplifySearch(
-                            call.clone(call.type, ImmutableList.of(a, literal2)),
+                            call.clone(call.type, ImmutableList.of(searchOperand, literal2)),
                             unknownAs);
                 }
             } else if (sarg.isPoints() && sarg.pointCount <= 1) {
                 // Expand "SEARCH(x, Sarg([point])" to "x = point"
                 // and "SEARCH(x, Sarg([])" to "false"
                 return RexUtil.expandSearch(rexBuilder, null, call);
-            } else if (a instanceof RexLiteral) {
+            } else if (searchOperand instanceof RexLiteral) {
                 // Bodo Change:
                 // Expand to a disjunction, so we can simplify based on AND/OR.
                 return simplify(RexUtil.expandSearch(rexBuilder, null, call), unknownAs);
             }
         }
-        return call;
+        return operandUnchanged
+                ? call
+                : call.clone(call.type, ImmutableList.of(simplifiedOperand, call.getOperands().get(1)));
     }
 
     private RexNode simplifyCast(RexCall e) {
@@ -2411,6 +2605,45 @@ public class RexSimplify {
         }
         return e.clone(e.getType(),
                 ImmutableList.of(operand, e.getOperands().get(1)));
+    }
+
+    /** Simplify TRIM function by eliminating nested duplication.
+     *
+     * <p>Examples:
+     * <ul>
+     *
+     * <li>{@code trim(trim(' aa '))} returns {@code trim(' aa ')}
+     *
+     * <li>{@code trim(BOTH ' ' from trim(BOTH ' ' from ' aa '))}
+     * returns {@code trim(BOTH ' ' from ' aa ')}
+     *
+     * <li>{@code trim(LEADING 'a' from trim(BOTH ' ' from ' aa '))} does not change
+     *
+     * </ul>
+     */
+    private RexNode simplifyTrim(RexCall e) {
+        if (e.getOperands().size() != 3) {
+            return e;
+        }
+
+        RexNode trimType = simplify(e.operands.get(0));
+        RexNode trimed = simplify(e.operands.get(1));
+        if (e.getOperands().get(2) instanceof RexCall) {
+            RexCall childNode = (RexCall) e.getOperands().get(2);
+            // only strings with the same trim method and deduplication will be eliminated.
+            if (childNode.getKind() == SqlKind.TRIM
+                && trimType.equals(simplify(childNode.operands.get(0)))
+                && trimed.equals(simplify(childNode.operands.get(1)))) {
+                return simplifyTrim(childNode);
+            }
+        }
+
+        ArrayList<RexNode> rexNodes = new ArrayList<>();
+        rexNodes.add(trimType);
+        rexNodes.add(trimed);
+        rexNodes.add(simplify(e.operands.get(2)));
+        RexNode rexNode = rexBuilder.makeCall(e.getType(), e.getOperator(), rexNodes);
+        return rexNode;
     }
 
     /** Method that returns whether we can rollup from inner time unit
@@ -3008,6 +3241,8 @@ public class RexSimplify {
                 case EQUALS:
                 case NOT_EQUALS:
                 case SEARCH:
+                case IS_NOT_DISTINCT_FROM:
+                case IS_DISTINCT_FROM:
                     return accept2(((RexCall) e).operands.get(0),
                             ((RexCall) e).operands.get(1), e.getKind(), newTerms);
                 case IS_NULL:
@@ -3021,29 +3256,11 @@ public class RexSimplify {
 
         private boolean accept2(RexNode left, RexNode right, SqlKind kind,
                                 List<RexNode> newTerms) {
-            switch (left.getKind()) {
-                case INPUT_REF:
-                case FIELD_ACCESS:
-                case CAST:
-                    switch (right.getKind()) {
-                        case LITERAL:
-                            return accept2b(left, kind, (RexLiteral) right, newTerms);
-                        default:
-                            break;
-                    }
-                    return false;
-                case LITERAL:
-                    switch (right.getKind()) {
-                        case INPUT_REF:
-                        case FIELD_ACCESS:
-                        case CAST:
-                            return accept2b(right, kind.reverse(), (RexLiteral) left, newTerms);
-                        default:
-                            break;
-                    }
-                    return false;
-                default:
-                    break;
+            if (right.isA(SqlKind.LITERAL) && RexUtil.isDeterministic(left)) {
+                return accept2b(left, kind, (RexLiteral) right, newTerms);
+            }
+            if (left.isA(SqlKind.LITERAL) && RexUtil.isDeterministic(right)) {
+                return accept2b(right, kind.reverse(), (RexLiteral) left, newTerms);
             }
             return false;
         }
@@ -3103,9 +3320,16 @@ public class RexSimplify {
                 case EQUALS:
                     b.addRange(Range.singleton(value), literal.getType());
                     return true;
+                case IS_NOT_DISTINCT_FROM:
+                    b.addRange(Range.singleton(value), literal.getType(), FALSE);
+                    return true;
                 case NOT_EQUALS:
                     b.addRange(Range.lessThan(value), literal.getType());
                     b.addRange(Range.greaterThan(value), literal.getType());
+                    return true;
+                case IS_DISTINCT_FROM:
+                    b.addRange(Range.lessThan(value), literal.getType(), TRUE);
+                    b.addRange(Range.greaterThan(value), literal.getType(), TRUE);
                     return true;
                 case SEARCH:
                     final Sarg sarg = (Sarg) value;
@@ -3151,7 +3375,8 @@ public class RexSimplify {
             if (term instanceof RexSargBuilder) {
                 final RexSargBuilder sargBuilder = (RexSargBuilder) term;
                 final Sarg sarg = sargBuilder.build();
-                if (sarg.complexity() <= 1 && simpleSarg(sarg)) {
+                boolean isSmall = sarg.complexity() <= 1 || sarg.isAll() || sarg.isNone();
+                if (isSmall && simpleSarg(sarg)) {
                     // Expand small sargs into comparisons in order to avoid plan changes
                     // and better readability.
                     return RexUtil.sargRef(rexBuilder, sargBuilder.ref, sarg,
@@ -3252,10 +3477,14 @@ public class RexSimplify {
         }
 
         void addRange(Range<Comparable> range, RelDataType type) {
+            addRange(range, type, UNKNOWN);
+        }
+
+        void addRange(Range<Comparable> range, RelDataType type, RexUnknownAs unknownAs) {
             types.add(type);
             rangeSet.add(range);
             mergedSarg |= hasSarg;
-            nullAs = nullAs.or(UNKNOWN);
+            nullAs = nullAs.or(unknownAs);
         }
 
         @SuppressWarnings({"rawtypes", "unchecked"})

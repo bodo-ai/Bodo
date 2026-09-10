@@ -16,6 +16,7 @@ import org.apache.calcite.rex.RexLambdaRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexNodeAndFieldIndex
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexPatternFieldRef
 import org.apache.calcite.rex.RexRangeRef
@@ -329,4 +330,7 @@ class IcebergFilterVisitor(
 
     override fun visitLambdaRef(var1: RexLambdaRef): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a LambdaRef")
+
+    override fun visitNodeAndFieldIndex(p0: RexNodeAndFieldIndex): Expr =
+        throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexNodeAndFieldIndex")
 }

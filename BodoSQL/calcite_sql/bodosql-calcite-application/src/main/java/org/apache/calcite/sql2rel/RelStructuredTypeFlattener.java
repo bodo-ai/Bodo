@@ -568,7 +568,6 @@ public class RelStructuredTypeFlattener implements ReflectiveVisitor {
     PairList<RexNode, String> flattenedExpList = PairList.of();
     flattenProjections(shuttle, oldProjects, oldNames, "", flattenedExpList);
     RelNode newInput = getNewForOldRel(rel.getInput());
-    // Bodo Change: Propagate the projection variable set
     final RelNode newRel = relBuilder.push(newInput)
         .projectNamed(flattenedExpList.leftList(), flattenedExpList.rightList(),
             true, rel.getVariablesSet())

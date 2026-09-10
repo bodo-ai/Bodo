@@ -103,9 +103,9 @@ class BodoRelMdRowCount : RelMdRowCount() {
         }
         val offset =
             if (rel.offset == null) {
-                0
+                0L
             } else {
-                RexLiteral.intValue(rel.offset)
+                RexLiteral.longValue(rel.offset)
             }
 
         rowCount = (rowCount - offset).coerceAtLeast(0.0)
@@ -113,7 +113,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
             if (rel.fetch is RexDynamicParam || rel.fetch is RexCall) {
                 return rowCount
             }
-            val limit = RexLiteral.intValue(rel.fetch)
+            val limit = RexLiteral.longValue(rel.fetch)
             if (limit < rowCount) {
                 return limit.toDouble()
             }

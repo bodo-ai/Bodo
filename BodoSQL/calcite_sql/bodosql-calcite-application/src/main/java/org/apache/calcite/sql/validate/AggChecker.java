@@ -127,7 +127,14 @@ class AggChecker extends SqlBasicVisitor<Void> {
         // it fully-qualified.
         // TODO: It would be better if we always compared fully-qualified
         // to fully-qualified.
-        final SqlQualified fqId = scopes.getFirst().fullyQualify(id);
+        SqlValidatorScope firstScope = scopes.getFirst();
+        if (firstScope instanceof SqlLambdaScope) {
+            SqlLambdaScope lambdaScope = (SqlLambdaScope) firstScope;
+            if (lambdaScope.isParameter(id)) {
+                return null;
+            }
+        }
+        final SqlQualified fqId = firstScope.fullyQualify(id);
         if (isGroupExpr(fqId.identifier)) {
             return null;
         }

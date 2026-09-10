@@ -23,6 +23,7 @@ import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFamily;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.TimeFrame;
@@ -300,6 +301,16 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
     // "MEASURE" has no effect, so expand "x AS MEASURE id" into "x".
     registerOp(SqlInternalOperators.MEASURE,
         (cx, call) -> cx.convertExpression(call.operand(0)));
+
+    // Expand "CAST NOT NULL(x)" into "CAST(x AS INTEGER NOT NULL)"
+    registerOp(SqlInternalOperators.CAST_NOT_NULL,
+        (cx, call) -> {
+          RexNode operand = cx.convertExpression(call.operand(0));
+          return cx.getRexBuilder().makeCast(
+              cx.getTypeFactory().createTypeWithNullability(
+                  operand.getType(), false),
+              operand);
+        });
 
     registerOp(SqlStdOperatorTable.CONVERT, this::convertCharset);
     registerOp(SqlStdOperatorTable.TRANSLATE, this::translateCharset);
@@ -1052,13 +1063,13 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
     }
     RelDataType returnType =
         cx.getValidator().getValidatedNodeTypeIfKnown(call);
-    final int groupCount = cx.getGroupCount();
+    final boolean hasEmptyGroup = cx.hasEmptyGroup();
     if (returnType == null) {
       RexCallBinding binding =
           new RexCallBinding(cx.getTypeFactory(), fun, exprs,
               ImmutableList.of()) {
-            @Override public int getGroupCount() {
-              return groupCount;
+            @Override public boolean hasEmptyGroup() {
+              return hasEmptyGroup;
             }
           };
       returnType = fun.inferReturnType(binding);
@@ -1307,7 +1318,9 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
       SqlOperandTypeChecker.Consistency consistency, List<RelDataType> types) {
     switch (consistency) {
     case COMPARE:
-      if (SqlTypeUtil.areSameFamily(types)) {
+      if (SqlTypeUtil.areSameFamily(types)
+          && (types.stream().allMatch(RelDataTypeFactoryImpl::isJavaType)
+          || types.stream().noneMatch(RelDataTypeFactoryImpl::isJavaType))) {
         // All arguments are of same family. No need for explicit casts.
         return null;
       }
@@ -1985,7 +1998,7 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
         throw new AssertionError();
       }
       final List<RexNode> exprs =
-          convertOperands(cx, call, SqlOperandTypeChecker.Consistency.NONE);
+          convertOperands(cx, call, SqlOperandTypeChecker.Consistency.LEAST_RESTRICTIVE);
       final List<RexNode> list = new ArrayList<>();
       final List<RexNode> orList = new ArrayList<>();
       for (RexNode expr : exprs) {
@@ -2042,7 +2055,7 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
           throw new AssertionError();
       }
       final List<RexNode> exprs =
-          convertOperands(cx, call, SqlOperandTypeChecker.Consistency.NONE);
+          convertOperands(cx, call, SqlOperandTypeChecker.Consistency.LEAST_RESTRICTIVE);
       final List<RexNode> list = new ArrayList<>();
       for (int i = 0; i < exprs.size(); i++) {
         RexNode expr = exprs.get(i);
@@ -2341,6 +2354,10 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
       }
 
       RexNode interval2Add;
+      BigDecimal multiplier = unit.multiplier;
+      if (multiplier == null) {
+        throw new IllegalArgumentException("Impossible conversion to " + unit);
+      }
       switch (unit) {
       case MICROSECOND:
       case NANOSECOND:
@@ -2348,12 +2365,11 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
             divide(pos, rexBuilder,
                 multiply(pos, rexBuilder,
                     rexBuilder.makeIntervalLiteral(BigDecimal.ONE, qualifier), op1),
-                BigDecimal.ONE.divide(unit.multiplier,
-                    RoundingMode.UNNECESSARY));
+                BigDecimal.ONE.divide(multiplier, RoundingMode.UNNECESSARY));
         break;
       default:
         interval2Add = multiply(pos, rexBuilder,
-            rexBuilder.makeIntervalLiteral(unit.multiplier, qualifier), op1);
+            rexBuilder.makeIntervalLiteral(multiplier, qualifier), op1);
       }
 
       return rexBuilder.makeCall(pos, SqlStdOperatorTable.DATETIME_PLUS,

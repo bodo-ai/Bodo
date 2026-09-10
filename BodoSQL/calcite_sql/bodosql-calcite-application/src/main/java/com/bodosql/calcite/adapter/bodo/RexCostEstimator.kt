@@ -12,6 +12,7 @@ import org.apache.calcite.rex.RexLambda
 import org.apache.calcite.rex.RexLambdaRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexLocalRef
+import org.apache.calcite.rex.RexNodeAndFieldIndex
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexPatternFieldRef
 import org.apache.calcite.rex.RexRangeRef
@@ -124,4 +125,8 @@ object RexCostEstimator : RexVisitor<Cost> {
     override fun visitTableInputRef(tableInputRef: RexTableInputRef): Cost = visitInputRef(tableInputRef)
 
     override fun visitPatternFieldRef(patternFieldRef: RexPatternFieldRef): Cost = visitInputRef(patternFieldRef)
+
+    override fun visitNodeAndFieldIndex(nodeAndFieldIndex: RexNodeAndFieldIndex): Cost =
+        // Same as an input ref since it just references existing data.
+        Cost()
 }
