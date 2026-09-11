@@ -2943,13 +2943,13 @@ def get_snowflake_connection_string(
     else:
         raise ValueError("Invalid user")
 
-    keypair_params = get_snowflake_keypair_connection_params(conn_params)
+    params = {"warehouse": "DEMO_WH"} if conn_params is None else conn_params
+    keypair_params = get_snowflake_keypair_connection_params(params)
     if keypair_params is not None:
         # Key pair (JWT) authentication, password is not used.
         params = keypair_params
         conn = f"snowflake://{username}@{account}/{db}/{schema}?{urlencode(params)}"
     else:
-        params = {"warehouse": "DEMO_WH"} if conn_params is None else conn_params
         conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urlencode(params)}"
     return conn
 
