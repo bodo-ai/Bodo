@@ -4,11 +4,15 @@ for organizing tables.
 """
 
 from bodosql import DatabaseCatalog
-from bodosql.imported_java_classes import JavaEntryPoint
+from bodosql.imported_java_classes import (
+    JavaEntryPoint,
+    build_java_array_list,
+    build_java_hash_map,
+)
 
 
 def _create_java_filesystem_catalog(
-    connection_string: str, default_write_format: str, default_schema: str
+    connection_string: str, default_write_format: str, default_schema: str, primaryKeys
 ):
     """
     Create a Java FileSystemCatalog object.
@@ -21,10 +25,17 @@ def _create_java_filesystem_catalog(
     Returns:
         JavaObject: A Java FileSystemCatalog object.
     """
+    if primaryKeys is None:
+        primaryKeys = {}
+    if len(primaryKeys) > 0:
+        primaryKeys = {k: build_java_array_list(v) for k, v in primaryKeys.items()}
+    primaryKeys = build_java_hash_map(primaryKeys)
+
     return JavaEntryPoint.buildFileSystemCatalog(
         connection_string,
         default_write_format,
         default_schema,
+        primaryKeys,
     )
 
 
@@ -38,6 +49,7 @@ class FileSystemCatalog(DatabaseCatalog):
         connection_string: str,
         default_write_format: str = "iceberg",
         default_schema: str = ".",
+        primaryKeys=None,
     ):
         """
         Create a filesystem catalog from a connection string to a file system
@@ -57,6 +69,7 @@ class FileSystemCatalog(DatabaseCatalog):
         self.connection_string = connection_string
         self.default_write_format = self.standardize_write_format(default_write_format)
         self.default_schema = default_schema
+        self.primaryKeys = primaryKeys
 
     @staticmethod
     def standardize_write_format(write_format: str) -> str:
@@ -79,7 +92,10 @@ class FileSystemCatalog(DatabaseCatalog):
 
     def get_java_object(self):
         return _create_java_filesystem_catalog(
-            self.connection_string, self.default_write_format, self.default_schema
+            self.connection_string,
+            self.default_write_format,
+            self.default_schema,
+            self.primaryKeys,
         )
 
     # Define == for testing
