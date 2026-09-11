@@ -146,4 +146,21 @@ def parse_snowflake_conn_str(
 
                 params[key] = json.loads(val)
 
+    # BodoSQL Snowflake catalogs pass all extra connection parameters through
+    # Java, which places them inside `session_parameters`. Authentication
+    # parameters must instead be passed to the Snowflake connector directly,
+    # so hoist any recognized ones out of session_parameters.
+    session_params = params.get("session_parameters")
+    if isinstance(session_params, dict):
+        for key in (
+            "authenticator",
+            "private_key",
+            "private_key_file",
+            "private_key_file_pwd",
+            "private_key_pwd",
+            "token",
+        ):
+            if key in session_params:
+                params.setdefault(key, session_params.pop(key))
+
     return params
