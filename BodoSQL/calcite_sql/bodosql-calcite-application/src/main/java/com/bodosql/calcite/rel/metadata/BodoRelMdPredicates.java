@@ -21,7 +21,6 @@ import java.util.TreeMap;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
@@ -43,7 +42,6 @@ import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.util.BitSets;
-import org.apache.calcite.util.Bug;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Util;
 import org.apache.calcite.util.mapping.Mapping;
@@ -74,26 +72,6 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
   public RelOptPredicateList getPredicates(
       BodoPhysicalMinRowNumberFilter mrnf, RelMetadataQuery mq) {
     return ((BodoRelMetadataQuery) mq).getPulledUpPredicates(mrnf.asBodoProjectFilter());
-  }
-
-  public RelOptPredicateList getPredicates(RelSubset r, RelMetadataQuery mq) {
-    if (!Bug.CALCITE_1048_FIXED) {
-      if (Boolean.parseBoolean(System.getenv().getOrDefault("BODOSQL_PREDICATE_PULLUP", "true"))) {
-        // System.out.println("Getting pulled up MD");
-        return mq.getPulledUpPredicates(r.stripped());
-      }
-      // System.out.println("Getting empty MD");
-      return RelOptPredicateList.EMPTY;
-    }
-    final RexBuilder rexBuilder = r.getCluster().getRexBuilder();
-    RelOptPredicateList list = null;
-    for (RelNode r2 : r.getRels()) {
-      RelOptPredicateList list2 = mq.getPulledUpPredicates(r2);
-      if (list2 != null) {
-        list = list == null ? list2 : list.union(rexBuilder, list2);
-      }
-    }
-    return Util.first(list, RelOptPredicateList.EMPTY);
   }
 
   /**

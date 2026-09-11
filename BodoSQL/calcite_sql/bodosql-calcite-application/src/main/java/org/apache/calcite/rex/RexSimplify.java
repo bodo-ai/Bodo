@@ -69,6 +69,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.rex.RexUnknownAs.FALSE;
@@ -1657,6 +1658,92 @@ public class RexSimplify {
         return simplifyAnd2ForUnknownAsFalse(terms, notTerms, Comparable.class);
     }
 
+    /**
+     * Bodo Change: Add private methods for finding equivalent search terms
+     * inside conjunctions and removing redundant terms.
+     */
+    private void deduplicateSearchTerms(List<RexNode> terms) {
+        final List<RexCall> searchTerms =
+                terms.stream()
+                        .filter(t -> t.getKind() == SqlKind.SEARCH)
+                        .map(term -> (RexCall) term)
+                        .collect(Collectors.toList());
+
+        if (searchTerms.size() < 2) {
+            return;
+        }
+
+        for (int i = 0; i < searchTerms.size(); i++) {
+            for (int j = i + 1; j < searchTerms.size(); j++) {
+                if (equivalentSearchTerms(searchTerms.get(i), searchTerms.get(j))) {
+                    terms.remove(searchTerms.get(j));
+                }
+            }
+        }
+    }
+
+    /**
+     * Determine whether two search terms are equivalent
+     * Search terms are equivalent if their arguments are the same
+     * except for operand nullability is represented i.e.:
+     *
+     * <p>SEARCH(x, Sarg[..., NULL AS FALSE])</p>
+     *
+     * <p>versus</p>
+     *
+     * <p>SEARCH(CAST(x AS T NOT NULL), Sarg[...])</p>
+     */
+    private boolean equivalentSearchTerms(RexCall searchA, RexCall searchB) {
+        assert ((searchA.getKind() == SqlKind.SEARCH) && (searchB.getKind() == SqlKind.SEARCH));
+
+        if (!(searchA.getOperands().get(1) instanceof RexLiteral)
+                || !(searchB.getOperands().get(1) instanceof RexLiteral)) {
+            return false;
+        }
+
+        final RexNode operandA = searchA.getOperands().get(0);
+        final RexNode operandB = searchB.getOperands().get(0);
+
+        final Sarg sargA = ((RexLiteral) searchA.getOperands().get(1))
+                                .getValueAs(Sarg.class);
+        final Sarg sargB = ((RexLiteral) searchB.getOperands().get(1))
+                                .getValueAs(Sarg.class);
+
+        if (!sargA.rangeSet.equals(sargB.rangeSet)) {
+            return false;
+        }
+
+        return equivalentSearchOperands(
+                operandA, sargA, operandB, sargB)
+                || equivalentSearchOperands(
+                operandB, sargB, operandA, sargA);
+    }
+
+    /**
+     * Determines whether two SEARCH operands differ only by a nullability cast
+     * that accounts for the difference in their Sarg null semantics.
+     */
+    private boolean equivalentSearchOperands(
+            RexNode nullableOperand,
+            Sarg nullableSarg,
+            RexNode nonNullOperand,
+            Sarg nonNullSarg) {
+
+        // Assuming Unknown is False inside the outer expression.
+        // Returning UNKNOWN and FALSE for nulls
+        // should be equivalent.
+        if (nullableSarg.nullAs != TRUE
+                && nonNullSarg.nullAs != TRUE) {
+            return false;
+        }
+
+        final RexNode strippedOperand =
+                removeNullabilityCast(nonNullOperand);
+
+        return strippedOperand != nonNullOperand
+                && strippedOperand.equals(nullableOperand);
+    }
+
     private <C extends Comparable<C>> RexNode simplifyAnd2ForUnknownAsFalse(
             List<RexNode> terms, List<RexNode> notTerms, Class<C> clazz) {
         for (RexNode term : terms) {
@@ -1671,6 +1758,10 @@ public class RexSimplify {
             // Make sure "x OR y OR x" (a single-term conjunction) gets simplified.
             return simplify(terms.get(0), FALSE);
         }
+
+        // Bodo Change: Deduplicate equivalent SEARCH terms
+        deduplicateSearchTerms(terms);
+
         // Try to simplify the expression
         final Multimap<RexNode, Pair<RexNode, RexNode>> equalityTerms =
                 ArrayListMultimap.create();
@@ -2225,35 +2316,6 @@ public class RexSimplify {
         if (call.getOperands().get(1) instanceof RexLiteral) {
             RexLiteral literal = (RexLiteral) call.getOperands().get(1);
             final Sarg sarg = castNonNull(literal.getValueAs(Sarg.class));
-
-            // Bodo Change:
-            // Normalize:
-            //
-            //   SEARCH(CAST(x AS T NOT NULL), Sarg[..., ...])
-            //
-            // to
-            //
-            //   SEARCH(x, Sarg[..., NULL AS FALSE])
-            //
-            // in filter context. This allows equivalent SEARCH predicates that
-            // differ only due to a nullability cast to be deduplicated.
-            if (unknownAs == FALSE) {
-                final RexNode a2 = removeNullabilityCast(a);
-                if (a2 != a) {
-                    final Sarg sarg2 = Sarg.of(FALSE, sarg.rangeSet);
-                    final RexLiteral literal2 =
-                            rexBuilder.makeLiteral(
-                                    sarg2,
-                                    literal.getType(),
-                                    literal.getTypeName());
-
-                    return simplifySearch(
-                            call.clone(
-                                    call.type,
-                                    ImmutableList.of(a2, literal2)),
-                            unknownAs);
-                }
-            }
 
             if (sarg.isAll() || sarg.isNone()) {
                 RexNode rexNode = RexUtil.simpleSarg(rexBuilder, a, sarg, unknownAs);
