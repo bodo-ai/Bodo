@@ -1683,15 +1683,17 @@ public class RexSimplify {
     }
 
     /**
-     * Determine whether two search terms are equivalent
+     * Determine whether two search terms are equivalent.
      * Search terms are equivalent if their arguments are the same
-     * except for operand nullability is represented i.e.:
+     * except for operand nullability i.e.:
      *
      * <p>SEARCH(x, Sarg[..., NULL AS FALSE])</p>
      *
      * <p>versus</p>
      *
      * <p>SEARCH(CAST(x AS T NOT NULL), Sarg[...])</p>
+     *
+     * Assumes UNKNOWN and FALSE are equivalent in the outer expression.
      */
     private boolean equivalentSearchTerms(RexCall searchA, RexCall searchB) {
         assert ((searchA.getKind() == SqlKind.SEARCH) && (searchB.getKind() == SqlKind.SEARCH));
@@ -1713,35 +1715,13 @@ public class RexSimplify {
             return false;
         }
 
-        return equivalentSearchOperands(
-                operandA, sargA, operandB, sargB)
-                || equivalentSearchOperands(
-                operandB, sargB, operandA, sargA);
-    }
-
-    /**
-     * Determines whether two SEARCH operands differ only by a nullability cast
-     * that accounts for the difference in their Sarg null semantics.
-     */
-    private boolean equivalentSearchOperands(
-            RexNode nullableOperand,
-            Sarg nullableSarg,
-            RexNode nonNullOperand,
-            Sarg nonNullSarg) {
-
-        // Assuming Unknown is False inside the outer expression.
-        // Returning UNKNOWN and FALSE for nulls
-        // should be equivalent.
-        if (nullableSarg.nullAs != TRUE
-                && nonNullSarg.nullAs != TRUE) {
+        // Assuming UNKNOWN and FALSE are equivalent in the outer expression.
+        if (sargA.nullAs == TRUE
+                || sargB.nullAs == TRUE) {
             return false;
         }
 
-        final RexNode strippedOperand =
-                removeNullabilityCast(nonNullOperand);
-
-        return strippedOperand != nonNullOperand
-                && strippedOperand.equals(nullableOperand);
+        return removeNullabilityCast(operandA).equals(removeNullabilityCast(operandB));
     }
 
     private <C extends Comparable<C>> RexNode simplifyAnd2ForUnknownAsFalse(
