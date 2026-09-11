@@ -86,12 +86,11 @@ jobs:
         - name: Setup Snowflake Key Pair
           env:
             SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY }}
-            SF_PRIVATE_KEY_PWD: ${{ secrets.SF_PRIVATE_KEY_PWD }}
           run: |
             # Write the private key (if configured) to a file and expose the
             # path to the tests for key pair (JWT) authentication.
             if [[ -n "$SF_PRIVATE_KEY" ]]; then
-              key_path="$RUNNER_TEMP/snowflake_test_key.pem"
+              key_path="$RUNNER_TEMP/snowflake_test_key.p8"
               printf '%s\n' "$SF_PRIVATE_KEY" > "$key_path"
               echo "SF_PRIVATE_KEY_FILE=$key_path" >> "$GITHUB_ENV"
             fi
