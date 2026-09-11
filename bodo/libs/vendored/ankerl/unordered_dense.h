@@ -1377,13 +1377,14 @@ public:
         #ifdef _MSC_VER
             // MSVC doesn't support __builtin_prefetch, so just return
             return;
-        #endif
+        #else
         if (ANKERL_UNORDERED_DENSE_UNLIKELY(empty())) {
             return;
         }
         auto mh = mixed_hash(key);
         auto bucket_idx = bucket_idx_from_hash(mh);
         __builtin_prefetch(&at(m_buckets, static_cast<value_idx_type>(bucket_idx)), /*read only*/ 0, /*low locality*/1);
+        #endif
     }
 
     auto find(Key const& key) const -> const_iterator {
