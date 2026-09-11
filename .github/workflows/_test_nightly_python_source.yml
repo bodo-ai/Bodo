@@ -136,34 +136,6 @@ jobs:
           fi
         shell: bash
 
-      # Temporary: debug key pair (JWT) authentication failures ("JWT token is
-      # invalid"). Prints the fingerprint of the key file CI will use so it can
-      # be compared with the fingerprint of the local key and the
-      # RSA_PUBLIC_KEY set on the user in Snowflake.
-      - name: Debug Snowflake Key Pair
-        if: ${{ env.SF_PRIVATE_KEY_FILE != '' }}
-        env:
-          SF_PRIVATE_KEY_FILE: ${{ env.SF_PRIVATE_KEY_FILE }}
-          SF_PRIVATE_KEY_PWD: ${{ secrets.SF_PRIVATE_KEY_PWD }}
-          SF_USERNAME: ${{ secrets.SF_USERNAME }}
-        run: |
-          head -1 "$SF_PRIVATE_KEY_FILE"
-          python3 - <<'EOF'
-          import base64, hashlib, os
-          from cryptography.hazmat.primitives import serialization
-          pwd = os.environ.get("SF_PRIVATE_KEY_PWD")
-          key = serialization.load_pem_private_key(
-              open(os.environ["SF_PRIVATE_KEY_FILE"], "rb").read(),
-              password=pwd.encode() if pwd else None,
-          )
-          der = key.public_key().public_bytes(
-              serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
-          )
-          print("CI key fingerprint:", "SHA256:" + base64.b64encode(hashlib.sha256(der).digest()).decode())
-          print("CI user:", os.environ.get("SF_USERNAME"))
-          EOF
-        shell: bash
-
       - name: Run Tests
         run: |
           set -exo pipefail
