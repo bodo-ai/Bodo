@@ -1716,8 +1716,8 @@ public class RexSimplify {
         }
 
         // Assuming UNKNOWN and FALSE are equivalent in the outer expression.
-        if ((sargA.nullAs == TRUE || sargB.nullAs == TRUE)
-                && sargA != sargB) {
+        if (sargA.nullAs != sargB.nullAs
+                && (sargA.nullAs == TRUE || sargB.nullAs == TRUE)) {
             return false;
         }
 
