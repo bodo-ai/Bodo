@@ -22,6 +22,7 @@ from bodo.tests.utils import (
     count_array_OneD_Vars,
     count_array_OneDs,
     count_array_REPs,
+    get_snowflake_keypair_connection_params,
     pytest_mark_one_rank,
     pytest_snowflake,
 )
@@ -39,7 +40,9 @@ from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
                     "bodopartner.us-east-1",
                     "DEMO_WH",
                     "TEST_DB",
-                    connection_params={"schema": "PUBLIC"},
+                    connection_params=get_snowflake_keypair_connection_params(
+                        {"schema": "PUBLIC"}
+                    ),
                 ),
                 SnowflakeCatalog(
                     os.environ.get("SF_USERNAME", ""),
@@ -47,7 +50,9 @@ from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
                     "bodopartner.us-east-1",
                     "DEMO_WH",
                     "SNOWFLAKE_SAMPLE_DATA",
-                    connection_params={"schema": "PUBLIC"},
+                    connection_params=get_snowflake_keypair_connection_params(
+                        {"schema": "PUBLIC"}
+                    ),
                 ),
             ),
             marks=pytest_snowflake,
@@ -206,7 +211,9 @@ def test_bodosql_context_boxing_with_catalog(datapath, memory_leak_check):
             "bodopartner.us-east-1",
             "DEMO_WH",
             "TEST_DB",
-            connection_params={"schema": "PUBLIC"},
+            connection_params=get_snowflake_keypair_connection_params(
+                {"schema": "PUBLIC"}
+            ),
         ),
     )
 
@@ -244,7 +251,9 @@ def test_bodosql_context_boxing_with_catalog(datapath, memory_leak_check):
                     "bodopartner.us-east-1",
                     "DEMO_WH",
                     "TEST_DB",
-                    connection_params={"schema": "PUBLIC"},
+                    connection_params=get_snowflake_keypair_connection_params(
+                        {"schema": "PUBLIC"}
+                    ),
                 ),
             ),
             id="snowflake-catalog",
