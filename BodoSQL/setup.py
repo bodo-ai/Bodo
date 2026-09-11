@@ -1,9 +1,9 @@
 import os
 import subprocess
+import sys
 
 from setuptools import setup
 from setuptools.command.build_py import build_py
-from setuptools.errors import ExecError
 from setuptools_scm import get_version
 
 
@@ -44,7 +44,13 @@ def build_libs(obj):
             pass
         os.rename(executable_jar_path, dst_jar_path)
     except subprocess.CalledProcessError as e:
-        raise ExecError(f"maven build failed with error: {e}") from e
+        # Print to stderr for visibility and exit with the maven return code
+        print(
+            f"maven build failed with returncode={getattr(e, 'returncode', 'unknown')}: {e}",
+            file=sys.stderr,
+        )
+        # Ensure the process exits non-zero so pip/pixi sees the failure
+        sys.exit(getattr(e, "returncode", 1))
 
 
 class CustomBuildPyCommand(build_py):
