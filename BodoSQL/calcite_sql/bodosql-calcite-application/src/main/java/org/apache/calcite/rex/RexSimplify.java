@@ -2296,7 +2296,6 @@ public class RexSimplify {
         if (call.getOperands().get(1) instanceof RexLiteral) {
             RexLiteral literal = (RexLiteral) call.getOperands().get(1);
             final Sarg sarg = castNonNull(literal.getValueAs(Sarg.class));
-
             if (sarg.isAll() || sarg.isNone()) {
                 RexNode rexNode = RexUtil.simpleSarg(rexBuilder, a, sarg, unknownAs);
                 return simplify(rexNode, unknownAs);
