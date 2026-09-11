@@ -2881,8 +2881,9 @@ def get_snowflake_keypair_connection_params(
     returns None (indicating password auth should be used).
 
     Environment variables:
-        SF_PRIVATE_KEY_FILE: Path to the private key file (e.g. PEM PKCS#8).
-        SF_PRIVATE_KEY_PWD: Optional passphrase if the private key file is encrypted.
+        SF_PRIVATE_KEY_FILE: Path to the private key file (unencrypted PEM PKCS#8).
+            The key must not be encrypted because the Snowflake JDBC driver used
+            for BodoSQL catalogs does not support encrypted private keys.
 
     Args:
         extra_params (Optional[Dict[str, str]]): Existing connection parameters to
@@ -2901,12 +2902,6 @@ def get_snowflake_keypair_connection_params(
         "authenticator": "snowflake_jwt",
         "private_key_file": private_key_file,
     }
-    if private_key_pwd := os.environ.get("SF_PRIVATE_KEY_PWD"):
-        # The Python connector only supports private_key_file_pwd (it ignores
-        # unknown params with a warning), while JDBC deprecates it in favor
-        # of private_key_pwd. Emit both so one dict works for both clients.
-        params["private_key_file_pwd"] = private_key_pwd
-        params["private_key_pwd"] = private_key_pwd
 
     if extra_params is not None:
         params = {**extra_params, **params}

@@ -746,7 +746,6 @@ def test_to_sql_wrong_password():
                 # Force password auth since a key pair would otherwise take
                 # precedence and the expected error wouldn't occur.
                 "SF_PRIVATE_KEY_FILE": None,
-                "SF_PRIVATE_KEY_PWD": None,
             }
         ),
     ):
