@@ -2902,7 +2902,11 @@ def get_snowflake_keypair_connection_params(
         "private_key_file": private_key_file,
     }
     if private_key_pwd := os.environ.get("SF_PRIVATE_KEY_PWD"):
+        # The Python connector only supports private_key_file_pwd (it ignores
+        # unknown params with a warning), while JDBC deprecates it in favor
+        # of private_key_pwd. Emit both so one dict works for both clients.
         params["private_key_file_pwd"] = private_key_pwd
+        params["private_key_pwd"] = private_key_pwd
 
     if extra_params is not None:
         params = {**extra_params, **params}
