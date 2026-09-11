@@ -105,7 +105,9 @@ def snowflake_sample_data_conn_str():
             "kl02615.east-us-2.azure",
             "DEMO_WH",
             "TEST_DB",
-            connection_params={"schema": "PUBLIC"},
+            connection_params=get_snowflake_keypair_connection_params(
+                {"schema": "PUBLIC"}
+            ),
         )
     ]
 )

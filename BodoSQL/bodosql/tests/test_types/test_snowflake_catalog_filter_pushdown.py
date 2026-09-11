@@ -385,6 +385,7 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
             "bodopartner.us-east-1",
             "DEMO_WH",
             "TEST_DB",
+            connection_params=get_snowflake_keypair_connection_params(),
         )
     )
 
