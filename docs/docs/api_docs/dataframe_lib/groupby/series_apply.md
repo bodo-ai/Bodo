@@ -30,13 +30,9 @@ Passing arguments to *func* is not supported and will trigger a fallback to pand
 ``` py
 import bodo.pandas as bd
 
-df = bd.DataFrame({'A': 'a a b'.split(),
+df = bd.DataFrame({"A": "a a b".split(), "B": [1, 2, 3], "C": [4, 6, 5]})
 
-                   'B': [1, 2, 3],
-
-                   'C': [4, 6, 5]})
-
-apply_res = df.groupby('A')['B'].apply(lambda x: x.min() - x.max())
+apply_res = df.groupby("A")["B"].apply(lambda x: x.min() - x.max())
 print(apply_res)
 ```
 

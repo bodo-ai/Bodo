@@ -103,25 +103,25 @@ import bodo.pandas as pd
 import numpy as np
 import time
 
+
 def gen_data():
     NUM_GROUPS = 30
     NUM_ROWS = 20_000_000
-    df = pd.DataFrame({
-        "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-        "B": np.arange(NUM_ROWS)
-    })
+    df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
     df.to_parquet("example1.pq")
+
 
 def test():
     df = pd.read_parquet("example1.pq")
     t0 = time.time()
     df2 = df.groupby("A")["B"].agg(
-        sum_b1=(lambda a: (a==1).sum()),
-        sum_b2=(lambda a: (a==2).sum()),
-        sum_b3=(lambda a: (a==3).sum())
+        sum_b1=(lambda a: (a == 1).sum()),
+        sum_b2=(lambda a: (a == 2).sum()),
+        sum_b3=(lambda a: (a == 3).sum()),
     )
     m = df2.sum_b1.mean()
     print("Result:", m, "\nCompute time:", time.time() - t0, "secs")
+
 
 gen_data()
 test()

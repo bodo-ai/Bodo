@@ -129,8 +129,9 @@ different file name.
 
 ``` py
 @bodo.jit(cache=True)
-def io_call(file_name):
-    ...
+def io_call(file_name): ...
+
+
 io_call("mydata.parquet")
 ```
 
@@ -157,8 +158,7 @@ cell from the function call.
 
 ``` py
 @bodo.jit(cache=True)
-def io_call(file_name):
-    ...
+def io_call(file_name): ...
 ```
 
 ``` py

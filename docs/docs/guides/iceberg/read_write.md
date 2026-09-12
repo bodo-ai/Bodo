@@ -128,8 +128,7 @@ def example_read_iceberg() -> pd.DataFrame:
         con="<... Connection String. See previous section ...>",
         schema="<... Namespace Path to Iceberg Table ...>",
         _snapshot_id="<... Optional (int): Snapshot ID to read the table from ...>",
-        _snapshot_timestamp_ms="<... Optional (int): Timestamp to read the table from ...>"
-
+        _snapshot_timestamp_ms="<... Optional (int): Timestamp to read the table from ...>",
     )
 ```
 
@@ -149,7 +148,7 @@ def write_iceberg_table(df: pandas.DataFrame):
         name="<... Name of the Iceberg Table ...>",
         con="<... Connection String. See previous section ...>",
         schema="<... Namespace Path to Iceberg Table ..>",
-        if_exists="replace"
+        if_exists="replace",
     )
 ```
 

@@ -361,4 +361,4 @@ if __name__ == "__main__":
         )
     else:
         print("Invalid Number of Arguments")
-        exit(1)
+        sys.exit(1)

@@ -7,7 +7,7 @@ import pytest
 
 import bodosql
 from bodo.tests.utils import pytest_slow_unless_codegen
-from bodosql.tests.string_ops_common import *  # noqa
+from bodosql.tests.string_ops_common import *
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed

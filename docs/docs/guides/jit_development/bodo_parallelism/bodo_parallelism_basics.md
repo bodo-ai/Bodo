@@ -158,12 +158,15 @@ nature of the computation that produces them. Let's see an example:
 ```py
 import bodo
 import pandas as pd
+
+
 @bodo.jit
 def mean_power_speed():
     df = pd.read_parquet("data/cycling_dataset.pq")
     m = df[["power", "speed"]].mean()
     print(m)
     return m
+
 
 res = mean_power_speed()
 ```

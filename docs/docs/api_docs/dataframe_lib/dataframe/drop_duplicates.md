@@ -39,11 +39,13 @@ See [`pandas.DataFrame.drop_duplicates`](https://pandas.pydata.org/docs/referenc
 ``` py
 import bodo.pandas as pd
 
-df = pd.DataFrame({
-    'brand': ['Yum Yum', 'Yum Yum', 'Indomie', 'Indomie', 'Indomie'],
-    'style': ['cup', 'cup', 'cup', 'pack', 'pack'],
-    'rating': [4, 4, 3.5, 15, 5]
-})
+df = pd.DataFrame(
+    {
+        "brand": ["Yum Yum", "Yum Yum", "Indomie", "Indomie", "Indomie"],
+        "style": ["cup", "cup", "cup", "pack", "pack"],
+        "rating": [4, 4, 3.5, 15, 5],
+    }
+)
 print(df.drop_duplicates())
 ```
 
@@ -58,7 +60,7 @@ Output:
 
 To remove duplicates on specific column(s), use `subset`.
 ``` py
-print(df.drop_duplicates(subset=['brand']))
+print(df.drop_duplicates(subset=["brand"]))
 ```
 
 Output:

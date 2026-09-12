@@ -274,34 +274,34 @@ def box_str_arr_split_view(typ, val, c):
         with c.builder.if_else(cond) as (then, otherwise):
             with then:
                 list_obj = c.pyapi.list_new(nitems)
-                with c.builder.if_then(
-                    cgutils.is_not_null(c.builder, list_obj), likely=True
+                with (
+                    c.builder.if_then(
+                        cgutils.is_not_null(c.builder, list_obj), likely=True
+                    ),
+                    cgutils.for_range(c.builder, nitems) as loop,
                 ):
-                    with cgutils.for_range(c.builder, nitems) as loop:
-                        # data_offsets of current list
-                        start_index = builder.add(list_start_offset, loop.index)
-                        data_start = builder.load(
-                            builder.gep(sp_view.data_offsets, [start_index])
+                    # data_offsets of current list
+                    start_index = builder.add(list_start_offset, loop.index)
+                    data_start = builder.load(
+                        builder.gep(sp_view.data_offsets, [start_index])
+                    )
+                    # add 1 since starts from -1
+                    data_start = builder.add(data_start, data_start.type(1))
+                    data_end = builder.load(
+                        builder.gep(
+                            sp_view.data_offsets,
+                            [builder.add(start_index, start_index.type(1))],
                         )
-                        # add 1 since starts from -1
-                        data_start = builder.add(data_start, data_start.type(1))
-                        data_end = builder.load(
-                            builder.gep(
-                                sp_view.data_offsets,
-                                [builder.add(start_index, start_index.type(1))],
-                            )
-                        )
-                        # cgutils.printf(builder, "ind %lld %lld\n", data_start, data_end)
-                        data_ptr = builder.gep(
-                            builder.extract_value(sp_view.data, 0), [data_start]
-                        )
-                        str_size = builder.sext(
-                            builder.sub(data_end, data_start), lir.IntType(64)
-                        )
-                        str_obj = c.pyapi.string_from_string_and_size(
-                            data_ptr, str_size
-                        )
-                        c.pyapi.list_setitem(list_obj, loop.index, str_obj)
+                    )
+                    # cgutils.printf(builder, "ind %lld %lld\n", data_start, data_end)
+                    data_ptr = builder.gep(
+                        builder.extract_value(sp_view.data, 0), [data_start]
+                    )
+                    str_size = builder.sext(
+                        builder.sub(data_end, data_start), lir.IntType(64)
+                    )
+                    str_obj = c.pyapi.string_from_string_and_size(data_ptr, str_size)
+                    c.pyapi.list_setitem(list_obj, loop.index, str_obj)
 
                 builder.call(arr_setitem_fn, [out_arr, arr_ptr, list_obj])
             with otherwise:

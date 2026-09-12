@@ -46,25 +46,25 @@ import bodo.decorators
 import bodo.types  # isort:skip
 import bodo.ext
 import bodo.hiframes.boxing
-import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
-import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
-import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
+import bodo.hiframes.dataframe_indexing  # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_datetime_ext  # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_timedelta_ext  # side effect: initialize Numba extensions
 import bodo.hiframes.pd_timestamp_ext
 import bodo.io
 import bodo.io.csv_iterator_ext
 import bodo.io.np_io
 import bodo.io.stream_parquet_write
-import bodo.ir.object_mode  # noqa
+import bodo.ir.object_mode
 import bodo.libs
 import bodo.libs.array_ops
 import bodo.libs.binops_ext
 import bodo.libs.csr_matrix_ext
 import bodo.libs.distributed_api
-import bodo.libs.int_arr_ext  # noqa # side effect
+import bodo.libs.int_arr_ext  # side effect
 import bodo.libs.matrix_ext
 import bodo.libs.memory_budget
 import bodo.libs.query_profile_collector
-import bodo.libs.re_ext  # noqa # side effect: initialize Numba extensions
+import bodo.libs.re_ext  # side effect: initialize Numba extensions
 import bodo.libs.spark_extra
 import bodo.libs.streaming.dict_encoding
 import bodo.libs.streaming.groupby
@@ -79,15 +79,15 @@ import bodo.libs.array_kernels  # isort:skip # side effect: install Numba functi
 import bodo.transforms
 import bodo.transforms.series_pass
 import bodo.transforms.type_inference
-import bodo.transforms.type_inference.typeinfer  # noqa # side effect: initialize Numba extensions
+import bodo.transforms.type_inference.typeinfer  # side effect: initialize Numba extensions
 import bodo.transforms.untyped_pass
 import bodo.utils
 
 # Check for addition of new methods and attributes in pandas documentation for Series. Needs to be checked for every new Pandas release.
 # New methods and attributes need to be added to the unsupported_xxx list in the appropriate _ext.py file.
 # NOTE: This check needs to happen last.
-import bodo.utils.pandas_coverage_tracking  # noqa # side effect
-import bodo.utils.table_utils  # noqa # side effect
+import bodo.utils.pandas_coverage_tracking  # side effect
+import bodo.utils.table_utils  # side effect
 import bodo.utils.tracing
 import bodo.utils.tracing_py
 import bodo.utils.typing
@@ -1001,13 +1001,15 @@ def is_user_dispatcher(func_type):
     a user rather than an internally written function."""
     # Func_type is a user function component if it is either from objmode or a
     # dispatcher with the BodoCompiler
-    return (
-        isinstance(func_type, numba.core.types.functions.ObjModeDispatcher)
-        or isinstance(func_type, bodo.decorators.WrapPythonDispatcherType)
-        or (
-            isinstance(func_type, numba.core.types.Dispatcher)
-            and issubclass(func_type.dispatcher._compiler.pipeline_class, BodoCompiler)
-        )
+    return isinstance(
+        func_type,
+        (
+            numba.core.types.functions.ObjModeDispatcher,
+            bodo.decorators.WrapPythonDispatcherType,
+        ),
+    ) or (
+        isinstance(func_type, numba.core.types.Dispatcher)
+        and issubclass(func_type.dispatcher._compiler.pipeline_class, BodoCompiler)
     )
 
 

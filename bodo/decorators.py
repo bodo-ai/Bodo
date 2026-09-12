@@ -22,7 +22,7 @@ from numba.core.typing.templates import signature
 from numba.extending import lower_builtin, models, register_model
 
 import bodo
-import bodo.compiler  # noqa # side effect: initialize JIT compiler
+import bodo.compiler  # side effect: initialize JIT compiler
 from bodo.pandas_compat import bodo_pandas_udf_execution_engine
 
 # Add Bodo's options to Numba's allowed options/flags
@@ -470,34 +470,34 @@ def _init_extensions():
     if "sklearn" in sys.modules and "bodo.ml_support.sklearn_ext" not in sys.modules:
         # side effect: initialize Numba extensions
         import bodo.ml_support.sklearn_ext  # noqa
-        import bodo.ml_support.sklearn_cluster_ext  # noqa
-        import bodo.ml_support.sklearn_ensemble_ext  # noqa
-        import bodo.ml_support.sklearn_feature_extraction_ext  # noqa
-        import bodo.ml_support.sklearn_linear_model_ext  # noqa
-        import bodo.ml_support.sklearn_metrics_ext  # noqa
-        import bodo.ml_support.sklearn_model_selection_ext  # noqa
-        import bodo.ml_support.sklearn_naive_bayes_ext  # noqa
-        import bodo.ml_support.sklearn_preprocessing_ext  # noqa
-        import bodo.ml_support.sklearn_svm_ext  # noqa
-        import bodo.ml_support.sklearn_utils_ext  # noqa
+        import bodo.ml_support.sklearn_cluster_ext
+        import bodo.ml_support.sklearn_ensemble_ext
+        import bodo.ml_support.sklearn_feature_extraction_ext
+        import bodo.ml_support.sklearn_linear_model_ext
+        import bodo.ml_support.sklearn_metrics_ext
+        import bodo.ml_support.sklearn_model_selection_ext
+        import bodo.ml_support.sklearn_naive_bayes_ext
+        import bodo.ml_support.sklearn_preprocessing_ext
+        import bodo.ml_support.sklearn_svm_ext
+        import bodo.ml_support.sklearn_utils_ext
 
         need_refresh = True
 
     if "matplotlib" in sys.modules and "bodo.libs.matplotlib_ext" not in sys.modules:
         # side effect: initialize Numba extensions
-        import bodo.libs.matplotlib_ext  # noqa
+        import bodo.libs.matplotlib_ext
 
         need_refresh = True
 
     if "xgboost" in sys.modules and "bodo.ml_support.xgb_ext" not in sys.modules:
         # side effect: initialize Numba extensions
-        import bodo.ml_support.xgb_ext  # noqa
+        import bodo.ml_support.xgb_ext
 
         need_refresh = True
 
     if "h5py" in sys.modules and "bodo.io.h5_api" not in sys.modules:
         # side effect: initialize Numba extensions
-        import bodo.io.h5_api  # noqa
+        import bodo.io.h5_api
 
         if bodo.utils.utils.has_supported_h5py():
             from bodo.io import h5  # noqa
@@ -506,9 +506,9 @@ def _init_extensions():
 
     if "pyspark" in sys.modules and "bodo.libs.pyspark_ext" not in sys.modules:
         # side effect: initialize Numba extensions
-        import pyspark.sql.functions  # noqa
+        import pyspark.sql.functions
 
-        import bodo.libs.pyspark_ext  # noqa
+        import bodo.libs.pyspark_ext
 
         bodo.utils.transform.no_side_effect_call_tuples.update(
             {

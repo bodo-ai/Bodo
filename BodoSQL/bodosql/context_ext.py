@@ -30,7 +30,7 @@ from numba.extending import (
 import bodo
 import bodo.hiframes
 import bodo.hiframes.pd_multi_index_ext
-import bodo.io.iceberg.merge_into  # noqa
+import bodo.io.iceberg.merge_into
 import bodo.io.iceberg.read_compilation
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.io.utils import parse_dbtype

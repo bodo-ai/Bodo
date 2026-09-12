@@ -27,8 +27,8 @@ def overload_sql_null_equal_column(arg0, arg1):
     if isinstance(arg0, bodo.types.SeriesType) and isinstance(
         arg1, bodo.types.SeriesType
     ):
-        return lambda arg0, arg1: (arg0.isna() & arg1.isna()) | (arg0 == arg1).fillna(
-            False
+        return lambda arg0, arg1: (
+            (arg0.isna() & arg1.isna()) | (arg0 == arg1).fillna(False)
         )
     # 1 column and 1 scalar
     elif isinstance(arg0, bodo.types.SeriesType):

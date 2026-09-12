@@ -96,7 +96,7 @@ class StructArrayType(types.ArrayCompatible):
     def from_dict(cls, d):
         """create a StructArrayType from dict where keys are names and values are dtypes"""
         assert isinstance(d, dict)
-        names = tuple(str(a) for a in d.keys())
+        names = tuple(str(a) for a in d)
         data = tuple(dtype_to_array_type(t) for t in d.values())
         return StructArrayType(data, names)
 
@@ -821,8 +821,8 @@ def is_field_value_null(s, field_name):  # pragma: no cover
 def overload_is_field_value_null(s, field_name):
     """return True if struct field is NA"""
     field_ind = _get_struct_field_ind(s, field_name, "element access (getitem)")
-    return (
-        lambda s, field_name: get_struct_null_bitmap(s)[field_ind] == 0
+    return lambda s, field_name: (
+        get_struct_null_bitmap(s)[field_ind] == 0
     )  # pragma: no cover
 
 
@@ -920,9 +920,11 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ):
 
             na_val = context.compile_internal(
                 builder,
-                lambda arr, ind: np.uint8(0)
-                if bodo.libs.array_kernels.isna(arr, ind)
-                else np.uint8(1),
+                lambda arr, ind: (
+                    np.uint8(0)
+                    if bodo.libs.array_kernels.isna(arr, ind)
+                    else np.uint8(1)
+                ),
                 types.uint8(arr_typ, types.int64),
                 [arr_ptr, ind],
             )

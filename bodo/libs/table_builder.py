@@ -807,7 +807,6 @@ def table_builder_reset(
         )
         builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return
 
     sig = types.none(builder_state)
     return sig, codegen

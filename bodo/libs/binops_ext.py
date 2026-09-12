@@ -1032,9 +1032,7 @@ def arith_op_supported_by_numba(op, lhs, rhs):
         fl_int = isinstance(lhs, types.Float) and (
             isinstance(
                 rhs,
-                (types.IntegerLiteral, types.Float, types.Integer)
-                or rhs in types.unsigned_domain
-                or rhs in types.signed_domain,
+                (types.IntegerLiteral, types.Float, types.Integer),
             )
         )
         # complex ^ complex

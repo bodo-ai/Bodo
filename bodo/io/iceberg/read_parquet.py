@@ -1232,7 +1232,7 @@ def get_row_counts_for_schema_group(
                     file_schema, schema_group.read_schema
                 )
             except Exception as e:
-                msg = f"Schema of file {pq_info.path} is not compatible.\n{str(e)}"
+                msg = f"Schema of file {pq_info.path} is not compatible.\n{e!s}"
                 # TODO: raise BodoError in case of compiler (not dataframe library)
                 raise ValueError(msg)
 

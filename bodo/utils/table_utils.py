@@ -428,8 +428,8 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
         and is_overload_false(_bodo_nan_to_str)
         and is_overload_none(used_cols)
     ):
-        return (
-            lambda table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None: table
+        return lambda table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None: (
+            table
         )  # pragma: no cover
 
     # Determine if we can avoid the copy

@@ -656,7 +656,7 @@ def test_join_broadcast_hint(memory_leak_check, capfd):
             only_jit_1DVar=True,
             use_duckdb=True,
         )
-        stdout, stderr = capfd.readouterr()
+        _stdout, stderr = capfd.readouterr()
         if bodo.get_rank() == 0:
             expected_log_messages = ["Converting to a broadcast hash join"]
         else:

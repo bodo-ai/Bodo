@@ -321,7 +321,7 @@ def overload_struct_hash(struct):
 
     args = []
     for idx, name in enumerate(struct.names):
-        args.append(f"consistent_hash({repr(name)})")
+        args.append(f"consistent_hash({name!r})")
         args.append(
             f"consistent_hash(get_struct_data(struct)[{idx}]) if get_struct_null_bitmap(struct)[{idx}] else -1"
         )

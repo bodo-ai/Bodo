@@ -268,7 +268,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                 ret = bodo.types.SeriesType(dtype, data_type, index_type, name_typ)
                 return ret(*args)
 
-        if isinstance(ind, types.Integer) or isinstance(ind, types.UnicodeType):
+        if isinstance(ind, (types.Integer, types.UnicodeType)):
             # if we have non constant integer/string getitem, raise an error
             raise_bodo_error(
                 "df[] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."

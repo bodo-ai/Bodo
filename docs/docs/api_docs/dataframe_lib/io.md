@@ -36,9 +36,7 @@ The type of this argument differs from Pandas.
 ``` py
 import bodo.pandas as bd
 
-original_df = bd.DataFrame(
-    {"foo": range(15), "bar": range(15, 30)}
-   )
+original_df = bd.DataFrame({"foo": range(15), "bar": range(15, 30)})
 
 original_df.to_parquet("example.pq")
 
@@ -124,7 +122,7 @@ df = bd.read_iceberg(
     row_filter="col1 > 10",
     selected_fields=("col1", "col2"),
     snapshot_id=123456789,
-    limit=1000
+    limit=1000,
 )
 ```
 
@@ -138,7 +136,7 @@ df = bd.read_iceberg(
     catalog_properties={
         pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
         pyiceberg.catalog.WAREHOUSE_LOCATION: path_to_warehouse_dir,
-    }
+    },
 )
 ```
 
@@ -149,7 +147,7 @@ import bodo.pandas as bd
 
 df = bd.read_iceberg(
     table_identifier="my_table",
-    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
+    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table",
 )
 ```
 
@@ -183,7 +181,7 @@ warehouse_path = "/tmp/warehouse"
 catalog = load_catalog(
     "default",
     **{
-        'type': 'sql',
+        "type": "sql",
         "uri": f"sqlite:///{warehouse_path}/pyiceberg_catalog.db",
         "warehouse": f"file://{warehouse_path}",
     },

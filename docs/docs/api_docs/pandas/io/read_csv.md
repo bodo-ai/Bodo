@@ -43,8 +43,8 @@
     ```py
     @bodo.jit
     def impl(f):
-      df = pd.read_csv(f, _bodo_read_as_dict=["A", "B", "C"])
-      return df
+        df = pd.read_csv(f, _bodo_read_as_dict=["A", "B", "C"])
+        return df
     ```
 
 

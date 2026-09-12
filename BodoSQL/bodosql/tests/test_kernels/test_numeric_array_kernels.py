@@ -1330,9 +1330,8 @@ double_arg_np_list = list(double_arg_np_map.keys())
 @pytest.mark.parametrize("arr", test_arrs)
 @pytest.mark.parametrize("func", single_arg_np_list)
 def test_numeric_single_arg_funcs(arr, func):
-    if func == "factorial":
-        if np.any(np.abs(arr) > 20):
-            return  # skip factorial for large values
+    if func == "factorial" and np.any(np.abs(arr) > 20):
+        return  # skip factorial for large values
     test_impl = "def impl(arr):\n"
     test_impl += f"  return pd.Series(bodosql.kernels.{func}(arr))"
     impl_vars = {}

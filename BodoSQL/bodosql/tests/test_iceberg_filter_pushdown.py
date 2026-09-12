@@ -111,7 +111,7 @@ def test_filter_pushdown_in_int_as_array(iceberg_database):
         )
 
     setup()
-    db_schema, warehouse_loc = iceberg_database()
+    db_schema, _warehouse_loc = iceberg_database()
     # TODO: Fix the FileSystemCatalog so that it can take in a full connection string
     # and not just a hardcoded path.
     catalog = bodosql.FileSystemCatalog(".")
@@ -161,7 +161,7 @@ def test_filter_pushdown_in_str_as_array(iceberg_database):
         )
 
     setup()
-    db_schema, warehouse_loc = iceberg_database()
+    db_schema, _warehouse_loc = iceberg_database()
     # TODO: Fix the FileSystemCatalog so that it can take in a full connection string
     # and not just a hardcoded path.
     catalog = bodosql.FileSystemCatalog(".")

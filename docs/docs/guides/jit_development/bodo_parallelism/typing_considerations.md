@@ -83,11 +83,13 @@ import numpy as np
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def df_iloc(df, rows, columns):
-   return df.iloc[rows, columns]
+    return df.iloc[rows, columns]
 
-df = pd.DataFrame({'A': np.arange(100), 'B': ["A", "B", "C", "D"]* 25})
+
+df = pd.DataFrame({"A": np.arange(100), "B": ["A", "B", "C", "D"] * 25})
 print(df_iloc(df, slice(1, 4), 0))
 ```
 
@@ -124,11 +126,13 @@ import numpy as np
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def df_iloc(df, rows):
-   return df.iloc[rows, 0]
+    return df.iloc[rows, 0]
 
-df = pd.DataFrame({'A': np.arange(100), 'B': ["A", "B", "C", "D"]* 25})
+
+df = pd.DataFrame({"A": np.arange(100), "B": ["A", "B", "C", "D"] * 25})
 print(df_iloc(df, slice(1, 4)))
 ```
 
@@ -163,12 +167,13 @@ this code reads column `A` into a nullable integer array
 ```py
 @bodo.jit
 def example(fname):
-  dtype = {'A': 'Int64', 'B': 'float64'}
-  df = pd.read_csv(fname,
-      names=dtype.keys(),
-      dtype=dtype,
-  )
-  ...
+    dtype = {"A": "Int64", "B": "float64"}
+    df = pd.read_csv(
+        fname,
+        names=dtype.keys(),
+        dtype=dtype,
+    )
+    ...
 ```
 
 

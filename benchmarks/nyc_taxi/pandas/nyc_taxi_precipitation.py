@@ -93,7 +93,6 @@ def get_monthly_travels_weather(weather_dataset, hvfhv_dataset):
     end = time.time()
     print("Writing time:", (end - start_write))
     print("Total E2E time:", (end - start_read))
-    return
 
 
 if __name__ == "__main__":

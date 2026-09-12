@@ -105,11 +105,9 @@ import time
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
-df = pd.DataFrame({
-    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-    "B": np.arange(NUM_ROWS)
-})
+df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
 df.to_parquet("my_data.pq")
+
 
 def computation():
     t1 = time.time()
@@ -117,6 +115,7 @@ def computation():
     df["C"] = df.apply(lambda r: 0 if r.A == 0 else (r.B // r.A), axis=1)
     df.to_parquet("out.pq")
     print("Execution time:", time.time() - t1)
+
 
 computation()
 ```

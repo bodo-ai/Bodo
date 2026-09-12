@@ -328,11 +328,7 @@ def typeof_time(val, c):
 def overload_time(
     hour=0, min=0, second=0, millisecond=0, microsecond=0, nanosecond=0, precision=9
 ):
-    if (
-        isinstance(hour, types.Integer)
-        or isinstance(hour, types.IntegerLiteral)
-        or hour == 0
-    ):
+    if isinstance(hour, (types.Integer, types.IntegerLiteral)) or hour == 0:
 
         def impl(
             hour=0,
@@ -996,9 +992,7 @@ def create_cmp_op_overload(op):
         if isinstance(lhs, TimeType) and is_overload_none(rhs):
             # When we compare Time and None in order to sort or take extreme values
             # in a series/array of Time, Time() > None, Time() < None should all return True
-            return (
-                lambda lhs, rhs: False if op is operator.eq else True
-            )  # pragma: no cover
+            return lambda lhs, rhs: not op is operator.eq  # pragma: no cover
 
         if is_overload_none(lhs) and isinstance(rhs, TimeType):
             # When we compare None and Time in order to sort or take extreme values
@@ -1013,7 +1007,7 @@ def time_min(lhs, rhs):
     if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs < rhs else rhs
+            return min(rhs, lhs)
 
         return impl
 
@@ -1023,6 +1017,6 @@ def time_max(lhs, rhs):
     if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs > rhs else rhs
+            return max(rhs, lhs)
 
         return impl

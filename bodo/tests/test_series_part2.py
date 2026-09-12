@@ -117,9 +117,11 @@ def test_series_map_isna_check(memory_leak_check):
 
     def impl1(S):
         return S.map(
-            lambda a: pd.Timestamp("2019-01-01")
-            if pd.isna(a)
-            else a + datetime.timedelta(days=1)
+            lambda a: (
+                pd.Timestamp("2019-01-01")
+                if pd.isna(a)
+                else a + datetime.timedelta(days=1)
+            )
         )
 
     def impl2(S):
@@ -538,7 +540,6 @@ def test_monotonicity(memory_leak_check):
     Srand = pd.Series(e_list)
     S_inc = Srand.cumsum()
     S_dec = Srand.sum() - S_inc
-    #
     e_list_fail = e_list
     e_list[random.randint(0, n - 1)] = -1
     Srand2 = pd.Series(e_list_fail)
@@ -1106,10 +1107,10 @@ def test_series_infer_objects(S, memory_leak_check):
         pytest.param(
             pd.Series(
                 [
-                    Decimal("1"),
-                    Decimal("2"),
+                    Decimal(1),
+                    Decimal(2),
                     Decimal("4.5"),
-                    Decimal("5"),
+                    Decimal(5),
                     None,
                     Decimal("4.9"),
                 ]
@@ -3408,11 +3409,10 @@ def is_where_mask_supported_series(S):
         S.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
     ):
         return False
-    if not isinstance(S.dtype, pd.CategoricalDtype) and isinstance(
-        S.values[0], datetime.date
-    ):
-        return False
-    return True
+    return not (
+        not isinstance(S.dtype, pd.CategoricalDtype)
+        and isinstance(S.values[0], datetime.date)
+    )
 
 
 @pytest.mark.skip(

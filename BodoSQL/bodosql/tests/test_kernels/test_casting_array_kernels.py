@@ -439,8 +439,8 @@ def test_cast_boolean(numeric_arrays, memory_leak_check):
 
     # Simulates casting to float64 on a single row
     if is_string_dtype(args[0]) or isinstance(args[0], str):
-        to_bool_scalar_fn = (
-            lambda x: None if pd.isna(str_to_bool(x)) else str_to_bool(x)
+        to_bool_scalar_fn = lambda x: (
+            None if pd.isna(str_to_bool(x)) else str_to_bool(x)
         )
     elif is_float_dtype(args[0]) or isinstance(args[0], float):
         to_bool_scalar_fn = lambda x: None if np.isnan(x) or np.isinf(x) else bool(x)

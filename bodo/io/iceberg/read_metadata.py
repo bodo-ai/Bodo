@@ -15,7 +15,6 @@ import typing as pt
 import pyarrow as pa
 
 import bodo
-import bodo.utils.tracing as tracing
 from bodo.io.iceberg.common import (
     FieldIDs,
     FieldNames,
@@ -29,6 +28,7 @@ from bodo.io.iceberg.read_parquet import (
 )
 from bodo.io.parquet_pio import fpath_without_protocol_prefix
 from bodo.spawn.utils import run_rank0
+from bodo.utils import tracing
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyiceberg.catalog import Catalog
@@ -204,7 +204,7 @@ def get_iceberg_file_list_parallel(
     except Exception as exc:  # pragma: no cover
         # TODO: raise BodoError in case of compiler (not dataframe library)
         raise ValueError(
-            f"Error reading Iceberg Table: {type(exc).__name__}: {str(exc)}\n"
+            f"Error reading Iceberg Table: {type(exc).__name__}: {exc!s}\n"
         ) from exc
     finally:
         ev_iceberg_fl.finalize()
@@ -289,7 +289,7 @@ def group_file_frags_by_schema_group_identifier(
             msg = (
                 f"Encountered an error while generating the schema group identifier for file {pq_info.path}. "
                 "This is most likely either a corrupted/invalid Parquet file or represents a bug/gap in Bodo.\n"
-                f"{str(e)}"
+                f"{e!s}"
             )
             # TODO: raise BodoError in case of compiler (not dataframe library)
             raise ValueError(msg)

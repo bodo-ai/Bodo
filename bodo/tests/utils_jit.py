@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 # Import compiler
-import bodo.decorators  # isort:skip # noqa
+import bodo.decorators  # isort:skip
 from numba.core.compiler_machinery import FunctionPass, register_pass
 from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR

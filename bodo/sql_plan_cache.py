@@ -129,4 +129,4 @@ class BodoSqlPlanCache:
             if numba.core.config.DEBUG_CACHE:
                 print("[cache] failed to cache BodoSQL Plan.")
                 if numba.core.config.DEVELOPER_MODE:
-                    print(f"[cache] error: {str(e)}")
+                    print(f"[cache] error: {e!s}")

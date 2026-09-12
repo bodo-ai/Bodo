@@ -426,6 +426,5 @@ def test_json_write_read_simple_df(memory_leak_check):
         reset_index=True,
         check_dtype=False,
     )
-    if bodo.get_rank() == 0:
-        if bodo.get_rank() == 0:
-            shutil.rmtree(fname_file, ignore_errors=True)
+    if bodo.get_rank() == 0 and bodo.get_rank() == 0:
+        shutil.rmtree(fname_file, ignore_errors=True)
