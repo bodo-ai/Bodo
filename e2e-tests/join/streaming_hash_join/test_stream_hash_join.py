@@ -42,7 +42,7 @@ def test_hash_join(
         unpin_behavior(),
         temp_env_override(
             {
-                "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": str(mem_size_mib)
+                "BODO_BUFFER_POOL_WORKER_MEMORY_SIZE_MiB": str(mem_size_mib)
                 if (mem_size_mib is not None)
                 else None,
                 "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
