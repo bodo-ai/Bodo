@@ -1329,6 +1329,10 @@ object BodoRules {
             PRUNE_EMPTY_UNION_RULE,
             PROJECT_VALUES_REDUCE_RULE,
             JOIN_REORDER_CONDITION_RULE,
+            // Avoiding repeated application of this rule here since it can lead to cycles. It
+            // requires extracting canonical forms of predicates from query subtrees to know if the derived predicate
+            // is already applied, but our infrastructure cannot provide this reliably. For example, "SEARCH(a, [1,2])"
+            // is not converted to "a=1 or a=2".
 //            JOIN_DERIVE_OR_PREDICATES_RULE,
             FILTER_REORDER_CONDITION_RULE,
             LIMIT_PROJECT_TRANSPOSE_RULE,
