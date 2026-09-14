@@ -1661,6 +1661,21 @@ public class RexSimplify {
     /**
      * Bodo Change: Add private methods for finding equivalent search terms
      * inside conjunctions and removing redundant terms.
+     *
+     * These changes are motivated by testEngage3ActiveSegue, where filter
+     * pushdown produces equivalent SEARCH predicates on either side of a join,
+     * differing only by a NOT NULL cast:
+     *
+     *   Join
+     *     Filter(SEARCH(CAST($0 AS NOT NULL), Sarg['x', 'y']))
+     *     Filter(SEARCH($0, Sarg['x', 'y'; NULL AS FALSE]))
+     *
+     * JOIN_PUSH_TRANSITIVE_PREDICATES then infers each predicate on the opposite
+     * side, resulting in redundant SEARCH predicates:
+     *
+     *   Join
+     *     Filter(AND(SEARCH(CAST($0 AS NOT NULL), ...), SEARCH($0, ...)))
+     *     Filter(AND(SEARCH($0, ...), SEARCH(CAST($0 AS NOT NULL), ...)))
      */
     private void deduplicateSearchTerms(List<RexNode> terms) {
         final List<RexCall> searchTerms =
