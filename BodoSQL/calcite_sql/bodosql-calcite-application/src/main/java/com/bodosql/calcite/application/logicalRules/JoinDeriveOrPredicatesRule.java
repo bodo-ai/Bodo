@@ -27,28 +27,25 @@ import org.apache.calcite.util.Util;
 import org.immutables.value.Value;
 
 /**
- * Planner rule that recognizes a {@link Join} whose condition contains a disjunction referencing
- * both inputs and ANDs onto the condition the strongest single-sided predicates the disjunction
- * implies. The original disjunction is kept, so the rewrite is an equivalence on the condition.
+ * Planner rule that generates predicates from OR-of-AND clauses in {@link Join} conditions. It adds
+ * each predicate as an additional AND clause, without changing the existing conditions.
  *
- * <p>For example, with A, C over the left input and B, D over the right input:
+ * <p>For example:
  *
  * <pre>
- *   OR(AND(A, B), AND(C, D))
- *     -&gt; AND(OR(AND(A, B), AND(C, D)), OR(A, C), OR(B, D))
+ *   OR(AND(T1.A=1, T2.B=4), AND(T1.A=2, T2.B=5))
+ *     -&gt; AND(OR(AND(T1.A=1, T2.B=4), AND(T1.A=2, T2.B=5)), OR(T1.A=1, T1.A=2), OR(T2.B=4, T2.B=5))
  * </pre>
  *
- * <p>Neither {@code OR(A, C)} nor {@code OR(B, D)} is a common factor, so {@link
- * JoinReorderConditionRule} cannot extract them. Once they are conjuncts of the join condition,
- * FilterJoinRule pushes them beneath the join and RexSimplify collapses them into SEARCH/IN, which
- * lets them reach the table scans. TPC-H Q7's nation condition is the canonical case.
+ * <p>FilterJoinRule pushes the predicates beneath the join and RexSimplify collapses them into
+ * SEARCH/IN, which lets them be pushed down to I/O. TPC-H Q7's nation condition is the canonical
+ * case.
  *
- * <p>Termination: a derived predicate is only added if it is not already (in canonical form) a
- * conjunct of the join condition or a pulled-up predicate of the input it applies to. After
- * FilterJoinRule moves the derived conjuncts into Filters on the inputs, they show up in {@link
- * RelMetadataQuery#getPulledUpPredicates} and the rule becomes a no-op, exactly as {@code
- * JoinPushTransitivePredicatesRule} relies on. Any node that absorbs a filter must therefore keep
- * reporting it as a pulled-up predicate.
+ * <p>Termination: a derived predicate is only added if it is not already (in canonical form) in the
+ * join condition or a pulled-up predicate of the input it applies to.
+ *
+ * <p>This is similar to a Postgres optimization: <a
+ * href="https://github.com/postgres/postgres/blob/6a1c1102c4a36c4b80bba4a46f1ad8c125f8dd4e/src/backend/optimizer/util/orclauses.c">extract_restriction_or_clauses</a>
  */
 @BodoSQLStyleImmutable
 @Value.Enclosing
@@ -89,7 +86,6 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
     final ImmutableBitSet rightBits = ImmutableBitSet.range(nLeft, nLeft + nRight);
 
     final List<RexNode> conjuncts = RelOptUtil.conjunctions(join.getCondition());
-    System.out.println("conjuncts = " + conjuncts);
 
     // Canonical forms of every predicate that already holds at this join: the existing conjuncts
     // of the condition and whatever the inputs already filter on (expressed in join field
