@@ -4909,7 +4909,6 @@ def test_df_copy(datapath):
     _test_equal(bdf_copy, pdf, check_pandas_types=False)
 
 
-@pytest.mark.gpu
 def test_runtime_join_filters(tmp_path):
     """
     Test that runtime join filters are present and filter data using query profiler.
