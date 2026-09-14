@@ -25,8 +25,10 @@ from bodo.pandas.utils import (
 )
 from bodo.tests.utils import (
     _test_equal,
+    get_first_join_filter_output_row_count,
     is_multi_worker_per_gpu_test,
     temp_config_override,
+    temp_env_override,
 )
 
 # Various Index kinds to use in test data (assuming maximum size of 100 in input)
@@ -4905,3 +4907,34 @@ def test_df_copy(datapath):
     assert bdf_copy.is_lazy_plan()
     # make sure the copy got the same answer.
     _test_equal(bdf_copy, pdf, check_pandas_types=False)
+
+
+def test_runtime_join_filters(tmp_path):
+    """
+    Test that runtime join filters actually filter data using the query profiler.
+    """
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": str(tmp_path)}
+    ):
+        df1 = pd.DataFrame({"A": range(1000)})
+        df2 = pd.DataFrame({"A": [1, 2, 3]})
+
+        bdf1 = bd.from_pandas(df1)
+        bdf2 = bd.from_pandas(df2)
+
+        bdf3 = bdf1.merge(bdf2, left_on="A", right_on="A", how="inner")
+        df3 = df1.merge(df2, left_on="A", right_on="A", how="inner")
+
+        _test_equal(
+            bdf3,
+            df3,
+            check_pandas_types=False,
+            sort_output=True,
+            reset_index=True,
+        )
+
+    join_filter_output_rows = get_first_join_filter_output_row_count(str(tmp_path))
+    assert join_filter_output_rows < len(df1), (
+        "Runtime Join Filter output_row_count is the same as input rows."
+    )
