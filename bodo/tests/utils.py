@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime
 import gzip
 import io
+import json
 import os
 import platform
 import random
@@ -3647,6 +3648,30 @@ def get_query_profile_location(output_dir: str, myrank: int) -> str:
     profile_path = os.path.join(output_dir, runs[0], f"query_profile_{myrank}.json")
     assert os.path.isfile(profile_path)
     return profile_path
+
+
+def get_first_join_filter_output_row_count(profile_dir):
+    """
+    Get the output row count for the first join filter from the query profile.
+    """
+    join_filter_operator_name = "18PhysicalJoinFilter"
+    join_filter_output_rows = 0
+
+    for i in range(bodo.spawn.spawner.get_num_workers()):
+        found_join_filter_in_profile = False
+        with open(get_query_profile_location(profile_dir, i)) as f:
+            operator_reports = json.load(f)["operator_reports"]
+            for _, op in operator_reports.items():
+                if op["name"] == join_filter_operator_name:
+                    join_filter_output_rows += op["stage_1"]["output_row_count"]
+                    found_join_filter_in_profile = True
+                    break
+
+        assert found_join_filter_in_profile, (
+            "Join filter operator not found in profile JSON"
+        )
+
+    return join_filter_output_rows
 
 
 def get_num_test_workers():

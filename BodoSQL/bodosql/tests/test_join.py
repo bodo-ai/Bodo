@@ -20,6 +20,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    get_first_join_filter_output_row_count,
     pytest_mark_one_rank,
     pytest_slow_unless_join,
     temp_env_override,
@@ -669,3 +670,37 @@ def test_join_broadcast_hint(memory_leak_check, capfd):
                 assert_success = expected_log_message in stderr
             assert_success = comm.allreduce(assert_success, op=MPI.LAND)
             assert assert_success
+
+
+@pytest.mark.bodosql_cpp
+def test_runtime_join_filters(tmp_path):
+    """
+    Test that runtime join filters are present and filter data using query profiler.
+    """
+
+    N = 1000
+    ctx = {
+        "TABLE1": pd.DataFrame({"A1": range(N)}),
+        "TABLE2": pd.DataFrame({"A2": [1, 2, 3]}),
+    }
+    query = "select * from table1 t1 join table2 t2 on t1.A1 = t2.A2"
+
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        only_python=True,
+        use_duckdb=True,
+    )
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": str(tmp_path)}
+    ):
+        bc = bodosql.BodoSQLContext(tables=ctx)
+        bc.sql(query)
+        output_row_count = get_first_join_filter_output_row_count(str(tmp_path))
+        assert output_row_count < N, (
+            "Runtime Join Filter output_row_count is the same as input rows."
+        )
