@@ -59,7 +59,9 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
 
   /**
    * Determines if this rule could apply to the given join: the condition contains an OR and does
-   * not contain sub-queries or window functions, which we do not attempt to duplicate.
+   * not contain sub-queries or window functions. It's hard to analyze sub-queries and window
+   * functions well (e.g. InputFinder limitations), and also duplicating them in filters can make
+   * the overall query more expensive.
    *
    * @param join The join node that may be rewritten.
    * @return If the join is a candidate.
