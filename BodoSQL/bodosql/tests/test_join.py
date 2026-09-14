@@ -675,7 +675,7 @@ def test_join_broadcast_hint(memory_leak_check, capfd):
 @pytest.mark.bodosql_cpp
 def test_runtime_join_filters(tmp_path):
     """
-    Test that runtime join filters are present and filter data using query profiler.
+    Test that runtime join filters actually filter data using the query profiler.
     """
 
     N = 1000

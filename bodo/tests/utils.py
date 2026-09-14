@@ -3650,9 +3650,9 @@ def get_query_profile_location(output_dir: str, myrank: int) -> str:
     return profile_path
 
 
-def get_first_join_filter_output_row_count(profile_dir):
+def get_first_join_filter_output_row_count(profile_dir: str) -> int:
     """
-    Get the output row count for the first join filter from the query profile.
+    Get the total output row count from the first join filter in a query profile.
     """
     join_filter_operator_names = ["18PhysicalJoinFilter", "21PhysicalGPUJoinFilter"]
     join_filter_output_rows = 0

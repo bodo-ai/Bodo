@@ -4911,7 +4911,7 @@ def test_df_copy(datapath):
 
 def test_runtime_join_filters(tmp_path):
     """
-    Test that runtime join filters are present and filter data using query profiler.
+    Test that runtime join filters actually filter data using the query profiler.
     """
 
     with temp_env_override(
