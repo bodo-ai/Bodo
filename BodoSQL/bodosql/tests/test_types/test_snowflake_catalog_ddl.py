@@ -2,7 +2,6 @@
 Tests DDL operations on a BodoSQL catalog.
 """
 
-import os
 from contextlib import contextmanager
 from copy import deepcopy
 from decimal import Decimal
@@ -10,10 +9,10 @@ from decimal import Decimal
 import pandas as pd
 import pyarrow as pa
 import pytest
-import snowflake.connector
 
 import bodo
 import bodosql
+from bodo.io.snowflake import snowflake_connect
 from bodo.tests.utils import (
     _test_equal_guard,
     check_func_seq,
@@ -1796,11 +1795,8 @@ def _show_views_snowflake_sample_data_output(terse: bool = True) -> pd.DataFrame
     """Fetch the SHOW VIEWS output directly from Snowflake sample DB."""
     maybe_terse = " TERSE " if terse else ""
 
-    conn = snowflake.connector.connect(
-        user=os.environ["SF_USERNAME"],
-        password=os.environ["SF_PASSWORD"],
-        account="bodopartner.us-east-1",
-        warehouse="DEMO_WH",
+    conn = snowflake_connect(
+        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "INFORMATION_SCHEMA")
     )
     try:
         cur = conn.cursor()

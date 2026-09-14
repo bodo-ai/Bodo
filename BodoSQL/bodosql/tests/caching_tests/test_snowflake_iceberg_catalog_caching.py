@@ -35,7 +35,7 @@ def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
 
         catalog = bodosql.SnowflakeCatalog(
             os.environ["SF_USERNAME"],
-            os.environ["SF_PASSWORD"],
+            os.environ.get("SF_PASSWORD", ""),
             "bodopartner.us-east-1",
             "DEMO_WH",
             "TEST_DB",

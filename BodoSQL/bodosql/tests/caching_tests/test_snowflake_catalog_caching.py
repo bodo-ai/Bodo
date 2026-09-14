@@ -55,7 +55,7 @@ def test_snowflake_catalog_caching(fn_distribution, is_cached):
 
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
+        os.environ.get("SF_PASSWORD", ""),
         "bodopartner.us-east-1",
         "DEMO_WH",
         db,
@@ -92,7 +92,7 @@ def test_snowflake_catalog_write_caching(fn_distribution, is_cached):
 
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
+        os.environ.get("SF_PASSWORD", ""),
         "bodopartner.us-east-1",
         "DEMO_WH",
         db,
@@ -200,7 +200,7 @@ def test_snowflake_runtime_join_filter_caching(is_cached):
 
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
+        os.environ.get("SF_PASSWORD", ""),
         "bodopartner.us-east-1",
         "DEMO_WH",
         db,

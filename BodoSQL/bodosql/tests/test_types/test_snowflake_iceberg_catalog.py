@@ -36,7 +36,7 @@ pytestmark = [pytest.mark.iceberg, pytest.mark.skip] + pytest_snowflake
 def sf_iceberg_catalog():
     return bodosql.SnowflakeCatalog(
         os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
+        os.environ.get("SF_PASSWORD", ""),
         "bodopartner.us-east-1",
         "DEMO_WH",
         "TEST_DB",
@@ -183,7 +183,7 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
     # Create a catalog with iceberg_volume specified
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
+        os.environ.get("SF_PASSWORD", ""),
         "bodopartner.us-east-1",
         "DEMO_WH",
         "E2E_TESTS_DB",
@@ -443,7 +443,7 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
     iceberg_volume = "exvol"
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_USERNAME"],
-        os.environ["SF_PASSWORD"],
+        os.environ.get("SF_PASSWORD", ""),
         "bodopartner.us-east-1",
         "DEMO_WH",
         database,
@@ -495,7 +495,7 @@ def test_azure_basic_read(memory_leak_check):
     """
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_AZURE_USER"],
-        os.environ["SF_AZURE_PASSWORD"],
+        os.environ.get("SF_AZURE_PASSWORD", ""),
         "kl02615.east-us-2.azure",
         "DEMO_WH",
         "TEST_DB",
@@ -535,7 +535,7 @@ def test_azure_basic_write(memory_leak_check):
     schema = "PUBLIC"
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_AZURE_USER"],
-        os.environ["SF_AZURE_PASSWORD"],
+        os.environ.get("SF_AZURE_PASSWORD", ""),
         "kl02615.east-us-2.azure",
         "DEMO_WH",
         db,

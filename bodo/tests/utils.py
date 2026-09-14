@@ -2925,15 +2925,15 @@ def get_snowflake_connection_string(
     """
     if user == 1:
         username = os.environ["SF_USERNAME"]
-        password = os.environ["SF_PASSWORD"]
+        password = os.environ.get("SF_PASSWORD", "")
         account = "bodopartner.us-east-1"
     elif user == 2:
         username = os.environ["SF_USER2"]
-        password = os.environ["SF_PASSWORD2"]
+        password = os.environ.get("SF_PASSWORD2", "")
         account = "bodopartner.us-east-1"
     elif user == 3:
         username = os.environ["SF_AZURE_USER"]
-        password = os.environ["SF_AZURE_PASSWORD"]
+        password = os.environ.get("SF_AZURE_PASSWORD", "")
         account = "kl02615.east-us-2.azure"
     else:
         raise ValueError("Invalid user")
@@ -2976,7 +2976,9 @@ def snowflake_cred_env_vars_present(user: int = 1) -> bool:
     """
     Simple function to check if environment variables for the
     snowflake credentials are set or not. Goes along with
-    get_snowflake_connection_string.
+    get_snowflake_connection_string. Credentials are considered present if a
+    password is set for the user or key pair authentication is configured
+    (via SF_PRIVATE_KEY_FILE).
 
     Args:
         user (int, optional): Same user definition as get_snowflake_connection_string.
@@ -2986,13 +2988,16 @@ def snowflake_cred_env_vars_present(user: int = 1) -> bool:
         bool: Whether env vars are set or not
     """
     if user == 1:
-        return ("SF_USERNAME" in os.environ) and ("SF_PASSWORD" in os.environ)
+        user_var, password_var = "SF_USERNAME", "SF_PASSWORD"
     elif user == 2:
-        return ("SF_USER2" in os.environ) and ("SF_PASSWORD2" in os.environ)
+        user_var, password_var = "SF_USER2", "SF_PASSWORD2"
     elif user == 3:
-        return ("SF_AZURE_USER" in os.environ) and ("SF_AZURE_PASSWORD" in os.environ)
+        user_var, password_var = "SF_AZURE_USER", "SF_AZURE_PASSWORD"
     else:
         raise ValueError("Invalid user")
+    return (user_var in os.environ) and (
+        (password_var in os.environ) or bool(os.environ.get("SF_PRIVATE_KEY_FILE"))
+    )
 
 
 @contextmanager
