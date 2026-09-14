@@ -26,7 +26,7 @@ repos:
       - id: ruff-format
   # Cython
   - repo: https://github.com/MarcoGorelli/cython-lint
-    rev: v0.16.7
+    rev: v0.21.1
     hooks:
       - id: cython-lint
         args: [--no-pycodestyle]  # Because it doesn't autofix, it would be too annoying
