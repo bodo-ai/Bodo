@@ -19,4 +19,6 @@ echo "Removing bodo/pandas/plan_optimizer.cpp"
 find . -name "plan_optimizer.cpp" | xargs rm -f
 echo "Removing DuckDB build"
 rm -rf bodo/pandas/vendor/duckdb/build
+echo "Removing BodoSQL build"
+rm -rf BodoSQL/calcite_sql/bodosql-calcite-application/target
 
