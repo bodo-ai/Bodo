@@ -144,12 +144,12 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
    *
    * <ul>
    *   <li>A leaf is kept if it references only {@code side} (and is deterministic), else TRUE.
-   *   <li>AND(x, y) implies AND(derive(x), derive(y)); TRUE parts are dropped.
-   *   <li>OR(x, y) implies OR(derive(x), derive(y)); if any part is TRUE the whole thing is TRUE.
+   *   <li>AND(x, y) implies AND(derive(x), derive(y))
+   *   <li>OR(x, y) implies OR(derive(x), derive(y))
    * </ul>
    *
    * <p>NOT and other operators are treated as leaves: weakening the argument of a NOT would
-   * strengthen the result, which is unsound.
+   * strengthen the result, which is unsound (i.e. filters more rows than the original condition).
    */
   private static RexNode deriveSidePredicate(
       RexBuilder rexBuilder, RexNode cond, ImmutableBitSet side) {
