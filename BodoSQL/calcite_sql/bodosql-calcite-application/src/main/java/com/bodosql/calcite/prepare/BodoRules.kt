@@ -21,7 +21,6 @@ import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRu
 import com.bodosql.calcite.application.logicalRules.BodoCommonSubexpressionRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinDeriveIsNotNullFilterRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule
-import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredicatesRule
 import com.bodosql.calcite.application.logicalRules.BodoProjectToWindowRule
 import com.bodosql.calcite.application.logicalRules.BodoProjectWindowTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
@@ -82,6 +81,7 @@ import org.apache.calcite.rel.rules.CoreRules
 import org.apache.calcite.rel.rules.FilterJoinRule
 import org.apache.calcite.rel.rules.FilterWindowTransposeRule
 import org.apache.calcite.rel.rules.JoinCommuteRule
+import org.apache.calcite.rel.rules.JoinPushTransitivePredicatesRule
 import org.apache.calcite.rel.rules.LoptOptimizeJoinRule
 import org.apache.calcite.rel.rules.ProjectAggregateMergeRule
 import org.apache.calcite.rel.rules.ProjectFilterTransposeRule
@@ -330,7 +330,7 @@ object BodoRules {
      */
     @JvmField
     val JOIN_PUSH_TRANSITIVE_PREDICATES: RelOptRule =
-        BodoJoinPushTransitivePredicatesRule.Config.DEFAULT
+        JoinPushTransitivePredicatesRule.Config.DEFAULT
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
