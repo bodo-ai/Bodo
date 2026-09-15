@@ -106,7 +106,9 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   public int getMaxScale(SqlTypeName typeName) {
     switch (typeName) {
       case DECIMAL:
-        return getMaxNumericScale();
+        // Bodo Change: Calcite 1.42 made getMaxNumericScale final, so the
+        // customization moves into getMaxScale.
+        return 37;
       default:
         return super.getMaxScale(typeName);
     }
@@ -166,7 +168,9 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       case SMALLINT:
       case BIGINT:
       case DECIMAL:
-        return getMaxNumericPrecision();
+        // Bodo Change: Calcite 1.42 made getMaxNumericPrecision final, so the
+        // customization moves into getMaxPrecision.
+        return 38;
       case TIME:
       case TIMESTAMP:
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
@@ -181,16 +185,6 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       default:
         return super.getMaxPrecision(typeName);
     }
-  }
-
-  @Override
-  public int getMaxNumericScale() {
-    return 37;
-  }
-
-  @Override
-  public int getMaxNumericPrecision() {
-    return 38;
   }
 
   @Override

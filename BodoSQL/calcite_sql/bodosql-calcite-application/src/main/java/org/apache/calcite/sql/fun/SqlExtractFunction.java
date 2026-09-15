@@ -88,7 +88,6 @@ public class SqlExtractFunction extends SqlFunction {
       .add(SqlTypeName.DATE)
       .add(SqlTypeName.TIMESTAMP)
       .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
-      // Bodo Change: Add TIMESTAMP_TZ
       .add(SqlTypeName.TIMESTAMP_TZ)
       .addAll(SqlTypeName.YEAR_INTERVAL_TYPES)
       .build();
@@ -98,9 +97,8 @@ public class SqlExtractFunction extends SqlFunction {
       new ImmutableSet.Builder<SqlTypeName>()
           .add(SqlTypeName.DATE)
           .add(SqlTypeName.TIMESTAMP)
-          .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
-          // Bodo Change: Add TIMESTAMP_TZ
           .add(SqlTypeName.TIMESTAMP_TZ)
+          .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
           .build();
 
   // List of types that support EXTRACT(EPOCH, ...)
@@ -108,9 +106,8 @@ public class SqlExtractFunction extends SqlFunction {
       new ImmutableSet.Builder<SqlTypeName>()
           .add(SqlTypeName.DATE)
           .add(SqlTypeName.TIMESTAMP)
-          .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
-          // Bodo Change: Add TIMESTAMP_TZ
           .add(SqlTypeName.TIMESTAMP_TZ)
+          .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
           .addAll(SqlTypeName.YEAR_INTERVAL_TYPES)
           .addAll(SqlTypeName.DAY_INTERVAL_TYPES)
           .build();
@@ -120,9 +117,8 @@ public class SqlExtractFunction extends SqlFunction {
       new ImmutableSet.Builder<SqlTypeName>()
           .add(SqlTypeName.DATE)
           .add(SqlTypeName.TIMESTAMP)
-          .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
-          // Bodo Change: Add TIMESTAMP_TZ
           .add(SqlTypeName.TIMESTAMP_TZ)
+          .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
           .add(SqlTypeName.INTERVAL_DAY)
           .add(SqlTypeName.INTERVAL_DAY_HOUR)
           .add(SqlTypeName.INTERVAL_DAY_MINUTE)
@@ -136,10 +132,10 @@ public class SqlExtractFunction extends SqlFunction {
       new ImmutableSet.Builder<SqlTypeName>()
           .add(SqlTypeName.DATE)
           .add(SqlTypeName.TIMESTAMP)
-          .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
-          // Bodo Change: Add TIMESTAMP_TZ
           .add(SqlTypeName.TIMESTAMP_TZ)
+          .add(SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE)
           .add(SqlTypeName.TIME)
+          .add(SqlTypeName.TIME_TZ)
           .add(SqlTypeName.TIME_WITH_LOCAL_TIME_ZONE)
           .addAll(SqlTypeName.YEAR_INTERVAL_TYPES)
           .addAll(SqlTypeName.DAY_INTERVAL_TYPES)

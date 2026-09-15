@@ -20,6 +20,10 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFamily;
 import org.apache.calcite.rel.type.RelDataTypePrecedenceList;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
+import java.util.Objects;
+
 import static org.apache.calcite.sql.type.NonNullableAccessors.getComponentTypeOrThrow;
 
 import static java.util.Objects.requireNonNull;
@@ -28,79 +32,95 @@ import static java.util.Objects.requireNonNull;
  * SQL array type.
  */
 public class ArraySqlType extends AbstractSqlType {
-    //~ Instance fields --------------------------------------------------------
+  //~ Instance fields --------------------------------------------------------
 
-    private final RelDataType elementType;
+  private final RelDataType elementType;
 
-    //~ Constructors -----------------------------------------------------------
+  //~ Constructors -----------------------------------------------------------
 
-    /**
-     * Creates an ArraySqlType. This constructor should only be called
-     * from a factory method.
-     */
-    public ArraySqlType(RelDataType elementType, boolean isNullable) {
-        super(SqlTypeName.ARRAY, isNullable, null);
-        this.elementType = requireNonNull(elementType, "elementType");
-        computeDigest();
+  /**
+   * Creates an ArraySqlType. This constructor should only be called
+   * from a factory method.
+   */
+  public ArraySqlType(RelDataType elementType, boolean isNullable) {
+    super(SqlTypeName.ARRAY, isNullable, null);
+    this.elementType = requireNonNull(elementType, "elementType");
+    computeDigest();
+  }
+
+  //~ Methods ----------------------------------------------------------------
+
+  // implement RelDataTypeImpl
+  @Override protected void generateTypeString(StringBuilder sb, boolean withDetail) {
+    if (withDetail) {
+      sb.append(elementType.getFullTypeString());
+    } else {
+      sb.append(elementType.toString());
     }
+    sb.append(" ARRAY");
+  }
 
-    //~ Methods ----------------------------------------------------------------
+  @Override public boolean deepEquals(@Nullable Object obj) {
+    if (this == obj) {
+      return true;
+    }
+    if (obj == null || this.getClass() != obj.getClass()) {
+      return false;
+    }
+    ArraySqlType that = (ArraySqlType) obj;
+    return this.isNullable() == that.isNullable() && elementType.equals(that.elementType);
+  }
 
-    // implement RelDataTypeImpl
-    @Override protected void generateTypeString(StringBuilder sb, boolean withDetail) {
-        if (withDetail) {
-            sb.append(elementType.getFullTypeString());
-        } else {
-            sb.append(elementType.toString());
+  @Override public int deepHashCode() {
+    return Objects.hash(SqlTypeName.ARRAY.ordinal(), isNullable, elementType.hashCode());
+  }
+
+  // implement RelDataType
+  @Override public RelDataType getComponentType() {
+    return elementType;
+  }
+
+  // implement RelDataType
+  @Override public RelDataTypeFamily getFamily() {
+    return this;
+  }
+
+  @Override public RelDataTypePrecedenceList getPrecedenceList() {
+    return new RelDataTypePrecedenceList() {
+      @Override public boolean containsType(RelDataType type) {
+        if (type.getSqlTypeName() != getSqlTypeName()) {
+          return false;
         }
-        sb.append(" ARRAY");
-    }
+        RelDataType otherComponentType = type.getComponentType();
+        // Bodo change: treat any array whose component type is VARIANT as
+        // contained, since VARIANT sits at the bottom of the precedence list.
+        return otherComponentType != null
+            && (getComponentType().getPrecedenceList().containsType(otherComponentType)
+                || otherComponentType instanceof VariantSqlType);
+      }
 
-    // implement RelDataType
-    @Override public RelDataType getComponentType() {
-        return elementType;
-    }
-
-    // implement RelDataType
-    @Override public RelDataTypeFamily getFamily() {
-        return this;
-    }
-
-    @Override public RelDataTypePrecedenceList getPrecedenceList() {
-        return new RelDataTypePrecedenceList() {
-            @Override public boolean containsType(RelDataType type) {
-                if (type.getSqlTypeName() != getSqlTypeName()) {
-                    return false;
-                }
-                RelDataType otherComponentType = type.getComponentType();
-                return otherComponentType != null
-                        && ((getComponentType().getPrecedenceList().containsType(otherComponentType)) || (otherComponentType instanceof VariantSqlType));
-            }
-
-            @Override public int compareTypePrecedence(RelDataType type1, RelDataType type2) {
-                if (!containsType(type1)) {
-                    throw new IllegalArgumentException("must contain type: " + type1);
-                }
-                if (!containsType(type2)) {
-                    throw new IllegalArgumentException("must contain type: " + type2);
-                }
-                /* BODO CHANGE */
-                // Before invoking compareTypePrecedence, case on if either component type is a VARIANT,
-                // pretending that both are implicitly at the bottom of the precedence list.
-                RelDataType compType1 = getComponentTypeOrThrow(type1);
-                RelDataType compType2 = getComponentTypeOrThrow(type1);
-                if ((compType1 instanceof VariantSqlType) && (compType2 instanceof VariantSqlType))  {
-                    return 0;
-                }
-                if ((compType1 instanceof VariantSqlType)) {
-                    return -1;
-                }
-                if ((compType2 instanceof VariantSqlType)) {
-                    return 1;
-                }
-                /* End of BODO CHANGE */
-                return getComponentType().getPrecedenceList().compareTypePrecedence(compType1, compType2);
-            }
-        };
-    }
+      @Override public int compareTypePrecedence(RelDataType type1, RelDataType type2) {
+        if (!containsType(type1)) {
+          throw new IllegalArgumentException("must contain type: " + type1);
+        }
+        if (!containsType(type2)) {
+          throw new IllegalArgumentException("must contain type: " + type2);
+        }
+        // Bodo change: if either component type is a VARIANT, treat it as
+        // living at the bottom of the precedence list.
+        RelDataType compType1 = getComponentTypeOrThrow(type1);
+        RelDataType compType2 = getComponentTypeOrThrow(type2);
+        if (compType1 instanceof VariantSqlType && compType2 instanceof VariantSqlType) {
+          return 0;
+        }
+        if (compType1 instanceof VariantSqlType) {
+          return -1;
+        }
+        if (compType2 instanceof VariantSqlType) {
+          return 1;
+        }
+        return getComponentType().getPrecedenceList().compareTypePrecedence(compType1, compType2);
+      }
+    };
+  }
 }

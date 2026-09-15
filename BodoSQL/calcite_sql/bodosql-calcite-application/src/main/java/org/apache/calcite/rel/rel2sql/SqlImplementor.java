@@ -65,8 +65,10 @@ import org.apache.calcite.rex.RexWindowExclusion;
 import org.apache.calcite.sql.JoinType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlBasicCall;
+import org.apache.calcite.sql.SqlBasicTypeNameSpec;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlCall;
+import org.apache.calcite.sql.SqlDataTypeSpec;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.SqlDynamicParam;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -95,6 +97,8 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.util.SqlBasicVisitor;
+import org.apache.calcite.sql.util.SqlShuttle;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.util.DateString;
 import org.apache.calcite.util.ImmutableBitSet;
@@ -137,6 +141,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 
@@ -190,6 +195,10 @@ public abstract class SqlImplementor {
 
     if (!this.dialect.supportsJoinType(JoinRelType.FULL)) {
       rules.add(FullToLeftAndRightJoinRule.Config.DEFAULT.toRule());
+    }
+
+    if (!this.dialect.supportsJoinType(JoinRelType.RIGHT)) {
+      rules.add(CoreRules.JOIN_COMMUTE_RIGHT_TO_LEFT);
     }
 
     if (!this.dialect.supportsOrderByLiteral()) {
@@ -318,9 +327,10 @@ public abstract class SqlImplementor {
     for (Ord<RelNode> input : Ord.zip(rel.getInputs())) {
       final Result result = visitInput(rel, input.i);
       if (node == null) {
-        node = result.asSelect();
+        node = result.maybeExpandStar(result.asSelect());
       } else {
-        node = operator.createCall(POS, node, result.asSelect());
+        node =
+            operator.createCall(POS, node, result.maybeExpandStar(result.asSelect()));
       }
     }
     if (node == null) {
@@ -1520,8 +1530,16 @@ public abstract class SqlImplementor {
     case NUMERIC:
     case EXACT_NUMERIC: {
       if (SqlTypeName.APPROX_TYPES.contains(typeName)) {
-        return SqlLiteral.createApproxNumeric(
-            castNonNull(literal.getValueAs(Double.class)).toString(), POS);
+        final Double d = castNonNull(literal.getValueAs(Double.class));
+        // BigDecimal cannot represent IEEE 754 special values (NaN, ±Infinity).
+        if (!Double.isFinite(d)) {
+          final SqlNode strLiteral =
+              SqlLiteral.createCharString(d.toString(), POS);
+          final SqlDataTypeSpec typeSpec =
+              new SqlDataTypeSpec(new SqlBasicTypeNameSpec(typeName, POS), POS);
+          return SqlStdOperatorTable.CAST.createCall(POS, strLiteral, typeSpec);
+        }
+        return SqlLiteral.createApproxNumeric(d.toString(), POS);
       } else {
         return SqlLiteral.createExactNumeric(
             castNonNull(literal.getValueAs(BigDecimal.class)).toPlainString(), POS);
@@ -1848,16 +1866,24 @@ public abstract class SqlImplementor {
     private final @Nullable RelNode expectedRel;
     private final boolean needNew;
 
+    /**
+     * Whether to force explicit alias generation in FROM clause.
+     * Set to true when this Result is used in a correlation context
+     * where the table alias must be explicit even if the dialect
+     * normally supports implicit aliases.
+     */
+    private final boolean forceExplicitAlias;
+
     public Result(SqlNode node, Collection<Clause> clauses, @Nullable String neededAlias,
         @Nullable RelDataType neededType, Map<String, RelDataType> aliases) {
       this(node, clauses, neededAlias, neededType, aliases, false, false,
-          ImmutableSet.of(), null);
+          ImmutableSet.of(), null, false);
     }
 
     private Result(SqlNode node, Collection<Clause> clauses, @Nullable String neededAlias,
         @Nullable RelDataType neededType, Map<String, RelDataType> aliases, boolean anon,
         boolean ignoreClauses, Set<Clause> expectedClauses,
-        @Nullable RelNode expectedRel) {
+        @Nullable RelNode expectedRel, boolean forceExplicitAlias) {
       this.node = node;
       this.neededAlias = neededAlias;
       this.neededType = neededType;
@@ -1867,6 +1893,7 @@ public abstract class SqlImplementor {
       this.ignoreClauses = ignoreClauses;
       this.expectedClauses = ImmutableSet.copyOf(expectedClauses);
       this.expectedRel = expectedRel;
+      this.forceExplicitAlias = forceExplicitAlias;
       final Set<Clause> clauses2 =
           ignoreClauses ? ImmutableSet.of() : expectedClauses;
       this.needNew = expectedRel != null
@@ -1944,6 +1971,13 @@ public abstract class SqlImplementor {
           newContext = aliasContext(newAliases, qualified);
         } else {
           newContext = aliasContext(aliases, qualified);
+        }
+        if (!dialect.supportGenerateSelectStar(rel.getInput(0))) {
+          final List<SqlNode> expandedSelectList = new ArrayList<>();
+          for (int i = 0; i < newContext.fieldCount; i++) {
+            expandedSelectList.add(newContext.field(i));
+          }
+          select.setSelectList(new SqlNodeList(expandedSelectList, POS));
         }
       }
       return new Builder(rel, clauseList, select, newContext, isAnon(),
@@ -2082,24 +2116,25 @@ public abstract class SqlImplementor {
       if (node == null) {
         return false;
       }
-      if (node.getKind() == SqlKind.WINDOW) {
-        return true;
-      }
-      if (node instanceof SqlSelect) {
-        final SqlNodeList selectList = ((SqlSelect) node).getSelectList();
-        for (SqlNode child : selectList) {
-          if (containsOver(child)) {
-            return true;
+      final boolean[] result = {false};
+      node.accept(new SqlBasicVisitor<Void>() {
+        @Override public Void visit(SqlCall call) {
+          if (result[0]) {
+            return null;
           }
-        }
-      } else if (node instanceof SqlBasicCall) {
-        for (SqlNode operand : ((SqlBasicCall) node).getOperandList()) {
-          if (containsOver(operand)) {
-            return true;
+          if (call.getKind() == SqlKind.WINDOW) {
+            result[0] = true;
+            return null;
           }
+          for (SqlNode operand : call.getOperandList()) {
+            if (operand != null) {
+              operand.accept(this);
+            }
+          }
+          return null;
         }
-      }
-      return false;
+      });
+      return result[0];
     }
 
 
@@ -2172,12 +2207,51 @@ public abstract class SqlImplementor {
      * INTERSECT, EXCEPT) remain as is. */
     public SqlSelect asSelect() {
       if (node instanceof SqlSelect) {
-        return (SqlSelect) node;
+        SqlSelect select = (SqlSelect) node;
+        // Check if we need to add explicit alias to FROM clause
+        if (forceExplicitAlias && neededAlias != null) {
+          SqlNode from = select.getFrom();
+
+          // Only add alias if FROM doesn't already have one
+          if (from != null && from.getKind() != SqlKind.AS) {
+            SqlNode newFrom =
+                SqlStdOperatorTable.AS.createCall(POS, from,
+                new SqlIdentifier(neededAlias, POS));
+            select.setFrom(newFrom);
+          }
+        }
+        return select;
       }
-      if (!dialect.hasImplicitTableAlias()) {
+      // For non-SELECT nodes, wrap in SELECT *
+      if (forceExplicitAlias || !dialect.hasImplicitTableAlias() || hasConflictTableAlias(node)) {
         return wrapSelect(asFrom());
       }
       return wrapSelect(node);
+    }
+
+    private boolean hasConflictTableAlias(SqlNode node) {
+      if (!(node instanceof SqlIdentifier)) {
+        return false;
+      }
+      if (correlTableMap.isEmpty()) {
+        return false;
+      }
+      if (neededAlias == null) {
+        return false;
+      }
+      SqlIdentifier identifier = (SqlIdentifier) node;
+      List<AliasContext> aliasContexts =
+          correlTableMap.values().stream()
+              .filter(context -> context instanceof AliasContext)
+              .map(context -> (AliasContext) context)
+              .collect(Collectors.toList());
+
+      for (AliasContext aliasContext : aliasContexts) {
+        if (aliasContext.aliases.containsKey(Util.last(identifier.names))) {
+          return true;
+        }
+      }
+      return false;
     }
 
     public void stripTrivialAliases(SqlNode node) {
@@ -2240,8 +2314,40 @@ public abstract class SqlImplementor {
       case MERGE:
         return maybeStrip(node);
       default:
-        return maybeStrip(asSelect());
+        return maybeStrip(maybeExpandStar(asSelect()));
       }
+    }
+
+    /** If the dialect does not support {@code SELECT *} and the select list
+     * is {@link SqlNodeList#SINGLETON_STAR}, replaces it with explicit column
+     * references derived from the result's aliases. */
+    SqlSelect maybeExpandStar(SqlSelect select) {
+      if (expectedRel != null
+          && !expectedRel.getInputs().isEmpty()
+          && select.getSelectList().equals(SqlNodeList.SINGLETON_STAR)
+          && !dialect.supportGenerateSelectStar(expectedRel.getInput(0))) {
+        boolean qualified =
+            !dialect.hasImplicitTableAlias() || aliases.size() > 1;
+        final Context ctx = aliasContext(aliases, qualified);
+        final List<SqlNode> expandedList = new ArrayList<>();
+        for (int i = 0; i < ctx.fieldCount; i++) {
+          expandedList.add(ctx.field(i));
+        }
+        return new SqlSelect(select.getParserPosition(),
+            (SqlNodeList) select.getOperandList().get(0),
+            new SqlNodeList(expandedList, POS),
+            select.getFrom(),
+            select.getWhere(),
+            select.getGroup(),
+            select.getHaving(),
+            select.getWindowList(),
+            select.getQualify(),
+            select.getOrderList(),
+            select.getOffset(),
+            select.getFetch(),
+            select.getHints());
+      }
+      return select;
     }
 
     /** Converts a non-query node into a SELECT node. Set operators (UNION,
@@ -2254,7 +2360,7 @@ public abstract class SqlImplementor {
       case VALUES:
         return maybeStrip(node);
       default:
-        return maybeStrip(asSelect());
+        return maybeStrip(maybeExpandStar(asSelect()));
       }
     }
 
@@ -2275,7 +2381,7 @@ public abstract class SqlImplementor {
       } else {
         return new Result(node, clauses, neededAlias, neededType,
             ImmutableMap.of(neededAlias, castNonNull(neededType)), anon, ignoreClauses,
-            expectedClauses, expectedRel);
+            expectedClauses, expectedRel, false);
       }
     }
 
@@ -2288,14 +2394,36 @@ public abstract class SqlImplementor {
     public Result resetAlias(String alias, RelDataType type) {
       return new Result(node, clauses, alias, neededType,
           ImmutableMap.of(alias, type), anon, ignoreClauses,
-          expectedClauses, expectedRel);
+          expectedClauses, expectedRel, false);
+    }
+
+    /**
+     * Sets the alias and forces explicit alias generation in FROM clause.
+     * Used when correlation requires an explicit table alias.
+     *
+     * @param alias New alias to use
+     * @param type Type of the node associated with the alias
+     * @return New Result with forced explicit alias
+     */
+    public Result resetAliasForCorrelation(String alias, RelDataType type) {
+      return new Result(
+          node,
+          clauses,
+          alias,
+          neededType,
+          ImmutableMap.of(alias, type),
+          anon,
+          ignoreClauses,
+          expectedClauses,
+          expectedRel,
+          true); // Force explicit alias
     }
 
     /** Returns a copy of this Result, overriding the value of {@code anon}. */
     Result withAnon(boolean anon) {
       return anon == this.anon ? this
           : new Result(node, clauses, neededAlias, neededType, aliases, anon,
-              ignoreClauses, expectedClauses, expectedRel);
+              ignoreClauses, expectedClauses, expectedRel, false);
     }
 
     /** Returns a copy of this Result, overriding the value of
@@ -2307,7 +2435,7 @@ public abstract class SqlImplementor {
           && expectedRel == this.expectedRel
           ? this
           : new Result(node, clauses, neededAlias, neededType, aliases, anon,
-              ignoreClauses, ImmutableSet.copyOf(expectedClauses), expectedRel);
+              ignoreClauses, ImmutableSet.copyOf(expectedClauses), expectedRel, false);
     }
   }
 

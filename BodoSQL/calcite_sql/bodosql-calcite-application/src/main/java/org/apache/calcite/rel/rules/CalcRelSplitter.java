@@ -21,6 +21,8 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Calc;
+import org.apache.calcite.rel.hint.Hintable;
+import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.logical.LogicalCalc;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -88,6 +90,7 @@ public abstract class CalcRelSplitter {
   //~ Instance fields --------------------------------------------------------
 
   protected final RexProgram program;
+  protected final List<RelHint> hints;
   private final RelDataTypeFactory typeFactory;
 
   private final List<RelType> relTypes;
@@ -106,9 +109,11 @@ public abstract class CalcRelSplitter {
    *                 distinct.
    */
   // BODO CHANGE: made protected
+  // Bodo Change: Make protected.
   protected CalcRelSplitter(Calc calc, RelBuilder relBuilder, RelType[] relTypes) {
     this.relBuilder = relBuilder;
     this.program = calc.getProgram();
+    this.hints = calc.getHints();
     this.cluster = calc.getCluster();
     this.traits = calc.getTraitSet();
     this.typeFactory = calc.getCluster().getTypeFactory();
@@ -120,6 +125,7 @@ public abstract class CalcRelSplitter {
   //~ Methods ----------------------------------------------------------------
 
   // BODO CHANGE: make public
+  // Bodo Change: Make public.
   public RelNode execute() {
     // Check that program is valid. In particular, this means that every
     // expression is trivial (either an atom, or a function applied to
@@ -226,8 +232,35 @@ public abstract class CalcRelSplitter {
               projectExprOrdinals,
               conditionExprOrdinal,
               outputRowType);
+
+      // Propagate hints to each level. Since CalcRelSplitter builds a vertical stack of
+      // relational expressions (bottom-up), the relative depth of a level from the
+      // original top-level Calc determines how many '0's must be appended to the
+      // hint's inheritPath to maintain correct mapping.
+      //
+      // Example: SELECT /*+ Hint message */ SUM(v1) OVER(P1), SUM(v2) OVER(P2) FROM t
+      // split into 3 levels:
+      // LogicalProject, relativeDepth = 0, path = []
+      //   LogicalWindow (P2), relativeDepth = 1, path = [0]
+      //     LogicalWindow (P1), relativeDepth = 2, path = [0, 0]
+      final List<RelHint> levelHints;
+      final int relativeDepth = (levelCount - 1) - level;
+      if (hints.isEmpty() || relativeDepth == 0) {
+        levelHints = hints;
+      } else {
+        levelHints = new ArrayList<>(hints.size());
+        for (RelHint hint : hints) {
+          List<Integer> newPath = new ArrayList<>(hint.inheritPath.size() + relativeDepth);
+          newPath.addAll(hint.inheritPath);
+          for (int i = 0; i < relativeDepth; i++) {
+            newPath.add(0);
+          }
+          levelHints.add(hint.copy(newPath));
+        }
+      }
+
       rel =
-          relType.makeRel(cluster, traits, relBuilder, rel, program1);
+          relType.makeRel(cluster, traits, relBuilder, rel, program1, levelHints);
 
       // Sometimes a level's program merely projects its inputs. We don't
       // want these. They cause an explosion in the search space.
@@ -578,7 +611,7 @@ public abstract class CalcRelSplitter {
       projectRefs.add(new RexLocalRef(index, expr.getType()));
 
       // Inherit meaningful field name if possible.
-      fieldNames.add(deriveFieldName(expr, i));
+      fieldNames.add(deriveFieldName(expr, projectExprOrdinal, i));
     }
     RexLocalRef conditionRef;
     if (conditionExprOrdinal >= 0) {
@@ -600,18 +633,61 @@ public abstract class CalcRelSplitter {
         outputRowType);
   }
 
-  private String deriveFieldName(RexNode expr, int ordinal) {
+  /**
+   * Derives a field name for a projected expression.
+   *
+   * <p>If {@code expr} is a {@link RexInputRef}, returns the corresponding
+   * input field name. Otherwise, attempts to retrieve the name from the
+   * original program's projections. If no meaningful name is found, or if
+   * the name looks like an auto-generated name such as {@code $n} (but not
+   * starting with {@code $EXPR}), returns a synthesized name {@code "$" + ordinal}.
+   *
+   * @param expr      Expression to derive the name for
+   * @param exprIndex Index of the expression in the program's expression list
+   * @param ordinal   Position in the projection (used to generate a fallback name)
+   * @return Derived or synthesized field name
+   */
+  private String deriveFieldName(RexNode expr, int exprIndex, int ordinal) {
+    String fieldName = null;
     if (expr instanceof RexInputRef) {
-      int inputIndex = ((RexInputRef) expr).getIndex();
-      String fieldName =
-          child.getRowType().getFieldList().get(inputIndex).getName();
-      // Don't inherit field names like '$3' from child: that's
-      // confusing.
-      if (!fieldName.startsWith("$") || fieldName.startsWith("$EXPR")) {
-        return fieldName;
+      fieldName = getInputRefName((RexInputRef) expr);
+    } else {
+      fieldName = findProjectedFieldName(exprIndex);
+    }
+    return normalizeFieldName(fieldName, ordinal);
+  }
+
+  private String getInputRefName(RexInputRef ref) {
+    int inputIndex = ref.getIndex();
+    return child.getRowType().getFieldList().get(inputIndex).getName();
+  }
+
+  /**
+   * Return the output field name corresponding to the given expression index {@code exprIndex},
+   * or {@code null} if the expression is not part of the program's projection.
+   *
+   * @param exprIndex Index of the expression in the program's expression list
+   * @return the output field name for the given expression index, or {@code null} if not projected
+   */
+  private @Nullable String findProjectedFieldName(int exprIndex) {
+    List<RexLocalRef> projects = program.getProjectList();
+    List<String> fieldNames = program.getOutputRowType().getFieldNames();
+    for (int i = 0; i < projects.size(); i++) {
+      // If the project entry refers to the given expression, return its name.
+      if (projects.get(i).getIndex() == exprIndex) {
+        return fieldNames.get(i);
       }
     }
-    return "$" + ordinal;
+    return null;
+  }
+
+  private String normalizeFieldName(@Nullable String fieldName, int ordinal) {
+    // Don't inherit field names like '$3' from child: that's confusing.
+    if (fieldName == null
+            || (fieldName.startsWith("$") && !fieldName.startsWith("$EXPR"))) {
+      return "$" + ordinal;
+    }
+    return fieldName;
   }
 
   /**
@@ -761,10 +837,24 @@ public abstract class CalcRelSplitter {
       return true;
     }
 
+    @Deprecated  // to be removed before 2.0
     protected RelNode makeRel(RelOptCluster cluster,
         RelTraitSet traitSet, RelBuilder relBuilder, RelNode input,
         RexProgram program) {
-      return LogicalCalc.create(input, program);
+      return makeRel(cluster, traitSet, relBuilder, input, program, ImmutableList.of());
+    }
+
+    protected RelNode makeRel(RelOptCluster cluster,
+        RelTraitSet traitSet,
+        RelBuilder relBuilder,
+        RelNode input,
+        RexProgram program,
+        List<RelHint> hints) {
+      RelNode rel = LogicalCalc.create(input, program);
+      if (!hints.isEmpty()) {
+        rel = ((Hintable) rel).withHints(hints);
+      }
+      return rel;
     }
 
     /**
