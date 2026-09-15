@@ -71,7 +71,7 @@ def load_query(spark, nn: str, sql_dir="../sql") -> str:
     return sql_text
 
 
-def create_queries(spark, queries, scale_factor, sql_dir="../sql"):
+def create_queries(spark, queries, scale_factor, sql_dir="../sql", show_plans=False):
     for q in queries:
         nn = f"{q:02d}"  # zero-padded two-digit string
 
@@ -84,6 +84,18 @@ def create_queries(spark, queries, scale_factor, sql_dir="../sql"):
 
         func_name = f"tpch_q{nn}"
 
+        plan_debug_text = (
+            """
+    print("spark.sql simple:\\\\n", df.explain("simple"))
+    print("spark.sql extended:\\\\n", df.explain("extended"))
+    print("spark.sql codegen:\\\\n", df.explain("codegen"))
+    print("spark.sql cost:\\\\n", df.explain("cost"))
+    print("spark.sql formatted:\\\\n", df.explain("formatted"))
+"""
+            if show_plans
+            else ""
+        )
+
         # Build the function source string
         func_src = (
             f"""
@@ -92,8 +104,9 @@ def {func_name}(spark):
             + "'''\\\n"
             + sql_text
             + "\\\n'''\n"
-            + """
+            + f"""
     df = spark.sql(tpch_query)
+    {plan_debug_text}
     df.collect()
     return df
 """
@@ -110,9 +123,10 @@ def run_queries(
     sql_dir: str = "../sql",
     use_parquet: bool = False,
     store_output: bool = False,
+    show_plans: bool = False,
 ):
     load_tables(spark, data_folder, use_parquet)
-    create_queries(spark, queries, scale_factor, sql_dir)
+    create_queries(spark, queries, scale_factor, sql_dir, show_plans)
 
     t1 = time.time()
 
@@ -178,12 +192,18 @@ def main():
         action="store_true",
         help="Write the output for each query to a file (default: False).",
     )
+    parser.add_argument(
+        "--show_plans",
+        action="store_true",
+        help="Show plan debug output. (default: False).",
+    )
     args = parser.parse_args()
     folder = args.folder
     scale_factor = args.scale_factor
     run_on_gpu = args.gpu
     use_parquet = args.use_parquet
     store_output = args.store_output
+    show_plans = args.show_plans
 
     iceberg_version = "1.11.0"  # or your preferred Iceberg version
     spark_version = "4.0"  # match your Spark major.minor version
@@ -240,7 +260,14 @@ def main():
     warnings.filterwarnings("ignore")
 
     run_queries(
-        spark, folder, queries, scale_factor, args.sql_dir, use_parquet, store_output
+        spark,
+        folder,
+        queries,
+        scale_factor,
+        args.sql_dir,
+        use_parquet,
+        store_output,
+        show_plans,
     )
 
 

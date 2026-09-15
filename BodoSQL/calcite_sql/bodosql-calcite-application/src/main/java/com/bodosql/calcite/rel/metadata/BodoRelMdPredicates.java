@@ -21,7 +21,6 @@ import java.util.TreeMap;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
@@ -31,8 +30,6 @@ import org.apache.calcite.rel.metadata.MetadataHandler;
 import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rex.BodoRexSimplify;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
@@ -52,12 +49,7 @@ import org.apache.calcite.util.mapping.MappingType;
 import org.apache.calcite.util.mapping.Mappings;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-/**
- * Utility to infer Predicates that are applicable above a RelNode.
- *
- * <p>The only change that Bodo makes is to Join predicate inference. This change can be undone
- * if/when the upstream calcite PR merges: https://github.com/apache/calcite/pull/3452
- */
+/** Utility to infer Predicates that are applicable above a RelNode. */
 public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Predicates> {
   public static final RelMetadataProvider SOURCE =
       ReflectiveRelMetadataProvider.reflectiveSource(
@@ -80,15 +72,6 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
   public RelOptPredicateList getPredicates(
       BodoPhysicalMinRowNumberFilter mrnf, RelMetadataQuery mq) {
     return ((BodoRelMetadataQuery) mq).getPulledUpPredicates(mrnf.asBodoProjectFilter());
-  }
-
-  public RelOptPredicateList getPredicates(RelSubset r, RelMetadataQuery mq) {
-    // Bodo Change: Keep returning an empty list regardless of
-    // Bug.CALCITE_1048_FIXED. Calcite 1.41 sets the flag to true, which
-    // activates the recursive subset implementation and causes cyclic
-    // metadata exceptions.
-    // TODO(BSE-5568) Return non-empty predicates list.
-    return RelOptPredicateList.EMPTY;
   }
 
   /**
@@ -207,44 +190,6 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
       equivalence = BitSets.closure(equivalence);
     }
 
-    // BODO CHANGE:
-    /**
-     * As RexPermuteInputsShuttle, with one exception. When visiting an inputRef, it will replace
-     * the type of the InputRef with the type found in the input fields, instead of keeping the
-     * original type. This is used within when generating the Left/RightInferredPredicates, to avoid
-     * nullability mismatches between the types of the join and the types of the inputs.
-     */
-    private class TypeChangingRexPermuteInputsShuttle
-        extends org.apache.calcite.rex.RexPermuteInputsShuttle {
-
-      private final Mappings.TargetMapping mapping;
-      private final ImmutableList<RelDataTypeField> fields;
-
-      public TypeChangingRexPermuteInputsShuttle(
-          Mappings.TargetMapping mapping, RelNode... inputs) {
-        super(mapping, inputs);
-        this.mapping = mapping;
-        this.fields = fields(inputs);
-      }
-
-      private ImmutableList<RelDataTypeField> fields(RelNode[] inputs) {
-        final ImmutableList.Builder<RelDataTypeField> fields = ImmutableList.builder();
-        for (RelNode input : inputs) {
-          fields.addAll(input.getRowType().getFieldList());
-        }
-        return fields.build();
-      }
-
-      @Override
-      public RexNode visitInputRef(RexInputRef local) {
-        final int index = local.getIndex();
-        int target = mapping.getTarget(index);
-        RelDataType oldTyp = local.getType();
-        RelDataType newTyp = fields.get(target).getType();
-        return new RexInputRef(target, newTyp);
-      }
-    }
-
     /**
      * The PullUp Strategy is sound but not complete.
      *
@@ -266,7 +211,7 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
       final List<RexNode> inferredPredicates = new ArrayList<>();
       final Set<RexNode> allExprs = new HashSet<>(this.allExprs);
       final JoinRelType joinType = joinRel.getJoinType();
-      // Bodo Change: If we know the join condition is always true we there
+      // Bodo Change: If we know the join condition is always true, there
       // is nothing to infer from the join condition.
       boolean keepAllPredicates = joinRel.getCondition().isAlwaysTrue();
       if (!keepAllPredicates) {
@@ -304,14 +249,12 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
       Mappings.TargetMapping rightMapping =
           Mappings.createShiftMapping(
               nSysFields + nFieldsLeft + nFieldsRight, 0, nSysFields + nFieldsLeft, nFieldsRight);
-      // BODO CHANGE: uses TypeChangingRexPermuteInputsShuttle instead of the default
-      // RexPermuteInputsShuttle.
       final RexPermuteInputsShuttle rightPermute =
-          new TypeChangingRexPermuteInputsShuttle(rightMapping, joinRel.getRight());
+          new RexPermuteInputsShuttle(rightMapping, true, joinRel.getRight());
       Mappings.TargetMapping leftMapping =
           Mappings.createShiftMapping(nSysFields + nFieldsLeft, 0, nSysFields, nFieldsLeft);
       final RexPermuteInputsShuttle leftPermute =
-          new TypeChangingRexPermuteInputsShuttle(leftMapping, joinRel.getLeft());
+          new RexPermuteInputsShuttle(leftMapping, true, joinRel.getLeft());
       final List<RexNode> initialLeftInferredPredicates = new ArrayList<>();
       final List<RexNode> initialRightInferredPredicates = new ArrayList<>();
 
@@ -324,7 +267,7 @@ public class BodoRelMdPredicates implements MetadataHandler<BuiltInMetadata.Pred
         }
       }
 
-      // Bodo change: Don't just accept they inferred predicates unless
+      // Bodo change: Don't just accept the inferred predicates unless
       // the left/right predicates simplify
       final List<RexNode> leftInferredPredicates = new ArrayList<>();
       RexNode simplifiedLeftChildPredicates =
