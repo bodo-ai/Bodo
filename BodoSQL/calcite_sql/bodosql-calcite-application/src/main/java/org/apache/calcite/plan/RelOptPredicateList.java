@@ -110,10 +110,12 @@ public class RelOptPredicateList {
     this.constantMap = requireNonNull(constantMap, "constantMap");
 
     // Bodo change: removed the validation added in Calcite 1.41 that rejects
-    // comparisons with null literals in pulledUpPredicates. Bodo runs with
-    // simplification disabled in the planner, so predicates such as
-    // `=(NULL, 'x')` can legitimately appear (as they did in Calcite 1.40)
-    // and rejecting them poisons the metadata cache with CyclicMetadataException.
+    // comparisons with null literals in pulledUpPredicates. Pulled-up
+    // predicates are collected from filter and join conditions without
+    // running through the simplifier, so predicates such as `=(NULL, 'x')`
+    // can legitimately appear (as they did in Calcite 1.40). Rejecting them
+    // throws inside a metadata call, which poisons the metadata cache with
+    // CyclicMetadataException.
   }
 
   /** Creates a RelOptPredicateList with only pulled-up predicates, no inferred
