@@ -15,6 +15,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.SubstitutionRule;
+import org.apache.calcite.rex.BodoRexSimplify;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexExecutor;
@@ -80,7 +81,8 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
     final RexBuilder rexBuilder = call.builder().getRexBuilder();
     final RelMetadataQuery mq = call.getMetadataQuery();
     final RexExecutor executor = Util.first(call.getPlanner().getExecutor(), RexUtil.EXECUTOR);
-    final RexSimplify simplify = new RexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor);
+    final RexSimplify simplify =
+        new BodoRexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor);
 
     final int nLeft = join.getLeft().getRowType().getFieldCount();
     final int nRight = join.getRight().getRowType().getFieldCount();
@@ -90,9 +92,7 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
     final List<RexNode> conjuncts = RelOptUtil.conjunctions(join.getCondition());
 
     // Canonical forms of every predicate that already holds at this join: the existing conjuncts
-    // of the condition and whatever the inputs already filter on (expressed in join field
-    // indices). Anything we derive that is in this set is redundant and must not be re-added,
-    // otherwise the rule never reaches a fixed point.
+    // of the condition and whatever the inputs already filter on.
     final Set<RexNode> known = new HashSet<>();
     for (RexNode conjunct : conjuncts) {
       known.add(canonicalize(simplify, conjunct));
@@ -203,8 +203,8 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
 
   /**
    * Canonical form used for "already present" comparisons. Both freshly derived predicates and
-   * existing predicates go through the same simplifier so that e.g. OR(x = 'A', x = 'B') and
-   * SEARCH(x, Sarg['A', 'B']) compare equal. Join/filter conditions treat UNKNOWN as FALSE.
+   * existing predicates go through the same simplifier so they compare equal. Join/filter
+   * conditions treat UNKNOWN as FALSE.
    */
   private static RexNode canonicalize(RexSimplify simplify, RexNode node) {
     return simplify.simplifyUnknownAsFalse(node);
