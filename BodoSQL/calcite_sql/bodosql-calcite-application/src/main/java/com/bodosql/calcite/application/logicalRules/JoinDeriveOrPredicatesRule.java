@@ -13,6 +13,7 @@ import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
+import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.SubstitutionRule;
 import org.apache.calcite.rex.BodoRexSimplify;
@@ -71,7 +72,8 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
     RexNode cond = join.getCondition();
     return filterContainsOr(cond)
         && !RexUtil.SubQueryFinder.containsSubQuery(join)
-        && !RexOver.containsOver(cond);
+        && !RexOver.containsOver(cond)
+        && (join.getJoinType() != JoinRelType.FULL);
   }
 
   /** This method is called when the rule finds a RelNode that matches config requirements. */
@@ -88,6 +90,21 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
     final int nRight = join.getRight().getRowType().getFieldCount();
     final ImmutableBitSet leftBits = ImmutableBitSet.range(0, nLeft);
     final ImmutableBitSet rightBits = ImmutableBitSet.range(nLeft, nLeft + nRight);
+
+    // Predicates on the outer side of the join cannot be pushed down so don't derive them.
+    // TODO(Ehsan): avoid sides affected by any outer join in the query subtree similar to Postgres:
+    // https://github.com/postgres/postgres/blob/1a3e782e762248b4a63294936224458571a0eb5a/src/backend/optimizer/util/restrictinfo.c#L586
+    final JoinRelType joinType = join.getJoinType();
+    final List<ImmutableBitSet> sides = new ArrayList<>();
+    if (joinType.canPushLeftFromWithin()) {
+      sides.add(leftBits);
+    }
+    if (joinType.canPushRightFromWithin()) {
+      sides.add(rightBits);
+    }
+    if (sides.isEmpty()) {
+      return; // FULL OUTER: nothing derived can be pushed.
+    }
 
     final List<RexNode> conjuncts = RelOptUtil.conjunctions(join.getCondition());
 
@@ -107,7 +124,7 @@ public class JoinDeriveOrPredicatesRule extends RelRule<JoinDeriveOrPredicatesRu
         // No OR to look inside, or already single-sided (FilterJoinRule handles those).
         continue;
       }
-      for (ImmutableBitSet side : new ImmutableBitSet[] {leftBits, rightBits}) {
+      for (ImmutableBitSet side : sides) {
         RexNode implied = deriveSidePredicate(rexBuilder, conjunct, side);
         // The result may itself be a conjunction; track each piece separately.
         for (RexNode piece : RelOptUtil.conjunctions(implied)) {
