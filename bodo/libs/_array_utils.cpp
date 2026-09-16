@@ -349,9 +349,10 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             }
         }
     } else {
-        out_arr =
-            alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0,
-                                  false, false, false, pool, std::move(mm));
+        out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0,
+                                        0, false, false, false, pool,
+                                        std::move(mm), in_arr->timezone,
+                                        in_arr->precision, in_arr->scale);
 
         if (siztype == sizeof(int32_t)) {
             using T = int32_t;
@@ -423,9 +424,10 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     assert(arr_type == bodo_array_type::NULLABLE_INT_BOOL);
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
-    std::shared_ptr<array_info> out_arr =
-        alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false,
-                              false, false, pool, std::move(mm));
+    std::shared_ptr<array_info> out_arr = alloc_array_top_level(
+        nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false, false, false, pool,
+        std::move(mm), in_arr->timezone, in_arr->precision, in_arr->scale);
+
     uint64_t siztype = numpy_item_size[dtype];
 
     if (dtype == Bodo_CTypes::_BOOL) {

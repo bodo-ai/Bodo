@@ -2406,6 +2406,34 @@ def test_decimal_cmp(index_val):
     )
 
 
+def test_decimal_filter_project():
+    """Test that Decimal filter preserves scale/precision."""
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [Decimal("1.1"), Decimal("2.2"), Decimal("3.3")],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            )
+        }
+    )
+    bdf = bd.from_pandas(df)
+
+    with assert_executed_plan_count(0):
+        df2 = df[df.A > Decimal("2.0")]
+        bdf2 = bdf[bdf.A > Decimal("2.0")]
+
+        df2["B"] = df2.A == Decimal("2.2")
+        bdf2["B"] = bdf2.A == Decimal("2.2")
+
+    _test_equal(
+        bdf2.execute_plan(),
+        df2,
+        check_pandas_types=False,
+        reset_index=True,
+        sort_output=True,
+    )
+
+
 @pytest.mark.gpu
 def test_scalar_arith_binops(datapath, index_val):
     """Test various cases of BodoScalar binary operations."""
