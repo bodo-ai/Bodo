@@ -317,8 +317,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
         (is_integer(dtype) || is_float(dtype) || dtype == Bodo_CTypes::_BOOL)) {
         out_arr = alloc_array_top_level(
             nRowOut, -1, -1, bodo_array_type::NULLABLE_INT_BOOL, dtype, -1, 0,
-            0, false, false, false, pool, std::move(mm), in_arr->timezone,
-            in_arr->precision, in_arr->scale);
+            0, false, false, false, pool, std::move(mm));
         char* out_data1 = out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
         if (dtype == Bodo_CTypes::_BOOL) {
             // Boolean needs a special implementation because the output
@@ -350,9 +349,10 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
             }
         }
     } else {
-        out_arr =
-            alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0, 0,
-                                  false, false, false, pool, std::move(mm));
+        out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype, -1, 0,
+                                        0, false, false, false, pool,
+                                        std::move(mm), in_arr->timezone,
+                                        in_arr->precision, in_arr->scale);
 
         if (siztype == sizeof(int32_t)) {
             using T = int32_t;

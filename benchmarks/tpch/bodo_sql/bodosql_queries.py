@@ -159,7 +159,7 @@ def run_queries(
                     from bodo.tests.utils import _test_equal
 
                     answer_df = pd.read_parquet(
-                        f"{answers_path}/q{query:02}.pq", dtype_backend="pyarrow"
+                        f"{answers_path}/q{query:02}_output", dtype_backend="pyarrow"
                     )
                     answer_df = answer_df[
                         list(result.columns)

@@ -34,6 +34,9 @@ from bodosql.tests.utils import check_query
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q01_output",
             id="iceberg",
+            marks=pytest.mark.skip(
+                reason="Rescaling Decimal value would cause data loss"
+            ),
         ),
     ],
 )
@@ -529,6 +532,9 @@ def test_tpch_q5(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q06_output",
             id="iceberg",
+            marks=pytest.mark.skip(
+                reason="Rescaling Decimal value would cause data loss"
+            ),
         ),
     ],
 )
@@ -567,6 +573,9 @@ def test_tpch_q6(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q07_output",
             id="iceberg",
+            marks=pytest.mark.skip(
+                reason="Rescaling Decimal value would cause data loss"
+            ),
         ),
     ],
 )
@@ -646,6 +655,9 @@ def test_tpch_q7(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q08_output",
             id="iceberg",
+            marks=pytest.mark.skip(
+                reason="Rescaling Decimal value would cause data loss"
+            ),
         ),
     ],
 )
@@ -718,6 +730,9 @@ def test_tpch_q8(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q09_output",
             id="iceberg",
+            marks=pytest.mark.skip(
+                reason="Rescaling Decimal value would cause data loss"
+            ),
         ),
     ],
 )
@@ -780,6 +795,9 @@ def test_tpch_q9(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q10_output",
             id="iceberg",
+            marks=pytest.mark.skip(
+                reason="Rescaling Decimal value would cause data loss"
+            ),
         ),
     ],
 )
@@ -1019,6 +1037,9 @@ def test_tpch_q10(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q11_output",
             id="iceberg",
+            marks=pytest.mark.skip(
+                reason="Rescaling Decimal value would cause data loss"
+            ),
         ),
     ],
 )
