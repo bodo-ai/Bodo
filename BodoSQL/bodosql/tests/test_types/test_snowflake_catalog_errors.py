@@ -4,7 +4,10 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.tests.utils import pytest_snowflake
+from bodo.tests.utils import (
+    get_snowflake_keypair_connection_params,
+    pytest_snowflake,
+)
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest_snowflake
@@ -17,7 +20,7 @@ def test_snowflake_catalog_invalid_credentials_err():
     # Incorrect Snowflake Username Catalog
     invalid_catalog1 = bodosql.SnowflakeCatalog(
         "invalid",
-        os.environ["SF_PASSWORD"],
+        os.environ.get("SF_PASSWORD", ""),
         "bodopartner.us-east-1",
         "DEMO_WH",
         "SNOWFLAKE_SAMPLE_DATA",
@@ -52,10 +55,11 @@ def test_snowflake_catalog_data_not_found_err():
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
             os.environ["SF_USERNAME"],
-            os.environ["SF_PASSWORD"],
+            os.environ.get("SF_PASSWORD", ""),
             "bodopartner.us-east-1",
             "DEMO_WH",
             "SNOWFLAKE_SAMPLE_DATA",
+            connection_params=get_snowflake_keypair_connection_params(),
         )
     )
 

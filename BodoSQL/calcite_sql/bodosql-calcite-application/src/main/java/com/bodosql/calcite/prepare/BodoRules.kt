@@ -38,6 +38,7 @@ import com.bodosql.calcite.application.logicalRules.FilterWindowMrnfRule
 import com.bodosql.calcite.application.logicalRules.FilterWindowSplitRule
 import com.bodosql.calcite.application.logicalRules.GroupingSetsToUnionAllRule
 import com.bodosql.calcite.application.logicalRules.JoinConditionToFilterRule
+import com.bodosql.calcite.application.logicalRules.JoinDeriveOrPredicatesRule
 import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
 import com.bodosql.calcite.application.logicalRules.LimitProjectTransposeRule
 import com.bodosql.calcite.application.logicalRules.LogicalFilterReorderConditionRule
@@ -482,6 +483,12 @@ object BodoRules {
     @JvmField
     val JOIN_REORDER_CONDITION_RULE: RelOptRule =
         JoinReorderConditionRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val JOIN_DERIVE_OR_PREDICATES_RULE: RelOptRule =
+        JoinDeriveOrPredicatesRule.Config.DEFAULT
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -1106,6 +1113,7 @@ object BodoRules {
             // Reordering conditions can lead to greater filter pushing.
             FILTER_REORDER_CONDITION_RULE,
             JOIN_REORDER_CONDITION_RULE,
+            JOIN_DERIVE_OR_PREDICATES_RULE,
             // Process for inserting new filters to push
             JOIN_PUSH_TRANSITIVE_PREDICATES,
             JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
@@ -1321,6 +1329,11 @@ object BodoRules {
             PRUNE_EMPTY_UNION_RULE,
             PROJECT_VALUES_REDUCE_RULE,
             JOIN_REORDER_CONDITION_RULE,
+            // Avoiding repeated application of this rule here since it can lead to cycles. It
+            // requires extracting canonical forms of predicates from query subtrees to know if the derived predicate
+            // is already applied, but our infrastructure cannot provide this reliably. For example, "SEARCH(a, [1,2])"
+            // is not converted to "a=1 or a=2".
+//            JOIN_DERIVE_OR_PREDICATES_RULE,
             FILTER_REORDER_CONDITION_RULE,
             LIMIT_PROJECT_TRANSPOSE_RULE,
             FILTER_EXTRACT_CASE_RULE,

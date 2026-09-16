@@ -123,6 +123,19 @@ jobs:
         run: |
             pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
+      - name: Setup Snowflake Key Pair
+        env:
+          SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY }}
+        run: |
+          # Write the private key (if configured) to a file and expose the
+          # path to the tests for key pair (JWT) authentication.
+          if [[ -n "$SF_PRIVATE_KEY" ]]; then
+            key_path="$RUNNER_TEMP/snowflake_test_key.p8"
+            printf '%s\n' "$SF_PRIVATE_KEY" > "$key_path"
+            echo "SF_PRIVATE_KEY_FILE=$key_path" >> "$GITHUB_ENV"
+          fi
+        shell: bash
+
       - name: Run Tests
         run: |
           set -exo pipefail
@@ -277,6 +290,10 @@ jobs:
           SF_USER2: ${{ secrets.SF_USER2 }}
           SF_PASSWORD2: ${{ secrets.SF_PASSWORD2 }}
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          SF_PRIVATE_KEY_FILE: ${{ env.SF_PRIVATE_KEY_FILE }}
+          # Allow key pair auth parameters in snowflake:// URL query strings
+          # (otherwise plain pandas calls using SQLAlchemy reject them).
+          SNOWFLAKE_SQLALCHEMY_LEGACY_URL_PARAMS: "true"
           SF_AZURE_USER: ${{ secrets.SF_AZURE_USER }}
           SF_AZURE_PASSWORD: ${{ secrets.SF_AZURE_PASSWORD }}
           SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}

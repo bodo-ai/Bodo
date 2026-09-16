@@ -1260,8 +1260,14 @@ def add_table_type(
     is_writeable = is_table_path_type(bodo_type) and bodo_type._file_type == "sql"
 
     if is_writeable:
+        # `write_format_code` is used as a Java format string (see
+        # LocalTable.writeCodeFormatString), so any literal '%' in the
+        # interpolated values must be escaped to avoid being interpreted as a
+        # format specifier.
+        write_conn_str = bodo_type._conn_str.replace("%", "%%")
+        write_file_path = bodo_type._file_path.replace("%", "%%")
         schema_code_to_sql = (
-            f"schema='{bodo_type._db_schema}'"
+            f"schema='{bodo_type._db_schema.replace('%', '%%')}'"
             if bodo_type._db_schema is not None
             else ""
         )
@@ -1269,9 +1275,9 @@ def add_table_type(
             # Note. We only support MERGE for Iceberg. We check this in the
             # Java code to ensure we also handle catalogs. Note the
             # last argument is for passing additional arguments as key=value pairs.
-            write_format_code = f"bodo.io.iceberg.merge_into.iceberg_merge_cow_py('{bodo_type._file_path}', '{bodo_type._conn_str}', '{bodo_type._db_schema}', %s, %s)"
+            write_format_code = f"bodo.io.iceberg.merge_into.iceberg_merge_cow_py('{write_file_path}', '{write_conn_str}', '{bodo_type._db_schema}', %s, %s)"
         else:
-            write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code_to_sql}, %s)"
+            write_format_code = f"%s.to_sql('{write_file_path}', '{write_conn_str}', if_exists='append', index=False, {schema_code_to_sql}, %s)"
     else:
         write_format_code = ""
 
@@ -1337,6 +1343,10 @@ def _generate_table_read(
         file_path = bodo_type._file_path
         # Escape "\" in Windows paths
         file_path = file_path.replace("\\", "\\\\")
+        # `read_line` is used as a Java format string (see LocalTable.readCode),
+        # so any literal '%' in the interpolated values must be escaped to avoid
+        # being interpreted as a format specifier.
+        file_path = file_path.replace("%", "%%")
 
         read_dict_list = (
             ""
@@ -1355,13 +1365,17 @@ def _generate_table_read(
             # the schema
             conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
+            conn_str = conn_str.replace("%", "%%")
+            db_schema = bodo_type._db_schema
+            if db_schema is not None:
+                db_schema = db_schema.replace("%", "%%")
             if db_type == "iceberg":
                 # Avoid errors for Windows path backslashes in generated code later
                 conn_str = conn_str.replace("\\", "/")
                 if read_dict_list:
-                    read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list}, _bodo_read_as_table=True, %s)"
+                    read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{db_schema}', {read_dict_list}, _bodo_read_as_table=True, %s)"
                 else:
-                    read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', _bodo_read_as_table=True, %s)"
+                    read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{db_schema}', _bodo_read_as_table=True, %s)"
             else:
                 read_line = f"pd.read_sql('select * from {file_path}', '{conn_str}', _bodo_read_as_table=True, %s)"
         else:
