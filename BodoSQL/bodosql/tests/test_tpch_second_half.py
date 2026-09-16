@@ -26,9 +26,6 @@ from bodosql.tests.utils import check_query, shrink_data
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q12_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -79,6 +76,7 @@ def test_tpch_q12(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -93,9 +91,6 @@ def test_tpch_q12(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q13_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -210,6 +205,7 @@ def test_tpch_q13(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -224,9 +220,7 @@ def test_tpch_q13(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q14_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q14 correctness"),
         ),
     ],
 )
@@ -255,16 +249,27 @@ def test_tpch_q14(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         is_out_distributed=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
+@pytest.mark.parametrize(
+    "mode,result",
+    [
+        pytest.param("parquet", None, id="parquet"),
+        pytest.param(
+            "iceberg",
+            "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q15_output",
+            id="iceberg",
+        ),
+    ],
+)
+def test_tpch_q15_blazingsql(
+    mode, result, tpch_data, tpch_iceberg_data, memory_leak_check
+):
     DATE = "1996-01-01"
-    # This query is modified because we don't support DDL properly.
-    # The changes match the blazingsql test suite.
-    # TODO: Match Q15 exactly with DDL
     tpch_query = f"""
                     with revenue (supplier_no, total_revenue) as (
                       select
@@ -309,11 +314,12 @@ def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
     )
     check_query(
         tpch_query,
-        tpch_data,
+        tpch_data if mode == "parquet" else tpch_iceberg_data,
         None,
         check_dtype=False,
         sort_output=False,
-        expected_output=py_output,
+        expected_output=py_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -331,9 +337,7 @@ def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q16_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q16 correctness"),
         ),
     ],
 )
@@ -391,6 +395,7 @@ def test_tpch_q16(
         check_dtype=False,
         sort_output=False,
         expected_output=None if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -406,9 +411,7 @@ def test_tpch_q16(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q17_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q16 correctness"),
         ),
     ],
 )
@@ -442,6 +445,7 @@ def test_tpch_q17(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         is_out_distributed=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -456,9 +460,6 @@ def test_tpch_q17(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q18_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -515,6 +516,7 @@ def test_tpch_q18(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_names=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -530,9 +532,7 @@ def test_tpch_q18(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q19_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q19 correctness"),
         ),
     ],
 )
@@ -588,6 +588,7 @@ def test_tpch_q19(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         is_out_distributed=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -605,9 +606,6 @@ def test_tpch_q19(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q20_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -665,6 +663,7 @@ def test_tpch_q20(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -680,9 +679,6 @@ def test_tpch_q20(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q21_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -727,6 +723,7 @@ def test_tpch_q21(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
                      order by
                        numwait desc,
                        s_name
+                      limit 100
     """
     expected_output = pd.DataFrame(
         {
@@ -747,6 +744,7 @@ def test_tpch_q21(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -762,9 +760,7 @@ def test_tpch_q21(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q22_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q22 Correctness"),
         ),
     ],
 )
@@ -835,4 +831,5 @@ def test_tpch_q22(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )

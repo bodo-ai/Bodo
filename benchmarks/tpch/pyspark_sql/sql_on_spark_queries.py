@@ -142,6 +142,8 @@ def run_queries(
         output_df = query_func(spark)  # run the query
         print(f"Query {query:02} took {time.time() - t2:.2f} seconds")
         if store_output:
+            # Upper case column names to match BodoSQL
+            output_df = output_df.toDF(*[c.upper() for c in output_df.columns])
             output_df.coalesce(1).write.parquet(f"q{query:02}_output")
         spark.catalog.clearCache()
         gc.collect()
