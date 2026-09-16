@@ -6358,10 +6358,11 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
     // matched
     boolean isUpdateModifiableViewTable = false;
     if (query instanceof SqlUpdate) {
-      // Bodo change: unlike upstream Calcite, the source select of an UPDATE
-      // contains the full target row (via star expansion) followed by the SET
-      // expressions, so trim both row types to the SET expressions before
-      // comparing them.
+      // Bodo change: upstream removed this trimming in Calcite 1.41
+      // (CALCITE-7220). BodoSQL needs it: the source select of an
+      // UPDATE ... FROM cross joins the FROM table, so its star expansion
+      // contains columns that are not in the target row type. Removing it
+      // breaks BodoValidatorTest.testUpdateOkFrom/testUpdateFailBasic.
       final SqlNodeList targetColumnList =
           requireNonNull(((SqlUpdate) query).getTargetColumnList());
       final int targetColumnCount = targetColumnList.size();

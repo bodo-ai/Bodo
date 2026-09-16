@@ -218,8 +218,10 @@ public class AggregateCall {
       final List<RelDataType> preTypes = RexUtil.types(rexList);
       final List<RelDataType> types =
           SqlTypeUtil.projectTypes(input.getRowType(), argList);
-      // Bodo Change: PERCENTILE_DIST needs its own call binding. This fixes a
-      // bug in calcite upstream.
+      // Bodo Change: use the percentile-specific binding so the return type is
+      // derived from the WITHIN GROUP sort expression, as upstream does for the
+      // non-deprecated overloads (CALCITE-5230, fixed in 1.33); upstream left
+      // this deprecated groupCount overload on the plain binding.
       final Aggregate.AggCallBinding callBinding;
       if (aggFunction.getKind() == SqlKind.PERCENTILE_DISC
           || aggFunction.getKind() == SqlKind.PERCENTILE_CONT) {
@@ -267,8 +269,8 @@ public class AggregateCall {
       final Aggregate.AggCallBinding callBinding;
       if (aggFunction.getKind() == SqlKind.PERCENTILE_DISC
           || aggFunction.getKind() == SqlKind.PERCENTILE_CONT) {
-        // Bodo Change: PERCENTILE_DIST needs its own call binding. This fixes a
-        // bug in calcite upstream.
+        // Bodo Change: assertion only. The percentile-specific binding below is
+        // upstream's CALCITE-5230 fix, already present in Calcite 1.33.
         assert collation.getKeys().size() == 1;
         callBinding = new Aggregate.PercentileDiscAggCallBinding(
             typeFactory, aggFunction,
