@@ -5,6 +5,9 @@ Some of these queries should be set with variables. These variables and their va
 be seen in the TPC-H document,
 http://tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.18.0.pdf. For now we set most
 of these variables according to the reference query.
+
+Expected results for Iceberg tests were generated using:
+python sql_on_spark_queries.py --sql_dir ../sql --folder ../data/tpch_sf1_iceberg --scale_factor 1 --store_output
 """
 
 import datetime
@@ -25,15 +28,12 @@ from bodosql.tests.utils import check_query
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
-            # Iceberg answers were generated with:
-            # python sql_on_spark_queries.py --sql_dir ../sql --folder ../data/tpch_sf1_iceberg --scale_factor 1 --store_output
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q01_output",
             id="iceberg",
             marks=pytest.mark.skip(reason="TODO: Fix Q1 correctness"),
@@ -124,11 +124,10 @@ def test_tpch_q1(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
 @pytest.mark.timeout(900)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q02_output",
@@ -243,11 +242,10 @@ def test_tpch_q2(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q03_output",
@@ -391,11 +389,10 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q04_output",
@@ -454,11 +451,10 @@ def test_tpch_q4(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q05_output",
@@ -517,11 +513,10 @@ def test_tpch_q5(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q06_output",
@@ -557,11 +552,10 @@ def test_tpch_q6(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q07_output",
@@ -637,11 +631,10 @@ def test_tpch_q7(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q08_output",
@@ -711,11 +704,10 @@ def test_tpch_q8(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q09_output",
@@ -774,11 +766,10 @@ def test_tpch_q9(
 @pytest.mark.timeout(700)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q10_output",
@@ -1014,11 +1005,10 @@ def test_tpch_q10(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q11_output",
