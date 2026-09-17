@@ -266,23 +266,21 @@ def test_tpch_q14(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         ),
     ],
 )
-def test_tpch_q15_blazingsql(
-    mode, result, tpch_data, tpch_iceberg_data, memory_leak_check
-):
+def test_tpch_q15(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
     DATE = "1996-01-01"
     tpch_query = f"""
-                    with revenue (supplier_no, total_revenue) as (
+                    with revenue0 as (
                       select
-                        l_suppkey,
-                        sum(l_extendedprice * (1 - l_discount))
+                        l_suppkey as supplier_no,
+                        sum(l_extendedprice * (1 - l_discount)) as total_revenue
                       from
                         lineitem
                       where
                         l_shipdate >= date '{DATE}'
                         and l_shipdate < date '{DATE}' + interval '3' month
                       group by
-                        l_suppkey
-                    )
+                        l_suppkey)
+
                     select
                       s_suppkey,
                       s_name,
@@ -291,14 +289,14 @@ def test_tpch_q15_blazingsql(
                       total_revenue
                     from
                       supplier,
-                      revenue
+                      revenue0
                     where
                       s_suppkey = supplier_no
                         and total_revenue = (
                           select
                             max(total_revenue)
                           from
-                            revenue
+                            revenue0
                       )
                     order by
                       s_suppkey
