@@ -13,15 +13,15 @@ import argparse
 import os
 import shutil
 import tempfile
-from pathlib import Path
 from urllib.parse import urlparse
 
 import duckdb
 import pyarrow as pa
 import pyarrow.dataset as ds
-import pyarrow.parquet as pq
 from pyiceberg.catalog import WAREHOUSE_LOCATION
 from tqdm import tqdm
+
+import bodo.pandas as pd
 
 TPCH_TABLES = [
     "lineitem",
@@ -125,52 +125,53 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
     if not is_s3_path(iceberg_path):
         os.makedirs(iceberg_path, exist_ok=True)
 
-    warehouse = (
-        os.path.abspath(iceberg_path) if not is_s3_path(iceberg_path) else iceberg_path
-    )
-
-    catalog = DirCatalog(f"TPCH_SF{sf}", **{WAREHOUSE_LOCATION: warehouse})
-
-    for table in TPCH_TABLES:
-        table_dir = Path(parquet_path) / table.upper()
-
-        dataset = ds.dataset(table_dir, format="parquet")
-        schema = dataset.schema
-
-        # Duckdb TPCH extension includes a NOT NULL constraint on all columns,
-        # which gets dropped when copying to Parquet.
-        required_schema = pa.schema(
-            [
-                pa.field(
-                    field.name,
-                    field.type,
-                    nullable=False,
-                    metadata=field.metadata,
-                )
-                for field in schema
-            ],
-            metadata=schema.metadata,
+    with tempfile.TemporaryDirectory() as tmp_warehouse:
+        warehouse = (
+            os.path.abspath(iceberg_path)
+            if not is_s3_path(iceberg_path)
+            else iceberg_path
         )
+        tmp_catalog = DirCatalog(f"TPCH_SF{sf}", **{WAREHOUSE_LOCATION: tmp_warehouse})
 
-        # Uses large write threshold so number of files matches parquet dataset
-        iceberg_table = catalog.create_table(
-            table.upper(),
-            required_schema,
-            properties={
-                "write.target-file-size-bytes": str(100 * 1024**3),  # 100 GiB
-            },
-        )
+        for table in TPCH_TABLES:
+            table_dir = os.path.join(parquet_path, table.upper())
 
-        for pq_file in tqdm(
-            sorted(table_dir.glob("*.parquet")),
-            desc=f"Copying {table.upper()} to Iceberg: ",
-        ):
-            table_fragment = pq.read_table(pq_file)
-            table_fragment = pa.Table.from_arrays(
-                table_fragment.columns,
+            dataset = ds.dataset(table_dir, format="parquet")
+            schema = dataset.schema
+
+            # Duckdb TPCH extension includes a NOT NULL constraint on all columns,
+            # which gets dropped when copying to Parquet.
+            required_schema = pa.schema(
+                [
+                    pa.field(
+                        field.name,
+                        field.type,
+                        nullable=False,
+                        metadata=field.metadata,
+                    )
+                    for field in schema
+                ],
+                metadata=schema.metadata,
+            )
+
+            # Create empty temporary table using Pyiceberg and copy empty table with
+            # Bodo to inherit the not null schema
+            empty_table = tmp_catalog.create_table(
+                table.upper(),
+                required_schema,
+            )
+            empty = pa.Table.from_batches(
+                [],
                 schema=required_schema,
             )
-            iceberg_table.append(table_fragment)
+            empty_table.append(empty)
+
+            empty_df = pd.read_iceberg(table.upper(), location=tmp_warehouse)
+            empty_df.to_iceberg(table.upper(), location=warehouse)
+
+            # Write tables with Bodo to get NDV count:
+            table_df = pd.read_parquet(table_dir)
+            table_df.to_iceberg(table.upper(), location=warehouse)
 
 
 def main():
