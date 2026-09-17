@@ -269,6 +269,9 @@ def test_tpch_q14(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
 def test_tpch_q15_blazingsql(
     mode, result, tpch_data, tpch_iceberg_data, memory_leak_check
 ):
+    # This query is modified because we don't support DDL properly.
+    # The changes match the blazingsql test suite.
+    # TODO: Match Q15 exactly with DDL
     DATE = "1996-01-01"
     tpch_query = f"""
                     with revenue (supplier_no, total_revenue) as (
