@@ -5,6 +5,9 @@ Some of these queries should be set with variables. These variables and their va
 be seen in the TPC-H document,
 http://tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.18.0.pdf. For now we set most
 of these variables according to the reference query.
+
+Expected results for Iceberg tests were generated using:
+python sql_on_spark_queries.py --sql_dir ../sql --folder ../data/tpch_sf1_iceberg --scale_factor 1 --store_output
 """
 
 import datetime
@@ -17,18 +20,14 @@ from bodosql.tests.utils import check_query, shrink_data
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q12_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -79,23 +78,20 @@ def test_tpch_q12(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q13_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -210,23 +206,21 @@ def test_tpch_q13(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q14_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q14 correctness"),
         ),
     ],
 )
@@ -255,16 +249,30 @@ def test_tpch_q14(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         is_out_distributed=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
-    DATE = "1996-01-01"
+@pytest.mark.parametrize(
+    "mode,result",
+    [
+        pytest.param("parquet", None, id="parquet"),
+        pytest.param(
+            "iceberg",
+            "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q15_output",
+            id="iceberg",
+        ),
+    ],
+)
+def test_tpch_q15_blazingsql(
+    mode, result, tpch_data, tpch_iceberg_data, memory_leak_check
+):
     # This query is modified because we don't support DDL properly.
     # The changes match the blazingsql test suite.
     # TODO: Match Q15 exactly with DDL
+    DATE = "1996-01-01"
     tpch_query = f"""
                     with revenue (supplier_no, total_revenue) as (
                       select
@@ -309,11 +317,12 @@ def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
     )
     check_query(
         tpch_query,
-        tpch_data,
+        tpch_data if mode == "parquet" else tpch_iceberg_data,
         None,
         check_dtype=False,
         sort_output=False,
-        expected_output=py_output,
+        expected_output=py_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -322,25 +331,21 @@ def test_tpch_q15_blazingsql(tpch_data, memory_leak_check):
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q16_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
 def test_tpch_q16(
     mode, result, tpch_data, tpch_iceberg_data, spark_info, memory_leak_check
 ):
-    BRAND = "BRAND#45"
+    BRAND = "Brand#45"
     TYPE = "MEDIUM POLISHED"
     SIZE1 = 49
     SIZE2 = 14
@@ -391,24 +396,22 @@ def test_tpch_q16(
         check_dtype=False,
         sort_output=False,
         expected_output=None if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q17_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q16 correctness"),
         ),
     ],
 )
@@ -442,23 +445,20 @@ def test_tpch_q17(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         is_out_distributed=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q18_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -515,24 +515,22 @@ def test_tpch_q18(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_names=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q19_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q19 correctness"),
         ),
     ],
 )
@@ -588,6 +586,7 @@ def test_tpch_q19(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         is_out_distributed=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
@@ -596,18 +595,14 @@ def test_tpch_q19(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
 # NOTE (allai5): Arbitrary high timeout number due to inability to replicate
 # timeout locally
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q20_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -665,24 +660,21 @@ def test_tpch_q20(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.timeout(900)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q21_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
         ),
     ],
 )
@@ -727,6 +719,7 @@ def test_tpch_q21(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
                      order by
                        numwait desc,
                        s_name
+                      limit 100
     """
     expected_output = pd.DataFrame(
         {
@@ -747,24 +740,22 @@ def test_tpch_q21(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
 
 
 @pytest.mark.timeout(600)
 @pytest.mark.slow
 @pytest.mark.bodosql_cpp
-@pytest.mark.gpu
 @pytest.mark.parametrize(
     "mode,result",
     [
-        pytest.param("parquet", None, id="parquet"),
+        pytest.param("parquet", None, id="parquet", marks=pytest.mark.gpu),
         pytest.param(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q22_output",
             id="iceberg",
-            marks=pytest.mark.skip(
-                reason="Rescaling Decimal value would cause data loss"
-            ),
+            marks=pytest.mark.skip(reason="TODO: Fix Q22 Correctness"),
         ),
     ],
 )
@@ -835,4 +826,5 @@ def test_tpch_q22(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
         check_dtype=False,
         sort_output=False,
         expected_output=expected_output if result is None else pd.read_parquet(result),
+        use_dict_encoded_strings=None if mode == "parquet" else False,
     )
