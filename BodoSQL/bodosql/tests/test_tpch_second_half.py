@@ -339,14 +339,13 @@ def test_tpch_q15_blazingsql(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q16_output",
             id="iceberg",
-            marks=pytest.mark.skip(reason="TODO: Fix Q16 correctness"),
         ),
     ],
 )
 def test_tpch_q16(
     mode, result, tpch_data, tpch_iceberg_data, spark_info, memory_leak_check
 ):
-    BRAND = "BRAND#45"
+    BRAND = "Brand#45"
     TYPE = "MEDIUM POLISHED"
     SIZE1 = 49
     SIZE2 = 14
