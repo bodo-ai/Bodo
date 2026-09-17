@@ -16,7 +16,7 @@
 
     <properties>
         <java.version>11</java.version>
-        <kotlin.version>1.9.0</kotlin.version>
+        <kotlin.version>2.3.20</kotlin.version>
 
         <!-- Maven properties -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -284,9 +284,6 @@
                             <sourceDirs>
                                 <source>src/test/java</source>
                             </sourceDirs>
-                            <args>
-                                <arg>-Xskip-metadata-version-check</arg>
-                            </args>
                         </configuration>
                     </execution>
                 </executions>
