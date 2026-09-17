@@ -269,9 +269,6 @@ public class AggregateCall {
       final Aggregate.AggCallBinding callBinding;
       if (aggFunction.getKind() == SqlKind.PERCENTILE_DISC
           || aggFunction.getKind() == SqlKind.PERCENTILE_CONT) {
-        // Bodo Change: assertion only. The percentile-specific binding below is
-        // upstream's CALCITE-5230 fix, already present in Calcite 1.33.
-        assert collation.getKeys().size() == 1;
         callBinding = new Aggregate.PercentileDiscAggCallBinding(
             typeFactory, aggFunction,
             SqlTypeUtil.projectTypes(input.getRowType(), argList),
