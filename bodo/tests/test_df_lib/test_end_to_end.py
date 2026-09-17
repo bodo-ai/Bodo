@@ -2434,6 +2434,22 @@ def test_decimal_filter_project():
     )
 
 
+def test_decimal_scalar_arith():
+    """Test that Decimal reduction preserves scale/precision."""
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [Decimal("1.1"), Decimal("2.2"), Decimal("3.3")],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            )
+        }
+    )
+    bdf = bd.from_pandas(df)
+
+    print((bdf.A.sum() * 100.00)._plan)
+    assert (bdf.A.sum() * 100.00).execute_plan().iloc[0] == Decimal("660.000")
+
+
 @pytest.mark.gpu
 def test_scalar_arith_binops(datapath, index_val):
     """Test various cases of BodoScalar binary operations."""

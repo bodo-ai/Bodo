@@ -660,6 +660,13 @@ static arrow::Datum decimal_arithmetic(
     const std::string& op,  // "add","subtract","multiply","divide"
     int result_precision, int result_scale, int left_precision, int left_scale,
     int right_precision, int right_scale) {
+    std::cout << " decimal arithmatic " << op
+              << " left_precision: " << left_precision
+              << " left_scale: " << left_scale
+              << " right_precision: " << right_precision
+              << " right_scale: " << right_scale
+              << " result_precision: " << result_precision
+              << " result_scale: " << result_scale << std::endl;
     // Determine length and whether inputs are arrays or scalars
     std::shared_ptr<arrow::Array> left_arr =
         left_res.is_array() ? left_res.make_array() : nullptr;
@@ -713,6 +720,9 @@ arrow::Datum do_arrow_compute_binary(
 
         std::tie(left_scalar, p1, s1, l1) = getDatumPrecisionScale(left_res);
         std::tie(right_scalar, p2, s2, l2) = getDatumPrecisionScale(right_res);
+        std::cout << "left: p=" << p1 << " s=" << s1 << " l=" << l1
+                  << " right: p=" << p2 << " s=" << s2 << " l=" << l2
+                  << std::endl;
         int result_precision = 0;
         int result_scale = 0;
 
