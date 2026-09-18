@@ -393,6 +393,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     other_dec = Decimal(str(other))
                     other_pa_dec = pa.scalar(other_dec)
                     right_atype = other_pa_dec.type
+                    other = other_dec
                 else:
                     raise BodoLibNotImplementedException(
                         f"Series _numeric_binop decimal fallback didn't handle other {other}"
