@@ -660,6 +660,7 @@ static arrow::Datum decimal_arithmetic(
     const std::string& op,  // "add","subtract","multiply","divide"
     int result_precision, int result_scale, int left_precision, int left_scale,
     int right_precision, int right_scale) {
+    // Determine length and whether inputs are arrays or scalars
     std::shared_ptr<arrow::Array> left_arr =
         left_res.is_array() ? left_res.make_array() : nullptr;
     std::shared_ptr<arrow::Array> right_arr =

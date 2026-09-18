@@ -386,7 +386,6 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     right_atype = zero_size_other.dtype.pyarrow_dtype
                 elif type(other) is BodoScalar:
                     right_atype = pa.scalar(zero_size_other).type
-                    # print("RIGHT TYPE: ", right_atype)
                 elif isinstance(other, numbers.Number) and not isinstance(
                     other, (bool, complex)
                 ):
@@ -429,6 +428,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                         raise BodoLibNotImplementedException(
                             f"Series _numeric_binop decimal fallback didn't handle operation {op}"
                         )
+
                     empty_data = get_binop_output_type(
                         None,  # not needed if guaranteed decimal
                         left_atype,
