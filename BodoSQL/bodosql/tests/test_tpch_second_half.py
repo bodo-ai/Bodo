@@ -220,7 +220,6 @@ def test_tpch_q13(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q14_output",
             id="iceberg",
-            # marks=pytest.mark.skip(reason="TODO: Fix Q14 correctness"),
         ),
     ],
 )
@@ -411,7 +410,6 @@ def test_tpch_q16(
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q17_output",
             id="iceberg",
-            # marks=pytest.mark.skip(reason="TODO: Fix Q16 correctness"),
         ),
     ],
 )
@@ -530,7 +528,6 @@ def test_tpch_q18(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q19_output",
             id="iceberg",
-            # marks=pytest.mark.skip(reason="TODO: Fix Q19 correctness"),
         ),
     ],
 )
@@ -755,7 +752,6 @@ def test_tpch_q21(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q22_output",
             id="iceberg",
-            # marks=pytest.mark.skip(reason="TODO: Fix Q22 Correctness"),
         ),
     ],
 )

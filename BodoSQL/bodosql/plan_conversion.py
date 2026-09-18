@@ -6265,6 +6265,33 @@ def is_any_pa_date_or_timestamp(pa_type):
     return pa.types.is_date(pa_type) or pa.types.is_timestamp(pa_type)
 
 
+def get_decimal_binop_new_input(left, right):
+    """
+    If either left/right is a decimal type and the other is a constant expression,
+    Return a new constant expression with the type cast to decimal, otherwise
+    leave left/right unchanged.
+    """
+
+    def convert_constant_expr_to_decimal(expr, atype):
+        if isinstance(expr, bodo.pandas.plan.ConstantExpression):
+            new_type = bd.utils.to_decimal_type(atype, expr)
+            new_empty_data = pd.Series(dtype=pd.ArrowDtype(new_type))
+            new_value = decimal.Decimal(str(expr.value))
+            return bodo.pandas.plan.ConstantExpression(
+                new_empty_data, expr.source, new_value
+            )
+        return expr
+
+    left_atype = left.empty_data.dtypes.iloc[0].pyarrow_dtype
+    right_atype = right.empty_data.dtypes.iloc[0].pyarrow_dtype
+    if pa.types.is_decimal(left_atype) and not pa.types.is_decimal(right_atype):
+        right = convert_constant_expr_to_decimal(right, right_atype)
+    elif pa.types.is_decimal(right_atype) and not pa.types.is_decimal(left_atype):
+        left = convert_constant_expr_to_decimal(left, left_atype)
+
+    return left, right
+
+
 def get_binop_output_type(left, right, non_decimal_func, decimal_func):
     left_empty = left.empty_data
     right_empty = right.empty_data
@@ -6300,13 +6327,14 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             decimal_addition_subtraction_output_precision_scale,
         )
 
+        new_left, new_right = get_decimal_binop_new_input(left, right)
         out_empty = get_binop_output_type(
-            left,
-            right,
+            new_left,
+            new_right,
             lambda l, r: l + r,
             decimal_addition_subtraction_output_precision_scale,
         )
-        expr = ArithOpExpression(out_empty, left, right, "__add__")
+        expr = ArithOpExpression(out_empty, new_left, new_right, "__add__")
         return expr
 
     if kind.equals(SqlKind.MINUS):
@@ -6330,13 +6358,14 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
                 decimal_addition_subtraction_output_precision_scale,
             )
 
+            new_left, new_right = get_decimal_binop_new_input(left, right)
             out_empty = get_binop_output_type(
-                left,
-                right,
+                new_left,
+                new_right,
                 lambda l, r: l - r,
                 decimal_addition_subtraction_output_precision_scale,
             )
-            expr = ArithOpExpression(out_empty, left, right, "__sub__")
+            expr = ArithOpExpression(out_empty, new_left, new_right, "__sub__")
         return expr
 
     if kind.equals(SqlKind.TIMES):
@@ -6344,26 +6373,28 @@ def java_binop_to_python_expr(ctx, kind, op_name, op_exprs):
             decimal_multiplication_output_precision_scale,
         )
 
+        new_left, new_right = get_decimal_binop_new_input(left, right)
         out_empty = get_binop_output_type(
-            left,
-            right,
+            new_left,
+            new_right,
             lambda l, r: l * r,
             decimal_multiplication_output_precision_scale,
         )
-        expr = ArithOpExpression(out_empty, left, right, "__mul__")
+        expr = ArithOpExpression(out_empty, new_left, new_right, "__mul__")
         return expr
 
     if kind.equals(SqlKind.DIVIDE):
         from bodo.utils.decimal_utils import decimal_division_output_precision_scale
 
+        new_left, new_right = get_decimal_binop_new_input(left, right)
         out_empty = get_binop_output_type(
-            left,
-            right,
+            new_left,
+            new_right,
             lambda l, r: l / r,
             decimal_division_output_precision_scale,
         )
 
-        expr = ArithOpExpression(out_empty, left, right, "__truediv__")
+        expr = ArithOpExpression(out_empty, new_left, new_right, "__truediv__")
         return expr
 
     # Comparison operators

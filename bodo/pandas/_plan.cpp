@@ -153,7 +153,6 @@ duckdb::unique_ptr<duckdb::Expression> make_const_number_expr(
     std::shared_ptr<arrow::Scalar> arrow_scalar =
         arrow::MakeScalar(field->type(), val).ValueOrDie();
     duckdb::Value duckdb_value = ArrowScalarToDuckDBValue(arrow_scalar);
-    // std::cout << " making const number expression" << val << std::endl;
     return duckdb::make_uniq<duckdb::BoundConstantExpression>(duckdb_value);
 }
 

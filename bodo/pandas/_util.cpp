@@ -138,8 +138,6 @@ extractValue(const duckdb::Value &value) {
             // https://github.com/bodo-ai/Bodo/blob/b6831ac9551f6cbb7fd6a4a50bb281021d0265e7/bodo/pandas/vendor/duckdb/src/common/types/value.cpp#L606
             uint8_t width = duckdb::DecimalType::GetWidth(value.type());
             uint8_t scale = duckdb::DecimalType::GetScale(value.type());
-            // std::cout << "DECIMAL width: " << static_cast<int>(width)
-            //           << " scale: " << static_cast<int>(scale) << std::endl;
             switch (value.type().InternalType()) {
                 case duckdb::PhysicalType::INT8: {
                     int8_t val = value.GetValueUnsafe<int8_t>();
