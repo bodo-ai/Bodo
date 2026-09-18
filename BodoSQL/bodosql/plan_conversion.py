@@ -6265,15 +6265,21 @@ def is_any_pa_date_or_timestamp(pa_type):
     return pa.types.is_date(pa_type) or pa.types.is_timestamp(pa_type)
 
 
-def get_decimal_binop_new_input(left, right):
+def get_decimal_binop_new_input(
+    left: LazyPlan, right: LazyPlan
+) -> tuple[LazyPlan, LazyPlan]:
     """
-    If either left/right is a decimal type and the other is a constant expression,
+    If either left/right are a decimal type and the other is a constant expression,
     Return a new constant expression with the type cast to decimal, otherwise
     leave left/right unchanged.
     """
 
-    def convert_constant_expr_to_decimal(expr, atype):
-        if isinstance(expr, bodo.pandas.plan.ConstantExpression):
+    def convert_constant_expr_to_decimal(
+        expr: LazyPlan, atype: pa.DataType
+    ) -> LazyPlan:
+        if isinstance(
+            expr, bodo.pandas.plan.ConstantExpression
+        ) and not pa.types.is_decimal(atype):
             new_type = bd.utils.to_decimal_type(atype, expr)
             new_empty_data = pd.Series(dtype=pd.ArrowDtype(new_type))
             new_value = decimal.Decimal(str(expr.value))
