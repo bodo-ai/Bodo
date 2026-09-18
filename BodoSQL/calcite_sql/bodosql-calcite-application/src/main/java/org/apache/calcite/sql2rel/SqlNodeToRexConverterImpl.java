@@ -28,6 +28,7 @@ import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlTimeLiteral;
 import org.apache.calcite.sql.SqlTimestampLiteral;
+import org.apache.calcite.sql.SqlTimestampTzLiteral;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.util.BitString;
@@ -134,7 +135,7 @@ public class SqlNodeToRexConverterImpl implements SqlNodeToRexConverter {
     case TIMESTAMP_TZ:
       return rexBuilder.makeTimestampTzLiteral(
           literal.getValueAs(TimestampWithTimeZoneString.class),
-          ((SqlTimestampLiteral) literal).getPrec());
+          ((SqlTimestampTzLiteral) literal).getPrec());
     case TIME:
       return rexBuilder.makeTimeLiteral(
           literal.getValueAs(TimeString.class, typeSystem),

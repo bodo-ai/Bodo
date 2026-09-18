@@ -26,6 +26,8 @@ import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.dataflow.qual.Pure;
 
+import static java.util.Objects.requireNonNull;
+
 import java.util.List;
 
 /**
@@ -34,7 +36,18 @@ import java.util.List;
  */
 public class SqlMerge extends SqlCall {
   public static final SqlSpecialOperator OPERATOR =
-      new SqlSpecialOperator("MERGE", SqlKind.MERGE);
+      new SqlSpecialOperator("MERGE", SqlKind.MERGE) {
+        @Override public SqlCall createCall(final @Nullable SqlLiteral functionQualifier,
+            final SqlParserPos pos,
+            final @Nullable SqlNode... operands) {
+          // Bodo Change: Bodo's SqlMerge stores matched/notMatched call lists
+          // instead of a SqlUpdate call.
+          return new SqlMerge(pos, requireNonNull(operands[0]), requireNonNull(operands[1]),
+              requireNonNull(operands[2]),
+              (SqlNodeList) operands[3], (SqlNodeList) operands[4],
+              (SqlSelect) operands[5], (SqlIdentifier) operands[6]);
+        }
+      };
 
   SqlNode targetTable;
   SqlNode condition;
