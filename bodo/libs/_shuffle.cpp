@@ -1756,7 +1756,7 @@ std::shared_ptr<array_info> broadcast_array(
         comm = *comm_ptr;
         is_sender = (root == MPI_ROOT);
     }
-    int64_t arr_bcast[6];
+    int64_t arr_bcast[7];
     if (is_sender) {
         arr_bcast[0] = in_arr->length;
         arr_bcast[1] = in_arr->dtype;
@@ -1764,8 +1764,9 @@ std::shared_ptr<array_info> broadcast_array(
         arr_bcast[3] = in_arr->n_sub_elems();
         arr_bcast[4] = in_arr->num_categories;
         arr_bcast[5] = (int64_t)in_arr->precision;
+        arr_bcast[6] = (int64_t)in_arr->scale;
     }
-    CHECK_MPI(MPI_Bcast(arr_bcast, 6, MPI_LONG_LONG_INT, root, comm),
+    CHECK_MPI(MPI_Bcast(arr_bcast, 7, MPI_LONG_LONG_INT, root, comm),
               "broadcast_array: MPI error on MPI_Bcast:");
     int64_t n_rows = arr_bcast[0];
     Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum(arr_bcast[1]);
@@ -1774,6 +1775,7 @@ std::shared_ptr<array_info> broadcast_array(
     int64_t n_sub_elems = arr_bcast[3];
     int64_t num_categories = arr_bcast[4];
     int32_t precision = (int32_t)arr_bcast[5];
+    int32_t scale = (int32_t)arr_bcast[6];
 
     // Create new communicator if target ranks are specified by user
     if (comm_ranks && comm_ranks->size() > 0) {
@@ -1794,6 +1796,7 @@ std::shared_ptr<array_info> broadcast_array(
             out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
         }
         out_arr->precision = precision;
+        out_arr->scale = scale;
         uint64_t bcast_size;
         if (arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
             dtype == Bodo_CTypes::_BOOL) {
