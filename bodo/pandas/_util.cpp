@@ -141,6 +141,18 @@ extractValue(const duckdb::Value &value) {
             std::cout << "DECIMAL width: " << static_cast<int>(width)
                       << " scale: " << static_cast<int>(scale) << std::endl;
             switch (value.type().InternalType()) {
+                case duckdb::PhysicalType::INT8: {
+                    int8_t val = value.GetValueUnsafe<int8_t>();
+                    return arrow::MakeScalar(arrow::decimal128(width, scale),
+                                             arrow::Decimal128(val))
+                        .ValueOrDie();
+                } break;
+                case duckdb::PhysicalType::INT16: {
+                    int16_t val = value.GetValueUnsafe<int16_t>();
+                    return arrow::MakeScalar(arrow::decimal128(width, scale),
+                                             arrow::Decimal128(val))
+                        .ValueOrDie();
+                } break;
                 case duckdb::PhysicalType::INT32: {
                     int32_t val = value.GetValueUnsafe<int32_t>();
                     return arrow::MakeScalar(arrow::decimal128(width, scale),
