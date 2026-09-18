@@ -2446,8 +2446,9 @@ def test_decimal_scalar_arith():
     )
     bdf = bd.from_pandas(df)
 
-    print((bdf.A.sum() * 100.00)._plan)
-    assert (bdf.A.sum() * 100.00).execute_plan().iloc[0] == Decimal("660.000")
+    res = bdf.A.sum() * 100.00
+    # print(res._plan)
+    assert res.execute_plan().iloc[0] == Decimal("660.000")
 
 
 @pytest.mark.gpu
