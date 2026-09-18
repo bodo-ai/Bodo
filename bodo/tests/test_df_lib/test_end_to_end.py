@@ -2434,8 +2434,17 @@ def test_decimal_filter_project():
     )
 
 
-def test_decimal_scalar_arith():
-    """Test that Decimal reduction preserves scale/precision."""
+@pytest.mark.parametrize(
+    "op, scalar, expected",
+    [
+        ("add", 100.00, Decimal("106.600")),
+        ("sub", 100.00, Decimal("-93.400")),
+        ("mul", 100.00, Decimal("660.000")),
+        ("div", 100.00, Decimal("0.066000")),
+    ],
+)
+def test_decimal_scalar_arith(op, scalar, expected):
+    """Test arithmetic on a Decimal scalars."""
     df = pd.DataFrame(
         {
             "A": pd.Series(
@@ -2446,9 +2455,20 @@ def test_decimal_scalar_arith():
     )
     bdf = bd.from_pandas(df)
 
-    res = bdf.A.sum() * 100.00
-    # print(res._plan)
-    assert res.execute_plan().iloc[0] == Decimal("660.000")
+    value = bdf.A.sum()
+
+    if op == "add":
+        res = value + scalar
+    elif op == "sub":
+        res = value - scalar
+    elif op == "mul":
+        res = value * scalar
+    elif op == "div":
+        res = value / scalar
+    else:
+        raise AssertionError(f"Unexpected operation: {op}")
+
+    assert res.execute_plan().iloc[0] == expected
 
 
 @pytest.mark.gpu

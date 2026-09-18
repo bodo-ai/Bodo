@@ -885,7 +885,7 @@ arrow::Decimal128 divide_decimal_scalars_util(arrow::Decimal128 v1, int64_t p1,
                                               int64_t out_precision,
                                               int64_t out_scale,
                                               bool* overflow) {
-    int32_t delta_scale = out_scale - (s1 + s2);
+    int32_t delta_scale = out_scale + s2 - s1;
     return decimalops::Divide(v1, v2, delta_scale, overflow);
 }
 
