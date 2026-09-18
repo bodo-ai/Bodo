@@ -3754,5 +3754,5 @@ def test_decimal_scalar_arith(expr, expected, memory_leak_check):
             expected_output=pd.DataFrame({"RES": [expected]}),
             rtol=1e-04,
             sort_output=False,
-            check_dtype=False,
+            check_dtype=True,
         )
