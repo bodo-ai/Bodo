@@ -23,6 +23,8 @@ import pyarrow.parquet as pq
 from pyiceberg.catalog import WAREHOUSE_LOCATION
 from tqdm import tqdm
 
+import bodo.pandas as pd
+
 TPCH_TABLES = [
     "lineitem",
     "orders",
@@ -112,24 +114,29 @@ def generate_duckdb_parquet(sf: int, parquet_path: str):
                 export_table_uppercase(con, table, out_file)
 
 
-def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
+def create_iceberg_tables(
+    parquet_path: str, temp_iceberg_path: str, iceberg_path: str, sf: int
+):
     """
     Create Iceberg tables from the generated Parquet files.
 
     Args:
         parquet_path (str): The directory containing the Parquet files.
+        temp_iceberg_path (str): The temporary directory used for creating Iceberg tables before copying them with Bodo.
         iceberg_path (str): The output directory where the Iceberg tables will be stored.
     """
     from bodo.io.iceberg.catalog.dir import DirCatalog
 
+    os.makedirs(temp_iceberg_path, exist_ok=True)
     if not is_s3_path(iceberg_path):
         os.makedirs(iceberg_path, exist_ok=True)
 
+    temp_warehouse = os.path.abspath(temp_iceberg_path)
     warehouse = (
         os.path.abspath(iceberg_path) if not is_s3_path(iceberg_path) else iceberg_path
     )
 
-    catalog = DirCatalog(f"TPCH_SF{sf}", **{WAREHOUSE_LOCATION: warehouse})
+    catalog = DirCatalog(f"TPCH_SF{sf}", **{WAREHOUSE_LOCATION: temp_warehouse})
 
     for table in TPCH_TABLES:
         table_dir = Path(parquet_path) / table.upper()
@@ -152,13 +159,9 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
             metadata=schema.metadata,
         )
 
-        # Uses large write threshold so number of files matches parquet dataset
         iceberg_table = catalog.create_table(
             table.upper(),
             required_schema,
-            properties={
-                "write.target-file-size-bytes": str(100 * 1024**3),  # 100 GiB
-            },
         )
 
         for pq_file in tqdm(
@@ -171,6 +174,13 @@ def create_iceberg_tables(parquet_path: str, iceberg_path: str, sf: int):
                 schema=required_schema,
             )
             iceberg_table.append(table_fragment)
+            pq_file.unlink()
+
+        # Rewrite data with Bodo to get per-column NDV estimates
+        table_df = pd.read_iceberg(table.upper(), location=temp_warehouse)
+        table_df.to_iceberg(table.upper(), location=warehouse)
+
+        shutil.rmtree(os.path.join(temp_warehouse, table.upper()))
 
 
 def main():
@@ -210,13 +220,15 @@ def main():
         os.makedirs(args.outdir, exist_ok=True)
 
     parquet_path = f"{args.outdir}/tpch_sf{args.sf}_pq"
+    temp_iceberg_path = f"{args.outdir}/tpch_sf{args.sf}_iceberg_temp"
     iceberg_path = args.iceberg_path or f"{args.outdir}/tpch_sf{args.sf}_iceberg"
 
     try:
         generate_duckdb_parquet(args.sf, parquet_path)
-        create_iceberg_tables(parquet_path, iceberg_path, args.sf)
+        create_iceberg_tables(parquet_path, temp_iceberg_path, iceberg_path, args.sf)
     finally:
         shutil.rmtree(parquet_path, ignore_errors=True)
+        shutil.rmtree(temp_iceberg_path, ignore_errors=True)
 
 
 if __name__ == "__main__":
