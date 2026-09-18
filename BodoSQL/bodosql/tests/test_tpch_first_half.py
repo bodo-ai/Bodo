@@ -522,7 +522,6 @@ def test_tpch_q5(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q06_output",
             id="iceberg",
-            marks=pytest.mark.skip(reason="TODO: Fix Q6 correctness"),
         ),
     ],
 )
@@ -640,7 +639,6 @@ def test_tpch_q7(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check):
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q08_output",
             id="iceberg",
-            marks=pytest.mark.skip(reason="TODO: Fix Q8 correctness"),
         ),
     ],
 )
@@ -1014,7 +1012,6 @@ def test_tpch_q10(mode, result, tpch_data, tpch_iceberg_data, memory_leak_check)
             "iceberg",
             "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg_results/q11_output",
             id="iceberg",
-            marks=pytest.mark.skip(reason="TODO: Fix Q11 correctness"),
         ),
     ],
 )

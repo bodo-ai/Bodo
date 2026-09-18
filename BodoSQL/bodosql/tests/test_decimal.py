@@ -3719,3 +3719,40 @@ def test_haversine_decimal(df, ans, memory_leak_check):
             sort_output=False,
             check_dtype=False,
         )
+
+
+@pytest.mark.bodosql_cpp
+@pytest.mark.parametrize(
+    "expr, expected",
+    [
+        ("SUM(A) + 100.0", Decimal("106.600")),
+        ("SUM(A) - 100.0", Decimal("-93.400")),
+        ("SUM(A) * 100.0", Decimal("660.000")),
+        ("SUM(A) / 100.0", Decimal("0.066000")),
+    ],
+)
+def test_decimal_scalar_arith(expr, expected, memory_leak_check):
+    """Test arithmetic on a Decimal reduction."""
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [Decimal("1.1"), Decimal("2.2"), Decimal("3.3")],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            )
+        }
+    )
+
+    ctx = {"TABLE1": df}
+
+    query = f"SELECT {expr} AS RES FROM TABLE1"
+
+    with temp_config_override("bodo_use_decimal", True):
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": [expected]}),
+            rtol=1e-04,
+            sort_output=False,
+            check_dtype=True,
+        )

@@ -2434,6 +2434,43 @@ def test_decimal_filter_project():
     )
 
 
+@pytest.mark.parametrize(
+    "op, scalar, expected",
+    [
+        ("add", 100.00, Decimal("106.600")),
+        ("sub", 100.00, Decimal("-93.400")),
+        ("mul", 100.00, Decimal("660.000")),
+        ("div", 100.00, Decimal("0.066000")),
+    ],
+)
+def test_decimal_scalar_arith(op, scalar, expected):
+    """Test arithmetic on a Decimal scalars."""
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [Decimal("1.1"), Decimal("2.2"), Decimal("3.3")],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            )
+        }
+    )
+    bdf = bd.from_pandas(df)
+
+    value = bdf.A.sum()
+
+    if op == "add":
+        res = value + scalar
+    elif op == "sub":
+        res = value - scalar
+    elif op == "mul":
+        res = value * scalar
+    elif op == "div":
+        res = value / scalar
+    else:
+        raise AssertionError(f"Unexpected operation: {op}")
+
+    assert res.execute_plan().iloc[0] == expected
+
+
 @pytest.mark.gpu
 def test_scalar_arith_binops(datapath, index_val):
     """Test various cases of BodoScalar binary operations."""
