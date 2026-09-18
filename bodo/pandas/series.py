@@ -386,7 +386,7 @@ class BodoSeries(pd.Series, BodoLazyWrapper):
                     right_atype = zero_size_other.dtype.pyarrow_dtype
                 elif type(other) is BodoScalar:
                     right_atype = pa.scalar(zero_size_other).type
-                    print("RIGHT TYPE: ", right_atype)
+                    # print("RIGHT TYPE: ", right_atype)
                 elif isinstance(other, numbers.Number) and not isinstance(
                     other, (bool, complex)
                 ):

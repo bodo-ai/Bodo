@@ -24,7 +24,7 @@ class PhysicalResultCollector : public PhysicalSink {
                 std::to_string(in_schema->ncols()) + " and output schema has " +
                 std::to_string(out_schema->ncols()) + " columns.");
         }
-        std::cout << out_schema->ToString() << std::endl;
+        // std::cout << out_schema->ToString() << std::endl;
         for (auto& col : in_schema->column_types) {
             // Note that none of the columns are "keys" from the perspective of
             // the dictionary builder, which is referring to keys for
