@@ -54,6 +54,7 @@ import org.apache.calcite.rex.RexLambdaRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexNodeAndFieldIndex
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexPatternFieldRef
 import org.apache.calcite.rex.RexRangeRef
@@ -2270,6 +2271,8 @@ open class RexToBodoTranslator(
     override fun visitLambda(var1: RexLambda): Expr = throw unsupportedNode("RexLambda")
 
     override fun visitLambdaRef(var1: RexLambdaRef): Expr = throw unsupportedNode("RexLambdaRef")
+
+    override fun visitNodeAndFieldIndex(nodeAndFieldIndex: RexNodeAndFieldIndex): Expr = throw unsupportedNode("RexNodeAndFieldIndex")
 
     private fun unsupportedNode(nodeType: String): BodoSQLCodegenException =
         BodoSQLCodegenException(

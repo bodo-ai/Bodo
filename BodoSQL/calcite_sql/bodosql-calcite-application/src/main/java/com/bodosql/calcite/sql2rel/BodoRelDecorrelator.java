@@ -144,7 +144,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
     // Perform decorrelation.
     map.clear();
 
-    final Frame frame = getInvoke(root, false, null);
+    final Frame frame = getInvoke(root, false, null, true);
     if (frame != null) {
       // has been rewritten; apply rules post-decorrelation
       final HepProgramBuilder builder =

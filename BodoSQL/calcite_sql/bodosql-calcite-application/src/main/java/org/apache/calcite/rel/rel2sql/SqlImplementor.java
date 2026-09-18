@@ -19,9 +19,10 @@ package org.apache.calcite.rel.rel2sql;
 import org.apache.calcite.config.CalciteSystemProperty;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.linq4j.tree.Expressions;
+import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.hep.HepPlanner;
-import org.apache.calcite.plan.hep.HepProgramBuilder;
+import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -33,6 +34,8 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Window;
 import org.apache.calcite.rel.rules.AggregateProjectConstantToDummyJoinRule;
+import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.FullToLeftAndRightJoinRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -130,6 +133,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
@@ -179,13 +183,23 @@ public abstract class SqlImplementor {
 
   /** Visits a relational expression that has no parent. */
   public final Result visitRoot(RelNode r) {
-    RelNode best;
+    List<RelOptRule> rules = new ArrayList<>();
     if (!this.dialect.supportsGroupByLiteral()) {
-      HepProgramBuilder hepProgramBuilder = new HepProgramBuilder();
-      hepProgramBuilder.addRuleInstance(
-          AggregateProjectConstantToDummyJoinRule.Config.DEFAULT.toRule());
-      HepPlanner hepPlanner = new HepPlanner(hepProgramBuilder.build());
+      rules.add(AggregateProjectConstantToDummyJoinRule.Config.DEFAULT.toRule());
+    }
 
+    if (!this.dialect.supportsJoinType(JoinRelType.FULL)) {
+      rules.add(FullToLeftAndRightJoinRule.Config.DEFAULT.toRule());
+    }
+
+    if (!this.dialect.supportsOrderByLiteral()) {
+      rules.add(CoreRules.SORT_REMOVE_CONSTANT_KEYS);
+    }
+
+    RelNode best;
+    if (!rules.isEmpty()) {
+      HepPlanner hepPlanner =
+          new HepPlanner(HepProgram.builder().addRuleCollection(rules).build());
       hepPlanner.setRoot(r);
       best = hepPlanner.findBestExp();
     } else {
@@ -772,17 +786,20 @@ public abstract class SqlImplementor {
       case IN:
       case SOME:
       case ALL:
-        subQuery = (RexSubQuery) rex;
-        sqlSubQuery = implementor().visitRoot(subQuery.rel).asQueryOrValues();
-        final List<RexNode> operands = subQuery.operands;
-        SqlNode op0;
-        if (operands.size() == 1) {
-          op0 = toSql(program, operands.get(0));
-        } else {
-          final List<SqlNode> cols = toSql(program, operands);
-          op0 = new SqlNodeList(cols, POS);
+        if (rex instanceof RexSubQuery) {
+          subQuery = (RexSubQuery) rex;
+          sqlSubQuery = implementor().visitRoot(subQuery.rel).asQueryOrValues();
+          final List<RexNode> operands = subQuery.operands;
+          SqlNode op0;
+          if (operands.size() == 1) {
+            op0 = toSql(program, operands.get(0));
+          } else {
+            final List<SqlNode> cols = toSql(program, operands);
+            op0 = new SqlNodeList(cols, POS);
+          }
+          return subQuery.getOperator().createCall(POS, op0, sqlSubQuery);
         }
-        return subQuery.getOperator().createCall(POS, op0, sqlSubQuery);
+        return callToSql(program, (RexCall) rex, false);
 
       case SEARCH:
         final RexCall search = (RexCall) rex;
@@ -1538,8 +1555,12 @@ public abstract class SqlImplementor {
       return SqlLiteral.createTimestamp(typeName,
           castNonNull(literal.getValueAs(TimestampString.class)),
           literal.getType().getPrecision(), POS);
+    case UUID:
+      return SqlLiteral.createUuid(castNonNull(literal.getValueAs(UUID.class)), POS);
     case BINARY:
       return SqlLiteral.createBinaryString(castNonNull(literal.getValueAs(byte[].class)), POS);
+    case GEO:
+      return SqlLiteral.createCharString(castNonNull(literal.getValue()).toString(), POS);
     case ANY:
     case NULL:
       switch (typeName) {
@@ -1548,7 +1569,7 @@ public abstract class SqlImplementor {
       default:
         break;
       }
-      // fall through
+    // fall through
     default:
       throw new AssertionError(literal + ": " + typeName);
     }
@@ -1600,6 +1621,10 @@ public abstract class SqlImplementor {
       x += type.getFieldCount();
     }
     return x;
+  }
+
+  public Context selectListContext(SqlNodeList sqlNodeList, boolean aliasRef) {
+    return new SelectListContext(dialect, sqlNodeList.size(), aliasRef, sqlNodeList);
   }
 
   public Context aliasContext(Map<String, RelDataType> aliases,
@@ -1732,6 +1757,80 @@ public abstract class SqlImplementor {
     }
   }
 
+  /**
+   * A context that uses a select list.
+   */
+  final class SelectListContext extends BaseContext {
+    private final boolean aliasRef;
+    private final SqlNodeList selectList;
+
+    /**
+     * Creates a SelectListContext.
+     *
+     * @param dialect    SQL dialect.
+     * @param fieldCount Number of fields.
+     * @param aliasRef   If true, and a select-list item at a given ordinal has an alias
+     *                   (e.g. {@code SUM(x) AS sx}), then a call to {@code field(ordinal)}
+     *                   will return the alias ({@code sx}). If false, it will return the
+     *                   full expression ({@code SUM(x)}).
+     * @param selectList The list of expressions in a SELECT clause.
+     */
+    SelectListContext(
+        SqlDialect dialect, int fieldCount, boolean aliasRef, SqlNodeList selectList) {
+      super(dialect, fieldCount);
+      this.aliasRef = aliasRef;
+      this.selectList = selectList;
+    }
+
+    @Override public SqlNode field(int ordinal) {
+      final SqlNode selectItem = selectList.get(ordinal);
+      switch (selectItem.getKind()) {
+      case AS:
+        final SqlCall asCall = (SqlCall) selectItem;
+        SqlNode alias = asCall.operand(1);
+        if (aliasRef && !SqlUtil.isGeneratedAlias(((SqlIdentifier) alias).getSimple())) {
+          // For BigQuery, given the query
+          //   SELECT SUM(x) AS x FROM t HAVING(SUM(t.x) > 0)
+          // we can generate
+          //   SELECT SUM(x) AS x FROM t HAVING(x > 0)
+          // because 'x' in HAVING resolves to the 'AS x' not 't.x'.
+          return alias;
+        }
+        return asCall.operand(0);
+      default:
+        break;
+      }
+      return selectItem;
+    }
+
+    @Override public SqlNode orderField(int ordinal) {
+      // If the field expression is an unqualified column identifier
+      // and matches a different alias, use an ordinal.
+      // For example, given
+      //    SELECT deptno AS empno, empno AS x FROM emp ORDER BY emp.empno
+      // we generate
+      //    SELECT deptno AS empno, empno AS x FROM emp ORDER BY 2
+      // "ORDER BY empno" would give incorrect result;
+      // "ORDER BY x" is acceptable but is not preferred.
+      final SqlNode node = super.orderField(ordinal);
+      if (node instanceof SqlIdentifier
+          && ((SqlIdentifier) node).isSimple()) {
+        final String name = ((SqlIdentifier) node).getSimple();
+        for (Ord<SqlNode> selectItem : Ord.zip(selectList)) {
+          if (selectItem.i != ordinal) {
+            final @Nullable String alias =
+                SqlValidatorUtil.alias(selectItem.e);
+            if (name.equalsIgnoreCase(alias) && dialect.getConformance().isSortByAlias()) {
+              return SqlLiteral.createExactNumeric(
+                  Integer.toString(ordinal + 1), SqlParserPos.ZERO);
+            }
+          }
+        }
+      }
+      return node;
+    }
+  }
+
   /** Result of implementing a node. */
   public class Result {
     final SqlNode node;
@@ -1829,59 +1928,7 @@ public abstract class SqlImplementor {
       if (!selectList.equals(SqlNodeList.SINGLETON_STAR)) {
         final boolean aliasRef = expectedClauses.contains(Clause.HAVING)
             && dialect.getConformance().isHavingAlias();
-        newContext = new Context(dialect, selectList.size()) {
-          @Override public SqlImplementor implementor() {
-            return SqlImplementor.this;
-          }
-
-          @Override public SqlNode field(int ordinal) {
-            final SqlNode selectItem = selectList.get(ordinal);
-            switch (selectItem.getKind()) {
-            case AS:
-              final SqlCall asCall = (SqlCall) selectItem;
-              SqlNode alias = asCall.operand(1);
-              if (aliasRef && !SqlUtil.isGeneratedAlias(((SqlIdentifier) alias).getSimple())) {
-                // For BigQuery, given the query
-                //   SELECT SUM(x) AS x FROM t HAVING(SUM(t.x) > 0)
-                // we can generate
-                //   SELECT SUM(x) AS x FROM t HAVING(x > 0)
-                // because 'x' in HAVING resolves to the 'AS x' not 't.x'.
-                return alias;
-              }
-              return asCall.operand(0);
-            default:
-              break;
-            }
-            return selectItem;
-          }
-
-          @Override public SqlNode orderField(int ordinal) {
-            // If the field expression is an unqualified column identifier
-            // and matches a different alias, use an ordinal.
-            // For example, given
-            //    SELECT deptno AS empno, empno AS x FROM emp ORDER BY emp.empno
-            // we generate
-            //    SELECT deptno AS empno, empno AS x FROM emp ORDER BY 2
-            // "ORDER BY empno" would give incorrect result;
-            // "ORDER BY x" is acceptable but is not preferred.
-            final SqlNode node = super.orderField(ordinal);
-            if (node instanceof SqlIdentifier
-                && ((SqlIdentifier) node).isSimple()) {
-              final String name = ((SqlIdentifier) node).getSimple();
-              for (Ord<SqlNode> selectItem : Ord.zip(selectList)) {
-                if (selectItem.i != ordinal) {
-                  final @Nullable String alias =
-                      SqlValidatorUtil.alias(selectItem.e);
-                  if (name.equalsIgnoreCase(alias) && dialect.getConformance().isSortByAlias()) {
-                    return SqlLiteral.createExactNumeric(
-                        Integer.toString(ordinal + 1), SqlParserPos.ZERO);
-                  }
-                }
-              }
-            }
-            return node;
-          }
-        };
+        newContext = selectListContext(selectList, aliasRef);
       } else {
         boolean qualified =
             !dialect.hasImplicitTableAlias() || aliases.size() > 1;

@@ -93,6 +93,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
+import static org.apache.calcite.util.Static.RESOURCE;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.calcite.sql.type.BodoReturnTypes.BOOL_AGG_RET_TYPE;
@@ -281,9 +282,14 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                                 typeToTransform.getSqlTypeName().getFamily() == SqlTypeFamily.ARRAY
                                         ? ReturnTypes.LEAST_RESTRICTIVE
                                         : ReturnTypes.DYADIC_STRING_SUM_PRECISION_NULLABLE;
-
-                        return requireNonNull(returnType.inferReturnType(opBinding),
-                                "inferred CONCAT element type");
+                        RelDataType type = returnType.inferReturnType(opBinding);
+                        if (type == null) {
+                          throw opBinding.newError(
+                              RESOURCE.cannotInferReturnType(
+                                  opBinding.getOperator().toString(),
+                                  opBinding.collectOperandTypes().toString()));
+                        }
+                        return type;
                     }),
                     null,
                     OperandTypes.STRING_SAME_SAME_OR_ARRAY_SAME_SAME);
@@ -1371,6 +1377,37 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
           OperandTypes.INTEGER_INTEGER.or(OperandTypes.BINARY_BINARY));
 
   /**
+   * <code>{@code ^}</code> operator.
+   */
+  public static final SqlBinaryOperator BITXOR_OPERATOR =
+      new SqlBinaryOperator(
+          "^",
+          SqlKind.BITXOR,
+          40,
+          true,
+          ReturnTypes.LARGEST_INT_OR_FIRST_NON_NULL,
+          InferTypes.FIRST_KNOWN,
+          OperandTypes.INTEGER_INTEGER.or(OperandTypes.BINARY_BINARY)
+              .or(OperandTypes.UNSIGNED_NUMERIC_UNSIGNED_NUMERIC));
+  // Both operands should support bitwise operations
+
+  /**
+   * <code>{@code &}</code> operator.
+   */
+  public static final SqlBinaryOperator BITAND_OPERATOR =
+      new SqlBinaryOperator(
+          "&",
+          SqlKind.BITAND,
+          50,        // Higher precedence than XOR but lower than multiplication
+          true,
+          ReturnTypes.LEAST_RESTRICTIVE,
+          InferTypes.FIRST_KNOWN,
+          OperandTypes.INTEGER_INTEGER.or(OperandTypes.BINARY_BINARY)
+              .or(OperandTypes.UNSIGNED_NUMERIC_UNSIGNED_NUMERIC)
+              .or(OperandTypes.family(SqlTypeFamily.UNSIGNED_NUMERIC, SqlTypeFamily.INTEGER)
+                  .or(OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.UNSIGNED_NUMERIC))));
+
+  /**
    * <code>BITNOT</code> scalar function.
    */
   public static final SqlFunction BITNOT =
@@ -1396,6 +1433,35 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
      */
     public static final SqlAggFunction BIT_XOR =
             new SqlBitOpAggFunction(SqlKind.BIT_XOR);
+
+  /**
+   * <code>{@code <<}</code> (left shift) operator.
+   */
+  public static final SqlBinaryOperator BIT_LEFT_SHIFT =
+      new SqlBinaryOperator(
+          "<<",
+          SqlKind.OTHER,
+          32,                                     // Standard shift operator precedence
+          true,
+          ReturnTypes.ARG0_NULLABLE,
+          InferTypes.FIRST_KNOWN,
+          OperandTypes.or(
+              OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+              OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.INTEGER),
+              OperandTypes.family(SqlTypeFamily.UNSIGNED_NUMERIC, SqlTypeFamily.INTEGER)));
+
+  /**
+   * left shift function.
+   */
+  public static final SqlFunction LEFTSHIFT =
+      SqlBasicFunction.create(
+          "LEFTSHIFT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          OperandTypes.or(
+              OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+              OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.INTEGER),
+              OperandTypes.family(SqlTypeFamily.UNSIGNED_NUMERIC, SqlTypeFamily.INTEGER)));
 
     //-------------------------------------------------------------
     // WINDOW Aggregate Functions

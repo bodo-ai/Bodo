@@ -68,6 +68,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Correlate;
+import org.apache.calcite.rel.core.Combine;
 import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Intersect;
@@ -2542,7 +2543,8 @@ public class RelBuilder {
     RelNode r = frame.rel;
     final List<AggregateCall> aggregateCalls = new ArrayList<>();
     for (AggCallPlus aggCall : aggCalls) {
-      AggregateCall aggregateCall = aggCall.aggregateCall(registrar, groupSet, r);
+      AggregateCall aggregateCall =
+          aggCall.aggregateCall(registrar, groupSets.contains(ImmutableBitSet.of()), r);
       if (groupSets.size() <= 1) {
         aggregateCall = removeRedundantAggregateDistinct(aggregateCall, groupSet, r);
       }
@@ -2841,57 +2843,148 @@ public class RelBuilder {
     //      GROUPING SETS (a, c) produces value 1,
     //      GROUPING SETS (c) produces value 2
     //      GROUPING SETS (c) produces value 3
+    final Frame input = stack.pop();
+
     final Map<Integer, Set<ImmutableBitSet>> groupIdToGroupSets = new HashMap<>();
-    int maxGroupId = 0;
     for (Multiset.Entry<ImmutableBitSet> entry : groupSets.entrySet()) {
       int groupId = entry.getCount() - 1;
-      if (groupId > maxGroupId) {
-        maxGroupId = groupId;
-      }
       for (int i = 0; i <= groupId; i++) {
-        groupIdToGroupSets.computeIfAbsent(i,
-            k -> Sets.newTreeSet(ImmutableBitSet.COMPARATOR))
+        groupIdToGroupSets.computeIfAbsent(i, k -> Sets.newTreeSet(ImmutableBitSet.COMPARATOR))
             .add(entry.getElement());
       }
     }
 
-    // AggregateCall list without GROUP_ID function
-    final List<AggCall> aggregateCallsWithoutGroupId =
-        new ArrayList<>(aggregateCalls);
-    aggregateCallsWithoutGroupId.removeIf(RelBuilder::isGroupId);
-
-    // For each group id value, we first construct an Aggregate without
-    // GROUP_ID() function call, and then create a Project node on top of it.
-    // The Project adds literal value for group id in right position.
-    final Frame frame = stack.pop();
-    for (int groupId = 0; groupId <= maxGroupId; groupId++) {
-      // Create the Aggregate node without GROUP_ID() call
-      stack.push(frame);
-      aggregate(groupKey(groupSet, castNonNull(groupIdToGroupSets.get(groupId))),
-          aggregateCallsWithoutGroupId);
-
-      final List<RexNode> selectList = new ArrayList<>();
-      final int groupExprLength = groupSet.cardinality();
-      // Project fields in group by expressions
-      for (int i = 0; i < groupExprLength; i++) {
-        selectList.add(field(i));
-      }
-      // Project fields in aggregate calls
-      int groupIdCount = 0;
-      for (int i = 0; i < aggregateCalls.size(); i++) {
-        if (isGroupId(aggregateCalls.get(i))) {
-          selectList.add(
-              getRexBuilder().makeExactLiteral(BigDecimal.valueOf(groupId),
-                  getTypeFactory().createSqlType(SqlTypeName.BIGINT)));
-          groupIdCount++;
-        } else {
-          selectList.add(field(groupExprLength + i - groupIdCount));
-        }
-      }
-      project(selectList, fieldNamesIfNoRewrite);
+    // Create aggregate for each GROUP_ID value
+    for (Map.Entry<Integer, Set<ImmutableBitSet>> entry : groupIdToGroupSets.entrySet()) {
+      // If n duplicates exist for a particular grouping, the {@code GROUP_ID()}
+      // function produces values in the range 0 to n-1. For each value,
+      // we need to figure out the corresponding group sets.
+      //
+      // For example, "... GROUPING SETS (a, a, b, c, c, c, c)"
+      // (i) The max value of the GROUP_ID() function returns is 3
+      // (ii) GROUPING SETS (a, b, c) produces value 0,
+      //      GROUPING SETS (a, c) produces value 1,
+      //      GROUPING SETS (c) produces value 2,
+      //      GROUPING SETS (c) produces value 3
+      int groupId = entry.getKey();
+      Set<ImmutableBitSet> newGroupSets = entry.getValue();
+      rewriteGroupAggCalls(newGroupSets, groupSet, aggregateCalls,
+          fieldNamesIfNoRewrite, input, groupId);
     }
 
-    return union(true, maxGroupId + 1);
+    return union(true, groupIdToGroupSets.size());
+  }
+
+  private void rewriteGroupAggCalls(
+      Set<ImmutableBitSet> subGroupSets,
+      ImmutableBitSet oriGroupSet,
+      List<AggCallPlus> oriAggCalls,
+      List<String> fieldNames,
+      Frame input,
+      int groupId) {
+    stack.push(input);
+    List<AggCallPlus> subAggCalls = new ArrayList<>();
+    ImmutableBitSet subGroupSet = ImmutableBitSet.union(subGroupSets);
+    List<RexNode> subProjects = new ArrayList<>();
+
+    // 1. For GroupSet
+    RelDataType subAggregateGroupSetType =
+        Aggregate.deriveRowType(getTypeFactory(), peek().getRowType(), false,
+            subGroupSet, ImmutableList.copyOf(subGroupSets), ImmutableList.of());
+    for (int i = 0; i < oriGroupSet.cardinality(); i++) {
+      int groupKey = oriGroupSet.nth(i);
+      if (subGroupSet.get(groupKey)) {
+        subProjects.add(
+            RexInputRef.of(
+                subGroupSet.indexOf(groupKey),
+                subAggregateGroupSetType));
+      } else {
+        // If the groupKey is not in the GroupSet, use null as a placeholder.
+        subProjects.add(getRexBuilder().makeNullLiteral(field(groupKey).getType()));
+      }
+    }
+
+    // 2. For AggregateCalls
+    int newGroupCount = subGroupSet.cardinality();
+    for (AggCallPlus oriAggCall : oriAggCalls) {
+      AggregateCall aggCall = oriAggCall.aggregateCall();
+      switch (oriAggCall.op().getKind()) {
+      case GROUPING:
+        if (!subGroupSet.contains(ImmutableBitSet.of(aggCall.getArgList()))) {
+          // If the parameters of the GROUPING function cannot be fully covered by the GroupSet,
+          // the GROUPING function needs to be split.
+          splitGrouping(subAggCalls, subProjects, aggCall, subGroupSet);
+        } else {
+          subProjects.add(
+              new RexInputRef(
+                  newGroupCount + subAggCalls.size(),
+                  aggCall.getType()));
+          subAggCalls.add(oriAggCall);
+        }
+        break;
+      case GROUP_ID:
+        subProjects.add(
+            getRexBuilder().makeLiteral(
+                groupId,
+                aggCall.getType()));
+        break;
+      default:
+        subProjects.add(
+            new RexInputRef(
+                newGroupCount + subAggCalls.size(),
+                aggCall.getType()));
+        subAggCalls.add(oriAggCall);
+        break;
+      }
+    }
+
+    aggregate(groupKey(subGroupSet, subGroupSets), subAggCalls);
+    project(subProjects, fieldNames);
+  }
+
+  /**
+   * This method is used to expand the SQL GROUPING operator
+   * into a set of expressions. For example, it expands GROUPING(x, y, z)
+   * into 2^2 * GROUPING(x) + 2^1 * GROUPING(y) + 2^0 * GROUPING(z)
+   */
+  private void splitGrouping(
+      List<AggCallPlus> aggCalls,
+      List<RexNode> projects,
+      AggregateCall grouping,
+      ImmutableBitSet groupSet) {
+    List<RexNode> splitOperands = new ArrayList<>();
+    List<Integer> groupingArgs = grouping.getArgList();
+    RelDataType groupingType = getTypeFactory().createSqlType(SqlTypeName.BIGINT);
+    for (int i = 0; i < groupingArgs.size(); i++) {
+      int groupingArg = groupingArgs.get(i);
+      if (groupSet.get(groupingArg)) {
+        RexInputRef groupingRef =
+            new RexInputRef(groupSet.cardinality() + aggCalls.size(), groupingType);
+        splitOperands.add(
+            call(SqlStdOperatorTable.MULTIPLY,
+                literal(safeShift(groupingArgs.size() - 1 - i)),
+                groupingRef));
+        aggCalls.add((AggCallPlus) aggregateCall(SqlStdOperatorTable.GROUPING, field(groupingArg)));
+      } else {
+        // Sets GROUPING function value to 1 for parameters not in GroupSet and calculates offset.
+        splitOperands.add(literal(safeShift(groupingArgs.size() - 1 - i)));
+      }
+    }
+
+    // Plus all expanded expressions (including GROUPING functions and constants).
+    RexNode plus = splitOperands.get(0);
+    for (int i = 1; i < splitOperands.size(); i++) {
+      plus = call(SqlStdOperatorTable.PLUS, plus, splitOperands.get(i));
+    }
+    projects.add(plus);
+  }
+
+  private static int safeShift(int shift) {
+    if (shift < 0 || shift >= Integer.SIZE) {
+      throw new IllegalArgumentException(
+          "Too many grouping keys. Maximum is " + (Integer.SIZE - 1) + " for grouping functions.");
+    }
+    return 1 << shift;
   }
 
   private static boolean isGroupId(AggCall c) {
@@ -3624,15 +3717,21 @@ public class RelBuilder {
   }
 
   /** Creates a {@link Sort} by expressions, with limit and offset. */
-  public RelBuilder sortLimit(int offset, int fetch, RexNode... nodes) {
+  public RelBuilder sortLimit(long offset, long fetch, RexNode... nodes) {
     return sortLimit(offset, fetch, ImmutableList.copyOf(nodes));
   }
 
   /** Creates a {@link Sort} by specifying collations.
    */
   public RelBuilder sort(RelCollation collation) {
+    return sortLimit(null, null, collation);
+  }
+
+  /** Creates a {@link Sort} by specifying collations, with offset node and fetch node. */
+  public RelBuilder sortLimit(@Nullable RexNode offsetNode, @Nullable RexNode fetchNode,
+      RelCollation collation) {
     final RelNode sort =
-        struct.sortFactory.createSort(peek(), collation, null, null);
+        struct.sortFactory.createSort(peek(), collation, offsetNode, fetchNode);
     replaceTop(sort);
     return this;
   }
@@ -3643,10 +3742,16 @@ public class RelBuilder {
    * @param fetch Maximum number of rows to fetch; negative means no limit
    * @param nodes Sort expressions
    */
-  public RelBuilder sortLimit(int offset, int fetch,
+  public RelBuilder sortLimit(Number offset, Number fetch,
       Iterable<? extends RexNode> nodes) {
-    final @Nullable RexNode offsetNode = offset <= 0 ? null : literal(offset);
-    final @Nullable RexNode fetchNode = fetch < 0 ? null : literal(fetch);
+    final @Nullable RexNode offsetNode =
+        new BigDecimal(offset.toString()).compareTo(BigDecimal.ZERO) <= 0
+            ? null
+            : literal(offset);
+    final @Nullable RexNode fetchNode =
+        new BigDecimal(fetch.toString()).compareTo(BigDecimal.ZERO) < 0
+            ? null
+            : literal(fetch);
     return sortLimit(offsetNode, fetchNode, nodes);
   }
 
@@ -3675,8 +3780,9 @@ public class RelBuilder {
     final List<RelFieldCollation> fieldCollations =
         registrar.registerFieldCollations(nodes);
 
-    final int fetch = fetchNode instanceof RexLiteral
-        ? RexLiteral.intValue(fetchNode) : -1;
+    // Bodo change: use longValue since limits can exceed the INT range.
+    final long fetch = fetchNode instanceof RexLiteral
+        ? RexLiteral.longValue(fetchNode) : -1L;
 
     if (offsetNode == null && fetch == 0 && config.simplifyLimit()) {
       return empty();
@@ -3706,7 +3812,7 @@ public class RelBuilder {
       }
       if (top instanceof Project) {
         final Project project = (Project) top;
-        if (project.getInput() instanceof Sort) {
+        if (!project.containsOver() && project.getInput() instanceof Sort) {
           final Sort sort2 = (Sort) project.getInput();
           if (sort2.offset == null && sort2.fetch == null) {
             final RelNode sort =
@@ -4271,7 +4377,7 @@ public class RelBuilder {
     AggregateCall aggregateCall();
 
     /** Converts this {@code AggCall} to a good {@link AggregateCall}. */
-    AggregateCall aggregateCall(Registrar registrar, ImmutableBitSet groupSet,
+    AggregateCall aggregateCall(Registrar registrar, boolean hasEmptyGroup,
         RelNode r);
 
     /** Registers expressions in operands and filters. */
@@ -4459,7 +4565,7 @@ public class RelBuilder {
     }
 
     @Override public AggregateCall aggregateCall(Registrar registrar,
-        ImmutableBitSet groupSet, RelNode r) {
+        boolean hasEmptyGroup, RelNode r) {
       List<Integer> args =
           registrar.registerExpressions(this.operands);
       final int filterArg =
@@ -4484,7 +4590,7 @@ public class RelBuilder {
 
       return AggregateCall.create(pos, aggFunction, distinct, approximate,
           ignoreNulls, preOperands, args, filterArg, distinctKeys,
-          collation, groupSet.cardinality(), r, null, alias);
+          collation, hasEmptyGroup, r, null, alias);
     }
 
     @Override public void register(Registrar registrar) {
@@ -4617,8 +4723,12 @@ public class RelBuilder {
     }
 
     @Override public AggregateCall aggregateCall(Registrar registrar,
-        ImmutableBitSet groupSet, RelNode r) {
-      return aggregateCall;
+        boolean hasEmptyGroup, RelNode r) {
+      return AggregateCall.create(aggregateCall.getParserPosition(), aggregateCall.getAggregation(),
+          aggregateCall.isDistinct(), aggregateCall.isApproximate(), aggregateCall.ignoreNulls(),
+          aggregateCall.rexList, aggregateCall.getArgList(), aggregateCall.filterArg,
+          aggregateCall.distinctKeys, aggregateCall.getCollation(), hasEmptyGroup, r, null,
+          aggregateCall.name);
     }
 
     @Override public void register(Registrar registrar) {
@@ -4902,8 +5012,8 @@ public class RelBuilder {
       final RexCallBinding bind =
           new RexCallBinding(getTypeFactory(), op, operands,
               ImmutableList.of()) {
-            @Override public int getGroupCount() {
-              return SqlWindow.isAlwaysNonEmpty(lowerBound, upperBound) ? 1 : 0;
+            @Override public boolean hasEmptyGroup() {
+              return !SqlWindow.isAlwaysNonEmpty(lowerBound, upperBound);
             }
           };
       final RelDataType type = op.inferReturnType(bind);
@@ -5284,5 +5394,30 @@ public class RelBuilder {
   private interface RegisterAgg {
     RexInputRef registerAgg(SqlAggFunction op, List<RexNode> operands,
                             RelDataType type, @Nullable String name);
+  }
+
+  /** Creates a {@link Combine} of the top {@code n} relational expressions
+   * on the stack. */
+  public RelBuilder combine(int n) {
+    final List<RelNode> inputs = new ArrayList<>();
+    for (int i = 0; i < n; i++) {
+      inputs.add(0, peek(i));
+    }
+    return push(struct.combineFactory.createCombine(cluster, inputs));
+  }
+
+  /** Creates a {@link Combine} of all relational expressions on the stack. */
+  public RelBuilder combine() {
+    return combine(size());
+  }
+
+  /** Creates a {@link Combine} of the given relational expressions. */
+  public RelBuilder combine(RelNode... inputs) {
+    return push(struct.combineFactory.createCombine(cluster, Arrays.asList(inputs)));
+  }
+
+  /** Creates a {@link Combine} of the given relational expressions. */
+  public RelBuilder combine(Iterable<? extends RelNode> inputs) {
+    return push(struct.combineFactory.createCombine(cluster, ImmutableList.copyOf(inputs)));
   }
 }

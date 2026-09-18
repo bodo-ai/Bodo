@@ -233,7 +233,9 @@ abstract class AbstractWindowDecomposeRule protected constructor(
         ): RexNode {
             val sum = duplicateOverWithNewOperator(builder, over, SqlStdOperatorTable.SUM, over.operands)
             val count = duplicateOverWithNewOperator(builder, over, SqlStdOperatorTable.COUNT, over.operands)
-            return builder.makeCall(SqlStdOperatorTable.DIVIDE, sum, count)
+            // Cast back to the original AVG type since division may infer
+            // a different nullability than the function it replaces.
+            return builder.makeCast(over.type, builder.makeCall(SqlStdOperatorTable.DIVIDE, sum, count))
         }
 
         /**

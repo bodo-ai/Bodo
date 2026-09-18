@@ -228,7 +228,7 @@ public abstract class ReturnTypes {
         @Override public RelDataType
         inferReturnType(SqlOperatorBinding opBinding) {
           final RelDataType type = super.inferReturnType(opBinding);
-          if (opBinding.getGroupCount() == 0 || opBinding.hasFilter()) {
+          if (opBinding.hasEmptyGroup() || opBinding.hasFilter()) {
             return opBinding.getTypeFactory()
                 .createTypeWithNullability(type, true);
           } else {
@@ -1432,7 +1432,7 @@ public abstract class ReturnTypes {
     final RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
     final RelDataType type = typeFactory.getTypeSystem()
         .deriveSumType(typeFactory, opBinding.getOperandType(0));
-    if (opBinding.getGroupCount() == 0 || opBinding.hasFilter()) {
+    if (opBinding.hasEmptyGroup() || opBinding.hasFilter()) {
       return typeFactory.createTypeWithNullability(type, true);
     } else {
       return type;
@@ -1479,7 +1479,7 @@ public abstract class ReturnTypes {
             typeSystem.deriveAvgVarStdType(typeFactory,
             opBinding.getOperator(),
             opBinding.getOperandType(0));
-    if (opBinding.getGroupCount() == 0 || opBinding.hasFilter()
+    if (opBinding.hasEmptyGroup() || opBinding.hasFilter()
         || opBinding.getOperator().kind == SqlKind.STDDEV_SAMP) {
       return typeFactory.createTypeWithNullability(relDataType, true);
     } else {
@@ -1492,7 +1492,7 @@ public abstract class ReturnTypes {
     final RelDataType relDataType =
         typeFactory.getTypeSystem().deriveCovarType(typeFactory,
             opBinding.getOperandType(0), opBinding.getOperandType(1));
-    if (opBinding.getGroupCount() == 0 || opBinding.hasFilter()) {
+    if (opBinding.hasEmptyGroup() || opBinding.hasFilter()) {
       return typeFactory.createTypeWithNullability(relDataType, true);
     } else {
       return relDataType;

@@ -1283,7 +1283,19 @@ public class RexLiteral extends RexNode {
    * never null. */
   public static int intValue(RexNode node) {
     final Number number = numberValue(node);
+    long longValue = number.longValue();
+    if (longValue > Integer.MAX_VALUE || longValue < Integer.MIN_VALUE) {
+      throw new ArithmeticException(
+          "Integer overflow: " + longValue + " is out of range for INT");
+    }
     return number.intValue();
+  }
+
+  /** Returns the value of a literal, cast, or unary minus, as a long;
+   * never null. */
+  public static long longValue(RexNode node) {
+    final Number number = numberValue(node);
+    return number.longValue();
   }
 
   public static @Nullable String stringValue(RexNode node) {

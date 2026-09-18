@@ -1,10 +1,13 @@
 package com.bodosql.calcite.application.utils
 
+import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexShuttle
+import org.apache.calcite.rex.RexSimplify
+import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.`fun`.SqlCastFunction
 
@@ -53,14 +56,64 @@ class RexNormalizer private constructor(
             rexBuilder: RexBuilder,
             node: RexNode,
             matchType: Boolean,
+        ): RexNode = normalize(rexBuilder, node, matchType, false)
+
+        /**
+         * Normalizes a filter or join condition and folds comparisons against a NULL literal
+         * to FALSE (following [CALCITE-7070]).
+         *
+         * Filter and join conditions are collected into
+         * [org.apache.calcite.plan.RelOptPredicateList.pulledUpPredicates] as conjunctions
+         * without any further simplification, and Calcite rejects comparisons against NULL
+         * there because they make the derived constant map inconsistent. A comparison against
+         * NULL can appear after conversion when a rule inlines a constant projection into a
+         * predicate, for example pushing a filter past a project that computes
+         * `null::VARCHAR`. Conjuncts are folded individually because UNKNOWN is only
+         * equivalent to FALSE for the top-level terms of a condition.
+         */
+        @JvmStatic
+        fun normalizeCondition(
+            rexBuilder: RexBuilder,
+            node: RexNode,
+        ): RexNode = normalize(rexBuilder, node, false, true)
+
+        @JvmStatic
+        fun normalize(
+            rexBuilder: RexBuilder,
+            node: RexNode,
+            matchType: Boolean,
+            unknownAsFalse: Boolean,
         ): RexNode {
             val normalizer = RexNormalizer(rexBuilder)
             val result = node.accept(normalizer)
-            return if (matchType && result.type != node.type) {
-                rexBuilder.makeCast(node.type, result, true, false)
+            val folded =
+                if (unknownAsFalse) {
+                    foldNullComparisons(rexBuilder, result)
+                } else {
+                    result
+                }
+            return if (matchType && folded.type != node.type) {
+                rexBuilder.makeCast(node.type, folded, true, false)
             } else {
-                result
+                folded
             }
+        }
+
+        private fun foldNullComparisons(
+            rexBuilder: RexBuilder,
+            node: RexNode,
+        ): RexNode {
+            val conjuncts = RelOptUtil.conjunctions(node)
+            var changed = false
+            val folded =
+                conjuncts.map {
+                    val foldedConjunct = RexSimplify.simplifyComparisonWithNull(it, rexBuilder)
+                    if (foldedConjunct !== it) {
+                        changed = true
+                    }
+                    foldedConjunct
+                }
+            return if (changed) RexUtil.composeConjunction(rexBuilder, folded) else node
         }
     }
 }

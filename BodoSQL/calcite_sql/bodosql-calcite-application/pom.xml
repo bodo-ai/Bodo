@@ -24,8 +24,8 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
         <org.slf4j-version>1.7.36</org.slf4j-version>
-        <org.apache.calcite-version>1.40.0</org.apache.calcite-version>
-        <org.apache.calcite.avatica-version>1.26.0</org.apache.calcite.avatica-version>
+        <org.apache.calcite-version>1.41.0</org.apache.calcite-version>
+        <org.apache.calcite.avatica-version>1.27.0</org.apache.calcite.avatica-version>
         <com.google.protobuf-version>3.21.5</com.google.protobuf-version>
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
         <snowflake-jdbc-version>3.13.33</snowflake-jdbc-version>
@@ -56,7 +56,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.12.0</version>
+            <version>3.18.0</version>
         </dependency>
 
         <dependency>
