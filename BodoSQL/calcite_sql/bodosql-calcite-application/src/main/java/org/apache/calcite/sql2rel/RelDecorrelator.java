@@ -1791,7 +1791,7 @@ public class RelDecorrelator implements ReflectiveVisitor {
 
     // Bodo Change: Enable pruning a Correlation that doesn't have required columns
     // anymore.
-    if (rightFrame == null || rel.getRequiredColumns().isEmpty() && rightFrame.corDefOutputs.isEmpty()) {
+    if (rightFrame == null || (!rel.getRequiredColumns().isEmpty() && rightFrame.corDefOutputs.isEmpty())) {
         return null;
     }
 
