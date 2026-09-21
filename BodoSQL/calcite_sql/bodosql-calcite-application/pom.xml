@@ -392,7 +392,6 @@
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization$1.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization$ProjectFilterTable.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptMaterialization.class</exclude>
-                                        <exclude>org/apache/calcite/plan/RelOptPredicateList.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptRowSamplingParameters.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable$ToRelContext.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable$ViewExpander.class</exclude>
