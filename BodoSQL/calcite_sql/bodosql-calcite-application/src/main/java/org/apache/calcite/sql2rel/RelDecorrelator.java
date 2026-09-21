@@ -1789,15 +1789,11 @@ public class RelDecorrelator implements ReflectiveVisitor {
             rel.getJoinType() == JoinRelType.LEFT || parentPropagatesNullValues);
     frameStack.pop();
 
-    if (rightFrame == null || rightFrame.corDefOutputs.isEmpty()) {
-      return null;
+    // Bodo Change: Enable pruning a Correlation that doesn't have required columns
+    // anymore.
+    if (!rightFrame == null || rel.getRequiredColumns().isEmpty() && rightFrame.corDefOutputs.isEmpty()) {
+        return null;
     }
-
-        // Bodo Change: Enable pruning a Correlation that doesn't have required columns
-        // anymore.
-        if (!rel.getRequiredColumns().isEmpty() && rightFrame.corDefOutputs.isEmpty()) {
-            return null;
-        }
 
     assert rel.getRequiredColumns().cardinality()
         <= rightFrame.corDefOutputs.keySet().size();
