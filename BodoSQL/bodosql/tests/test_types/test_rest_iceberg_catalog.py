@@ -128,7 +128,7 @@ def test_filter_pushdown(
         check_logger_msg(stream, "Columns loaded ['A', 'B']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\npie.And(pie.GreaterThan('B', literal(f0)), pie.NotNull('A'))",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('B', literal(f0))",
         )
 
 
@@ -171,7 +171,7 @@ def test_filter_pushdown_col_not_read(
         check_logger_msg(stream, "Columns loaded ['A']")
         check_logger_msg(
             stream,
-            "Iceberg Filter Pushed Down:\npie.And(pie.GreaterThan('B', literal(f0)), pie.NotNull('A'))",
+            "Iceberg Filter Pushed Down:\npie.GreaterThan('B', literal(f0))",
         )
 
 

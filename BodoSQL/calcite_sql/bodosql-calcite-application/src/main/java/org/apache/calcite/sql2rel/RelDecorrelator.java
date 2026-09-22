@@ -1789,10 +1789,11 @@ public class RelDecorrelator implements ReflectiveVisitor {
             rel.getJoinType() == JoinRelType.LEFT || parentPropagatesNullValues);
     frameStack.pop();
 
-    // Bodo Change: Enable pruning a Correlation that doesn't have required columns
-    // anymore.
-    if (rightFrame == null || (!rel.getRequiredColumns().isEmpty() && rightFrame.corDefOutputs.isEmpty())) {
-        return null;
+    // Bodo Change: Restored the pre-Calcite-1.42 strict check so correlations
+    // with no correlated outputs are left to the scalar remove rules, matching
+    // Bodo's expected decorrelation behavior.
+    if (rightFrame == null || rightFrame.corDefOutputs.isEmpty()) {
+      return null;
     }
 
     assert rel.getRequiredColumns().cardinality()
@@ -1885,16 +1886,16 @@ public class RelDecorrelator implements ReflectiveVisitor {
       return decorrelateRel((RelNode) rel, isCorVarDefined, parentPropagatesNullValues);
     }
     //
-    // For other join types (INNER, LEFT, RIGHT, FULL):
+    // Bodo Change: Reverted to the pre-Calcite-1.42 implementation. Upstream 1.42
+    // rewrote join decorrelation to introduce value generators and null-safe
+    // (IS NOT DISTINCT FROM) join conditions for correlated variables. Bodo's
+    // decorrelator and join runtime do not support that plan shape, so keep the
+    // simpler rewrite that just decorrelates the inputs and the condition.
     //
-    // 1. Decorrelates the left and right inputs recursively.
-    // 2. Ensures that required correlated variables are present in the inputs, adding
-    //    value generators if necessary (e.g., for the nullable side of an outer join).
-    // 3. Constructs a new join condition that includes the original condition and
-    //    equality conditions for the correlated variables.
-    // 4. For {@link JoinRelType#FULL}, adds a projection on top of the join to coalesce
-    //    correlated variables that might be null on one side due to the join nature.
-    // 5. Updates the output mapping to reflect the new join structure.
+    // Rewrite logic:
+    //
+    // 1. rewrite join condition.
+    // 2. map output positions and produce corVars if any.
     //
 
     final RelNode oldLeft = rel.getInput(0);
@@ -1908,176 +1909,44 @@ public class RelDecorrelator implements ReflectiveVisitor {
       return null;
     }
 
-    // 1. Collect all CorRefs involved
-    final List<CorRef> corVarList = collectExternalCorVars(rel);
-
-    // 2. Ensure CorVars are present in inputs (adding ValueGenerators if needed)
-    Frame newLeftFrame = leftFrame;
-    Frame newRightFrame = rightFrame;
-    final NavigableMap<CorDef, Integer> leftCorDefOutputs = new TreeMap<>();
-    final NavigableMap<CorDef, Integer> rightCorDefOutputs = new TreeMap<>();
-    boolean generatesNullsOnRight = rel.getJoinType().generatesNullsOnRight();
-    boolean generatesNullsOnLeft = rel.getJoinType().generatesNullsOnLeft();
-
-    if (isCorVarDefined) {
-      // ensure CorVars are present in left input
-      if (generatesNullsOnRight || RexUtil.containsFieldAccess(rel.getCondition())) {
-        newLeftFrame = supplyMissingCorVars(oldLeft, leftFrame, corVarList, leftCorDefOutputs);
-        rightCorDefOutputs.putAll(rightFrame.corDefOutputs);
-      }
-      // ensure CorVars are present in right input
-      if (generatesNullsOnLeft) {
-        newRightFrame = supplyMissingCorVars(oldRight, rightFrame, corVarList, rightCorDefOutputs);
-        leftCorDefOutputs.putAll(leftFrame.corDefOutputs);
-      }
-    } else {
-      leftCorDefOutputs.putAll(leftFrame.corDefOutputs);
-      rightCorDefOutputs.putAll(rightFrame.corDefOutputs);
-    }
-
-    // 3. Build Join Conditions
-    final List<RexNode> joinConditions = new ArrayList<>();
-    RexNode originalCond = decorrelateExpr(castNonNull(currentRel), map, cm, rel.getCondition());
-    if (!originalCond.isAlwaysTrue()) {
-      joinConditions.add(originalCond);
-    }
-
-    if (generatesNullsOnLeft || generatesNullsOnRight) {
-      List<RexNode> conds =
-          buildCorDefJoinConditions(leftCorDefOutputs, rightCorDefOutputs,
-              newLeftFrame.r, newRightFrame.r, relBuilder);
-      joinConditions.addAll(conds);
-    }
-
-    RexNode finalCondition = joinConditions.isEmpty()
-        ? relBuilder.literal(true)
-        : RexUtil.composeConjunction(relBuilder.getRexBuilder(), joinConditions);
-
     RelNode newJoin = relBuilder
-        .push(newLeftFrame.r)
-        .push(newRightFrame.r)
-        .join(rel.getJoinType(), finalCondition, ImmutableSet.of())
+        .push(leftFrame.r)
+        .push(rightFrame.r)
+        .join(rel.getJoinType(),
+            decorrelateExpr(castNonNull(currentRel), map, cm, rel.getCondition()),
+            ImmutableSet.of())
         .build();
 
-    // 4. Handle Full Join Projections (Coalesce)
-    NavigableMap<CorDef, Integer> corDefOutputs = new TreeMap<>(newLeftFrame.corDefOutputs);
-    int newLeftFieldCount = newLeftFrame.r.getRowType().getFieldCount();
-    if (rel.getJoinType() == JoinRelType.FULL && isCorVarDefined) {
-      //
-      // SELECT
-      //    d.dname,
-      //    (
-      //        SELECT COUNT(sub.empno)
-      //        FROM (
-      //            SELECT * FROM emp e2 WHERE e2.deptno = d.deptno
-      //        ) sub
-      //        FULL JOIN emp e
-      //        ON sub.mgr = e.mgr
-      //    ) as matched_subordinate_count
-      // FROM dept d
-      // order by d.dname;
-      //
-      // LogicalJoin(condition=[=($3, $11)], joinType=[full])
-      //   LogicalProject(EMPNO=[$0], ENAME=[$1], JOB=[$2], MGR=[$3], ...)
-      //     LogicalFilter(condition=[=($7, $cor0.DEPTNO)])
-      //       LogicalTableScan(table=[[scott, EMP]])
-      //   LogicalTableScan(table=[[scott, EMP]])
-      //
-      // convert to:
-      //
-      // LogicalProject(_cor_$cor0_0=[COALESCE($8, $17)], EMPNO=[$0])
-      //   LogicalJoin(condition=[AND(=($3, $12), IS NOT DISTINCT FROM($8, $17))], joinType=[full])
-      //     LogicalProject(EMPNO=[$0], ENAME=[$1], JOB=[$2], MGR=[$3], ...)
-      //       LogicalFilter(condition=[IS NOT NULL($7)])
-      //         LogicalTableScan(table=[[scott, EMP]])
-      //     LogicalJoin(condition=[true], joinType=[inner])
-      //       LogicalTableScan(table=[[scott, EMP]])
-      //       LogicalProject(DEPTNO=[$0])
-      //         LogicalTableScan(table=[[scott, DEPT]])
-      List<RelDataTypeField> joinFields = newJoin.getRowType().getFieldList();
+    // Create the mapping between the output of the old correlation rel
+    // and the new join rel
+    Map<Integer, Integer> mapOldToNewOutputs = new HashMap<>();
 
-      // 4.1. Pass through existing fields
-      final PairList<RexNode, String> projects = PairList.of();
-      for (int i = 0; i < joinFields.size(); i++) {
-        RexInputRef.add2(projects, i, joinFields);
-      }
-
-      // 4.2. Build Coalesced CorVars
-      NavigableMap<CorDef, Integer> mergedCorDefOutputs = new TreeMap<>(corDefOutputs);
-      int projectedIndex = joinFields.size();
-      boolean appended = false;
-
-      for (CorRef corRef : corVarList) {
-        CorDef corDef = corRef.def();
-
-        Integer leftPos = leftCorDefOutputs.get(corDef);
-        Integer rightPos = rightCorDefOutputs.get(corDef);
-
-        // If missing on both sides, nothing to coalesce or project
-        if (leftPos == null && rightPos == null) {
-          continue;
-        }
-
-        // Create references
-        RexNode leftRef = null;
-        if (leftPos != null) {
-          leftRef = new RexInputRef(leftPos, joinFields.get(leftPos).getType());
-        }
-
-        RexNode rightRef = null;
-        if (rightPos != null) {
-          // Right side indices are offset by the left field count in the join
-          int actualRightIndex = rightPos + newLeftFieldCount;
-          rightRef = new RexInputRef(actualRightIndex, joinFields.get(actualRightIndex).getType());
-        }
-
-        // Determine the expression
-        RexNode expr;
-        if (leftRef == null) {
-          expr = rightRef;
-        } else if (rightRef == null) {
-          expr = leftRef;
-        } else {
-          // Both exist, create COALESCE
-          expr = relBuilder.call(SqlStdOperatorTable.COALESCE, leftRef, rightRef);
-        }
-
-        String name = "_cor_" + corDef.corr.getName() + "_" + corDef.field;
-        projects.add(requireNonNull(expr, "expr"), name);
-        mergedCorDefOutputs.put(corDef, projectedIndex++);
-        appended = true;
-      }
-
-      if (appended) {
-        newJoin = relBuilder.push(newJoin)
-            .projectNamed(projects.leftList(), projects.rightList(), true)
-            .build();
-        corDefOutputs.clear();
-        corDefOutputs.putAll(mergedCorDefOutputs);
-      }
-    } else {
-      // Standard output mapping for non-Full Join (or Full Join without CorVars)
-      // Right input positions are shifted.
-      for (Map.Entry<CorDef, Integer> entry : newRightFrame.corDefOutputs.entrySet()) {
-        final int shifted = entry.getValue() + newLeftFieldCount;
-        if (rel.getJoinType().generatesNullsOnRight()) {
-          corDefOutputs.putIfAbsent(entry.getKey(), shifted);
-        } else {
-          corDefOutputs.put(entry.getKey(), shifted);
-        }
-      }
-    }
-
-    // 5. Output Mapping
     int oldLeftFieldCount = oldLeft.getRowType().getFieldCount();
-    int oldRightFieldCount = oldRight.getRowType().getFieldCount();
+    int newLeftFieldCount = leftFrame.r.getRowType().getFieldCount();
 
-    Map<Integer, Integer> mapOldToNewOutputs = new HashMap<>(newLeftFrame.oldToNewOutputs);
+    int oldRightFieldCount = oldRight.getRowType().getFieldCount();
+    //noinspection AssertWithSideEffects
+    assert rel.getRowType().getFieldCount()
+        == oldLeftFieldCount + oldRightFieldCount;
+
+    // Left input positions are not changed.
+    mapOldToNewOutputs.putAll(leftFrame.oldToNewOutputs);
+
+    // Right input positions are shifted by newLeftFieldCount.
     for (int i = 0; i < oldRightFieldCount; i++) {
       mapOldToNewOutputs.put(i + oldLeftFieldCount,
-          requireNonNull(newRightFrame.oldToNewOutputs.get(i)) + newLeftFieldCount);
+          requireNonNull(rightFrame.oldToNewOutputs.get(i)) + newLeftFieldCount);
     }
 
+    final NavigableMap<CorDef, Integer> corDefOutputs =
+        new TreeMap<>(leftFrame.corDefOutputs);
+
+    // Right input positions are shifted by newLeftFieldCount.
+    for (Map.Entry<CorDef, Integer> entry
+        : rightFrame.corDefOutputs.entrySet()) {
+      corDefOutputs.put(entry.getKey(),
+          entry.getValue() + newLeftFieldCount);
+    }
     return register(rel, newJoin, mapOldToNewOutputs, corDefOutputs);
   }
 
@@ -3987,7 +3856,10 @@ public class RelDecorrelator implements ReflectiveVisitor {
         final RelDataType rightType = rightRel.getRowType().getFieldList().get(rightPos).getType();
         final RexNode leftRef = new RexInputRef(leftPos, leftType);
         final RexNode rightRef = new RexInputRef(leftFieldCount + rightPos, rightType);
-        joinConditions.add(relBuilder.isNotDistinctFrom(leftRef, rightRef));
+        // Bodo Change: Upstream 1.42 uses IS NOT DISTINCT FROM here, but Bodo's
+        // join runtime does not support null-safe equality in join conditions.
+        // Keep `equals`, matching the workaround used in decorrelateRel.
+        joinConditions.add(relBuilder.equals(leftRef, rightRef));
       }
     }
     return joinConditions;
