@@ -1791,13 +1791,25 @@ public class RelDecorrelator implements ReflectiveVisitor {
 
     // Bodo Change: Restored the pre-Calcite-1.42 strict check so correlations
     // with no correlated outputs are left to the scalar remove rules, matching
-    // Bodo's expected decorrelation behavior.
-    if (rightFrame == null || rightFrame.corDefOutputs.isEmpty()) {
+    // Bodo's expected decorrelation behavior. Departure from upstream 1.42: also
+    // rewrite the correlation when the right input never references the
+    // correlation variable. In that case requiredColumns may still be populated
+    // as a planner hint even though nothing in the right subtree depends on it
+    // (e.g. an inlined scalar UDF whose correlated argument is only used above
+    // its aggregate). The correlate is then just an uncorrelated join and is
+    // safe to rewrite; neither the main decorrelator nor the
+    // RemoveCorrelationForScalar{Project,Aggregate} rules handle this shape.
+    final boolean rightReferencesCorrelation =
+        RelOptUtil.getVariablesUsed(oldRight).contains(rel.getCorrelationId());
+    if (rightFrame == null
+        || (rightFrame.corDefOutputs.isEmpty() && rightReferencesCorrelation)) {
       return null;
     }
 
-    assert rel.getRequiredColumns().cardinality()
-        <= rightFrame.corDefOutputs.keySet().size();
+    if (rightReferencesCorrelation) {
+      assert rel.getRequiredColumns().cardinality()
+          <= rightFrame.corDefOutputs.keySet().size();
+    }
 
     // Change correlator rel into a join.
     // Join all the correlated variables produced by this correlator rel
