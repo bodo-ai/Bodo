@@ -277,7 +277,7 @@ def test_query_argument_udf(test_db_snowflake_catalog, memory_leak_check):
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_query_column_argument_udf(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -469,7 +469,7 @@ def test_unsupported_query_argument_window_order_by_udf(
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_query_argument_having_udf(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -530,7 +530,7 @@ def test_unsupported_query_argument_qualify_udf(
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_query_argument_nested_select_udf(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -564,7 +564,7 @@ def test_query_argument_nested_select_udf(test_db_snowflake_catalog, memory_leak
 
 @pytest_mark_one_rank
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_udf_multiple_definitions(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -855,7 +855,7 @@ def test_repeated_nested_expression_udf(test_db_snowflake_catalog, memory_leak_c
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_query_column_expression_argument_udf(
     test_db_snowflake_catalog, memory_leak_check
@@ -887,7 +887,7 @@ def test_query_column_expression_argument_udf(
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_query_multi_column_expression_argument_udf(
     test_db_snowflake_catalog, memory_leak_check
@@ -919,7 +919,7 @@ def test_query_multi_column_expression_argument_udf(
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_nested_udf_calls(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -954,7 +954,7 @@ def test_nested_udf_calls(test_db_snowflake_catalog, memory_leak_check):
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_filter_udf_calls(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -984,7 +984,7 @@ def test_filter_udf_calls(test_db_snowflake_catalog, memory_leak_check):
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_order_by_udf_calls(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -1018,7 +1018,7 @@ def test_order_by_udf_calls(test_db_snowflake_catalog, memory_leak_check):
         pytest.param(
             False,
             marks=pytest.mark.skip(
-                reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+                reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
             ),
         ),
         True,
@@ -1193,9 +1193,8 @@ def test_unsupported_both_tables_join_condition_udf_calls(
     ],
 )
 @pytest.mark.skip(
-    reason="Calcite 1.42 leaves an uncorrelated LogicalCorrelate over the join "
-    "for this UDF, so the plan fails to decorrelate; once that is resolved the "
-    "scalar-aggregate UDF plan still produces a replicated output that the JIT "
+    reason="Calcite 1.42 now decorrelates this UDF form, but the resulting "
+    "scalar-aggregate UDF plan produces a replicated output that the JIT "
     "backend's distributed analysis rejects. The JIT path is not currently "
     "supported for this UDF form."
 )
@@ -1248,7 +1247,7 @@ def test_join_output_udf_calls(test_db_snowflake_catalog, outer, memory_leak_che
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_window_partition_by_udf_calls(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -1292,7 +1291,7 @@ def test_window_partition_by_udf_calls(test_db_snowflake_catalog, memory_leak_ch
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_window_order_by_udf_calls(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -1336,7 +1335,7 @@ def test_window_order_by_udf_calls(test_db_snowflake_catalog, memory_leak_check)
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_having_udf_calls(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -1366,7 +1365,7 @@ def test_having_udf_calls(test_db_snowflake_catalog, memory_leak_check):
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_qualify_udf_calls(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -1429,9 +1428,6 @@ def test_view_udf(test_db_snowflake_catalog, memory_leak_check):
         check_logger_msg(stream, "COUNT_TABLE")
 
 
-@pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
-)
 def test_udf_function_call_view_udf(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that a calls into a SNOWFLAKE_UDF that contains a view that also
@@ -1462,7 +1458,7 @@ def test_udf_function_call_view_udf(test_db_snowflake_catalog, memory_leak_check
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_nested_correlation_function_udf(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -1525,7 +1521,7 @@ def test_multiple_definitions_udfs(test_db_snowflake_catalog, memory_leak_check)
 
 
 @pytest.mark.skip(
-    reason="Decorrelating this Snowflake UDF form is not supported by the JIT backend after the Calcite 1.42 upgrade: the plan either keeps an unresolved correlation node or produces a replicated output that the distributed analysis rejects."
+    reason="After the Calcite 1.42 upgrade this Snowflake UDF form decorrelates, but the resulting plan produces a replicated output that the JIT backend's distributed analysis rejects. The JIT path is not currently supported for this form."
 )
 def test_dateadd_inline_bug(test_db_snowflake_catalog, memory_leak_check):
     """Test for a specific issue where inlining a UDF whose arguments included a dateadd
