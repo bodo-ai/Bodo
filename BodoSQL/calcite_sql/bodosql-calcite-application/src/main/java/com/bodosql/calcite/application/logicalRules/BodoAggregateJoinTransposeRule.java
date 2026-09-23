@@ -145,7 +145,7 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
     final Map<Integer, Integer> map = new HashMap<>();
     final List<Side> sides = new ArrayList<>();
     int uniqueCount = 0;
-    // BODO CHANGE: number of aggregated sides with at least MIN_ROW_REDUCTION.
+    // BODO CHANGE: number of aggregated sides with at least MIN_ROW_REDUCTION reduction in input.
     int reducingCount = 0;
     int offset = 0;
     int belowOffset = 0;
@@ -237,6 +237,9 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
         // BODO CHANGE: check whether this side's aggregate is estimated to reduce
         // its input by at least MIN_ROW_REDUCTION. An unknown estimate is treated
         // as no reduction.
+        // This safe gaurd is necessary since making join and aggregate cost estimates accurate
+        // relative to each other
+        // is very difficult practically. See TPC-H Q5 for an example.
         final Double inputRows = mq.getRowCount(joinInput);
         final Double groupRows = mq.getDistinctRowCount(joinInput, belowAggregateKey, null);
         if (inputRows != null
@@ -286,7 +289,7 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
 
     if (reducingCount == 0) {
       // BODO CHANGE: None of the new aggregates is estimated to reduce its
-      // input significantly, so they would only add work below the join.
+      // input significantly, so they would only add more work below the join.
       return;
     }
 
