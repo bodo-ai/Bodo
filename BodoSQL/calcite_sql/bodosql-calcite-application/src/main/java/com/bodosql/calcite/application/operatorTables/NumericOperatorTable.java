@@ -49,7 +49,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   // TODO: Extend the Library Operator and use the builtin Libraries
 
   public static final SqlNullPolicyFunction BITAND =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "BITAND",
           ReturnTypes.ARG0_NULLABLE,
           OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
@@ -60,7 +60,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction BITXOR = BITAND.withName("BITXOR");
 
   public static final SqlFunction BITNOT =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "BITNOT", ReturnTypes.ARG0_NULLABLE, OperandTypes.INTEGER, SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction BITSHIFTLEFT = BITAND.withName("BITSHIFTLEFT");
@@ -70,7 +70,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction GETBIT = BITAND.withName("GETBIT");
 
   public static final SqlNullPolicyFunction SNOWFLAKE_CEIL =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "CEIL",
           ReturnTypes.ARG0_NULLABLE,
           argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER),
@@ -80,7 +80,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction SNOWFLAKE_FLOOR = SNOWFLAKE_CEIL.withName("FLOOR");
 
   public static final SqlFunction CEILING =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "CEILING",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -110,7 +110,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction HAVERSINE =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "HAVERSINE",
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
@@ -124,7 +124,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction LOG =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "LOG",
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
@@ -138,7 +138,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction LOG2 =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "LOG2",
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
@@ -148,7 +148,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction POW =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "POW",
           ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.NUMERIC_NUMERIC,
@@ -181,7 +181,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlNullPolicyFunction ACOSH =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "ACOSH",
           ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
@@ -199,7 +199,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction SQUARE =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "SQUARE",
           ReturnTypes.DOUBLE_NULLABLE,
           OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),

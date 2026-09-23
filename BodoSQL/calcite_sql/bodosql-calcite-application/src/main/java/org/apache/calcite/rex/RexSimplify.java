@@ -1561,6 +1561,11 @@ public class RexSimplify {
     SafeRexVisitor() {
       ImmutableSet.Builder<SqlOperator> builder = ImmutableSet.builder();
       builder.addAll(SqlStdOperatorTable.QUANTIFY_OPERATORS);
+      // Bodo Change: LOWER and UPPER are strong (null-propagating) operators per
+      // BodoStrong.OTHER_FUNCTION_MAP and cannot raise an error for any input, so
+      // they can safely be unwrapped by IS NULL / IS NOT NULL.
+      builder.add(SqlStdOperatorTable.LOWER);
+      builder.add(SqlStdOperatorTable.UPPER);
       safeOperators = builder.build();
 
       Set<SqlKind> safeOps = EnumSet.noneOf(SqlKind.class);
