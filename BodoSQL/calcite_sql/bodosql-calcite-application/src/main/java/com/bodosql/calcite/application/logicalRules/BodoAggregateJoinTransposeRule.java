@@ -237,7 +237,7 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
         // BODO CHANGE: check whether this side's aggregate is estimated to reduce
         // its input by at least MIN_ROW_REDUCTION. An unknown estimate is treated
         // as no reduction.
-        // This safe gaurd is necessary since making join and aggregate cost estimates accurate
+        // This safe guard is necessary since making join and aggregate cost estimates accurate
         // relative to each other
         // is very difficult practically. See TPC-H Q5 for an example.
         final Double inputRows = mq.getRowCount(joinInput);
