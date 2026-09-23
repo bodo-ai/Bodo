@@ -71,6 +71,10 @@ import org.immutables.value.Value;
 public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTransposeRule.Config>
     implements TransformationRule {
 
+  // BODO CHANGE: Only push an aggregate below a join if at least one of the
+  // new aggregates is estimated to reduce its input by at least this factor.
+  private static final double MIN_ROW_REDUCTION = 2.0;
+
   /** Creates an AggregateJoinTransposeRule. */
   protected BodoAggregateJoinTransposeRule(Config config) {
     super(config);
@@ -141,6 +145,8 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
     final Map<Integer, Integer> map = new HashMap<>();
     final List<Side> sides = new ArrayList<>();
     int uniqueCount = 0;
+    // BODO CHANGE: number of aggregated sides with at least MIN_ROW_REDUCTION reduction in input.
+    int reducingCount = 0;
     int offset = 0;
     int belowOffset = 0;
     for (int s = 0; s < 2; s++) {
@@ -228,6 +234,19 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
         if (oldGroupKeyCount > 0 && newGroupKeyCount == 0) {
           return;
         }
+        // BODO CHANGE: check whether this side's aggregate is estimated to reduce
+        // its input by at least MIN_ROW_REDUCTION. An unknown estimate is treated
+        // as no reduction.
+        // This safe guard is necessary since making join and aggregate cost estimates accurate
+        // relative to each other
+        // is very difficult practically. See TPC-H Q5 for an example.
+        final Double inputRows = mq.getRowCount(joinInput);
+        final Double groupRows = mq.getDistinctRowCount(joinInput, belowAggregateKey, null);
+        if (inputRows != null
+            && groupRows != null
+            && inputRows >= MIN_ROW_REDUCTION * Math.max(groupRows, 1.0)) {
+          ++reducingCount;
+        }
         for (Ord<AggregateCall> aggCall : Ord.zip(aggregate.getAggCallList())) {
           final SqlAggFunction aggregation = aggCall.e.getAggregation();
           final SqlSplittableAggFunction splitter =
@@ -265,6 +284,12 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
       // Both inputs to the join are unique. There is nothing to be gained by
       // this rule. In fact, this aggregate+join may be the result of a previous
       // invocation of this rule; if we continue we might loop forever.
+      return;
+    }
+
+    if (reducingCount == 0) {
+      // BODO CHANGE: None of the new aggregates is estimated to reduce its
+      // input significantly, so they would only add more work below the join.
       return;
     }
 
