@@ -269,7 +269,7 @@ def test_snowflake_coalesce_lower_pushdown(
             # Note this optimized in the planner
             check_logger_msg(
                 stream,
-                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE LOWER("A") IS NULL OR LOWER("A") = $$macedonia$$',
+                f'FROM "TEST_DB"."PUBLIC"."{table_name.upper()}" WHERE LOWER("A") = $$macedonia$$ OR "A" IS NULL',
             )
 
 

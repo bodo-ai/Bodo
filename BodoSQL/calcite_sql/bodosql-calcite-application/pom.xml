@@ -570,8 +570,6 @@
                                         <exclude>org/apache/calcite/sql/ddl/SqlCreateTable.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlCastOperator.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlCoalesceFunction.class</exclude>
-                                        <exclude>org/apache/calcite/sql/fun/SqlExtractFunction$1.class</exclude>
-                                        <exclude>org/apache/calcite/sql/fun/SqlExtractFunction.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlQuantifyOperator$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlQuantifyOperator.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$1.class</exclude>

@@ -1799,6 +1799,8 @@ public class RelDecorrelator implements ReflectiveVisitor {
     // its aggregate). The correlate is then just an uncorrelated join and is
     // safe to rewrite; neither the main decorrelator nor the
     // RemoveCorrelationForScalar{Project,Aggregate} rules handle this shape.
+    // test_udf_function_call_view_udf in
+    // BodoSQL/bodosql/tests/test_types/test_snowflake_catalog_udfs.py; exercises this case.
     final boolean rightReferencesCorrelation =
         RelOptUtil.getVariablesUsed(oldRight).contains(rel.getCorrelationId());
     if (rightFrame == null

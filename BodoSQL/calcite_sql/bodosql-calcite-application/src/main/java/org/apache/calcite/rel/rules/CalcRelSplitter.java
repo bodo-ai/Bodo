@@ -109,7 +109,6 @@ public abstract class CalcRelSplitter {
    *                 distinct.
    */
   // BODO CHANGE: made protected
-  // Bodo Change: Make protected.
   protected CalcRelSplitter(Calc calc, RelBuilder relBuilder, RelType[] relTypes) {
     this.relBuilder = relBuilder;
     this.program = calc.getProgram();
@@ -125,7 +124,6 @@ public abstract class CalcRelSplitter {
   //~ Methods ----------------------------------------------------------------
 
   // BODO CHANGE: make public
-  // Bodo Change: Make public.
   public RelNode execute() {
     // Check that program is valid. In particular, this means that every
     // expression is trivial (either an atom, or a function applied to
