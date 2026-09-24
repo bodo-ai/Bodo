@@ -54,7 +54,10 @@ class DirCatalog(Catalog):
 
     def _table_path(self, identifier: Identifier) -> str:
         wh_path = self.warehouse_path.removesuffix("/")
-        identifier = tuple(iden for iden in identifier if iden)
+        # FileSystemCatalog uses "." as the default schema. When converted to an
+        # Iceberg identifier, "." produces empty namespace components. Ignore
+        # those components when constructing the filesystem path.
+        identifier = tuple(part for part in identifier if part)
         return f"{wh_path}/{'/'.join(identifier)}"
 
     def _load_table_and_version(
