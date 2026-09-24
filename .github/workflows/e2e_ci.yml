@@ -144,12 +144,26 @@ jobs:
           DISABLE_CCACHE: 1
         run: pixi run build
 
+      - name: Setup Snowflake Key Pair
+        env:
+          SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY }}
+        run: |
+          # Write the private key (if configured) to a file and expose the
+          # path to the tests for key pair (JWT) authentication.
+          if [[ -n "$SF_PRIVATE_KEY" ]]; then
+            key_path="$RUNNER_TEMP/snowflake_test_key.p8"
+            printf '%s\n' "$SF_PRIVATE_KEY" > "$key_path"
+            echo "SF_PRIVATE_KEY_FILE=$key_path" >> "$GITHUB_ENV"
+          fi
+        shell: bash
+
       - name: Run Python Examples
         working-directory: ./examples
         env:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          SF_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SF_PRIVATE_KEY_PASSPHRASE }}
         run: |
           set -eo pipefail
 
