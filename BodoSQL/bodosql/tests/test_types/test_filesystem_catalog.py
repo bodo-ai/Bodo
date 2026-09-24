@@ -313,7 +313,7 @@ def test_basic_iceberg_read(iceberg_warehouse_s3_loc):
 
 @pytest.mark.iceberg
 @pytest_mark_one_rank
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_basic_iceberg_read_jit(iceberg_warehouse_s3_loc):
     """Test that FileSystemCatalog can read S3 paths."""
     catalog = bodosql.FileSystemCatalog(iceberg_warehouse_s3_loc)
