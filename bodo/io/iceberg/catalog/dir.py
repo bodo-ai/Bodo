@@ -54,6 +54,7 @@ class DirCatalog(Catalog):
 
     def _table_path(self, identifier: Identifier) -> str:
         wh_path = self.warehouse_path.removesuffix("/")
+        identifier = tuple(iden for iden in identifier if iden)
         return f"{wh_path}/{'/'.join(identifier)}"
 
     def _load_table_and_version(
