@@ -432,7 +432,7 @@ def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
         # SEARCH/Sarg (NULL AS TRUE) and the pushdown renders as an isin filter.
         check_logger_msg(
             stream,
-            "((pa.compute.utf8_lower(ds.field('A'))).isin(f0))",
+            "(((pa.compute.utf8_lower(ds.field('A'))) == ds.scalar(f0)) | (ds.field('A').is_null()))",
         )
 
 
