@@ -1,7 +1,13 @@
 [workspace]
 name = "bodo"
 channels = ["conda-forge"]
-platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+platforms = [
+  "linux-64",
+  "linux-aarch64",
+  { name = "bodo-osx-64", platform = "osx-64", macos = "12.0" },
+  { name = "bodo-osx-arm64", platform = "osx-arm64", macos = "12.0" },
+  "win-64",
+]
 
 [environments]
 # Development
@@ -203,9 +209,6 @@ b = { depends-on = ["build"] }              # Alias for build
 # Additional
 clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash buildscripts/clean.sh" }
 
-
-[system-requirements]
-macos = "12.0"
 
 [dependencies]
 pip = "*"
