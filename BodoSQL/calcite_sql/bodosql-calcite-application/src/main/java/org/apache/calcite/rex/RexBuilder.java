@@ -452,8 +452,30 @@ public class RexBuilder {
             boolean nullWhenCountZero,
             boolean distinct,
             boolean ignoreNulls) {
-        return makeOver(type, operator, exprs, partitionKeys, orderKeys, lowerBound, upperBound,
-            RexWindowExclusion.EXCLUDE_NO_OTHER, rows, allowPartial, nullWhenCountZero, distinct,
+        return makeOver(SqlParserPos.ZERO, type, operator, exprs, partitionKeys, orderKeys,
+            lowerBound, upperBound, RexWindowExclusion.EXCLUDE_NO_OTHER, rows, allowPartial,
+            nullWhenCountZero, distinct, ignoreNulls);
+    }
+
+    /**
+     * Creates a call to a windowed agg.
+     */
+    public RexNode makeOver(
+        RelDataType type,
+        SqlAggFunction operator,
+        List<RexNode> exprs,
+        List<RexNode> partitionKeys,
+        ImmutableList<RexFieldCollation> orderKeys,
+        RexWindowBound lowerBound,
+        RexWindowBound upperBound,
+        RexWindowExclusion exclude,
+        boolean rows,
+        boolean allowPartial,
+        boolean nullWhenCountZero,
+        boolean distinct,
+        boolean ignoreNulls) {
+        return makeOver(SqlParserPos.ZERO, type, operator, exprs, partitionKeys, orderKeys,
+            lowerBound, upperBound, exclude, rows, allowPartial, nullWhenCountZero, distinct,
             ignoreNulls);
     }
 
@@ -461,6 +483,7 @@ public class RexBuilder {
      * Creates a call to a windowed agg.
      */
     public RexNode makeOver(
+        SqlParserPos pos,
         RelDataType type,
         SqlAggFunction operator,
         List<RexNode> exprs,
@@ -483,7 +506,7 @@ public class RexBuilder {
                     rows,
                     exclude);
         RexNode result =
-            new RexOver(type, operator, exprs, window, distinct, ignoreNulls);
+            new RexOver(pos, type, operator, exprs, window, distinct, ignoreNulls);
 
         // This should be correct but need time to go over test results.
         // Also want to look at combing with section below.
@@ -493,12 +516,12 @@ public class RexBuilder {
             result =
                     makeCall(SqlStdOperatorTable.CASE,
                             makeCall(SqlStdOperatorTable.GREATER_THAN,
-                                    new RexOver(bigintType, SqlStdOperatorTable.COUNT, exprs,
+                                    new RexOver(pos, bigintType, SqlStdOperatorTable.COUNT, exprs,
                                             window, distinct, ignoreNulls),
                                     makeLiteral(BigDecimal.ZERO, bigintType,
                                             SqlTypeName.DECIMAL)),
                             ensureType(type, // SUM0 is non-nullable, thus need a cast
-                                    new RexOver(typeFactory.createTypeWithNullability(type, false),
+                                    new RexOver(pos, typeFactory.createTypeWithNullability(type, false),
                                             operator, exprs, window, distinct, ignoreNulls),
                                     false),
                             makeNullLiteral(type));
@@ -514,6 +537,7 @@ public class RexBuilder {
                             makeCall(
                                     SqlStdOperatorTable.GREATER_THAN_OR_EQUAL,
                                     new RexOver(
+                                            pos,
                                             bigintType,
                                             SqlStdOperatorTable.COUNT,
                                             ImmutableList.of(),

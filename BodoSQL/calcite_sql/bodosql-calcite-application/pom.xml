@@ -16,7 +16,7 @@
 
     <properties>
         <java.version>11</java.version>
-        <kotlin.version>1.9.0</kotlin.version>
+        <kotlin.version>2.3.20</kotlin.version>
 
         <!-- Maven properties -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -24,8 +24,8 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
         <org.slf4j-version>1.7.36</org.slf4j-version>
-        <org.apache.calcite-version>1.41.0</org.apache.calcite-version>
-        <org.apache.calcite.avatica-version>1.27.0</org.apache.calcite.avatica-version>
+        <org.apache.calcite-version>1.42.0</org.apache.calcite-version>
+        <org.apache.calcite.avatica-version>1.28.0</org.apache.calcite.avatica-version>
         <com.google.protobuf-version>3.21.5</com.google.protobuf-version>
         <!-- TODO(njriasan): Upgrade to 3.14.1. This changes retry behavior so we need to test -->
         <snowflake-jdbc-version>3.13.33</snowflake-jdbc-version>
@@ -397,6 +397,8 @@
                                         <exclude>org/apache/calcite/plan/RelOptTable$ViewExpander.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$1.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$10.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$11.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$1JoinCounter.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$2.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$3.class</exclude>
@@ -413,6 +415,7 @@
                                         <exclude>org/apache/calcite/plan/RelOptUtil$Logic.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$RelHintPropagateShuttle.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$ResetHintsShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$RexCorrelVariableMapShuttle.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$RexInputConverter.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$Side.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptUtil$SubQueryType.class</exclude>
@@ -439,28 +442,46 @@
                                         <exclude>org/apache/calcite/rel/core/TableModify$1.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/TableModify$Operation.class</exclude>
                                         <exclude>org/apache/calcite/rel/core/TableModify.class</exclude>
-                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter.class</exclude>
-                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$RelType.class</exclude>
-                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$ImplementTester.class</exclude>
+                                        <exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$1.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$2.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$AliasContext.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$BaseContext.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$Builder.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$Clause.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$Context$1.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$Context$2.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$Context$RangeToSql.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$Context.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$JoinContext.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$MatchRecognizeContext.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$Result$1.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$Result.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$SelectListContext.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$SimpleContext.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor$TableFunctionScanContext.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rel2sql/SqlImplementor.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$1.class</exclude>
                                         <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$CannotImplement.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$HighestUsageFinder.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$ImplementTester.class</exclude>
                                         <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$InputToCommonExprConverter.class</exclude>
                                         <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$MaxInputFinder.class</exclude>
-                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$HighestUsageFinder.class</exclude>
-                                        <exclude>org/apache/calcite/rel/logical/LogicalTargetTableScan.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter$RelType.class</exclude>
+                                        <exclude>org/apache/calcite/rel/rules/CalcRelSplitter.class</exclude>
                                         <exclude>org/apache/calcite/rel2sql/SqlImplementor.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor.class</exclude>
-                                        <exclude>org/apache/calcite/rex/RexWindow$1.class</exclude>
-                                        <exclude>org/apache/calcite/rex/RexWindow.class</exclude>
-                                        <exclude>org/apache/calcite/rex/RexShuttle$1.class</exclude>
-                                        <exclude>org/apache/calcite/rex/RexShuttle.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexBuilder$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexBuilder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexCall$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexCall.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexLiteral$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexLiteral.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexShuttle$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexShuttle.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSimplify$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexSimplify$2.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSimplify$CaseBranch.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSimplify$Comparison.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSimplify$IsPredicate.class</exclude>
@@ -477,6 +498,7 @@
                                         <exclude>org/apache/calcite/rex/RexUtil$11.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$12.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$13.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$14.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$2.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$3.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$4.class</exclude>
@@ -490,6 +512,7 @@
                                         <exclude>org/apache/calcite/rex/RexUtil$ConstantFinder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$CorrelationFinder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$DnfHelper.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$ExpandDisjunctionHelper.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$ExprSimplifier.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$ExpressionNormalizer$SubExprExistsException.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$ExpressionNormalizer.class</exclude>
@@ -504,10 +527,14 @@
                                         <exclude>org/apache/calcite/rex/RexUtil$SubQueryCollector.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil$SubQueryFinder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexUtil.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexWindow$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexWindow.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlBasicTypeNameSpec$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlBasicTypeNameSpec.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding$DefaultCallHolder.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlCallBinding.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlDelete$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDelete.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDeleteUsingItem$SqlDeleteUsingItemOperator.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlDeleteUsingItem.class</exclude>
@@ -522,24 +549,28 @@
                                         <exclude>org/apache/calcite/sql/SqlLiteral$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlLiteral$SqlSymbol.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlLiteral.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlMerge$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlMerge.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableIdentifierWithID.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableRefWithID$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTableRefWithID.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlUpdate$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlUpdate.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlUtil$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/SqlUtil$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlUtil$DatabaseMetaDataInvocationHandler.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlUtil$Genealogist.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlUtil.class</exclude>
                                         <exclude>org/apache/calcite/sql/advise/SqlAdvisorValidator.class</exclude>
                                         <exclude>org/apache/calcite/sql/ddl/SqlColumnDeclaration$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/ddl/SqlColumnDeclaration$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/ddl/SqlColumnDeclaration.class</exclude>
                                         <exclude>org/apache/calcite/sql/ddl/SqlCreateTable$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/ddl/SqlCreateTable$CreateTableType.class</exclude>
                                         <exclude>org/apache/calcite/sql/ddl/SqlCreateTable.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlCastOperator.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlCoalesceFunction.class</exclude>
-                                        <exclude>org/apache/calcite/sql/fun/SqlExtractFunction$1.class</exclude>
-                                        <exclude>org/apache/calcite/sql/fun/SqlExtractFunction.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlQuantifyOperator$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlQuantifyOperator.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$10.class</exclude>
@@ -564,6 +595,14 @@
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$ToTreeListItem.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$TokenSequenceImpl.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ArraySqlType$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ArraySqlType.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$2.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$3.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ReturnTypes.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlOperandTypeChecker$Consistency.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlOperandTypeChecker.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/SqlBasicVisitor$ArgHandler.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/SqlBasicVisitor$ArgHandlerImpl.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/SqlBasicVisitor.class</exclude>
@@ -592,12 +631,18 @@
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$3.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$4.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$5.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$6.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$7.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$Clause.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$CompareFromBothSides.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$ConjunctionOfEqualities.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$DdlNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$DeleteNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$DeriveTypeVisitor.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$DmlNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$Expander.class</exclude>
+                                        <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$ExtendedExpander$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$ExtendedExpander.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$FunctionParamInfo.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/SqlValidatorImpl$IdInfo.class</exclude>
@@ -636,23 +681,48 @@
                                         <exclude>org/apache/calcite/sql/validate/TableNamespace.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/WindowedAggChecker.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/WithScope.class</exclude>
-                                        <exclude>org/apache/calcite/sql/type/ArraySqlType.class</exclude>
-                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$1.class</exclude>
-                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$2.class</exclude>
-                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$3.class</exclude>
-                                        <exclude>org/apache/calcite/sql/type/ReturnTypes.class</exclude>
-                                        <exclude>org/apache/calcite/sql/type/SqlOperandTypeChecker$Consistency.class</exclude>
-                                        <exclude>org/apache/calcite/sql/type/SqlOperandTypeChecker.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableAdjustProjectForCountAggregateRuleConfig$Builder.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableAdjustProjectForCountAggregateRuleConfig$InitShim.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableAdjustProjectForCountAggregateRuleConfig.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveCorrelationForScalarAggregateRuleConfig$Builder.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveCorrelationForScalarAggregateRuleConfig$InitShim.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveCorrelationForScalarAggregateRuleConfig.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveCorrelationForScalarProjectRuleConfig$Builder.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveCorrelationForScalarProjectRuleConfig$InitShim.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveCorrelationForScalarProjectRuleConfig.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveSingleAggregateRuleConfig$Builder.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveSingleAggregateRuleConfig$InitShim.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/ImmutableRemoveSingleAggregateRuleConfig.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$1.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$Config$Builder.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$Config$InitShim.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter$Config.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/ImmutableSqlToRelConverter.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$AdjustProjectForCountAggregateRule$AdjustProjectForCountAggregateRuleConfig.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$AdjustProjectForCountAggregateRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorDef.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorRef.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorelMap.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorelMapBuilder$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorelMapBuilder.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$DecorrelateRexShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$Frame.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationForScalarAggregateRule$RemoveCorrelationForScalarAggregateRuleConfig.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationForScalarAggregateRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationForScalarProjectRule$RemoveCorrelationForScalarProjectRuleConfig.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationForScalarProjectRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationRexShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveSingleAggregateRule$RemoveSingleAggregateRuleConfig.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveSingleAggregateRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/RelStructuredTypeFlattener$1.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/RelStructuredTypeFlattener$RewriteRelVisitor.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/RelStructuredTypeFlattener$RewriteRexShuttle.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/RelStructuredTypeFlattener$SelfFlatteningRel.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/RelStructuredTypeFlattener.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/SqlNodeToRexConverterImpl$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/SqlNodeToRexConverterImpl.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$1.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$2.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$3.class</exclude>
@@ -668,6 +738,7 @@
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$HistogramShuttle.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$JsonFunctionRexRewriter.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$LookupContext.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$MeasureBlackboard.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$NestedJsonFunctionRelRewriter.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$NoOpSubQueryConverter.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/SqlToRelConverter$RegisterArgs.class</exclude>
@@ -682,6 +753,7 @@
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$AvgVarianceConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$FloorCeilConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$GreatestConvertlet.class</exclude>
+                                        <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$GreatestPgConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$RegrCovarianceConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$SubstrConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TimestampAddConvertlet.class</exclude>
@@ -691,18 +763,6 @@
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable$TruncConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTable.class</exclude>
                                         <exclude>org/apache/calcite/sql2rel/StandardConvertletTableConfig.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$DecorrelateRexShuttle.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationRexShuttle.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveSingleAggregateRule.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationForScalarProjectRule.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$RemoveCorrelationForScalarAggregateRule.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$AdjustProjectForCountAggregateRule.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorRef.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorDef.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorelMap.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$CorelMapBuilder.class</exclude>
-                                        <exclude>org/apache/calcite/sql2rel/RelDecorrelator$Frame.class</exclude>
                                         <exclude>org/apache/calcite/tools/ImmutableRelBuilder$1.class</exclude>
                                         <exclude>org/apache/calcite/tools/ImmutableRelBuilder$Config$Builder.class</exclude>
                                         <exclude>org/apache/calcite/tools/ImmutableRelBuilder$Config$InitShim.class</exclude>
@@ -710,6 +770,7 @@
                                         <exclude>org/apache/calcite/tools/ImmutableRelBuilder.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$1.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$2.class</exclude>
+                                        <exclude>org/apache/calcite/tools/RelBuilder$AggBuilder.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$AggCall.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$AggCallImpl.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$AggCallImpl2.class</exclude>
@@ -721,6 +782,7 @@
                                         <exclude>org/apache/calcite/tools/RelBuilder$OverCall.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$OverCallImpl$1.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$OverCallImpl.class</exclude>
+                                        <exclude>org/apache/calcite/tools/RelBuilder$RegisterAgg.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Registrar.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder$Shifter.class</exclude>
                                         <exclude>org/apache/calcite/tools/RelBuilder.class</exclude>

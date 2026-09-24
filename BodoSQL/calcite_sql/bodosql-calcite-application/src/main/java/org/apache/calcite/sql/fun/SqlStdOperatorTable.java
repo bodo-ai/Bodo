@@ -1076,7 +1076,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     80,
                     ReturnTypes.ARG0,
                     InferTypes.RETURN_TYPE,
-                    OperandTypes.NUMERIC_OR_INTERVAL);
+                    OperandTypes.SIGNED_OR_INTERVAL);
 
     /**
      * Checked version of prefix arithmetic minus operator, '<code>-</code>'.
@@ -2392,6 +2392,11 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
             new SqlItemOperator("ITEM", OperandTypes.ARRAY_OR_MAP, 1, true);
 
     /**
+     * Colon operator, '<code>:</code>', used for variant path access.
+     */
+    public static final SqlOperator COLON = new SqlColonOperator();
+
+    /**
      * The ARRAY Value Constructor. e.g. "<code>ARRAY[1, 2, 3]</code>".
      */
     public static final SqlArrayValueConstructor ARRAY_VALUE_CONSTRUCTOR =
@@ -2471,7 +2476,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
             new SqlInternalOperator(
                     "$SCALAR_QUERY",
                     SqlKind.SCALAR_QUERY,
-                    0,
+                    100, // High precedence to prevent SqlCall from adding extra parentheses
                     false,
                     ReturnTypes.RECORD_TO_SCALAR,
                     null,
@@ -2481,9 +2486,15 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                         SqlCall call,
                         int leftPrec,
                         int rightPrec) {
-                    final SqlWriter.Frame frame = writer.startList("(", ")");
-                    call.operand(0).unparse(writer, 0, 0);
-                    writer.endList(frame);
+                    final SqlNode operand = call.operand(0);
+                    if (operand.getKind() == SqlKind.SELECT) {
+                        operand.unparse(writer, leftPrec, rightPrec);
+                    } else {
+                        final SqlWriter.Frame frame =
+                            writer.startList(SqlWriter.FrameTypeEnum.SUB_QUERY, "(", ")");
+                        operand.unparse(writer, 0, 0);
+                        writer.endList(frame);
+                    }
                 }
 
                 @Override public boolean argumentMustBeScalar(int ordinal) {

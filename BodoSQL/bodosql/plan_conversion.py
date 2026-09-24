@@ -4565,12 +4565,19 @@ def convert_strtok_to_array(input_plan, src, delim_expr=None):
 
 def convert_split(input_plan, src, delim_expr):
     ensure_type_of_expr(src, "src", (str, pa.binary()))
-    ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", (str, pa.binary()))
 
     src_pa_type = get_expr_dtype(
         src, "SPLIT src", get_const_val_type=False
     ).pyarrow_dtype
     list_empty_data = pd.Series(dtype=pd.ArrowDtype(pa.list_(src_pa_type)))
+
+    # If the delimiter is a NULL literal the result is always NULL. Calcite 1.42
+    # no longer coerces the NULL literal to the delimiter's declared type, so it
+    # reaches us as a NullExpression instead of a typed ConstantExpression.
+    if isinstance(delim_expr, NullExpression):
+        return NullExpression(list_empty_data, input_plan, 0)
+
+    ensure_arg_is_const_expr_of_type(delim_expr, "delim_expr", (str, pa.binary()))
 
     # If delimiter is empty: return a list containing only the original string.
     # If original string is null, the result should be a null list rather than

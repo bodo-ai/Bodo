@@ -37,6 +37,8 @@ class SnowflakeNativeUDF private constructor(
         SqlFunctionCategory.USER_DEFINED_FUNCTION,
         { _: SqlOperatorBinding -> SqlMonotonicity.NOT_MONOTONIC },
         Strong.Policy.AS_IS,
+        // UDFs run arbitrary user code and can raise errors, so they are not safe.
+        false,
     ) {
     companion object {
         @JvmStatic
