@@ -7547,7 +7547,10 @@ def generate_iceberg_read(read_info: IcebergReadInfo):
     # Get file system path
     file_path = catalog.schemaPathToFilePath(schema_path)
     uri = file_path.toUri()
-    path_str = uri.getRawPath()
+    if uri.getScheme() in ("s3", "s3a"):
+        path_str = uri.toString()
+    else:
+        path_str = uri.getRawPath()
 
     plan, _, _ = build_iceberg_read_plan(
         # path_str has the schema in it so it's not needed in table id
