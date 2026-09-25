@@ -458,7 +458,7 @@ def read_csv(
     dtype_backend: DtypeBackend | lib.NoDefault = lib.no_default,
 ) -> BodoDataFrame:
     # Import compiler
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.utils.utils import bodo_spawn_exec
 
     bodo.spawn.utils.import_compiler_on_workers()
@@ -698,7 +698,7 @@ def _validate_df_to_datetime(df):
 
         return value
 
-    unit = {k: f(k) for k in df.keys()}
+    unit = {k: f(k) for k in df}
     unit_rev = {v: k for k, v in unit.items()}
 
     required = ["year", "month", "day"]

@@ -77,7 +77,7 @@ def _recv_arg(
     if isinstance(arg, ArgMetadata):
         if arg == ArgMetadata.BROADCAST:
             # Import compiler lazily
-            import bodo.decorators  # isort:skip # noqa
+            import bodo.decorators  # isort:skip
 
             return (
                 bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm),
@@ -243,7 +243,7 @@ def _is_table_type(t):
     """Helper for checking Table type that imports the JIT compiler lazily."""
     # Import compiler lazily
     import bodo
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     import bodo.hiframes
     import bodo.hiframes.table
@@ -293,14 +293,17 @@ def _gather_res(
                 res is None or len(res) == 0 if bodo.get_rank() == 0 else None, root=0
             )
         )
-        or isinstance(res, np.ndarray)
-        # TODO[BSE-4198]: support lazy Index wrappers
-        or isinstance(res, pd.Index)
-        or isinstance(res, pd.Categorical)
-        or isinstance(res, pd.arrays.IntervalArray)
-        # TODO[BSE-4205]: move DatetimeArray to use Arrow
-        or isinstance(res, pd.arrays.DatetimeArray)
-        or isinstance(res, pa.lib.NullArray)
+        or isinstance(
+            res,
+            (
+                np.ndarray,
+                pd.Index,
+                pd.Categorical,
+                pd.arrays.IntervalArray,
+                pd.arrays.DatetimeArray,
+                pa.lib.NullArray,
+            ),
+        )
         or (type(res).__name__ == "Table" and _is_table_type(res))
     ):
         # If the result is empty on rank 0, we can't send a head to the spawner
@@ -409,7 +412,7 @@ def _is_distributable_result(res):
         return False
 
     # Import compiler lazily
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     return bodo.utils.utils.is_distributable_typ(bodo.typeof(res))
 
@@ -688,7 +691,7 @@ def worker_loop(
             return
         elif command == CommandType.BROADCAST.value:
             # Import compiler lazily
-            import bodo.decorators  # isort:skip # noqa
+            import bodo.decorators  # isort:skip
 
             bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
             debug_worker_msg(logger, "Broadcast done")

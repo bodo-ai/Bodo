@@ -8,7 +8,7 @@ import pytest
 
 import bodo
 
-import bodo.decorators  # isort:skip # noqa
+import bodo.decorators  # isort:skip
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.libs.streaming.groupby import (
@@ -884,7 +884,7 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
     if fstr == "size":
         # 'size' doesn't need input columns.
         f_in_offsets = f_in_offsets = bodo.utils.typing.MetaType(tuple([0] * num_cols))
-        f_in_cols = bodo.utils.typing.MetaType(tuple(range(0, 0)))
+        f_in_cols = bodo.utils.typing.MetaType(tuple(range(0)))
     else:
         f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
         f_in_cols = bodo.utils.typing.MetaType(tuple(range(1, num_cols)))
@@ -1374,7 +1374,7 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
             bodo.bodo_disable_streaming_window_sort = True
             output = window_impl(_get_dist_arg(df))
             global_output = bodo.allgatherv(output)
-            stdout, stderr = capfd.readouterr()
+            _stdout, stderr = capfd.readouterr()
         finally:
             bodo.bodo_disable_streaming_window_sort = old_disable_value
 

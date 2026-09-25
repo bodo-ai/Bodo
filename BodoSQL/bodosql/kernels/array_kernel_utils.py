@@ -42,8 +42,7 @@ def is_valid_SQL_object_arg(arg):
     used to check if an argument is valid for SQL functions that accept SQL objects as arguments.
     """
     return (
-        isinstance(arg, StructArrayType)
-        or isinstance(arg, StructType)
+        isinstance(arg, (StructArrayType, StructType))
         or (
             isinstance(arg, bodo.libs.map_arr_ext.MapArrayType)
             and (

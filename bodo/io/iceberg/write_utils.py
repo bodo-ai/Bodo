@@ -8,9 +8,9 @@ import pyarrow.fs
 from pyarrow.fs import FileSystem
 
 import bodo
-import bodo.utils.tracing as tracing
 from bodo.io.iceberg.catalog import conn_str_to_catalog
 from bodo.io.iceberg.common import _format_data_loc, _fs_from_file_path
+from bodo.utils import tracing
 
 if pt.TYPE_CHECKING:  # pragma: no cover
     from pyarrow.fs import FileSystem

@@ -317,7 +317,7 @@ def test_optional_fusion(memory_leak_check, dt_like_series):
 
     def impl(S):
         return pd.DataFrame(
-            {"A": S.apply(lambda x: (None if (pd.isna(x)) else x)).isna()}
+            {"A": S.apply(lambda x: None if (pd.isna(x)) else x).isna()}
         )
 
     check_func(impl, (dt_like_series,))

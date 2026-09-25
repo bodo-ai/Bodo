@@ -730,7 +730,7 @@ def q13(data_folder):
     orders = load_orders(data_folder)
     customer_filtered = customer.loc[:, ["C_CUSTKEY"]]
     orders_filtered = orders[
-        ~orders["O_COMMENT"].str.contains("special(\S|\s)*requests")
+        ~orders["O_COMMENT"].str.contains(r"special(\S|\s)*requests")
     ]
     orders_filtered = orders_filtered.loc[:, ["O_ORDERKEY", "O_CUSTKEY"]]
     c_o_merged = customer_filtered.merge(
@@ -822,7 +822,7 @@ def q16(data_folder):
     )
     total = total.loc[:, ["P_BRAND", "P_TYPE", "P_SIZE", "PS_SUPPKEY"]]
     supplier_filtered = supplier[
-        supplier["S_COMMENT"].str.contains("Customer(\S|\s)*Complaints")
+        supplier["S_COMMENT"].str.contains(r"Customer(\S|\s)*Complaints")
     ]
     supplier_filtered = supplier_filtered.loc[:, ["S_SUPPKEY"]].drop_duplicates()
     # left merge to select only PS_SUPPKEY values not in supplier_filtered

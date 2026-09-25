@@ -39,13 +39,13 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
 
     # Use __slots__ to avoid creating __dict__ and __weakref__ for each instance, store it like a C struct
     __slots__ = [
-        "_md_nrows",
-        "_md_head",
-        "_md_result_id",
         "_collect_func",
         "_del_func",
-        "logger",
+        "_md_head",
+        "_md_nrows",
+        "_md_result_id",
         "_plan",
+        "logger",
     ]
 
     def __init__(
@@ -355,13 +355,13 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
 
     # Use __slots__ to avoid creating __dict__ and __weakref__ for each instance, store it like a C struct
     __slots__ = [
-        "_md_nrows",
-        "_md_head",
-        "_md_result_id",
         "_collect_func",
         "_del_func",
-        "logger",
+        "_md_head",
+        "_md_nrows",
+        "_md_result_id",
         "_plan",
+        "logger",
     ]
 
     def __init__(

@@ -351,7 +351,7 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
                 else:
                     scalar_text += f"res[i] = np.{func_name.lower()}(arg0)"
             else:
-                ValueError(f"Unknown function name: {func_name}")
+                raise ValueError(f"Unknown function name: {func_name}")
 
             out_dtype = _get_numeric_output_dtype(func_name, arr)
 
@@ -1868,9 +1868,7 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                 elif dtype2 == types.none:
                     dtype2 = dtype1
                 max_bitwidth = max(dtype1.bitwidth, dtype2.bitwidth)
-                if max_bitwidth == 64:
-                    out_dtype = types.int64
-                elif max_bitwidth == 32:
+                if max_bitwidth == 64 or max_bitwidth == 32:
                     out_dtype = types.int64
                 elif max_bitwidth == 16:
                     out_dtype = types.int32

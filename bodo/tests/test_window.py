@@ -42,7 +42,7 @@ def test_window_df():
     Q: Nullable float array which when grouped by D will have a partition containing NaNs.
     R: Nullable float array with all NA values to test all NA corner cases.
     """
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     return pd.DataFrame(
         {
@@ -1426,7 +1426,7 @@ def permute_df_and_answer(df, answer):
                             [True] * 15, dtype=pd.ArrowDtype(pa.bool_())
                         ),
                         "AGG_OUTPUT_2": pd.array(
-                            [Decimal("16")] * 12 + [None] * 3,
+                            [Decimal(16)] * 12 + [None] * 3,
                             dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
                         ),
                         "AGG_OUTPUT_3": pd.array(
@@ -1610,7 +1610,7 @@ def permute_df_and_answer(df, answer):
                             dtype=pd.ArrowDtype(pa.bool_()),
                         ),
                         "AGG_OUTPUT_1": pd.array(
-                            [Decimal("2")] * 12 + [Decimal("0.25")] * 3,
+                            [Decimal(2)] * 12 + [Decimal("0.25")] * 3,
                             dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
                         ),
                         # This answer is identical to the input column

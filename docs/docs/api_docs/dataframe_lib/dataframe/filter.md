@@ -28,11 +28,7 @@ Using `items`:
 import bodo.pandas as bd
 
 bdf = bd.DataFrame(
-    {
-        "A": [0, 1, 2, 3, 4],
-        "BB": [5, 6, 7, 8, 9],
-        "CAC": [10, 11, 12, 13, 14]
-    }
+    {"A": [0, 1, 2, 3, 4], "BB": [5, 6, 7, 8, 9], "CAC": [10, 11, 12, 13, 14]}
 )
 
 bdf_filtered = bdf.filter(items=("BB", "CAC", "D"))
@@ -55,11 +51,7 @@ Using `like`:
 import bodo.pandas as bd
 
 bdf = bd.DataFrame(
-    {
-        "A": [0, 1, 2, 3, 4],
-        "BB": [5, 6, 7, 8, 9],
-        "CAC": [10, 11, 12, 13, 14]
-    }
+    {"A": [0, 1, 2, 3, 4], "BB": [5, 6, 7, 8, 9], "CAC": [10, 11, 12, 13, 14]}
 )
 
 bdf_filtered = bdf.filter(like="A")

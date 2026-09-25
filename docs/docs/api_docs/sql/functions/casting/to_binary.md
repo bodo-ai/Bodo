@@ -12,10 +12,12 @@ _Example:_
 
 We are given `table1` with columns `a` and `b`:
 ```python
-table1 = pd.DataFrame({
-    'a': ["AB", "626f646f", "4a2F3132"],
-    'b': ["ABC", "ZETA", "#fizz"],
-})
+table1 = pd.DataFrame(
+    {
+        "a": ["AB", "626f646f", "4a2F3132"],
+        "b": ["ABC", "ZETA", "#fizz"],
+    }
+)
 ```
 upon query
 ```sql

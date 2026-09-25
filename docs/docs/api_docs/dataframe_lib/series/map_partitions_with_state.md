@@ -43,20 +43,27 @@ overheads that can be amortized across a batch using map\_partitions\_with\_stat
 ``` py
 import bodo.pandas as pd
 
+
 class mystate:
     def __init__(self):
-        self.dict = {1:7}
+        self.dict = {1: 7}
+
 
 def init_state():
     return mystate()
 
+
 def per_batch(state, batch, *args, **kwargs):
     def per_row(row):
         return "bodo" + str(row + state.dict[1])
+
     return batch.map(per_row)
 
+
 a = pd.Series(list(range(20)))
-b = a.map_partitions_with_state(init_state, per_batch, output_type=pd.Series(dtype="string[pyarrow]"))
+b = a.map_partitions_with_state(
+    init_state, per_batch, output_type=pd.Series(dtype="string[pyarrow]")
+)
 print(b)
 ```
 

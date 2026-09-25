@@ -534,7 +534,7 @@ def test_setitem_cast_decimal(memory_leak_check):
 
     # Int case
     arr = pd.array([1, 2, 3, 4, 5], "Int64")
-    val = Decimal("123")
+    val = Decimal(123)
     # Pandas doesn't support Decimal setitem yet so create output manually
     out = arr.copy()
     out[2] = int(val)
@@ -826,19 +826,19 @@ def test_decimal_sum_overflow():
             id="scalar-scalar-same_scale-fast",
         ),
         pytest.param(
-            pa.scalar(Decimal("-1234"), pa.decimal128(10, 0)),
+            pa.scalar(Decimal(-1234), pa.decimal128(10, 0)),
             pa.scalar(Decimal("2.9"), pa.decimal128(10, 2)),
             pa.scalar(Decimal("-1.5"), pa.decimal128(12, 2)),
             id="scalar-scalar-smaller_scale-fast",
         ),
         pytest.param(
             pa.scalar(Decimal("98765432.10"), pa.decimal128(10, 2)),
-            pa.scalar(Decimal("-9876543210"), pa.decimal128(10, 0)),
+            pa.scalar(Decimal(-9876543210), pa.decimal128(10, 0)),
             pa.scalar(Decimal("98765432.10"), pa.decimal128(12, 2)),
             id="scalar-scalar-larger_scale-fast",
         ),
         pytest.param(
-            pa.scalar(Decimal("9876543210987654321098765432"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal(9876543210987654321098765432), pa.decimal128(38, 0)),
             pa.scalar(Decimal("1234567.89"), pa.decimal128(38, 2)),
             pa.scalar(Decimal("7535.60"), pa.decimal128(38, 2)),
             id="scalar-scalar-smaller_scale-unsafe",
@@ -867,7 +867,7 @@ def test_decimal_sum_overflow():
                     Decimal("123.456"),
                     None,
                     Decimal("-98.0"),
-                    Decimal("1234"),
+                    Decimal(1234),
                     Decimal("0.0101"),
                     None,
                     Decimal("-0.123456789"),
@@ -930,37 +930,37 @@ def test_decimal_sum_overflow():
         pytest.param(
             pd.array(
                 [
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                     Decimal("12345670.89"),
                     None,
                     Decimal("-123456.78"),
                     Decimal("13.5"),
-                    Decimal("0"),
+                    Decimal(0),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
             ),
             pd.array(
                 [
-                    Decimal("12345"),
+                    Decimal(12345),
                     None,
-                    Decimal("666"),
-                    Decimal("-1"),
-                    Decimal("99999"),
+                    Decimal(666),
+                    Decimal(-1),
+                    Decimal(99999),
                     None,
-                    Decimal("-98765"),
+                    Decimal(-98765),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(5, 0)),
             ),
             pd.array(
                 [
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                     Decimal("28.89"),
                     None,
                     Decimal("-23457.78"),
                     None,
-                    Decimal("0"),
+                    Decimal(0),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
             ),
@@ -969,13 +969,13 @@ def test_decimal_sum_overflow():
         pytest.param(
             pd.array(
                 [
-                    Decimal("9876543210"),
+                    Decimal(9876543210),
                     None,
-                    Decimal("13"),
+                    Decimal(13),
                     None,
-                    Decimal("-99999999999999999"),
-                    Decimal("0"),
-                    Decimal("-1"),
+                    Decimal(-99999999999999999),
+                    Decimal(0),
+                    Decimal(-1),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(24, 0)),
             ),
@@ -984,7 +984,7 @@ def test_decimal_sum_overflow():
                     Decimal("6173.1234567789"),
                     None,
                     Decimal("-0.51206"),
-                    Decimal("0"),
+                    Decimal(0),
                     Decimal("1234.5678"),
                     None,
                     Decimal("-0.00000864200001300579"),
@@ -1020,13 +1020,13 @@ def test_decimal_sum_overflow():
             ),
             pd.array(
                 [
-                    Decimal("987654321"),
+                    Decimal(987654321),
                     None,
-                    Decimal("-987654321987654321"),
-                    Decimal("-987654321987654321"),
-                    Decimal("202020202020"),
+                    Decimal(-987654321987654321),
+                    Decimal(-987654321987654321),
+                    Decimal(202020202020),
                     None,
-                    Decimal("-202020202020"),
+                    Decimal(-202020202020),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(28, 0)),
             ),
@@ -1119,7 +1119,7 @@ def test_decimal_modulo(arg0, arg1, answers, memory_leak_check):
     "arg0, arg1, exception_type, msg",
     [
         pytest.param(
-            pa.scalar(Decimal("98765432109876543210"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal(98765432109876543210), pa.decimal128(38, 0)),
             pa.scalar(Decimal("187654.87654321"), pa.decimal128(38, 30)),
             RuntimeError,
             "Invalid rescale during decimal modulo",
@@ -1127,14 +1127,14 @@ def test_decimal_modulo(arg0, arg1, answers, memory_leak_check):
         ),
         pytest.param(
             pa.scalar(Decimal("-187654.87654321"), pa.decimal128(38, 30)),
-            pa.scalar(Decimal("98765432109876543210"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal(98765432109876543210), pa.decimal128(38, 0)),
             RuntimeError,
             "Invalid rescale during decimal modulo",
             id="larger_scale-overflow_on_rescale",
         ),
         pytest.param(
-            pa.scalar(Decimal("800000000000000001"), pa.decimal128(38, 18)),
-            pa.scalar(Decimal("0"), pa.decimal128(38, 18)),
+            pa.scalar(Decimal(800000000000000001), pa.decimal128(38, 18)),
+            pa.scalar(Decimal(0), pa.decimal128(38, 18)),
             RuntimeError,
             "Invalid modulo by zero",
             id="zero_divisor",
@@ -1166,7 +1166,7 @@ def test_decimal_modulo_error(arg0, arg1, exception_type, msg, array_0, array_1)
             id="scalar-positive",
         ),
         pytest.param(
-            pa.scalar(Decimal("0"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal(0), pa.decimal128(4, 2)),
             0,
             id="scalar-zero",
         ),
@@ -1186,7 +1186,7 @@ def test_decimal_modulo_error(arg0, arg1, exception_type, msg, array_0, array_1)
             pd.array(
                 [
                     Decimal("512.32"),
-                    Decimal("0"),
+                    Decimal(0),
                     Decimal("-153245.152"),
                     None,
                     Decimal("123456789012345678901234567890.12345678"),
@@ -1219,14 +1219,14 @@ def test_decimal_sign(arg, answer, memory_leak_check):
             id="scalar-scalar-same_scale-fast",
         ),
         pytest.param(
-            pa.scalar(Decimal("543"), pa.decimal128(3, 0)),
+            pa.scalar(Decimal(543), pa.decimal128(3, 0)),
             pa.scalar(Decimal("16.45"), pa.decimal128(4, 2)),
             pa.scalar(Decimal("559.45"), pa.decimal128(6, 2)),
             id="scalar-scalar-smaller_scale-fast",
         ),
         pytest.param(
             pa.scalar(Decimal("1.23456"), pa.decimal128(6, 5)),
-            pa.scalar(Decimal("9876543210"), pa.decimal128(10, 0)),
+            pa.scalar(Decimal(9876543210), pa.decimal128(10, 0)),
             pa.scalar(Decimal("9876543211.23456"), pa.decimal128(16, 5)),
             id="scalar-scalar-larger_scale-fast",
         ),
@@ -1237,7 +1237,7 @@ def test_decimal_sign(arg, answer, memory_leak_check):
             id="scalar-scalar-same_scale-unsafe",
         ),
         pytest.param(
-            pa.scalar(Decimal("123456789012345678901234567890"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal(123456789012345678901234567890), pa.decimal128(38, 0)),
             pa.scalar(Decimal("00.12"), pa.decimal128(4, 2)),
             pa.scalar(
                 Decimal("123456789012345678901234567890.12"), pa.decimal128(38, 2)
@@ -1267,7 +1267,7 @@ def test_decimal_sign(arg, answer, memory_leak_check):
         ),
         pytest.param(
             pd.array(
-                [Decimal("994"), Decimal("456"), Decimal("-12"), None] * 2,
+                [Decimal(994), Decimal(456), Decimal(-12), None] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(3, 0)),
             ),
             pd.array(
@@ -1286,7 +1286,7 @@ def test_decimal_sign(arg, answer, memory_leak_check):
                 dtype=pd.ArrowDtype(pa.decimal128(4, 3)),
             ),
             pd.array(
-                [Decimal("9999.9"), None, Decimal("-9999.9"), Decimal("0")] * 2,
+                [Decimal("9999.9"), None, Decimal("-9999.9"), Decimal(0)] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(5, 1)),
             ),
             pd.array(
@@ -1298,9 +1298,9 @@ def test_decimal_sign(arg, answer, memory_leak_check):
         pytest.param(
             pd.array(
                 [
-                    Decimal("12345678901234567890"),
-                    Decimal("-1024"),
-                    Decimal("1000000000000000000000000000000000001"),
+                    Decimal(12345678901234567890),
+                    Decimal(-1024),
+                    Decimal(1000000000000000000000000000000000001),
                     None,
                 ]
                 * 2,
@@ -1308,19 +1308,19 @@ def test_decimal_sign(arg, answer, memory_leak_check):
             ),
             pd.array(
                 [
-                    Decimal("97531975319753197531"),
+                    Decimal(97531975319753197531),
                     None,
-                    Decimal("-3000000000000000000000000000000000076"),
-                    Decimal("0"),
+                    Decimal(-3000000000000000000000000000000000076),
+                    Decimal(0),
                 ]
                 * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
             pd.array(
                 [
-                    Decimal("109877654220987765421"),
+                    Decimal(109877654220987765421),
                     None,
-                    Decimal("-2000000000000000000000000000000000075"),
+                    Decimal(-2000000000000000000000000000000000075),
                     None,
                 ]
                 * 2,
@@ -1331,9 +1331,9 @@ def test_decimal_sign(arg, answer, memory_leak_check):
         pytest.param(
             pd.array(
                 [
-                    Decimal("12345678901234567"),
-                    Decimal("-1024"),
-                    Decimal("123456789123456789"),
+                    Decimal(12345678901234567),
+                    Decimal(-1024),
+                    Decimal(123456789123456789),
                     None,
                 ]
                 * 2,
@@ -1341,17 +1341,17 @@ def test_decimal_sign(arg, answer, memory_leak_check):
             ),
             pd.array(
                 [
-                    Decimal("97531975319753197"),
+                    Decimal(97531975319753197),
                     None,
                     Decimal("-7654321987654321.987654321123456789"),
-                    Decimal("0"),
+                    Decimal(0),
                 ]
                 * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
             ),
             pd.array(
                 [
-                    Decimal("109877654220987764"),
+                    Decimal(109877654220987764),
                     None,
                     Decimal("115802467135802467.012345678876543211"),
                     None,
@@ -1374,10 +1374,10 @@ def test_decimal_sign(arg, answer, memory_leak_check):
             ),
             pd.array(
                 [
-                    Decimal("98765432109876543210"),
+                    Decimal(98765432109876543210),
                     None,
-                    Decimal("-12345678901234567890"),
-                    Decimal("0"),
+                    Decimal(-12345678901234567890),
+                    Decimal(0),
                 ]
                 * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(24, 0)),
@@ -1401,14 +1401,14 @@ def test_decimal_sign(arg, answer, memory_leak_check):
                 dtype=pd.ArrowDtype(pa.decimal128(4, 2)),
             ),
             pd.array(
-                [Decimal("2.98"), Decimal("100.98"), Decimal("-99"), None] * 2,
+                [Decimal("2.98"), Decimal("100.98"), Decimal(-99), None] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(5, 2)),
             ),
             id="scalar-array-same_scale-safe",
         ),
         pytest.param(
             pd.array(
-                [Decimal("15"), Decimal("-99"), Decimal("56"), None] * 2,
+                [Decimal(15), Decimal(-99), Decimal(56), None] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(2, 0)),
             ),
             pa.scalar(Decimal("98.12"), pa.decimal128(4, 2)),
@@ -1441,7 +1441,7 @@ def test_decimal_sign(arg, answer, memory_leak_check):
             pd.array(
                 [
                     Decimal("1" + "9" * 35 + "8"),
-                    Decimal("0"),
+                    Decimal(0),
                     Decimal("1" + "5" * 35 + "4"),
                     None,
                 ]
@@ -1451,7 +1451,7 @@ def test_decimal_sign(arg, answer, memory_leak_check):
             id="array-scalar-same_scale-unsafe",
         ),
         pytest.param(
-            pa.scalar(Decimal("123456789"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal(123456789), pa.decimal128(38, 0)),
             pd.array(
                 [
                     Decimal("9" * 20 + ".25"),
@@ -1549,11 +1549,11 @@ def test_decimal_addition(arg0, arg1, answer, memory_leak_check):
         ),
         pytest.param(
             pa.scalar(Decimal("87654321.87654321"), pa.decimal128(38, 30)),
-            pa.scalar(Decimal("800000000000000001"), pa.decimal128(38, 20)),
+            pa.scalar(Decimal(800000000000000001), pa.decimal128(38, 20)),
             id="scalar-scalar-larger_scale-overflow_on_rescale",
         ),
         pytest.param(
-            pa.scalar(Decimal("800000000000000001"), pa.decimal128(38, 20)),
+            pa.scalar(Decimal(800000000000000001), pa.decimal128(38, 20)),
             pa.scalar(Decimal("87654321.87654321"), pa.decimal128(38, 30)),
             id="scalar-scalar-smaller_scale-overflow_on_rescale",
         ),
@@ -1570,7 +1570,7 @@ def test_decimal_addition(arg0, arg1, answer, memory_leak_check):
         ),
         pytest.param(
             pd.array(
-                [Decimal("800000000000000001"), None] * 3,
+                [Decimal(800000000000000001), None] * 3,
                 dtype=pd.ArrowDtype(pa.decimal128(38, 20)),
             ),
             pd.array(
@@ -1602,14 +1602,14 @@ def test_decimal_addition_error(arg0, arg1):
         ),
         pytest.param(
             pa.scalar(Decimal("559.45"), pa.decimal128(6, 2)),
-            pa.scalar(Decimal("543"), pa.decimal128(6, 2)),
+            pa.scalar(Decimal(543), pa.decimal128(6, 2)),
             pa.scalar(Decimal("16.45"), pa.decimal128(6, 2)),
             id="scalar-scalar-same_scale-fast",
         ),
         pytest.param(
             pa.scalar(Decimal("1.23456"), pa.decimal128(6, 5)),
             pa.scalar(Decimal("9876543211.23456"), pa.decimal128(16, 5)),
-            pa.scalar(Decimal("-9876543210"), pa.decimal128(10, 0)),
+            pa.scalar(Decimal(-9876543210), pa.decimal128(10, 0)),
             id="scalar-scalar-larger_scale-fast",
         ),
         pytest.param(
@@ -1622,7 +1622,7 @@ def test_decimal_addition_error(arg0, arg1):
             pa.scalar(
                 Decimal("123456789012345678901234567890.12"), pa.decimal128(38, 2)
             ),
-            pa.scalar(Decimal("123456789012345678901234567890"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal(123456789012345678901234567890), pa.decimal128(38, 0)),
             pa.scalar(Decimal("00.12"), pa.decimal128(4, 2)),
             id="scalar-scalar-smaller_scale-unsafe",
         ),
@@ -1653,7 +1653,7 @@ def test_decimal_addition_error(arg0, arg1):
                 dtype=pd.ArrowDtype(pa.decimal128(6, 2)),
             ),
             pd.array(
-                [Decimal("994"), Decimal("456"), Decimal("-12"), None] * 2,
+                [Decimal(994), Decimal(456), Decimal(-12), None] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(3, 0)),
             ),
             pd.array(
@@ -1664,7 +1664,7 @@ def test_decimal_addition_error(arg0, arg1):
         ),
         pytest.param(
             pd.array(
-                [Decimal("10001.134"), None, Decimal("-10009.001"), Decimal("0")] * 2,
+                [Decimal("10001.134"), None, Decimal("-10009.001"), Decimal(0)] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(8, 3)),
             ),
             pd.array(
@@ -1680,19 +1680,9 @@ def test_decimal_addition_error(arg0, arg1):
         pytest.param(
             pd.array(
                 [
-                    Decimal("109877654220987765421"),
+                    Decimal(109877654220987765421),
                     None,
-                    Decimal("-2000000000000000000000000000000000075"),
-                    None,
-                ]
-                * 2,
-                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
-            ),
-            pd.array(
-                [
-                    Decimal("12345678901234567890"),
-                    Decimal("-1024"),
-                    Decimal("1000000000000000000000000000000000001"),
+                    Decimal(-2000000000000000000000000000000000075),
                     None,
                 ]
                 * 2,
@@ -1700,9 +1690,19 @@ def test_decimal_addition_error(arg0, arg1):
             ),
             pd.array(
                 [
-                    Decimal("97531975319753197531"),
+                    Decimal(12345678901234567890),
+                    Decimal(-1024),
+                    Decimal(1000000000000000000000000000000000001),
                     None,
-                    Decimal("-3000000000000000000000000000000000076"),
+                ]
+                * 2,
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            pd.array(
+                [
+                    Decimal(97531975319753197531),
+                    None,
+                    Decimal(-3000000000000000000000000000000000076),
                     None,
                 ]
                 * 2,
@@ -1713,7 +1713,7 @@ def test_decimal_addition_error(arg0, arg1):
         pytest.param(
             pd.array(
                 [
-                    Decimal("109877654220987764"),
+                    Decimal(109877654220987764),
                     None,
                     Decimal("115802467135802467.012345678876543211"),
                     None,
@@ -1723,9 +1723,9 @@ def test_decimal_addition_error(arg0, arg1):
             ),
             pd.array(
                 [
-                    Decimal("12345678901234567"),
+                    Decimal(12345678901234567),
                     None,
-                    Decimal("123456789123456789"),
+                    Decimal(123456789123456789),
                     None,
                 ]
                 * 2,
@@ -1733,7 +1733,7 @@ def test_decimal_addition_error(arg0, arg1):
             ),
             pd.array(
                 [
-                    Decimal("97531975319753197"),
+                    Decimal(97531975319753197),
                     None,
                     Decimal("-7654321987654321.987654321123456789"),
                     None,
@@ -1766,9 +1766,9 @@ def test_decimal_addition_error(arg0, arg1):
             ),
             pd.array(
                 [
-                    Decimal("98765432109876543210"),
+                    Decimal(98765432109876543210),
                     None,
-                    Decimal("-12345678901234567890"),
+                    Decimal(-12345678901234567890),
                     None,
                 ]
                 * 2,
@@ -1778,7 +1778,7 @@ def test_decimal_addition_error(arg0, arg1):
         ),
         pytest.param(
             pd.array(
-                [Decimal("2.98"), Decimal("100.98"), Decimal("-99"), None] * 2,
+                [Decimal("2.98"), Decimal("100.98"), Decimal(-99), None] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(5, 2)),
             ),
             pa.scalar(Decimal("0.99"), pa.decimal128(5, 2)),
@@ -1793,7 +1793,7 @@ def test_decimal_addition_error(arg0, arg1):
                 [Decimal("113.12"), Decimal("-0.88"), Decimal("154.12"), None] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(5, 2)),
             ),
-            pa.scalar(Decimal("99"), pa.decimal128(2, 0)),
+            pa.scalar(Decimal(99), pa.decimal128(2, 0)),
             pd.array(
                 [Decimal("14.12"), Decimal("-99.88"), Decimal("55.12"), None] * 2,
                 dtype=pd.ArrowDtype(pa.decimal128(5, 2)),
@@ -1823,7 +1823,7 @@ def test_decimal_addition_error(arg0, arg1):
             pd.array(
                 [
                     Decimal("1" + "9" * 35 + "8"),
-                    Decimal("0"),
+                    Decimal(0),
                     Decimal("1" + "5" * 35 + "4"),
                     None,
                 ]
@@ -1833,7 +1833,7 @@ def test_decimal_addition_error(arg0, arg1):
             id="array-scalar-same_scale-unsafe",
         ),
         pytest.param(
-            pa.scalar(Decimal("123456789"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal(123456789), pa.decimal128(38, 0)),
             pd.array(
                 [
                     Decimal("-" + "9" * 20 + ".25"),
@@ -1931,11 +1931,11 @@ def test_decimal_subtraction(arg0, arg1, answer, memory_leak_check):
         ),
         pytest.param(
             pa.scalar(Decimal("87654321.87654321"), pa.decimal128(38, 30)),
-            pa.scalar(Decimal("-800000000000000001"), pa.decimal128(38, 20)),
+            pa.scalar(Decimal(-800000000000000001), pa.decimal128(38, 20)),
             id="scalar-scalar-larger_scale-overflow_on_rescale",
         ),
         pytest.param(
-            pa.scalar(Decimal("800000000000000001"), pa.decimal128(38, 20)),
+            pa.scalar(Decimal(800000000000000001), pa.decimal128(38, 20)),
             pa.scalar(Decimal("-87654321.87654321"), pa.decimal128(38, 30)),
             id="scalar-scalar-smaller_scale-overflow_on_rescale",
         ),
@@ -1952,7 +1952,7 @@ def test_decimal_subtraction(arg0, arg1, answer, memory_leak_check):
         ),
         pytest.param(
             pd.array(
-                [Decimal("800000000000000001"), None] * 3,
+                [Decimal(800000000000000001), None] * 3,
                 dtype=pd.ArrowDtype(pa.decimal128(38, 20)),
             ),
             pd.array(
@@ -2036,7 +2036,7 @@ def test_decimal_subtraction_error(arg0, arg1):
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
             ),
-            pa.scalar(Decimal("2"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal(2), pa.decimal128(4, 2)),
             pd.array(
                 [
                     "2.0",
@@ -2054,7 +2054,7 @@ def test_decimal_subtraction_error(arg0, arg1):
             id="array_scalar",
         ),
         pytest.param(
-            pa.scalar(Decimal("2"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal(2), pa.decimal128(4, 2)),
             pd.array(
                 [
                     "1",
@@ -2207,7 +2207,7 @@ def test_decimal_array_multiplication_overflow_handling():
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
             ),
-            pa.scalar(Decimal("2"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal(2), pa.decimal128(4, 2)),
             pd.array(
                 [
                     "0.50000000",
@@ -2225,7 +2225,7 @@ def test_decimal_array_multiplication_overflow_handling():
             id="array_scalar",
         ),
         pytest.param(
-            pa.scalar(Decimal("2"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal(2), pa.decimal128(4, 2)),
             pd.array(
                 [
                     "1",
@@ -2336,7 +2336,7 @@ def test_decimal_array_division(arg1, arg2, expected, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
             ),
-            pa.scalar(Decimal("0"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal(0), pa.decimal128(4, 2)),
             pd.array(
                 [
                     "0",
@@ -2354,7 +2354,7 @@ def test_decimal_array_division(arg1, arg2, expected, memory_leak_check):
             id="array_scalar",
         ),
         pytest.param(
-            pa.scalar(Decimal("2"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal(2), pa.decimal128(4, 2)),
             pd.array(
                 [
                     "1",
@@ -2387,14 +2387,14 @@ def test_decimal_array_division(arg1, arg2, expected, memory_leak_check):
         ),
         pytest.param(
             pa.scalar(Decimal("-2.12"), pa.decimal128(4, 2)),
-            pa.scalar(Decimal("0"), pa.decimal128(5, 3)),
-            pa.scalar(Decimal("0"), pa.decimal128(13, 8)),
+            pa.scalar(Decimal(0), pa.decimal128(5, 3)),
+            pa.scalar(Decimal(0), pa.decimal128(13, 8)),
             id="scalar_scalar",
         ),
         pytest.param(
             pa.scalar(Decimal("-2.12"), pa.decimal128(4, 2)),
             0,
-            pa.scalar(Decimal("0"), pa.decimal128(13, 8)),
+            pa.scalar(Decimal(0), pa.decimal128(13, 8)),
             id="decimal-int",
         ),
         pytest.param(
@@ -2601,7 +2601,7 @@ def test_decimal_array_division_error_handling():
             ),
             0,
             pa.scalar(
-                Decimal("12345"),
+                Decimal(12345),
                 pa.decimal128(25, 5),
             ),
             id="scalar-scale_to_zero",
@@ -2613,7 +2613,7 @@ def test_decimal_array_division_error_handling():
             ),
             -1,
             pa.scalar(
-                Decimal("987654320"),
+                Decimal(987654320),
                 pa.decimal128(25, 0),
             ),
             id="scalar-negative_scale-round_down",
@@ -2625,67 +2625,67 @@ def test_decimal_array_division_error_handling():
             ),
             -5,
             pa.scalar(
-                Decimal("987700000"),
+                Decimal(987700000),
                 pa.decimal128(25, 0),
             ),
             id="scalar-negative_scale-round_up",
         ),
         pytest.param(
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(25, 5),
             ),
             3,
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(25, 3),
             ),
             id="scalar-zero",
         ),
         pytest.param(
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(25, 5),
             ),
             8,
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(25, 5),
             ),
             id="scalar-zero-larger_scale",
         ),
         pytest.param(
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(25, 5),
             ),
             -5,
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(25, 0),
             ),
             id="scalar-zero-negative_scale",
         ),
         pytest.param(
             pa.scalar(
-                Decimal("1"),
+                Decimal(1),
                 pa.decimal128(1, 0),
             ),
             -5,
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(1, 0),
             ),
             id="scalar-scale_larger_than_precision-negative",
         ),
         pytest.param(
             pa.scalar(
-                Decimal("9999999999"),
+                Decimal(9999999999),
                 pa.decimal128(10, 0),
             ),
             -1,
             pa.scalar(
-                Decimal("10000000000"),
+                Decimal(10000000000),
                 pa.decimal128(11, 0),
             ),
             id="scalar-negative_round-propagate",
@@ -2761,7 +2761,7 @@ def test_decimal_array_division_error_handling():
             ),
             -1,
             pa.scalar(
-                Decimal("-987654320"),
+                Decimal(-987654320),
                 pa.decimal128(25, 0),
             ),
             id="scalar-negative_scale-round_down-negative",
@@ -2773,7 +2773,7 @@ def test_decimal_array_division_error_handling():
             ),
             -5,
             pa.scalar(
-                Decimal("-987700000"),
+                Decimal(-987700000),
                 pa.decimal128(25, 0),
             ),
             id="scalar-negative_scale-round_up-negative",
@@ -2891,10 +2891,10 @@ def test_decimal_array_division_error_handling():
             0,
             pd.array(
                 [
-                    Decimal("12345"),
-                    Decimal("67891"),
-                    Decimal("12345"),
-                    Decimal("67891"),
+                    Decimal(12345),
+                    Decimal(67891),
+                    Decimal(12345),
+                    Decimal(67891),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
@@ -2915,10 +2915,10 @@ def test_decimal_array_division_error_handling():
             -1,
             pd.array(
                 [
-                    Decimal("12340"),
-                    Decimal("987654320"),
-                    Decimal("12340"),
-                    Decimal("987654320"),
+                    Decimal(12340),
+                    Decimal(987654320),
+                    Decimal(12340),
+                    Decimal(987654320),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
@@ -2939,10 +2939,10 @@ def test_decimal_array_division_error_handling():
             -1,
             pd.array(
                 [
-                    Decimal("12350"),
-                    Decimal("987654330"),
-                    Decimal("12350"),
-                    Decimal("987654330"),
+                    Decimal(12350),
+                    Decimal(987654330),
+                    Decimal(12350),
+                    Decimal(987654330),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
@@ -2952,10 +2952,10 @@ def test_decimal_array_division_error_handling():
         pytest.param(
             pd.array(
                 [
-                    Decimal("0"),
-                    Decimal("0"),
-                    Decimal("0"),
-                    Decimal("0"),
+                    Decimal(0),
+                    Decimal(0),
+                    Decimal(0),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(25, 5)),
@@ -2963,10 +2963,10 @@ def test_decimal_array_division_error_handling():
             3,
             pd.array(
                 [
-                    Decimal("0"),
-                    Decimal("0"),
-                    Decimal("0"),
-                    Decimal("0"),
+                    Decimal(0),
+                    Decimal(0),
+                    Decimal(0),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(26, 3)),
@@ -2976,10 +2976,10 @@ def test_decimal_array_division_error_handling():
         pytest.param(
             pd.array(
                 [
-                    Decimal("0"),
-                    Decimal("0"),
-                    Decimal("0"),
-                    Decimal("0"),
+                    Decimal(0),
+                    Decimal(0),
+                    Decimal(0),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(25, 5)),
@@ -2987,10 +2987,10 @@ def test_decimal_array_division_error_handling():
             -3,
             pd.array(
                 [
-                    Decimal("0"),
-                    Decimal("0"),
-                    Decimal("0"),
-                    Decimal("0"),
+                    Decimal(0),
+                    Decimal(0),
+                    Decimal(0),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
@@ -3000,10 +3000,10 @@ def test_decimal_array_division_error_handling():
         pytest.param(
             pd.array(
                 [
-                    Decimal("9999999999"),
-                    Decimal("99999"),
-                    Decimal("99"),
-                    Decimal("9"),
+                    Decimal(9999999999),
+                    Decimal(99999),
+                    Decimal(99),
+                    Decimal(9),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(10, 0)),
@@ -3011,10 +3011,10 @@ def test_decimal_array_division_error_handling():
             -1,
             pd.array(
                 [
-                    Decimal("10000000000"),
-                    Decimal("100000"),
-                    Decimal("100"),
-                    Decimal("10"),
+                    Decimal(10000000000),
+                    Decimal(100000),
+                    Decimal(100),
+                    Decimal(10),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(11, 0)),
@@ -3133,10 +3133,10 @@ def test_decimal_array_division_error_handling():
             -1,
             pd.array(
                 [
-                    Decimal("-12340"),
-                    Decimal("-987654320"),
-                    Decimal("-12340"),
-                    Decimal("-987654320"),
+                    Decimal(-12340),
+                    Decimal(-987654320),
+                    Decimal(-12340),
+                    Decimal(-987654320),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
@@ -3157,10 +3157,10 @@ def test_decimal_array_division_error_handling():
             -1,
             pd.array(
                 [
-                    Decimal("-12350"),
-                    Decimal("-987654330"),
-                    Decimal("-12350"),
-                    Decimal("-987654330"),
+                    Decimal(-12350),
+                    Decimal(-987654330),
+                    Decimal(-12350),
+                    Decimal(-987654330),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
@@ -3181,10 +3181,10 @@ def test_decimal_array_division_error_handling():
             0,
             pd.array(
                 [
-                    Decimal("-3"),
-                    Decimal("-4"),
-                    Decimal("3"),
-                    Decimal("4"),
+                    Decimal(-3),
+                    Decimal(-4),
+                    Decimal(3),
+                    Decimal(4),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
@@ -3239,9 +3239,9 @@ def test_round_decimal(arg, round_scale, answer, memory_leak_check):
                     Decimal(
                         "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
                     ),
-                    Decimal("12345"),
-                    Decimal("12345"),
-                    Decimal("12345"),
+                    Decimal(12345),
+                    Decimal(12345),
+                    Decimal(12345),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
@@ -3257,7 +3257,7 @@ def test_round_decimal(arg, round_scale, answer, memory_leak_check):
                             " ", ""
                         )
                     ),
-                    Decimal("12345"),
+                    Decimal(12345),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
@@ -3350,7 +3350,7 @@ def test_round_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("700"),
+                Decimal(700),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-positive",
@@ -3362,7 +3362,7 @@ def test_round_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("-100"),
+                Decimal(-100),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-negative",
@@ -3374,7 +3374,7 @@ def test_round_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-close_to_zero",
@@ -3387,7 +3387,7 @@ def test_round_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("649"),
+                Decimal(649),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-positive",
@@ -3399,7 +3399,7 @@ def test_round_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("-152"),
+                Decimal(-152),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-negative",
@@ -3411,7 +3411,7 @@ def test_round_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-close_to_zero",
@@ -3425,7 +3425,7 @@ def test_round_decimal_overflow(arg, round_scale):
                     Decimal("-152.5826"),
                     Decimal("-0.15122"),
                     Decimal("0.5233"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -3437,7 +3437,7 @@ def test_round_decimal_overflow(arg, round_scale):
                     Decimal("-152.58"),
                     Decimal("-0.15"),
                     Decimal("0.53"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
@@ -3451,7 +3451,7 @@ def test_round_decimal_overflow(arg, round_scale):
                     Decimal("-1234921349252.5826"),
                     Decimal("-88888888888.15122340213482"),
                     Decimal("99999999999.523294234123433"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
@@ -3459,11 +3459,11 @@ def test_round_decimal_overflow(arg, round_scale):
             -5,
             pd.array(
                 [
-                    Decimal("1231249024183300000"),
-                    Decimal("-1234921300000"),
-                    Decimal("-88888800000"),
-                    Decimal("100000000000"),
-                    Decimal("0"),
+                    Decimal(1231249024183300000),
+                    Decimal(-1234921300000),
+                    Decimal(-88888800000),
+                    Decimal(100000000000),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
@@ -3497,9 +3497,9 @@ def test_ceil_decimal(arg, round_scale, answer, memory_leak_check):
                     Decimal(
                         "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
                     ),
-                    Decimal("12345"),
-                    Decimal("12345"),
-                    Decimal("12345"),
+                    Decimal(12345),
+                    Decimal(12345),
+                    Decimal(12345),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
@@ -3581,7 +3581,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("600"),
+                Decimal(600),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-positive",
@@ -3593,7 +3593,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("-200"),
+                Decimal(-200),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-negative",
@@ -3605,7 +3605,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("-100"),
+                Decimal(-100),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-close_to_zero",
@@ -3618,7 +3618,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("648"),
+                Decimal(648),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-positive",
@@ -3630,7 +3630,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("-153"),
+                Decimal(-153),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-negative",
@@ -3642,7 +3642,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("-1"),
+                Decimal(-1),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-close_to_zero",
@@ -3656,7 +3656,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
                     Decimal("-152.5826"),
                     Decimal("-0.15122"),
                     Decimal("0.5233"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -3668,7 +3668,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
                     Decimal("-152.59"),
                     Decimal("-0.16"),
                     Decimal("0.52"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
@@ -3682,7 +3682,7 @@ def test_ceil_decimal_overflow(arg, round_scale):
                     Decimal("-1234921349252.5826"),
                     Decimal("-88888888888.15122340213482"),
                     Decimal("-99999999999.523294234123433"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
@@ -3690,11 +3690,11 @@ def test_ceil_decimal_overflow(arg, round_scale):
             -2,
             pd.array(
                 [
-                    Decimal("1231249024183219600"),
-                    Decimal("-1234921349300"),
-                    Decimal("-88888888900"),
-                    Decimal("-100000000000"),
-                    Decimal("0"),
+                    Decimal(1231249024183219600),
+                    Decimal(-1234921349300),
+                    Decimal(-88888888900),
+                    Decimal(-100000000000),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
@@ -3730,9 +3730,9 @@ def test_floor_decimal(arg, round_scale, answer, memory_leak_check):
                             " ", ""
                         )
                     ),
-                    Decimal("12345"),
-                    Decimal("12345"),
-                    Decimal("12345"),
+                    Decimal(12345),
+                    Decimal(12345),
+                    Decimal(12345),
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
@@ -3814,7 +3814,7 @@ def test_floor_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("600"),
+                Decimal(600),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-positive",
@@ -3826,7 +3826,7 @@ def test_floor_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("-100"),
+                Decimal(-100),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-negative",
@@ -3838,7 +3838,7 @@ def test_floor_decimal_overflow(arg, round_scale):
             ),
             -2,
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(21, 0),
             ),
             id="scalar-negative_scale-close_to_zero",
@@ -3851,7 +3851,7 @@ def test_floor_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("648"),
+                Decimal(648),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-positive",
@@ -3863,7 +3863,7 @@ def test_floor_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("-152"),
+                Decimal(-152),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-negative",
@@ -3875,7 +3875,7 @@ def test_floor_decimal_overflow(arg, round_scale):
             ),
             0,
             pa.scalar(
-                Decimal("0"),
+                Decimal(0),
                 pa.decimal128(21, 0),
             ),
             id="scalar-zero_scale-close_to_zero",
@@ -3901,7 +3901,7 @@ def test_floor_decimal_overflow(arg, round_scale):
                     Decimal("-152.5826"),
                     Decimal("-0.15122"),
                     Decimal("0.5233"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
@@ -3913,7 +3913,7 @@ def test_floor_decimal_overflow(arg, round_scale):
                     Decimal("-152.58"),
                     Decimal("-0.15"),
                     Decimal("0.52"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
@@ -3927,7 +3927,7 @@ def test_floor_decimal_overflow(arg, round_scale):
                     Decimal("-1234921349252.5826"),
                     Decimal("-88888888888.15122340213482"),
                     Decimal("-99999999999.523294234123433"),
-                    Decimal("0"),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
@@ -3935,11 +3935,11 @@ def test_floor_decimal_overflow(arg, round_scale):
             -2,
             pd.array(
                 [
-                    Decimal("1231249024183219600"),
-                    Decimal("-1234921349200"),
-                    Decimal("-88888888800"),
-                    Decimal("-99999999900"),
-                    Decimal("0"),
+                    Decimal(1231249024183219600),
+                    Decimal(-1234921349200),
+                    Decimal(-88888888800),
+                    Decimal(-99999999900),
+                    Decimal(0),
                     None,
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
@@ -5339,9 +5339,9 @@ def test_str_to_decimal_scalar(memory_leak_check):
     check_func(
         impl, ("1.12",), py_output=pa.scalar(Decimal("1.12"), pa.decimal128(4, 2))
     )
-    check_func(impl, ("E",), py_output=pa.scalar(Decimal("0"), pa.decimal128(4, 2)))
+    check_func(impl, ("E",), py_output=pa.scalar(Decimal(0), pa.decimal128(4, 2)))
     check_func(impl, ("-E",), py_output=pa.scalar(Decimal("-0"), pa.decimal128(4, 2)))
-    check_func(impl, ("+E",), py_output=pa.scalar(Decimal("+0"), pa.decimal128(4, 2)))
+    check_func(impl, ("+E",), py_output=pa.scalar(Decimal(+0), pa.decimal128(4, 2)))
     check_func(
         impl, ("1.1E-1",), py_output=pa.scalar(Decimal("0.11"), pa.decimal128(4, 2))
     )
@@ -5598,12 +5598,12 @@ def test_decimal_array_to_str_array(arr, expected, memory_leak_check):
         ),
         # Zeroes
         pytest.param(
-            pa.scalar(Decimal("0"), pa.decimal128(10, 3)),
+            pa.scalar(Decimal(0), pa.decimal128(10, 3)),
             "0.000",
             id="zero-with-scale",
         ),
         pytest.param(
-            pa.scalar(Decimal("0"), pa.decimal128(38, 37)),
+            pa.scalar(Decimal(0), pa.decimal128(38, 37)),
             "0.0000000000000000000000000000000000000",
             id="zero-with-large-scale",
         ),
@@ -5664,7 +5664,7 @@ def test_decimal_array_to_str_array(arr, expected, memory_leak_check):
         ),
         # Scale 0 (Integers)
         pytest.param(
-            pa.scalar(Decimal("9876543210"), pa.decimal128(15, 0)),
+            pa.scalar(Decimal(9876543210), pa.decimal128(15, 0)),
             "9876543210",
             id="scale-zero-integer",
         ),
@@ -5979,13 +5979,13 @@ def test_decimal_median_overflow(df, error_msg):
         ),
         # Zeroes
         pytest.param(
-            pa.scalar(Decimal("0"), pa.decimal128(10, 3)),
-            pa.scalar(Decimal("0"), pa.decimal128(10, 3)),
+            pa.scalar(Decimal(0), pa.decimal128(10, 3)),
+            pa.scalar(Decimal(0), pa.decimal128(10, 3)),
             id="zero-with-scale",
         ),
         pytest.param(
-            pa.scalar(Decimal("0"), pa.decimal128(38, 37)),
-            pa.scalar(Decimal("0"), pa.decimal128(38, 37)),
+            pa.scalar(Decimal(0), pa.decimal128(38, 37)),
+            pa.scalar(Decimal(0), pa.decimal128(38, 37)),
             id="zero-with-large-scale",
         ),
         pytest.param(
@@ -6076,17 +6076,17 @@ def test_decimal_abs(val, expected, memory_leak_check):
     [
         pytest.param(
             pa.scalar(Decimal("1.0"), pa.decimal128(10, 3)),
-            pa.scalar(Decimal("1"), pa.decimal128(37, 0)),
+            pa.scalar(Decimal(1), pa.decimal128(37, 0)),
             id="one",
         ),
         pytest.param(
             pa.scalar(Decimal("6.4"), pa.decimal128(38, 37)),
-            pa.scalar(Decimal("720"), pa.decimal128(37, 0)),
+            pa.scalar(Decimal(720), pa.decimal128(37, 0)),
             id="rounded",
         ),
         pytest.param(
             pa.scalar(Decimal("12.3"), pa.decimal128(15, 5)),
-            pa.scalar(Decimal("479001600"), pa.decimal128(37, 0)),
+            pa.scalar(Decimal(479001600), pa.decimal128(37, 0)),
             id="large-rounded",
         ),
         pytest.param(
@@ -6142,18 +6142,18 @@ def test_decimal_factorial(val, expected, memory_leak_check):
     "val, error_msg",
     [
         pytest.param(
-            pa.scalar(Decimal("-1"), pa.decimal128(10, 3)),
+            pa.scalar(Decimal(-1), pa.decimal128(10, 3)),
             "is negative",
             id="negative",
         ),
         pytest.param(
-            pa.scalar(Decimal("35"), pa.decimal128(10, 3)),
+            pa.scalar(Decimal(35), pa.decimal128(10, 3)),
             "is too large",
             id="too_large",
         ),
         pytest.param(
             pa.scalar(
-                Decimal("99999999999999999999999999999999999999"), pa.decimal128(38, 0)
+                Decimal(99999999999999999999999999999999999999), pa.decimal128(38, 0)
             ),
             "is too large",
             id="max_precision",

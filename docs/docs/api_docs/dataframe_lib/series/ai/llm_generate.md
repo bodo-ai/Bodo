@@ -63,11 +63,13 @@ Supports OpenAI-compatible endpoints and Amazon Bedrock via the backend paramete
 import bodo.pandas as pd
 from bodo.ai.backend import Backend
 
-a = pd.Series([
-    "What is the capital of France?",
-    "Who wrote 'To Kill a Mockingbird'?",
-    "What is the largest mammal?",
-])
+a = pd.Series(
+    [
+        "What is the capital of France?",
+        "Who wrote 'To Kill a Mockingbird'?",
+        "What is the largest mammal?",
+    ]
+)
 
 b = a.ai.llm_generate(
     api_key="your_api_key_here",
@@ -94,16 +96,16 @@ dtype: string[pyarrow]
 import bodo.pandas as pd
 from bodo.ai.backend import Backend
 
-a = pd.Series([
-    "What is the capital of France?",
-    "Who wrote 'To Kill a Mockingbird'?",
-    "What is the largest mammal?",
-])
+a = pd.Series(
+    [
+        "What is the capital of France?",
+        "Who wrote 'To Kill a Mockingbird'?",
+        "What is the largest mammal?",
+    ]
+)
 
 b = a.ai.llm_generate(
-    model="amazon.nova-micro-v1:0",
-    backend=Backend.BEDROCK,
-    region="us-east-1"
+    model="amazon.nova-micro-v1:0", backend=Backend.BEDROCK, region="us-east-1"
 )
 
 print(b)

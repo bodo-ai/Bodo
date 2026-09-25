@@ -129,7 +129,6 @@ class TestHiFrames(unittest.TestCase):
     def test_column_map_arg(self):
         def test_impl(df):
             df["B"] = df.A.map(lambda a: 2 * a)
-            return
 
         n = 121
         df1 = pd.DataFrame({"A": np.arange(n)})
@@ -343,7 +342,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
 
     def test_str_contains_regex(self):
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         def test_impl():
@@ -356,7 +355,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(bodo_func(), 2)
 
     def test_str_contains_noregex(self):
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         def test_impl():

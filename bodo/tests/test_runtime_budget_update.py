@@ -18,7 +18,7 @@ def hash_join_impl(df1, df2):
     """
     Helper impl for test_hash_join_dynamic_budget_increase.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.memory_budget import (
         OperatorType,
     )
@@ -230,7 +230,7 @@ def groupby_impl(df, key_inds_list, func_names, f_in_offsets, f_in_cols):
     """
     Helper impl for test_groupby_dynamic_budget_increase.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.libs.memory_budget import (
         OperatorType,
     )

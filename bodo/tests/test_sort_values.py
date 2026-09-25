@@ -349,7 +349,7 @@ def test_sort_values_1col_inplace(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
     """
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -387,7 +387,7 @@ def test_sort_values_2col_inplace(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
     """
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -693,7 +693,7 @@ def test_sort_values_strings_variable_length(n, len_str, memory_leak_check):
 @pytest.mark.df_lib
 @pytest.mark.parametrize(
     "n, len_str",
-    [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow), (100, 30)],
+    [(100, 30), pytest.param(1000, 10, marks=pytest.mark.slow)],
 )
 def test_sort_values_strings(n, len_str, memory_leak_check):
     """
@@ -1892,20 +1892,20 @@ def test_sort_values_input_boundaries(memory_leak_check):
                 ],
                 [
                     pd.array(
-                        [Decimal(10.5), None],
+                        [Decimal("10.5"), None],
                         dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
                     ),
                     pd.array([None, None], dtype=pd.ArrowDtype(pa.decimal128(38, 18))),
                     pd.array(
-                        [Decimal(10.0), Decimal(20.5)],
+                        [Decimal("10.0"), Decimal("20.5")],
                         dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
                     ),
                     pd.array(
-                        [Decimal(10.0), Decimal(20.0)],
+                        [Decimal("10.0"), Decimal("20.0")],
                         dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
                     ),
                     pd.array(
-                        [Decimal(20.0), Decimal(20.0)],
+                        [Decimal("20.0"), Decimal("20.0")],
                         dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
                     ),
                 ],

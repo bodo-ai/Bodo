@@ -746,7 +746,7 @@ void GPUIcebergRankBatchGenerator::build_pyiceberg_cudf_ast_node(
             {"gte", cudf::ast::ast_operator::GREATER_EQUAL},
             {"lt", cudf::ast::ast_operator::LESS},
             {"lte", cudf::ast::ast_operator::LESS_EQUAL},
-        };
+    };
     std::unordered_map<std::string, cudf::ast::ast_operator>::const_iterator
         cmp_it = cmp_ops.find(op);
     if (cmp_it != cmp_ops.end()) {

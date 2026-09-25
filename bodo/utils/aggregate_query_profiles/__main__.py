@@ -129,7 +129,7 @@ def print_sorted(outdir, results, pipeline_ret):
             last_pipeline_num = pn
         print(f"({stage}, {mt})", end=" ")
         df_data.append((pn, pipeline_ret[pn], stage, mt))
-    print("")
+    print()
 
     df = pd.DataFrame(df_data, columns=["pipeline", "pipeline_total", "stage", "time"])
     df["pipeline_label"] = df["pipeline"].apply(lambda x: f"Pipeline {x}")

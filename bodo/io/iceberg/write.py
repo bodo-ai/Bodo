@@ -19,7 +19,6 @@ from numba.core import cgutils, types
 from numba.extending import intrinsic
 
 import bodo
-import bodo.utils.tracing as tracing
 from bodo.io import arrow_cpp
 from bodo.io.helpers import pyarrow_fs_type, pyarrow_schema_type
 from bodo.io.iceberg.theta import theta_sketch_collection_type
@@ -32,6 +31,7 @@ from bodo.io.iceberg.write_utils import (
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.spawn.utils import run_rank0
+from bodo.utils import tracing
 from bodo.utils.py_objs import install_opaque_class, install_py_obj_class
 from bodo.utils.typing import CreateTableMetaType
 from bodo.utils.utils import BodoError

@@ -9,11 +9,7 @@ _Example:_
 
 We are given `table1` with columns `a` and `b` and `c`
 ```python
-table1 = pd.DataFrame({
-    'a': [1.1, 0, 2],
-    'b': [True, False, True],
-    'c': [None, 1, 0]
-})
+table1 = pd.DataFrame({"a": [1.1, 0, 2], "b": [True, False, True], "c": [None, 1, 0]})
 ```
 upon query
 ```sql

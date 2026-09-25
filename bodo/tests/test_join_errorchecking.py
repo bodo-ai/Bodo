@@ -360,7 +360,7 @@ def test_rightindex_lefton_len(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="len\(left_on\) must equal the number "
+        match=r"len\(left_on\) must equal the number "
         'of levels in the index of "right", which is 1',
     ):
         bodo.jit(impl)(df1, df2)
@@ -374,7 +374,7 @@ def test_leftindex_righton_len(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="len\(right_on\) must equal the number "
+        match=r"len\(right_on\) must equal the number "
         'of levels in the index of "left", which is 1',
     ):
         bodo.jit(impl)(df1, df2)

@@ -68,7 +68,9 @@ import time
 def data_transform():
     t0 = time.time()
     df = pd.read_parquet("pd_example.pq")
-    df["B"] = df.apply(lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1)
+    df["B"] = df.apply(
+        lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1
+    )
     df["C"] = df.A.dt.month
     df.to_parquet("pandas_output.pq")
     print("Total time: {:.2f}".format(time.time() - t0))
@@ -107,14 +109,18 @@ import pandas as pd
 import time
 import bodo
 
+
 @bodo.jit
 def data_transform():
     t0 = time.time()
     df = pd.read_parquet("pd_example.pq")
-    df["B"] = df.apply(lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1)
+    df["B"] = df.apply(
+        lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1
+    )
     df["C"] = df.A.dt.month
     df.to_parquet("bodo_output.pq")
-    print("Total time: {:.2f}".format(time.time()-t0))
+    print("Total time: {:.2f}".format(time.time() - t0))
+
 
 if __name__ == "__main__":
     data_transform()
@@ -162,20 +168,24 @@ import pandas as pd
 import time
 import bodo
 
+
 @bodo.jit
 def data_transform():
     df = pd.read_parquet("pd_example.pq")
-    df["B"] = df.apply(lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1)
+    df["B"] = df.apply(
+        lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1
+    )
     df["C"] = df.A.dt.month
     df.to_parquet("bodo_output.pq")
+
 
 if __name__ == "__main__":
     t0 = time.time()
     data_transform()
-    print("Total time first call: {:.2f}".format(time.time()-t0))
+    print("Total time first call: {:.2f}".format(time.time() - t0))
     t0 = time.time()
     data_transform()
-    print("Total time second call: {:.2f}".format(time.time()-t0))
+    print("Total time second call: {:.2f}".format(time.time() - t0))
 ```
 
 Save this code in `data_transform2.py` and run in command line:
@@ -201,7 +211,9 @@ import bodo
 @bodo.jit(cache=True)
 def data_transform():
     df = pd.read_parquet("pd_example.pq")
-    df["B"] = df.apply(lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1)
+    df["B"] = df.apply(
+        lambda r: "NA" if pd.isna(r.A) else "P1" if r.A.month < 5 else "P2", axis=1
+    )
     df["C"] = df.A.dt.month
     df.to_parquet("bodo_output.pq")
 
@@ -394,10 +406,12 @@ import bodo
 
 data_path = os.environ["JOB_DATA_PATH"]
 
+
 @bodo.jit
 def f(path):
     df = pd.read_parquet(path)
     print(df.A.sum())
+
 
 f(data_path)
 ```
@@ -587,8 +601,9 @@ Here are high level steps for integrating Bodo into Python workloads:
     ```python
     @bodo.jit(cache=True)
     def process_data(file_list):
-       df = pd.read_parquet(file_list)
-       print(df.A.sum())
+        df = pd.read_parquet(file_list)
+        print(df.A.sum())
+
 
     file_list = get_file_list()
     process_data(file_list)
@@ -614,10 +629,12 @@ Here are high level steps for integrating Bodo into Python workloads:
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     out_list_type = bodo.typeof([1, 2])
 
+
     @bodo.wrap_python(out_list_type)
     def run_tokenizer(text):
         tokenized = tokenizer(text)
         return tokenized["input_ids"]
+
 
     @bodo.jit
     def preprocess_pile(file_list):

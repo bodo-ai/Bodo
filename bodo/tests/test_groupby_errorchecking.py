@@ -1031,7 +1031,7 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
                         Decimal("-0.2"),
                         Decimal("44.2"),
                         None,
-                        Decimal("0"),
+                        Decimal(0),
                     ]
                 ),
             }
@@ -1441,7 +1441,7 @@ def test_var_std_unsupported_types(df, memory_leak_check):
                         Decimal("-0.2"),
                         Decimal("44.2"),
                         None,
-                        Decimal("0"),
+                        Decimal(0),
                     ]
                 ),
             }
@@ -1628,7 +1628,7 @@ def test_cumultative_args(memory_leak_check):
                             Decimal("-0.2"),
                             Decimal("44.2"),
                             None,
-                            Decimal("0"),
+                            Decimal(0),
                         ]
                     ),
                 }

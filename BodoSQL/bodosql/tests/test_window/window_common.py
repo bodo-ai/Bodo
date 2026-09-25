@@ -139,7 +139,7 @@ def col_to_window_df(cols):
     """Takes in a dictionary mapping column names to columns and produces a DataFrame
     containing those column as well as 4 others that can be used for window
     partitioning / ordering"""
-    n = len(list(cols.values())[0])
+    n = len(next(iter(cols.values())))
     return {
         "TABLE1": pd.DataFrame(
             {

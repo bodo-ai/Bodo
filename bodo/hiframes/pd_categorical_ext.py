@@ -211,8 +211,8 @@ def box_cat_dtype(typ, val, c):
 
 @overload_attribute(PDCategoricalDtype, "nbytes")
 def pd_categorical_nbytes_overload(A):
-    return lambda A: A.categories.nbytes + bodo.io.np_io.get_dtype_size(
-        types.bool_
+    return lambda A: (
+        A.categories.nbytes + bodo.io.np_io.get_dtype_size(types.bool_)
     )  # pragma: no cover
 
 
@@ -668,17 +668,16 @@ def _build_replace_dicts(to_replace, value, categories):
             for replace_cat in to_replace:
                 # Skip replaces with themselves because they won't change
                 # the code.
-                if replace_cat != value:
-                    if replace_cat in cat_to_code:
-                        # For deletions update the categories
-                        if value in cat_to_code:
-                            categories_dict[replace_cat] = replace_cat
-                            code_replacee = cat_to_code[replace_cat]
-                            replace_codes_dict[code_replacee] = cat_to_code[value]
-                            delete_codes_list.append(code_replacee)
-                        else:
-                            categories_dict[replace_cat] = value
-                            cat_to_code[value] = cat_to_code[replace_cat]
+                if replace_cat != value and replace_cat in cat_to_code:
+                    # For deletions update the categories
+                    if value in cat_to_code:
+                        categories_dict[replace_cat] = replace_cat
+                        code_replacee = cat_to_code[replace_cat]
+                        replace_codes_dict[code_replacee] = cat_to_code[value]
+                        delete_codes_list.append(code_replacee)
+                    else:
+                        categories_dict[replace_cat] = value
+                        cat_to_code[value] = cat_to_code[replace_cat]
             delete_codes = np.sort(np.array(delete_codes_list))
             # Determine how much each code must decrease before constructing
             # final mapping

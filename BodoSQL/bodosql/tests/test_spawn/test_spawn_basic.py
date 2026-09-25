@@ -27,7 +27,7 @@ def test_basic_sql(snowflake_sample_data_snowflake_catalog):
     """
     Simple test to ensure that we can run SQL queries in Spawn mode.
     """
-    import bodosql.compiler  # isort:skip # noqa
+    import bodosql.compiler  # isort:skip
 
     bodo.spawn.utils.import_bodosql_compiler_on_workers()
 

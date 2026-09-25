@@ -171,7 +171,6 @@ def arrow_reader_del(typingctx, arrow_reader_t):  # pragma: no cover
         )
         builder.call(fn_tp, args)
         inlined_check_and_propagate_cpp_exception(context, builder)
-        return
 
     sig = types.void(arrow_reader_t)
     return sig, codegen

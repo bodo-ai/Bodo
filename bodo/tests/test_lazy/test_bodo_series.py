@@ -179,7 +179,7 @@ def test_bodo_series_pandas_manager(single_pandas_managers):
     """
     Test basic operations on a bodo series using a pandas manager.
     """
-    _, pandas_manager = single_pandas_managers
+    _, _pandas_manager = single_pandas_managers
     base_s = pd.Series(pd.array(["a", "bc", "def", "ghij", "klmno"] * 8))
 
     series = BodoSeries._from_mgr(base_s._mgr, [])
@@ -191,7 +191,7 @@ def test_bodo_series_pandas_manager(single_pandas_managers):
 
 def test_bodo_series_del_func_called_if_not_collected(single_pandas_managers):
     """Tests that the del function is called when the manager is deleted if the data hasn't been collected yet"""
-    lazy_manager, pandas_manager = single_pandas_managers
+    lazy_manager, _pandas_manager = single_pandas_managers
     del_called = False
 
     def del_func(_):
@@ -213,7 +213,7 @@ def test_bodo_series_del_func_called_if_not_collected(single_pandas_managers):
 
 def test_bodo_series_del_func_not_called_if_collected(single_pandas_managers):
     """Tests that the del function is not called when the manager is deleted if the data has been collected"""
-    lazy_manager, pandas_manager = single_pandas_managers
+    lazy_manager, _pandas_manager = single_pandas_managers
     del_called = False
 
     def del_func(_):
@@ -238,7 +238,7 @@ def test_bodo_series_del_func_not_called_if_collected(single_pandas_managers):
 
 def test_len(single_pandas_managers, head_s, collect_func, del_func):
     """Tests that len() returns the right value and does not trigger data fetch"""
-    lazy_manager, pandas_manager = single_pandas_managers
+    lazy_manager, _pandas_manager = single_pandas_managers
 
     lsam = lazy_manager(
         [],
@@ -264,7 +264,7 @@ def test_len(single_pandas_managers, head_s, collect_func, del_func):
 @pytest.mark.skip("Fix Series slice tests")
 def test_slice(single_pandas_managers, head_s, collect_func, del_func):
     """Tests that slicing returns the correct value and does not trigger data fetch unnecessarily"""
-    lazy_manager, pandas_manager = single_pandas_managers
+    lazy_manager, _pandas_manager = single_pandas_managers
 
     lsam = lazy_manager(
         [],

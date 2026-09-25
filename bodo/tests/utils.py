@@ -71,7 +71,7 @@ class InputDist(Enum):
 
 
 def count_array_REPs():
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -79,7 +79,7 @@ def count_array_REPs():
 
 
 def count_parfor_REPs():
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -87,7 +87,7 @@ def count_parfor_REPs():
 
 
 def count_parfor_OneDs():
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -95,7 +95,7 @@ def count_parfor_OneDs():
 
 
 def count_array_OneDs():
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -103,7 +103,7 @@ def count_array_OneDs():
 
 
 def count_parfor_OneD_Vars():
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.parfor_dists.values()
@@ -111,7 +111,7 @@ def count_parfor_OneD_Vars():
 
 
 def count_array_OneD_Vars():
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.transforms.distributed_pass import Distribution
 
     vals = bodo.transforms.distributed_pass.dist_analysis.array_dists.values()
@@ -1403,9 +1403,9 @@ def _test_equal(
                 py_out = pd.Series(
                     _to_pa_array(
                         py_out.map(
-                            lambda a: None
-                            if isinstance(a, float) and np.isnan(a)
-                            else a
+                            lambda a: (
+                                None if isinstance(a, float) and np.isnan(a) else a
+                            )
                         ).values,
                         pa_type,
                     ),
@@ -2001,12 +2001,11 @@ def has_udf_call(fir):
                 isinstance(stmt, ir.Assign)
                 and isinstance(stmt.value, ir.Global)
                 and isinstance(stmt.value.value, numba.core.registry.CPUDispatcher)
+            ) and (
+                stmt.value.value._compiler.pipeline_class
+                == bodo.compiler.BodoCompilerUDF
             ):
-                if (
-                    stmt.value.value._compiler.pipeline_class
-                    == bodo.compiler.BodoCompilerUDF
-                ):
-                    return True
+                return True
 
     return False
 
@@ -2056,7 +2055,7 @@ def string_list_ent(x):
     if isinstance(x, str):
         return x
     if isinstance(x, Decimal):
-        if x == Decimal("0"):
+        if x == Decimal(0):
             return "0"
         e_s = str(x)
         if e_s.find(".") != -1:
@@ -2860,7 +2859,7 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
     """
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
-    for _, block in fir.blocks.items():
+    for block in fir.blocks.values():
         for stmt in block.body:
             if (
                 isinstance(stmt, ir.Assign)
@@ -3475,7 +3474,7 @@ def pytest_slow_unless_changed(features):
         if feature not in known_features:
             raise Exception(f"Invalid features: {features}")
         patterns.append(f"({known_features[feature]})")
-    p = re.compile("|".join(patterns), re.I)
+    p = re.compile("|".join(patterns), re.IGNORECASE)
     if compiler_files_were_changed or any(p.match(f) for f in files_changed):
         return []
     return [pytest.mark.slow]
@@ -3746,8 +3745,7 @@ pytest_mark_oracle = compose_decos(
                 and platform.system() == "Linux"
                 and "arm" in platform.machine().lower()
                 or "aarch64" in platform.machine().lower(),
-            )
-            or platform.system() == "Windows",
+            ),
             reason="Oracle client not supported on ARM64 Linux or Windows",
         ),
     )
