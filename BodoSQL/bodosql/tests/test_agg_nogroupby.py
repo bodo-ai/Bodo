@@ -1313,7 +1313,7 @@ def test_sum0_init_value(tpch_data):
     bc = bodosql.BodoSQLContext(tpch_data)
     plan_str = bc.generate_plan(query)
     assert "BodoPhysicalAggregate(group=[{}], CNT=[$SUM0($0)])" in plan_str, (
-        "Expected SUM0 in the plan."
+        f"Expected SUM0 in the plan. {plan_str}"
     )
 
     check_query(
