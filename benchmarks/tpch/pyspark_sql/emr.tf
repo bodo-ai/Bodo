@@ -226,11 +226,20 @@ resource "aws_emr_cluster" "emr_cluster" {
 
         args = [
           "spark-submit",
+
+          "--packages",
+          "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.2",
+
+          "--conf",
+          "spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+
           "s3://${aws_s3_bucket.emr_bucket.id}/scripts/sql_on_spark_queries.py",
+
           "--folder", var.data_folder,
           "--scale_factor", tostring(var.scale_factor),
           "--queries", tostring(step.value),
-          "--sql_dir", "s3://${aws_s3_bucket.emr_bucket.id}/sql"
+          "--sql_dir", "s3://${aws_s3_bucket.emr_bucket.id}/sql",
+          "--emr"
         ]
       }
     }

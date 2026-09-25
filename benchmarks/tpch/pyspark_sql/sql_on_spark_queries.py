@@ -185,6 +185,15 @@ def main():
         help="Run queries on GPU (default: CPU).",
     )
     parser.add_argument(
+        "--emr",
+        action="store_true",
+        help=(
+            "Run in EMR mode. Skips local spark dependencies, SQL extension, and AWS "
+            "credential-provider configuration because these are provided by the "
+            "EMR environment or spark-submit."
+        ),
+    )
+    parser.add_argument(
         "--use_parquet",
         action="store_true",
         help="Read data from Parquet files instead of Iceberg (default: False).",
@@ -207,10 +216,10 @@ def main():
     store_output = args.store_output
     show_plans = args.show_plans
 
-    iceberg_version = "1.11.0"  # or your preferred Iceberg version
-    spark_version = "4.0"  # match your Spark major.minor version
+    iceberg_version = "1.11.0"
+    spark_version = "4.0"
     scala_version = "2.13"
-    catalog_name = "local"  # arbitrary catalog identifier
+    catalog_name = "tpch"
 
     if run_on_gpu:
         spark = (
@@ -230,32 +239,64 @@ def main():
             .getOrCreate()
         )
     else:
-        packages = f"org.apache.iceberg:iceberg-spark-runtime-{spark_version}_{scala_version}:{iceberg_version},org.apache.hadoop:hadoop-aws:3.4.1,software.amazon.awssdk:bundle:2.24.6"
-        spark = (
-            SparkSession.builder.appName("SQL Queries with Spark")
-            .appName("IcebergTPCH")
-            .config("spark.jars.packages", packages)
-            .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-            # Enable Iceberg Spark extensions
-            .config(
-                "spark.sql.extensions",
-                "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-            )
-            # Register a Spark catalog backed by Iceberg (Hadoop catalog)
+        packages = (
+            f"org.apache.iceberg:iceberg-spark-runtime-"
+            f"{spark_version}_{scala_version}:{iceberg_version},"
+            "org.apache.hadoop:hadoop-aws:3.4.1,"
+            "software.amazon.awssdk:bundle:2.24.6"
+        )
+
+        builder = (
+            SparkSession.builder.appName("IcebergTPCH")
+            # Iceberg Hadoop catalog.
             .config(
                 f"spark.sql.catalog.{catalog_name}",
                 "org.apache.iceberg.spark.SparkCatalog",
             )
-            .config(f"spark.sql.catalog.{catalog_name}.type", "hadoop")
-            .config(f"spark.sql.catalog.{catalog_name}.warehouse", folder)
-            .config("spark.driver.memory", "12g")  # driver JVM heap
-            .config("spark.executor.memory", "8g")  # executor JVM heap (cluster mode)
             .config(
-                "spark.executor.memoryOverhead", "2g"
-            )  # off-heap overhead for executors
-            .config("spark.sql.shuffle.partitions", "200")  # reduce per-task pressure
-            .getOrCreate()
+                f"spark.sql.catalog.{catalog_name}.type",
+                "hadoop",
+            )
+            .config(
+                f"spark.sql.catalog.{catalog_name}.warehouse",
+                folder,
+            )
+            # Hadoop S3A filesystem.
+            .config(
+                "spark.hadoop.fs.s3a.impl",
+                "org.apache.hadoop.fs.s3a.S3AFileSystem",
+            )
+            .config(
+                "spark.hadoop.fs.s3.impl",
+                "org.apache.hadoop.fs.s3a.S3AFileSystem",
+            )
+            # Other settings.
+            .config("spark.sql.execution.arrow.pyspark.enabled", "true")
+            .config("spark.driver.memory", "12g")
+            .config("spark.executor.memory", "8g")
+            .config("spark.executor.memoryOverhead", "2g")
+            .config("spark.sql.shuffle.partitions", "200")
         )
+
+        if not args.emr:
+            # Local Spark requires the Iceberg/Hadoop dependencies, Iceberg SQL
+            # extensions, and AWS credential provider to be configured here.
+            # On EMR, these are provided by spark-submit or the EMR environment.
+            builder = (
+                builder.config("spark.jars.packages", packages)
+                .config(
+                    "spark.sql.extensions",
+                    "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+                )
+                .config(
+                    "spark.hadoop.fs.s3a.aws.credentials.provider",
+                    "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider",
+                )
+            )
+        else:
+            print("Using EMR mode")
+
+        spark = builder.getOrCreate()
 
     queries = args.queries or list(range(1, 23))
 
