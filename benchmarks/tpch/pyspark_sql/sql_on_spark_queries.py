@@ -7,7 +7,7 @@ import warnings
 from pyspark.sql import SparkSession
 
 
-def load_tables(spark, base, table_names: list[str], use_parquet: bool):
+def load_tables(spark, base, use_parquet: bool):
     """
     Load TPCH tables either from Parquet files (use_parquet=True)
     or from Iceberg tables (use_parquet=False).
@@ -18,6 +18,17 @@ def load_tables(spark, base, table_names: list[str], use_parquet: bool):
       - Otherwise base is treated as a filesystem path and tables are loaded as
         spark.read.format("iceberg").load(f"{base}/{table_name}")
     """
+    table_names = [
+        "lineitem",
+        "orders",
+        "customer",
+        "part",
+        "partsupp",
+        "supplier",
+        "nation",
+        "region",
+    ]
+
     tables = {}
 
     if use_parquet:
@@ -43,253 +54,6 @@ def load_tables(spark, base, table_names: list[str], use_parquet: bool):
         df.createOrReplaceTempView(name)
 
     return tables
-
-
-def load_all_tables(spark, base, use_parquet: bool):
-    """Load all TPCH tables into temporary views."""
-
-    tables = [
-        "lineitem",
-        "orders",
-        "customer",
-        "part",
-        "partsupp",
-        "supplier",
-        "nation",
-        "region",
-    ]
-
-    return load_tables(spark, base, tables, use_parquet)
-
-
-def load_query_tables(spark, base, query_num: int, use_parquet: bool):
-    """Load only tables required by *query_num* into temporary views."""
-    assert 1 <= query_num <= 22, "query_num must be between 1 and 22"
-
-    all_queries_tables = [
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q1
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q2
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q3
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q4
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q5
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q6
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q7
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q8
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q9
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q10
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q11
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q12
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q13
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q14
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q15
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q16
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q17
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q18
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q19
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q20
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q21
-        [
-            "lineitem",
-            "orders",
-            "customer",
-            "part",
-            "partsupp",
-            "supplier",
-            "nation",
-            "region",
-        ],  # Q22
-    ]
-
-    return load_tables(spark, base, all_queries_tables[query_num - 1], use_parquet)
 
 
 def load_query(spark, nn: str, sql_dir="../sql") -> str:

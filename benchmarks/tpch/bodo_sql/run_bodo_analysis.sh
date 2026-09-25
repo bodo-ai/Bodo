@@ -3,11 +3,9 @@
 folder=$1
 scale_factor=$2
 
-# clear plans
-rm -rf plans_sf$scale_factor
 profile_dir=/bodofs/Users/scott/profiles
 
-for query in {1..2}; do
+for query in {1..22}; do
     echo "Running query $query"
     BODO_TRACING_LEVEL=1 \
     BODO_TRACING_OUTPUT_DIR="$profile_dir/profile_q$query" \
