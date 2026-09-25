@@ -35,6 +35,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Calc;
 import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.hint.RelHint;
 import org.apache.calcite.rel.logical.LogicalCalc;
 import org.apache.calcite.rel.logical.LogicalWindow;
 import org.apache.calcite.rel.rules.CalcRelSplitter;
@@ -233,10 +234,11 @@ public abstract class BodoProjectToWindowRule extends RelRule<BodoProjectToWindo
             RelTraitSet traitSet,
             RelBuilder relBuilder,
             RelNode input,
-            RexProgram program) {
+            RexProgram program,
+            List<RelHint> hints) {
           assert !program.containsAggs();
           program = program.normalize(cluster.getRexBuilder(), null);
-          return super.makeRel(cluster, traitSet, relBuilder, input, program);
+          return super.makeRel(cluster, traitSet, relBuilder, input, program, hints);
         }
       },
       new RelType("WinAggRelType") {
@@ -271,11 +273,13 @@ public abstract class BodoProjectToWindowRule extends RelRule<BodoProjectToWindo
             RelTraitSet traitSet,
             RelBuilder relBuilder,
             RelNode input,
-            RexProgram program) {
+            RexProgram program,
+            List<RelHint> hints) {
           checkArgument(
               program.getCondition() == null, "WindowedAggregateRel cannot accept a condition");
           // BODO CHANGE: convert the output to a BodoLogicalWindow
-          RelNode result = LogicalWindow.create(cluster, traitSet, relBuilder, input, program);
+          RelNode result =
+              LogicalWindow.create(cluster, traitSet, relBuilder, input, program, hints);
           if (result instanceof Project) {
             // If there is a project on top, convert its input.
             BodoLogicalProject proj = (BodoLogicalProject) result;

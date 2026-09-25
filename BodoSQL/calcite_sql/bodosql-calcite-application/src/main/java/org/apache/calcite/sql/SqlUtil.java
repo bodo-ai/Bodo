@@ -1194,7 +1194,7 @@ public abstract class SqlUtil {
       final SqlHint sqlHint = (SqlHint) node;
       final String hintName = sqlHint.getName();
 
-      final RelHint.Builder builder = RelHint.builder(hintName);
+      final RelHint.Builder builder = RelHint.builder(hintName).position(node.getParserPosition());
       switch (sqlHint.getOptionFormat()) {
       case EMPTY:
         // do nothing.
@@ -1350,6 +1350,50 @@ public abstract class SqlUtil {
       Util.swallow(e, null);
       return true;
     }
+  }
+
+  /**
+   * Returns a copy of the sql node with ordering modifiers removed.
+   *
+   * <p>Does not modify the input. Strips outermost {@code DESC},
+   * {@code NULLS FIRST}, and {@code NULLS LAST} modifiers recursively.
+   */
+  public static SqlNode stripOrderModifiers(SqlNode node) {
+    SqlNode expr = node;
+    while (expr instanceof SqlCall) {
+      final SqlCall call = (SqlCall) expr;
+      final SqlKind kind = call.getKind();
+      if (kind == SqlKind.DESCENDING
+          || kind == SqlKind.NULLS_FIRST
+          || kind == SqlKind.NULLS_LAST) {
+        expr = call.operand(0);
+      } else {
+        break;
+      }
+    }
+    return expr;
+  }
+
+  /**
+   * Returns a copy of the ORDER BY item with {@code AS} alias removed,
+   * preserving sort modifiers (DESC, NULLS FIRST/LAST).
+   */
+  public static SqlNode stripAsFromOrder(SqlNode node) {
+    if (node instanceof SqlCall) {
+      SqlCall call = (SqlCall) node;
+      SqlKind kind = call.getKind();
+      if (kind == SqlKind.DESCENDING
+          || kind == SqlKind.NULLS_FIRST
+          || kind == SqlKind.NULLS_LAST) {
+        SqlNode operand = call.operand(0);
+        SqlNode stripped = stripAsFromOrder(operand);
+        if (stripped != operand) {
+          return call.getOperator().createCall(call.getParserPosition(), stripped);
+        }
+        return node;
+      }
+    }
+    return stripAs(node);
   }
 
   //~ Inner Classes ----------------------------------------------------------

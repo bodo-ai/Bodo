@@ -1749,6 +1749,11 @@ class BodoRexSimplify(
     private fun simplifyStringCapitalizationOp(e: RexCall): RexNode {
         val operand = simplify(e.operands[0])
         return if (operand is RexLiteral) {
+            // A NULL literal (Calcite 1.42 can leave the operand uncoerced) has no
+            // string value to fold, but is still null-propagating.
+            if (operand.isNull) {
+                return rexBuilder.makeNullLiteral(e.type)
+            }
             // e.g. LOWER('Alphabet Soup') -> 'alphabet soup'
             val asStr = operand.getValueAs(String::class.java)!!
             val capitalizedStr = if (e.operator.name == SqlStdOperatorTable.UPPER.name) { asStr.uppercase(Locale.ROOT) } else { asStr.lowercase(Locale.ROOT) }
