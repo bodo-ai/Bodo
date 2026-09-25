@@ -180,8 +180,8 @@ def get_snowflake_keypair_connection_params(
         "authenticator": "snowflake_jwt",
         "private_key_file": private_key_file,
     }
-    if private_key_file_pwd is not None:
-        params["private_key_file_pwd"] = private_key_file_pwd
+    # if private_key_file_pwd is not None:
+    #    params["private_key_file_pwd"] = private_key_file_pwd
     return params
 
 
