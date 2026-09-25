@@ -242,8 +242,18 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     SqlNode operand = call.getOperandList().get(index);
     // Bodo Change: We support implicit type coercion for dynamic param.
     requireNonNull(scope, "scope");
+    // Bodo Change: Calcite 1.42's SqlTypeUtil.canCastFrom short-circuits casts
+    // to ARRAY/MAP targets without consulting the type mapping rule, which
+    // breaks Bodo's implicit casts from VARIANT. Treat a VARIANT source as
+    // castable to ARRAY/MAP explicitly.
+    boolean variantToCollection = false;
+    if (targetType instanceof ArraySqlType || targetType instanceof MapSqlType) {
+      final RelDataType sourceType = validator.deriveType(scope, operand);
+      variantToCollection = sourceType instanceof VariantSqlType
+          || sourceType.getSqlTypeName() == SqlTypeName.OTHER;
+    }
     // Check it early.
-    if (!needToCast(scope, operand, targetType)) {
+    if (!variantToCollection && !needToCast(scope, operand, targetType)) {
       return false;
     }
     // Fix up nullable attr.

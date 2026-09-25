@@ -105,7 +105,7 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
   public static final SqlFunction TIMESTAMP_DIFF = new BodoSqlTimestampDiffFunction();
 
   public static final SqlNullPolicyFunction LAST_DAY =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "LAST_DAY",
           ReturnTypes.DATE_NULLABLE,
           OperandTypes.or(
