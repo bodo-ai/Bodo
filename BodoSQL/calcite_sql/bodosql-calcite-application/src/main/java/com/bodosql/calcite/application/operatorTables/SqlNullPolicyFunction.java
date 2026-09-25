@@ -56,6 +56,11 @@ public class SqlNullPolicyFunction extends SqlFunction {
 
   private final Strong.Policy nullablePolicy;
 
+  // Whether this function can never raise an error for any input. This is used to
+  // tell Calcite whether it is safe to unwrap IS NULL / IS NOT NULL, see
+  // SqlOperator#isSafeOperator() and RexSimplify.SafeRexVisitor.
+  private final boolean safe;
+
   // ~ Constructors -----------------------------------------------------------
 
   /**
@@ -73,6 +78,7 @@ public class SqlNullPolicyFunction extends SqlFunction {
    * @param category Categorization for function
    * @param monotonicityInference Strategy to infer monotonicity of a call
    * @param nullablePolicy Policy used to simplify IS NULL and IS NOT NULL.
+   * @param safe Whether the function can never raise an error for any input.
    */
   protected SqlNullPolicyFunction(
       String name,
@@ -86,7 +92,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
       Integer callValidator,
       SqlFunctionCategory category,
       Function<SqlOperatorBinding, SqlMonotonicity> monotonicityInference,
-      Strong.Policy nullablePolicy) {
+      Strong.Policy nullablePolicy,
+      boolean safe) {
     super(
         name,
         kind,
@@ -100,6 +107,7 @@ public class SqlNullPolicyFunction extends SqlFunction {
     this.callValidator = requireNonNull(callValidator, "callValidator");
     this.monotonicityInference = requireNonNull(monotonicityInference, "monotonicityInference");
     this.nullablePolicy = nullablePolicy;
+    this.safe = safe;
   }
 
   /** Creates a {@code SqlNullPolicyFunction}. */
@@ -108,7 +116,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
       SqlReturnTypeInference returnTypeInference,
       SqlOperandTypeChecker operandTypeChecker,
       SqlFunctionCategory category,
-      Strong.Policy nullablePolicy) {
+      Strong.Policy nullablePolicy,
+      boolean safe) {
     return new SqlNullPolicyFunction(
         name,
         SqlKind.OTHER_FUNCTION,
@@ -121,7 +130,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         0,
         category,
         call -> SqlMonotonicity.NOT_MONOTONIC,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /** Create a SqlNullPolicyFunction without a Null Policy. */
@@ -130,7 +140,7 @@ public class SqlNullPolicyFunction extends SqlFunction {
       SqlReturnTypeInference returnTypeInference,
       SqlOperandTypeChecker operandTypeChecker,
       SqlFunctionCategory category) {
-    return create(name, returnTypeInference, operandTypeChecker, category, null);
+    return create(name, returnTypeInference, operandTypeChecker, category, null, false);
   }
 
   /**
@@ -142,7 +152,21 @@ public class SqlNullPolicyFunction extends SqlFunction {
       SqlReturnTypeInference returnTypeInference,
       SqlOperandTypeChecker operandTypeChecker,
       SqlFunctionCategory category) {
-    return create(name, returnTypeInference, operandTypeChecker, category, Strong.Policy.ANY);
+    return create(
+        name, returnTypeInference, operandTypeChecker, category, Strong.Policy.ANY, false);
+  }
+
+  /**
+   * Create a SqlNullPolicyFunction with the ANY policy, where the function is also known to never
+   * raise an error for any input. This allows Calcite to safely unwrap IS NULL / IS NOT NULL around
+   * calls to the function.
+   */
+  public static SqlNullPolicyFunction createAnyPolicySafe(
+      String name,
+      SqlReturnTypeInference returnTypeInference,
+      SqlOperandTypeChecker operandTypeChecker,
+      SqlFunctionCategory category) {
+    return create(name, returnTypeInference, operandTypeChecker, category, Strong.Policy.ANY, true);
   }
 
   // ~ Methods ----------------------------------------------------------------
@@ -200,7 +224,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /** Returns a copy of this function with a given kind. */
@@ -217,7 +242,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /** Returns a copy of this function with a given category. */
@@ -234,7 +260,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         category,
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /** Returns a copy of this function with a given syntax. */
@@ -251,7 +278,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /** Returns a copy of this function with a given strategy for inferring returned type. */
@@ -268,7 +296,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /**
@@ -288,7 +317,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /** Returns a copy of this function with a given strategy for handling operands. */
@@ -305,7 +335,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /** Returns a copy of this function with a given determinism. */
@@ -322,7 +353,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /**
@@ -343,7 +375,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   public SqlFunction withValidation(int callValidator) {
@@ -359,7 +392,8 @@ public class SqlNullPolicyFunction extends SqlFunction {
         callValidator,
         getFunctionType(),
         monotonicityInference,
-        nullablePolicy);
+        nullablePolicy,
+        safe);
   }
 
   /**
@@ -376,5 +410,15 @@ public class SqlNullPolicyFunction extends SqlFunction {
     } else {
       return () -> requireNonNull(nullablePolicy, "nullablePolicy");
     }
+  }
+
+  /**
+   * Returns whether this function can never raise an error for any input. Calcite's {@code
+   * RexSimplify.SafeRexVisitor} consults this to decide whether it is safe to unwrap {@code IS
+   * NULL} / {@code IS NOT NULL} around a call to this function.
+   */
+  @Override
+  public Boolean isSafeOperator() {
+    return safe;
   }
 }

@@ -93,7 +93,14 @@ public class SqlQuantifyOperator extends SqlInOperator {
     if (typeForCollectionArgument != null) {
       return typeForCollectionArgument;
     }
-    return super.deriveType(validator, scope, call);
+    // Right-hand side is a subquery (some,any, all)
+    final RelDataType returnType = super.deriveType(validator, scope, call);
+    if (validator.config().typeCoercionEnabled()) {
+      validator.getTypeCoercion()
+          .quantifyOperationCoercion(
+              new SqlCallBinding(validator, scope, call));
+    }
+    return returnType;
   }
 
   /**
@@ -141,7 +148,8 @@ public class SqlQuantifyOperator extends SqlInOperator {
               validator.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN),
               rightType.isNullable()
                   || componentRightType.isNullable()
-                  || leftType.isNullable());        }
+                  || leftType.isNullable());
+        }
         throw validator.newValidationError(call,
             RESOURCE.incompatibleValueType(call.getOperator().getName()));
       }

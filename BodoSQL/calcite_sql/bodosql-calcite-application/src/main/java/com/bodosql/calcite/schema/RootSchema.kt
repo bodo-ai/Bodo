@@ -44,7 +44,7 @@ class RootSchema {
         override fun getFullPath(): ImmutableList<String> = ImmutableList.of()
 
         // These are operations that are disabled.
-        override fun createTablePath(tableName: String?): ImmutableList<String?>? =
+        override fun createTablePath(tableName: String): ImmutableList<String> =
             throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
 
         override fun generateWriteCode(

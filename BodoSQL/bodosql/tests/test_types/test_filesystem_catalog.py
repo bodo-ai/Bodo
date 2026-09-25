@@ -18,7 +18,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 from bodo.tests.utils import check_func, pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean2
-from bodosql.tests.utils import _check_query_equal
+from bodosql.tests.utils import _check_query_equal, check_query
 
 
 @pytest.fixture(
@@ -41,6 +41,14 @@ def dummy_filesystem_catalog(request):
     A dummy filesystem catalog used for most tests without any real functionality.
     """
     return request.param
+
+
+@pytest.fixture
+def iceberg_warehouse_s3_loc():
+    """
+    Path to Iceberg TPCH warehouse on S3.
+    """
+    return "s3://duckdb-iceberg-data-427443013497-us-east-2-an/tpch_sf1_iceberg/"
 
 
 def test_filesystem_catalog_boxing(dummy_filesystem_catalog, memory_leak_check):
@@ -277,3 +285,55 @@ def test_basic_iceberg_read(iceberg_database):
         ["A", "B", "C"]
     ].reset_index(drop=True)
     _check_query_equal(out, expected)
+
+
+@pytest.mark.iceberg
+@pytest_mark_one_rank
+@pytest.mark.bodosql_cpp
+def test_basic_iceberg_read(iceberg_warehouse_s3_loc):
+    """Test that FileSystemCatalog can read S3 paths."""
+    catalog = bodosql.FileSystemCatalog(iceberg_warehouse_s3_loc)
+
+    query = "SELECT N_NATIONKEY, N_NAME FROM nation WHERE n_name = 'ALGERIA'"
+    expected_df = pd.DataFrame(
+        {
+            "N_NATIONKEY": [0],
+            "N_NAME": ["ALGERIA"],
+        }
+    )
+
+    check_query(
+        query,
+        catalog,
+        None,
+        expected_output=expected_df,
+        use_dict_encoded_strings=False,
+    )
+
+
+@pytest.mark.iceberg
+@pytest_mark_one_rank
+@pytest.mark.slow
+def test_basic_iceberg_read_jit(iceberg_warehouse_s3_loc):
+    """Test that FileSystemCatalog can read S3 paths."""
+    catalog = bodosql.FileSystemCatalog(iceberg_warehouse_s3_loc)
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    query = "SELECT N_NATIONKEY, N_NAME FROM nation WHERE n_name = 'ALGERIA'"
+    expected_df = pd.DataFrame(
+        {
+            "N_NATIONKEY": [0],
+            "N_NAME": ["ALGERIA"],
+        }
+    )
+
+    def impl(bc):
+        return bc.sql(query)
+
+    check_func(
+        impl,
+        (bc,),
+        py_output=expected_df,
+        use_dict_encoded_strings=False,
+        only_seq=True,
+    )

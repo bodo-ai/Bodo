@@ -38,7 +38,7 @@ public class ArrayOperatorTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction ARRAY_COMPACT =
-      SqlNullPolicyFunction.createAnyPolicy(
+      SqlNullPolicyFunction.createAnyPolicySafe(
           "ARRAY_COMPACT",
           ReturnTypes.ARG0_NULLABLE,
           OperandTypes.ARRAY.or(BodoOperandTypes.VARIANT),

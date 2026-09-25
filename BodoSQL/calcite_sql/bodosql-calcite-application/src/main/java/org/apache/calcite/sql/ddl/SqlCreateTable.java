@@ -17,9 +17,11 @@
 package org.apache.calcite.sql.ddl;
 
 import org.apache.calcite.schema.Schema;
+import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlCreate;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
@@ -34,6 +36,8 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.List;
 import java.util.Objects;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Parse tree for {@code CREATE TABLE} statement.
@@ -82,35 +86,62 @@ public class SqlCreateTable extends SqlCreate {
   }
 
   private static final SqlOperator OPERATOR =
-      new SqlSpecialOperator("CREATE TABLE", SqlKind.CREATE_TABLE);
+      new SqlSpecialOperator("CREATE TABLE", SqlKind.CREATE_TABLE) {
+        @Override public SqlCall createCall(@Nullable SqlLiteral functionQualifier,
+            SqlParserPos pos, @Nullable SqlNode... operands) {
+          return new SqlCreateTable(OPERATOR, pos,
+              ((SqlLiteral) requireNonNull(operands[0], "replace")).booleanValue(),
+              ((SqlLiteral) requireNonNull(operands[1], "ifNotExists")).booleanValue(),
+              (SqlIdentifier) requireNonNull(operands[2], "name"),
+              (SqlNodeList) operands[3], operands[4]);
+        }
+      };
 
   /** Creates a SqlCreateTable. */
-  protected SqlCreateTable(SqlParserPos pos, boolean replace, boolean ifNotExists,
-      SqlIdentifier name, @Nullable SqlNodeList columnList, @Nullable SqlNode query) {
-    super(OPERATOR, pos, replace, ifNotExists);
+  protected SqlCreateTable(SqlOperator operator, SqlParserPos pos, boolean replace,
+      boolean ifNotExists, SqlIdentifier name, @Nullable SqlNodeList columnList,
+      @Nullable SqlNode query) {
+    super(operator, pos, replace, ifNotExists);
     this.name = Objects.requireNonNull(name, "name");
     this.columnList = columnList; // may be null
     this.query = query; // for "CREATE TABLE ... AS query"; may be null
     this.createType = CreateTableType.DEFAULT; // To handle CREATE [TEMPORARY/TRANSIENT/..] TABLE
   }
 
+  /** Creates a SqlCreateTable. */
+  protected SqlCreateTable(SqlParserPos pos, boolean replace, boolean ifNotExists,
+      SqlIdentifier name, @Nullable SqlNodeList columnList, @Nullable SqlNode query) {
+    this(OPERATOR, pos, replace, ifNotExists, name, columnList, query);
+  }
+
   @SuppressWarnings("nullness")
   @Override public List<SqlNode> getOperandList() {
-    return ImmutableNullableList.of(name, columnList, query);
+    return ImmutableNullableList.of(
+        SqlLiteral.createBoolean(getReplace(), SqlParserPos.ZERO),
+        SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
+        name, columnList, query);
   }
 
   @SuppressWarnings("assignment.type.incompatible")
   @Override public void setOperand(int i, @Nullable SqlNode operand) {
     switch (i) {
     case 0:
+      assert operand instanceof SqlLiteral;
+      setReplace(((SqlLiteral) requireNonNull(operand)).booleanValue());
+      break;
+    case 1:
+      // "ifNotExists" is final and cannot be changed after construction.
+      assert operand instanceof SqlLiteral;
+      break;
+    case 2:
       assert operand instanceof SqlIdentifier;
       name = (SqlIdentifier) operand;
       break;
-    case 1:
+    case 3:
       assert operand instanceof SqlNodeList;
       columnList = (SqlNodeList) operand;
       break;
-    case 2:
+    case 4:
       query = operand;
       break;
     default:
