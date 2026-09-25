@@ -4,7 +4,7 @@ folder=$1
 scale_factor=$2
 
 # clear plans
-rm -rf plans_sf=$scale_factor
+rm -rf plans_sf$scale_factor
 rm -rf profiles
 
 mkdir -p profiles
@@ -12,7 +12,6 @@ mkdir -p profiles
 for query in {1..2}; do
     echo "Running query $query"
     BODO_TRACING_LEVEL=1 \
-    BODO_NUM_WORKERS=2 \
     BODO_TRACING_OUTPUT_DIR="profiles/profile_q$query" \
     mpiexec -n 1 python bodosql_queries.py \
     --folder $folder \

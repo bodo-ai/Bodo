@@ -205,7 +205,7 @@ def generate_query_plans(
     catalog = FileSystemCatalog(root)
     bc = BodoSQLContext(catalog=catalog)
 
-    plans = f"plans_sf={int(scale_factor)}"
+    plans = f"plans_sf{int(scale_factor)}"
     os.makedirs(plans, exist_ok=True)
     for q in queries:
         nn = f"{q:02d}"
