@@ -379,11 +379,13 @@ class PythonEntryPoint {
             connectionString: String,
             writeTarget: String,
             defaultSchema: String,
+            primaryKeys: MutableMap<String, MutableList<String>>,
         ): FileSystemCatalog =
             FileSystemCatalog(
                 connectionString,
                 WriteTarget.WriteTargetEnum.fromString(writeTarget),
                 defaultSchema,
+                primaryKeys,
             )
 
         /**
