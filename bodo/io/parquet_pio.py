@@ -919,6 +919,10 @@ def filter_row_groups_from_start_of_dataset_heuristic(
     # and this rank needs to skip rows of the first file.
     # TODO see if getting row counts with filter pushdown could be worthwhile
     # in some specific cases, and integrate that into this heuristic.
+    import pyarrow.compute as pc
+
+    if expr_filter is not None and expr_filter.equals(pc.scalar(True)):
+        expr_filter = None
     return (expr_filter is None) and (
         len_fpaths <= 3 or (start_offset > 0 and len_fpaths <= 10)
     )
