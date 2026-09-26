@@ -72,13 +72,14 @@ def check_logger_msg(stream, msg, check_case=True):
     if bodo.tests.utils.test_spawn_mode_enabled:
         return
     if bodo.get_rank() == 0:
+        stream_value = stream.getvalue()
         if check_case:
-            assert msg in stream.getvalue(), (
-                f"Cannot find message in logging stream: '{msg}'"
+            assert msg in stream_value, (
+                f"Cannot find message in logging stream: '{msg}' stream '{stream_value}'"
             )
         else:
-            assert msg.lower() in stream.getvalue().lower(), (
-                f"Cannot find message in logging stream: '{msg}'"
+            assert msg.lower() in stream_value.lower(), (
+                f"Cannot find message in logging stream: '{msg.lower()}' stream '{stream_value.lower()}'"
             )
 
 
