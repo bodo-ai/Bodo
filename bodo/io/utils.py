@@ -5,9 +5,10 @@ This file should import JIT lazily to avoid slowing down non-JIT code paths.
 
 from __future__ import annotations
 
+import os
 from pathlib import PureWindowsPath
 from typing import Any
-from urllib.parse import parse_qsl, urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 
 def parse_dbtype(con_str) -> tuple[str, str]:
@@ -164,3 +165,39 @@ def parse_snowflake_conn_str(
                 params.setdefault(key, session_params.pop(key))
 
     return params
+
+
+def get_snowflake_keypair_connection_params(
+    private_key_file: str, private_key_file_pwd: str | None = None
+) -> dict[str, str]:
+    # The Snowflake SQLAlchemy dialect refuses key pair parameters in URL query
+    # strings (plain pd.read_sql/to_sql calls in tests go through it). Allow
+    # them with a deprecation warning so both the Python connector and
+    # SQLAlchemy paths work with the same connection string.
+    os.environ.setdefault("SNOWFLAKE_SQLALCHEMY_LEGACY_URL_PARAMS", "true")
+
+    params = {
+        "authenticator": "snowflake_jwt",
+        "private_key_file": private_key_file,
+    }
+    if private_key_file_pwd is not None:
+        params["private_key_file_pwd"] = private_key_file_pwd
+    return params
+
+
+def get_snowflake_connection_string(
+    db: str,
+    schema: str,
+    username: str,
+    account: str,
+    params: dict[str, str] = None,
+    password: str | None = None,
+) -> str:
+    if params is None:
+        params = {}
+
+    if password is None:
+        conn = f"snowflake://{username}@{account}/{db}/{schema}?{urlencode(params)}"
+    else:
+        conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urlencode(params)}"
+    return conn

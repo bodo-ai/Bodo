@@ -24,7 +24,6 @@ from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
 from typing import TypeVar
-from urllib.parse import urlencode
 from uuid import uuid4
 
 import numba  # noqa TID253
@@ -2893,16 +2892,7 @@ def get_snowflake_keypair_connection_params(
     if not (private_key_file := os.environ.get("SF_PRIVATE_KEY_FILE")):
         return None
 
-    # The Snowflake SQLAlchemy dialect refuses key pair parameters in URL query
-    # strings (plain pd.read_sql/to_sql calls in tests go through it). Allow
-    # them with a deprecation warning so both the Python connector and
-    # SQLAlchemy paths work with the same connection string.
-    os.environ.setdefault("SNOWFLAKE_SQLALCHEMY_LEGACY_URL_PARAMS", "true")
-
-    params = {
-        "authenticator": "snowflake_jwt",
-        "private_key_file": private_key_file,
-    }
+    params = bodo.io.utils.get_snowflake_keypair_connection_params(private_key_file)
 
     if extra_params is not None:
         params = {**extra_params, **params}
@@ -2942,12 +2932,13 @@ def get_snowflake_connection_string(
     params = {"warehouse": "DEMO_WH"} if conn_params is None else conn_params
     keypair_params = get_snowflake_keypair_connection_params(params)
     if keypair_params is not None:
-        # Key pair (JWT) authentication, password is not used.
-        params = keypair_params
-        conn = f"snowflake://{username}@{account}/{db}/{schema}?{urlencode(params)}"
+        return bodo.io.utils.get_snowflake_connection_string(
+            db, schema, username, account, keypair_params
+        )
     else:
-        conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urlencode(params)}"
-    return conn
+        return bodo.io.utils.get_snowflake_connection_string(
+            db, schema, username, account, params, password
+        )
 
 
 def get_rest_catalog_connection_string(
