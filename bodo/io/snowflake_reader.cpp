@@ -403,8 +403,10 @@ class SnowflakeReader : public ArrowReader {
 
         rows_left_to_emit -= out_batch_size;
         bool is_last = result_batches.empty() && out_batches->empty();
-        return std::make_tuple(new table_info(*next_batch), is_last,
-                               out_batch_size);
+        return std::make_tuple(
+            popped_batch_to_output(next_batch,
+                                   this->out_batches->dummy_output_chunk),
+            is_last, out_batch_size);
     }
 
     std::tuple<table_info*, bool, uint64_t> read_inner_piece_level() override {

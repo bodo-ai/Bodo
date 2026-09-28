@@ -9,6 +9,7 @@
 #pragma once
 
 #include <Python.h>
+#include <cstdlib>
 #include <set>
 #include <stdexcept>
 
@@ -39,6 +40,31 @@
 #define CHECK_ARROW_READER_AND_ASSIGN(res, msg, lhs) \
     CHECK_ARROW_READER(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
+
+/**
+ * @brief Convert a batch popped from a ChunkedTableBuilder into the raw
+ * output pointer expected by the reader interface. Transfers ownership of
+ * the popped batch instead of deep-copying it, except for the dummy output
+ * chunk which is owned by the builder and must be copied.
+ *
+ * @param next_batch Batch popped from ChunkedTableBuilder::PopChunk
+ * @param dummy_output_chunk The builder's dummy output chunk
+ * @return table_info* Raw pointer with ownership transferred to the caller
+ */
+inline table_info* popped_batch_to_output(
+    std::shared_ptr<table_info> next_batch,
+    const std::shared_ptr<table_info>& dummy_output_chunk) {
+    // Read on every call so interleaved A/B tests can flip the knob
+    // between plan executions without restarting workers.
+    const char* env = std::getenv("BODO_TEST_DISABLE_TABLE_INFO_COPY_AVOID");
+    bool disable_copy_avoid = env != nullptr && std::string(env) == "1";
+    if (disable_copy_avoid || next_batch == dummy_output_chunk) {
+        return new table_info(*next_batch);
+    }
+    // Sole owner of the popped batch: move its contents into a new
+    // table_info instead of deep-copying the column arrays.
+    return new table_info(std::move(*next_batch));
+}
 
 // --------- TableBuilder ---------
 

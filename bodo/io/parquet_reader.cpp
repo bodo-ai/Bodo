@@ -335,8 +335,10 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
         rows_left_to_emit -= out_batch_size;
         bool is_last = (this->rows_left_to_emit <= 0) &&
                        (this->out_batches->total_remaining <= 0);
-        return std::make_tuple(new table_info(*next_batch), is_last,
-                               out_batch_size);
+        return std::make_tuple(
+            popped_batch_to_output(next_batch,
+                                   this->out_batches->dummy_output_chunk),
+            is_last, out_batch_size);
     }
 
     TableBuilder builder(schema, selected_fields, count, is_nullable,
