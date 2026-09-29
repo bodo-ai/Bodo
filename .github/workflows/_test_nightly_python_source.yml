@@ -72,6 +72,14 @@ jobs:
 
       - uses: actions/checkout@v5
 
+      - name: Restore Docker Cache
+        uses: actions/cache@v4
+        with:
+          path: /var/lib/docker
+          key: docker-cache-${{ runner.os }}-${{ inputs.test-type }}
+          restore-keys: |
+            docker-cache-${{ runner.os }}-
+
       - name: Build from Source
         uses: ./.github/actions/build-source
         with:
