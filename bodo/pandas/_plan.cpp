@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <utility>
 
 #include <arrow/api.h>
@@ -1540,7 +1541,8 @@ std::pair<int64_t, PyObject *> execute_plan(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows, bool has_partitioning) {
+    int64_t num_rows, bool has_partitioning,
+    std::optional<std::vector<int32_t>> str_as_dict_cols_opt) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1548,7 +1550,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
         BodoParquetScanFunction(arrow_schema);
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoParquetScanFunctionData>(
-            parquet_path, pyarrow_schema, storage_options, has_partitioning);
+            parquet_path, pyarrow_schema, storage_options, has_partitioning,
+            str_as_dict_cols_opt);
 
     // Convert Arrow schema to DuckDB
     auto [return_names, return_types] = arrow_schema_to_duckdb(arrow_schema);
@@ -1730,7 +1733,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
     std::optional<std::vector<int>> selected_columns_opt,
     std::optional<int64_t> limit_opt,
-    std::optional<JoinFilterProgramState> rtjf_state_map_opt) {
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt,
+    std::optional<std::vector<int32_t>> str_as_dict_cols_opt) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
@@ -1755,7 +1759,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     duckdb::unique_ptr<duckdb::FunctionData> bind_data1 =
         duckdb::make_uniq<BodoIcebergScanFunctionData>(
             arrow_schema, pyiceberg_catalog, table_name, iceberg_filter,
-            iceberg_schema, snapshot_id, selected_columns_opt, limit_opt);
+            iceberg_schema, snapshot_id, selected_columns_opt, limit_opt,
+            str_as_dict_cols_opt);
 
     // Set the runtime join filter state map if provided by Calcite planner
     if (rtjf_state_map_opt.has_value()) {

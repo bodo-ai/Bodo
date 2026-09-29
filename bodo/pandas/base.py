@@ -65,6 +65,7 @@ from bodo.pandas.utils import (
     get_scalar_udf_result_type,
     wrap_module_functions_and_methods,
     wrap_plan,
+    wrap_str_fields_as_dict,
 )
 
 if pt.TYPE_CHECKING:
@@ -226,10 +227,46 @@ def read_parquet(
                 ),
             )
 
+    # Determine which string columns should be read with dictionary encoding.
+    # The selection is done at the logical plan level so df.dtypes and the
+    # physical reader output agree. str_as_dict_cols are indices into the full
+    # read schema. Partition columns are excluded since they are not part of
+    # the Parquet files (they are read as categoricals).
+    from bodo.io.dict_encode import select_str_as_dict_cols
+
+    partition_names = set(pq_dataset.partition_names)
+    str_col_names = [
+        field.name
+        for field in arrow_schema
+        if field.name not in partition_names
+        and (pa.types.is_string(field.type) or pa.types.is_large_string(field.type))
+    ]
+
+    def determine_str_as_dict(names):
+        from bodo.io.parquet_pio import determine_str_as_dict_columns_no_mpi
+
+        return determine_str_as_dict_columns_no_mpi(pq_dataset, arrow_schema, names)
+
+    str_as_dict_names = select_str_as_dict_cols(str_col_names, determine_str_as_dict)
+    str_as_dict_cols = [
+        arrow_schema.get_field_index(name) for name in str_as_dict_names
+    ]
+    # Keep the unwrapped schema for the physical reader (dict-encoding is
+    # passed separately as column indices, mirroring the JIT path and the
+    # Iceberg reader).
+    reader_schema = arrow_schema
+    if len(str_as_dict_cols) > 0:
+        arrow_schema = wrap_str_fields_as_dict(arrow_schema, str_as_dict_cols)
+
     empty_df = arrow_to_empty_df(arrow_schema)
 
     plan = LogicalGetParquetRead(
-        empty_df, path, storage_options, pq_dataset.partitioning is not None
+        empty_df,
+        path,
+        storage_options,
+        pq_dataset.partitioning is not None,
+        reader_schema,
+        str_as_dict_cols,
     )
     return wrap_plan(plan=plan)
 

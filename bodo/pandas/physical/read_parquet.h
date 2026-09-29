@@ -32,6 +32,7 @@ class PhysicalReadParquet : public PhysicalSource {
     PyObject *storage_options;
     PyObject *schema_fields;
     const std::vector<int> selected_columns;
+    const std::vector<int32_t> str_as_dict_cols;
     duckdb::unique_ptr<duckdb::TableFilterSet> filter_exprs;
     int64_t total_rows_to_read = -1;  // Default to read everything.
 
@@ -42,12 +43,14 @@ class PhysicalReadParquet : public PhysicalSource {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        JoinFilterColStats join_filter_col_stats)
+        JoinFilterColStats join_filter_col_stats,
+        const std::vector<int32_t> &str_as_dict_cols)
         : join_filter_col_stats(std::move(join_filter_col_stats)),
           py_path(py_path),
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options),
           selected_columns(selected_columns),
+          str_as_dict_cols(str_as_dict_cols),
           filter_exprs(filter_exprs.Copy()) {
         time_pt start_init = start_timer();
 
@@ -62,8 +65,11 @@ class PhysicalReadParquet : public PhysicalSource {
         this->out_metadata = std::make_shared<bodo::TableMetadata>(
             arrow_schema->metadata()->keys(),
             arrow_schema->metadata()->values());
-        this->output_schema = bodo::Schema::FromArrowSchema(arrow_schema)
-                                  ->Project(selected_columns);
+        // Wrap the selected dict-encoded columns in the output schema so it
+        // matches the logical plan schema.
+        this->output_schema =
+            bodo::Schema::FromArrowSchema(wrap_str_as_dict_fields(
+                arrow_schema, selected_columns, str_as_dict_cols));
 
         this->schema_fields = PyObject_GetAttrString(pyarrow_schema, "names");
         if (!this->schema_fields || !PyList_Check(this->schema_fields)) {
@@ -202,6 +208,7 @@ class PhysicalReadParquet : public PhysicalSource {
             py_path, true, arrowFilterExpr, storage_options, pyarrow_schema,
             total_rows_to_read, selected_columns, is_nullable, false,
             get_streaming_batch_size());
-        internal_reader->init_pq_reader({}, nullptr, nullptr, 0);
+        std::vector<int32_t> dict_cols = this->str_as_dict_cols;
+        internal_reader->init_pq_reader(dict_cols, nullptr, nullptr, 0);
     }
 };

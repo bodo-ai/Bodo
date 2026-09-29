@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <utility>
 #include "_util.h"
 
@@ -83,10 +84,12 @@ class BodoParquetScanFunction : public BodoScanFunction {
  */
 class BodoParquetScanFunctionData : public BodoScanFunctionData {
    public:
-    BodoParquetScanFunctionData(PyObject *path, PyObject *pyarrow_schema,
-                                PyObject *storage_options,
-                                bool has_partitioning)
+    BodoParquetScanFunctionData(
+        PyObject *path, PyObject *pyarrow_schema, PyObject *storage_options,
+        bool has_partitioning,
+        std::optional<std::vector<int32_t>> _str_as_dict_cols_opt)
         : BodoScanFunctionData(BodoScanFunctionType::PARQUET_SCAN),
+          str_as_dict_cols_opt(std::move(_str_as_dict_cols_opt)),
           path(path),
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options),
@@ -115,6 +118,9 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
     }
 
     // Parquet dataset path
+    // Indices (into the full read schema) of string columns that should be
+    // read with dictionary encoding, selected at the logical plan level.
+    std::optional<std::vector<int32_t>> str_as_dict_cols_opt;
     PyObject *path;
     PyObject *pyarrow_schema;
     PyObject *storage_options;
@@ -230,10 +236,12 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         const std::string _table_id, PyObject *_iceberg_filter,
         PyObject *_iceberg_schema, int64_t _snapshot_id,
         std::optional<std::vector<int>> _selected_fields_opt,
-        std::optional<int64_t> _limit_opt)
+        std::optional<int64_t> _limit_opt,
+        std::optional<std::vector<int32_t>> _str_as_dict_cols_opt)
         : BodoScanFunctionData(BodoScanFunctionType::ICEBERG_SCAN),
           selected_fields_opt(std::move(_selected_fields_opt)),
           limit_opt(std::move(_limit_opt)),
+          str_as_dict_cols_opt(std::move(_str_as_dict_cols_opt)),
           arrow_schema(std::move(_arrow_schema)),
           catalog(_catalog),
           iceberg_filter(_iceberg_filter),
@@ -268,6 +276,9 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
     // pass the columns we want to select as well as the limit.
     std::optional<std::vector<int>> selected_fields_opt;
     std::optional<int64_t> limit_opt;
+    // Indices (into the full read schema) of string columns that should be
+    // read with dictionary encoding, selected at the logical plan level.
+    std::optional<std::vector<int32_t>> str_as_dict_cols_opt;
     const std::shared_ptr<arrow::Schema> arrow_schema;
     PyObject *catalog;
     PyObject *iceberg_filter;

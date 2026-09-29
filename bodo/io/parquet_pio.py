@@ -1227,12 +1227,15 @@ def _pa_schemas_match(pa_schema1: pa.Schema, pa_schema2: pa.Schema) -> bool:
 
 def _get_sample_pq_pieces(
     pq_dataset: ParquetDataset | None,
+    num_sample_files: int | None = None,
 ):
     """get a sample of pieces in the Parquet dataset to avoid the overhead of opening
     every file in compile time.
 
     Args:
         pq_dataset: input Parquet dataset
+        num_sample_files: number of files to sample. Defaults to the number
+            of MPI ranks (one file per rank).
 
     Returns:
         list(ParquetPiece): A sample of filtered pieces
@@ -1240,13 +1243,16 @@ def _get_sample_pq_pieces(
     # Bodo IO uses None to represent an empty dataset, which has 0 pieces
     pieces = pq_dataset.pieces if pq_dataset else []
 
+    if num_sample_files is None:
+        num_sample_files = bodo.get_size()
+
     # a sample of N files where N is the number of ranks. Each rank looks at
     # the metadata of a different random file
-    if len(pieces) > bodo.get_size():
+    if len(pieces) > num_sample_files:
         import random
 
         my_random = random.Random(37)
-        pieces = my_random.sample(pieces, bodo.get_size())
+        pieces = my_random.sample(pieces, num_sample_files)
     else:
         pieces = pieces
 
@@ -1323,6 +1329,38 @@ def estimate_parquet_row_count(fpath: str, storage_options: dict | None = None) 
     return int(rows * (n_files / len(sampled)))
 
 
+def _accum_str_col_sizes(
+    pieces, pa_schema, str_columns: list, total_uncompressed_sizes
+) -> int:
+    """Accumulate the total uncompressed size of each column in
+    'str_columns' across the given Parquet pieces into
+    'total_uncompressed_sizes' (indexed like str_columns) and return the
+    total number of rows across the pieces.
+
+    Pieces that produce an OS error are skipped (the error will be reported
+    at runtime if the file is actually read).
+    """
+    total_rows = 0
+    # Get the index of each column in the schema up front
+    col_idxs = [pa_schema.get_field_index(col_name) for col_name in str_columns]
+    for piece in pieces:
+        try:
+            metadata = piece.metadata
+            for i in range(piece.num_row_groups):
+                for j, idx in enumerate(col_idxs):
+                    total_uncompressed_sizes[j] += (
+                        metadata.row_group(i).column(idx).total_uncompressed_size
+                    )
+            total_rows += metadata.num_rows
+        except Exception as e:
+            if isinstance(e, (OSError, FileNotFoundError)):
+                # skip the path that produced the error (error will be reported at runtime)
+                continue
+            else:
+                raise
+    return total_rows
+
+
 def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> set:
     """
     Determine which string columns (str_columns) should be read by Arrow as
@@ -1346,36 +1384,57 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> s
     str_columns = sorted(str_columns)
     total_uncompressed_sizes = np.zeros(len(str_columns), dtype=np.int64)
     total_uncompressed_sizes_recv = np.zeros(len(str_columns), dtype=np.int64)
-    if bodo.get_rank() < len(pieces):
-        piece = pieces[bodo.get_rank()]
-        try:
-            metadata = piece.metadata
-            for i in range(piece.num_row_groups):
-                for j, col_name in enumerate(str_columns):
-                    idx = pa_schema.get_field_index(col_name)
-                    total_uncompressed_sizes[j] += (
-                        metadata.row_group(i).column(idx).total_uncompressed_size
-                    )
-            num_rows = metadata.num_rows
-        except Exception as e:
-            if isinstance(e, (OSError, FileNotFoundError)):
-                # skip the path that produced the error (error will be reported at runtime)
-                num_rows = 0
-            else:
-                raise
-    else:
-        num_rows = 0
+    num_rows = (
+        _accum_str_col_sizes(
+            [pieces[bodo.get_rank()]], pa_schema, str_columns, total_uncompressed_sizes
+        )
+        if bodo.get_rank() < len(pieces)
+        else 0
+    )
     total_rows = comm.allreduce(num_rows, op=MPI.SUM)
     if total_rows == 0:
         return set()  # no string as dict columns
     comm.Allreduce(total_uncompressed_sizes, total_uncompressed_sizes_recv, op=MPI.SUM)
-    str_column_metrics = total_uncompressed_sizes_recv / total_rows
-    str_as_dict = set()
-    for i, metric in enumerate(str_column_metrics):
-        if metric < READ_STR_AS_DICT_THRESHOLD:
-            col_name = str_columns[i]
-            str_as_dict.add(col_name)
-    return str_as_dict
+
+    from bodo.io.dict_encode import str_as_dict_from_col_sizes
+
+    return str_as_dict_from_col_sizes(
+        str_columns, total_uncompressed_sizes_recv, total_rows
+    )
+
+
+def determine_str_as_dict_columns_no_mpi(
+    pq_dataset, pa_schema, str_columns: list, num_sample_files: int = 3
+) -> set:
+    """
+    No-MPI version of determine_str_as_dict_columns for the DataFrame library
+    planning path, which runs in a single process (rank 0 / spawner). Samples
+    a fixed number of files instead of one file per rank.
+
+    Args:
+        pq_dataset: Parquet dataset to probe (Bodo ParquetDataset).
+        pa_schema: PyArrow schema of the dataset.
+        str_columns (list): Names of string columns to check.
+        num_sample_files (int): Number of files to sample.
+
+    Returns:
+        set: Names of columns that should be dict-encoded
+            (subset of str_columns).
+    """
+    if len(str_columns) == 0:
+        return set()  # no string as dict columns
+
+    pieces = _get_sample_pq_pieces(pq_dataset, num_sample_files)
+
+    str_columns = sorted(str_columns)
+    total_uncompressed_sizes = np.zeros(len(str_columns), dtype=np.int64)
+    total_rows = _accum_str_col_sizes(
+        pieces, pa_schema, str_columns, total_uncompressed_sizes
+    )
+
+    from bodo.io.dict_encode import str_as_dict_from_col_sizes
+
+    return str_as_dict_from_col_sizes(str_columns, total_uncompressed_sizes, total_rows)
 
 
 def parquet_file_schema(

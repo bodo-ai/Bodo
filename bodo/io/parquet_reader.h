@@ -74,37 +74,12 @@ class ParquetReader : public ArrowReader {
         this->init_pq_scanner();
         // Construct ChunkedTableBuilder for output in the streaming case.
         if (this->batch_size != -1) {
-            this->dict_builders =
-                std::vector<std::shared_ptr<DictionaryBuilder>>(
-                    selected_fields.size() + num_partition_cols);
-            for (size_t i = 0; i < selected_fields.size(); i++) {
-                const std::shared_ptr<arrow::Field>& field =
-                    schema->field(selected_fields[i]);
-                this->dict_builders[i] = create_dict_builder_for_array(
-                    arrow_type_to_bodo_data_type(field->type()), false);
-            }
+            this->init_stream_dict_builders(str_as_dict_cols,
+                                            num_partition_cols);
             for (int i = 0; i < num_partition_cols; i++) {
                 auto partition_col = part_cols[i];
                 this->dict_builders[selected_fields.size() + i] =
                     create_dict_builder_for_array(partition_col, false);
-            }
-
-            // Generate a mapping from schema index to selected fields for the
-            // str_as_dict_cols.
-            std::vector<int32_t> str_as_dict_cols_map(schema->num_fields(), -1);
-            for (size_t i = 0; i < selected_fields.size(); i++) {
-                str_as_dict_cols_map[selected_fields[i]] = i;
-            }
-
-            // TODO: Remove. This step is unnecessary if we can guarantee that
-            // the arrow schema always specifies if the fields should be
-            // dictionary.
-            for (int str_as_dict_col : str_as_dict_cols) {
-                int32_t index = str_as_dict_cols_map[str_as_dict_col];
-                this->dict_builders[index] = create_dict_builder_for_array(
-                    std::make_unique<bodo::DataType>(bodo_array_type::DICT,
-                                                     Bodo_CTypes::STRING),
-                    false);
             }
             auto empty_table = get_empty_out_table();
             this->out_batches = std::make_shared<ChunkedTableBuilder>(

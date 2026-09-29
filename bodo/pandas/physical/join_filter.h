@@ -39,19 +39,12 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
         for (size_t i = 0; i < input_schema->ncols(); i++) {
             std::unique_ptr<bodo::DataType> col_type =
                 input_schema->column_types[i]->copy();
-            // TODO[BSE-5176]: Handle DICT column casting for bloom filters
-            // See
-            // https://github.com/bodo-ai/Bodo/blob/4b6e5830cc9f16bba5fc40ba495f11955bbf15af/bodo/libs/streaming/join.py#L1477
-            if (col_type->array_type == bodo_array_type::DICT) {
-                throw std::runtime_error(
-                    "Join filter does not support input tables with DICT "
-                    "columns yet");
-            }
 
             // Avoid materializing after each filter if there is any variable
             // length column (similar to Python join filter code)
             if (col_type->is_array() || col_type->is_map() ||
-                col_type->array_type == bodo_array_type::STRING) {
+                col_type->array_type == bodo_array_type::STRING ||
+                col_type->array_type == bodo_array_type::DICT) {
                 this->materialize_after_each_filter = false;
             }
 
@@ -72,8 +65,9 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
             this->can_apply_bloom_filters.push_back(can_apply);
         }
 
-        // TODO[BSE-5176]: support column level filters (only on DICT columns
-        // currently)
+        // NOTE: Column level filters are only supported when both the input
+        // column and its corresponding join key are DICT arrays. Otherwise
+        // only bloom filters can be applied (see HashJoinState::RuntimeFilter).
     }
 
     virtual ~PhysicalJoinFilter() = default;
@@ -158,6 +152,37 @@ class PhysicalJoinFilter : public PhysicalProcessBatch {
                         }
                         HashJoinState* hash_join_state =
                             (HashJoinState*)join_state.get();
+
+                        // Decode dict-encoded string key columns to regular
+                        // strings if the join's probe side key types are
+                        // regular strings (i.e. the build side keys are not
+                        // dict-encoded). This makes the key array types
+                        // match the JoinState schemas (see
+                        // PhysicalJoin::buildProbeSchemas).
+                        {
+                            std::vector<uint64_t> dict_key_cast_inds;
+                            for (size_t j = 0;
+                                 j < this->filter_columns[i].size(); j++) {
+                                int64_t col_idx = this->filter_columns[i][j];
+                                if (col_idx == -1) {
+                                    continue;
+                                }
+                                const std::unique_ptr<bodo::DataType>&
+                                    probe_key_type =
+                                        hash_join_state->probe_table_schema
+                                            ->column_types[j];
+                                if (probe_key_type->array_type ==
+                                        bodo_array_type::STRING &&
+                                    input_batch->columns[col_idx]->arr_type ==
+                                        bodo_array_type::DICT) {
+                                    dict_key_cast_inds.push_back(col_idx);
+                                }
+                            }
+                            if (!dict_key_cast_inds.empty()) {
+                                input_batch = decode_dict_string_columns(
+                                    input_batch, dict_key_cast_inds);
+                            }
+                        }
 
                         applied_any_filter = applied_any_filter ||
                                              hash_join_state->RuntimeFilter(

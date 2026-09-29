@@ -528,10 +528,10 @@ cdef extern from "_plan.h" nogil:
         pass
 
     cdef idx_t getTableIndex() except +
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, c_bool has_partitioning) except +
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, c_bool has_partitioning, optional[vector[int32_t]] str_as_dict_cols_opt) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
-    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate, optional[vector[int]] selected_columns_opt, optional[int64_t] limit_opt, optional[JoinFilterProgramState] join_info_opt) except +
+    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate, optional[vector[int]] selected_columns_opt, optional[int64_t] limit_opt, optional[JoinFilterProgramState] join_info_opt, optional[vector[int32_t]] str_as_dict_cols_opt) except +
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id, c_bool force_broadcast) except +
@@ -1255,15 +1255,24 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly object storage_options
     cdef readonly int64_t nrows
 
-    def __cinit__(self, object out_schema, object parquet_path, object storage_options, bool has_partitioning):
+    def __cinit__(self, object out_schema, object parquet_path, object storage_options, bool has_partitioning, object reader_schema=None, object str_as_dict_cols=None):
         from bodo.ext import hdist
 
         self.out_schema = out_schema
         self.path = parquet_path
         self.storage_options = storage_options
         self.nrows = -1
+
+        cdef optional[vector[int32_t]] c_str_as_dict_cols
+        cdef vector[int32_t] str_as_dict_vec
+        if str_as_dict_cols is not None:
+            for c in str_as_dict_cols:
+                str_as_dict_vec.push_back(<int32_t>c)
+            c_str_as_dict_cols = str_as_dict_vec
+
+        cdef object reader_schema_obj = reader_schema if reader_schema is not None else out_schema
         cdef int64_t nrows_estimate = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=False) if bodo.get_rank() == 0 else 0)
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate, has_partitioning)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, reader_schema_obj, storage_options, nrows_estimate, has_partitioning, c_str_as_dict_cols)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
@@ -1385,7 +1394,7 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     def __cinit__(self, object arrow_out_schema, str table_identifier, object catalog_name,
         object catalog_properties, object iceberg_filter, object iceberg_schema,
         object arrow_read_schema, object snapshot_id, uint64_t table_len_estimate, object selected_columns,
-        object limit, object join_filter_info):
+        object limit, object join_filter_info, object str_as_dict_cols=None):
         import pyiceberg.catalog
 
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
@@ -1396,6 +1405,8 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
         cdef optional[int64_t] c_limit
         cdef optional[vector[int]] c_selected_columns
         cdef vector[int] selected_vec
+        cdef optional[vector[int32_t]] c_str_as_dict_cols
+        cdef vector[int32_t] str_as_dict_vec
 
         if join_filter_info is not None:
             c_rtjf_program_state = convert_join_filter_info(join_filter_info)
@@ -1408,9 +1419,15 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
         if limit is not None:
             c_limit = <int64_t>limit
 
+        if str_as_dict_cols is not None:
+            for c in str_as_dict_cols:
+                str_as_dict_vec.push_back(<int32_t>c)
+            c_str_as_dict_cols = str_as_dict_vec
+
         cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(arrow_read_schema,
             table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id,
-            table_len_estimate, c_selected_columns, c_limit, c_rtjf_program_state)
+            table_len_estimate, c_selected_columns, c_limit, c_rtjf_program_state,
+            c_str_as_dict_cols)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):

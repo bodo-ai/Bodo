@@ -10,7 +10,8 @@ PhysicalReadIceberg::PhysicalReadIceberg(
     const int64_t snapshot_id, const std::vector<int> &selected_columns,
     duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-    JoinFilterColStats join_filter_col_stats)
+    JoinFilterColStats join_filter_col_stats,
+    const std::vector<int32_t> &str_as_dict_cols)
     : catalog(catalog),
       table_id(table_id),
       iceberg_filter(iceberg_filter),
@@ -19,8 +20,9 @@ PhysicalReadIceberg::PhysicalReadIceberg(
       filter_exprs(filter_exprs.Copy()),
       arrow_schema(std::move(arrow_schema)),
       selected_columns(selected_columns),
-      out_arrow_schema(
-          this->create_out_arrow_schema(this->arrow_schema, selected_columns)),
+      str_as_dict_cols(str_as_dict_cols),
+      out_arrow_schema(wrap_str_as_dict_fields(
+          this->arrow_schema, selected_columns, this->str_as_dict_cols)),
       join_filter_col_stats(std::move(join_filter_col_stats)),
       out_metadata(std::make_shared<bodo::TableMetadata>(
           this->arrow_schema->metadata()->keys(),
@@ -205,25 +207,6 @@ PhysicalReadIceberg::create_internal_reader() {
         py_iceberg_filter_and_duckdb_filter, iceberg_filter_str, filter_scalars,
         selected_columns, is_nullable, arrow::py::wrap_schema(arrow_schema),
         get_streaming_batch_size(), this->getOpId(), snapshot_id);
-    // TODO: Figure out cols to dict encode
-    reader->init_iceberg_reader({}, false);
+    reader->init_iceberg_reader(this->str_as_dict_cols, false);
     return reader;
-}
-
-std::shared_ptr<arrow::Schema> PhysicalReadIceberg::create_out_arrow_schema(
-    std::shared_ptr<arrow::Schema> arrow_schema,
-    const std::vector<int> &selected_columns) {
-    // Create a new schema with only the selected columns.
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(selected_columns.size());
-    for (int i : selected_columns) {
-        if (!(i >= 0 && i < arrow_schema->num_fields())) {
-            throw std::runtime_error(
-                "PhysicalReadIceberg(): invalid column index " +
-                std::to_string(i) + " for schema with " +
-                std::to_string(arrow_schema->num_fields()) + " fields");
-        }
-        fields.push_back(arrow_schema->field(i));
-    }
-    return arrow::schema(fields, arrow_schema->metadata());
 }

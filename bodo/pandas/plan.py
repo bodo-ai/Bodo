@@ -514,6 +514,7 @@ class LogicalGetIcebergRead(LogicalOperatorLeaf):
         join_filter_info,
         selected_fields,
         limit,
+        str_as_dict_cols=None,
         *,
         arrow_schema,
     ):
@@ -530,6 +531,7 @@ class LogicalGetIcebergRead(LogicalOperatorLeaf):
             selected_fields,
             limit,
             join_filter_info,
+            str_as_dict_cols,
         )
         # Iceberg needs schema metadata
         # TODO: avoid this to support operations like renaming columns

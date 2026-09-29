@@ -83,7 +83,8 @@ PhysicalCpuGpuSource BodoParquetScanFunctionData::CreatePhysicalOperator(
 #endif
     return std::make_shared<PhysicalReadParquet>(
         path, pyarrow_schema, storage_options, selected_columns, filter_exprs,
-        limit_val, join_filter_col_stats);
+        limit_val, join_filter_col_stats,
+        this->str_as_dict_cols_opt.value_or(std::vector<int32_t>()));
 }
 
 PhysicalCpuGpuSource BodoIcebergScanFunctionData::CreatePhysicalOperator(
@@ -115,5 +116,6 @@ PhysicalCpuGpuSource BodoIcebergScanFunctionData::CreatePhysicalOperator(
     return std::make_shared<PhysicalReadIceberg>(
         this->catalog, this->table_id, this->iceberg_filter,
         this->iceberg_schema, this->arrow_schema, this->snapshot_id,
-        selected_columns, filter_exprs, limit_val, join_filter_col_stats);
+        selected_columns, filter_exprs, limit_val, join_filter_col_stats,
+        this->str_as_dict_cols_opt.value_or(std::vector<int32_t>()));
 }

@@ -1010,6 +1010,28 @@ def arrow_to_empty_df(arrow_schema):
     return _reconstruct_pandas_index(empty_df, arrow_schema)
 
 
+def wrap_str_fields_as_dict(arrow_schema, dict_field_idxs):
+    """Create a copy of the given Arrow schema where the fields at the given
+    indices are wrapped as dictionary<int32, T> types. Used to mark string
+    columns that are read with dictionary encoding so planning and the
+    physical reader agree on the output dtypes.
+
+    Args:
+        arrow_schema (pa.Schema): input schema
+        dict_field_idxs (list[int]): indices of the fields to wrap
+
+    Returns:
+        pa.Schema: schema with the given fields wrapped as dictionary types
+    """
+    dict_field_set = set(dict_field_idxs)
+    wrapped_fields = []
+    for i, field in enumerate(arrow_schema):
+        if i in dict_field_set:
+            field = field.with_type(pa.dictionary(pa.int32(), field.type))
+        wrapped_fields.append(field)
+    return pa.schema(wrapped_fields, metadata=arrow_schema.metadata)
+
+
 def _fix_struct_arr_names(arr, pa_type):
     """Fix the names of the fields in a struct array to match the Arrow type.
     This is necessary since our C++ code may not preserve the field names in

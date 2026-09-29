@@ -185,6 +185,40 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::shared_ptr<bodo::Schema> probe_table_schema_reordered =
             probe_table_schema->Project(probe_col_inds);
 
+        // Normalize dict-encoded string key columns so both sides of the join
+        // have matching key array types. If one side is dict-encoded and the
+        // other is a regular string array, decode the dict-encoded side to
+        // strings (mirroring the JIT path behavior where the compiler casts
+        // join keys to matching types). Matching DICT/DICT and STRING/STRING
+        // keys are left unchanged.
+        for (size_t k = 0; k < left_keys.size(); k++) {
+            const std::unique_ptr<bodo::DataType>& build_key_type =
+                build_table_schema_reordered->column_types[k];
+            const std::unique_ptr<bodo::DataType>& probe_key_type =
+                probe_table_schema_reordered->column_types[k];
+            bool build_key_is_dict =
+                build_key_type->array_type == bodo_array_type::DICT;
+            bool probe_key_is_dict =
+                probe_key_type->array_type == bodo_array_type::DICT;
+            if (build_key_is_dict == probe_key_is_dict) {
+                continue;
+            }
+            // Mismatch: decode the dict-encoded side(s) to regular strings.
+            std::unique_ptr<bodo::DataType> string_key_type =
+                std::make_unique<bodo::DataType>(bodo_array_type::STRING,
+                                                 Bodo_CTypes::STRING);
+            if (build_key_is_dict) {
+                this->build_key_dict_cast_inds.push_back(k);
+                build_table_schema_reordered->column_types[k] =
+                    std::move(string_key_type);
+            }
+            if (probe_key_is_dict) {
+                this->probe_key_dict_cast_inds.push_back(k);
+                probe_table_schema_reordered->column_types[k] =
+                    std::move(string_key_type);
+            }
+        }
+
         for (duckdb::JoinCondition& cond : conditions) {
             if (cond.IsComparison() &&
                 cond.GetComparisonType() ==
@@ -439,6 +473,13 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
         std::shared_ptr<table_info> input_batch_reordered =
             ProjectTable(input_batch, this->build_col_inds);
 
+        // Decode dict-encoded string key columns to regular strings if the
+        // other side of the join has non-dict keys (see buildProbeSchemas).
+        if (!this->build_key_dict_cast_inds.empty()) {
+            input_batch_reordered = decode_dict_string_columns(
+                input_batch_reordered, this->build_key_dict_cast_inds);
+        }
+
         bool global_is_last = join_build_consume_batch(
             join_state, input_batch_reordered, has_bloom_filter, local_is_last);
 
@@ -482,6 +523,14 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
 
             std::shared_ptr<table_info> input_batch_reordered =
                 ProjectTable(input_batch, this->probe_col_inds);
+
+            // Decode dict-encoded string key columns to regular strings if
+            // the other side of the join has non-dict keys (see
+            // buildProbeSchemas).
+            if (!this->probe_key_dict_cast_inds.empty()) {
+                input_batch_reordered = decode_dict_string_columns(
+                    input_batch_reordered, this->probe_key_dict_cast_inds);
+            }
 
             CONSUME_PROBE_BATCH(join_state->build_table_outer,
                                 join_state->probe_table_outer,
@@ -708,6 +757,13 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     std::vector<int64_t> probe_col_inds;
     std::vector<int64_t> build_col_inds_rev;
     std::vector<int64_t> probe_col_inds_rev;
+
+    // Key column positions (in the reordered build/probe tables) that are
+    // dict-encoded on one side of the join but not the other. These columns
+    // are decoded to regular string arrays before being consumed by the join
+    // so the key array types match (see JoinState constructor requirements).
+    std::vector<uint64_t> build_key_dict_cast_inds;
+    std::vector<uint64_t> probe_key_dict_cast_inds;
 
     bool has_non_equi_cond;
     std::shared_ptr<PhysicalExpression> physExprTree;

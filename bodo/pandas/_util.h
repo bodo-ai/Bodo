@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <set>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -379,6 +380,46 @@ class ScalarExprResult;
  * @return std::shared_ptr<array_info>, the converted arrow::Datum
  */
 std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum);
+
+/**
+ * @brief Decode a dictionary-encoded string array into a regular string
+ * array. Used to make join key column array types match when one side of a
+ * join is dict-encoded (e.g. an Iceberg scan) and the other side is not.
+ *
+ * @param arr dictionary-encoded (bodo DICT) string array
+ * @return std::shared_ptr<array_info> regular string array
+ */
+std::shared_ptr<array_info> decode_dict_string_array(
+    std::shared_ptr<array_info> arr);
+
+/**
+ * @brief Replace the given columns of a table with decoded (regular string)
+ * versions if they are dictionary-encoded string arrays. Columns that are
+ * not dict-encoded strings are left unchanged.
+ *
+ * @param table input table
+ * @param col_inds indices of columns to decode
+ * @return std::shared_ptr<table_info> table with the given columns decoded
+ */
+std::shared_ptr<table_info> decode_dict_string_columns(
+    std::shared_ptr<table_info> table, const std::vector<uint64_t> &col_inds);
+
+/**
+ * @brief Create a copy of the given schema where the fields selected by
+ * selected_columns that appear in str_as_dict_cols are wrapped as
+ * dictionary<int32, T> types. Used to produce the output schema of readers
+ * that dict-encode selected string columns.
+ *
+ * @param arrow_schema full input schema
+ * @param selected_columns indices of the selected columns in arrow_schema
+ * @param str_as_dict_cols indices (into arrow_schema) of columns that are
+ * read with dictionary encoding
+ * @return std::shared_ptr<arrow::Schema> output schema with dict wrapping
+ */
+std::shared_ptr<arrow::Schema> wrap_str_as_dict_fields(
+    std::shared_ptr<arrow::Schema> arrow_schema,
+    const std::vector<int> &selected_columns,
+    const std::vector<int32_t> &str_as_dict_cols);
 
 inline arrow::Datum ConvertExprResultToDatum(arrow::Datum res,
                                              const std::string &res_name) {

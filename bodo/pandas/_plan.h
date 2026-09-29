@@ -577,7 +577,8 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows, bool has_partitioning);
+    int64_t num_rows, bool has_partitioning,
+    std::optional<std::vector<int32_t>> str_as_dict_cols_opt);
 
 /**
  * @brief Create a LogicalCopyToFile node for writing a Parquet dataset.
@@ -656,7 +657,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
     std::optional<std::vector<int>> selected_columns_opt,
     std::optional<int64_t> limit_opt,
-    std::optional<JoinFilterProgramState> rtjf_state_map_opt);
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt,
+    std::optional<std::vector<int32_t>> str_as_dict_cols_opt);
 
 /**
  * @brief Returns a statically created DuckDB database.

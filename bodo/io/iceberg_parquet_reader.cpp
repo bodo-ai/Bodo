@@ -558,36 +558,7 @@ void IcebergParquetReader::init_iceberg_reader(
     this->init_scanners();
     // Construct ChunkedTableBuilder for output in the streaming case.
     if (this->batch_size != -1) {
-        this->dict_builders = std::vector<std::shared_ptr<DictionaryBuilder>>(
-            selected_fields.size());
-
-        // This will create dict-builders for the nested types. The target
-        // schema doesn't have dict-encoding information, so this will
-        // essentially create nullptrs.
-        for (size_t i = 0; i < selected_fields.size(); i++) {
-            const std::shared_ptr<arrow::Field>& field =
-                this->schema->field(selected_fields[i]);
-            this->dict_builders[i] = create_dict_builder_for_array(
-                arrow_type_to_bodo_data_type(field->type()), false);
-        }
-
-        // Generate a mapping from schema index to selected fields for the
-        // str_as_dict_cols.
-        std::vector<int32_t> str_as_dict_cols_map(schema->num_fields(), -1);
-        for (size_t i = 0; i < selected_fields.size(); i++) {
-            str_as_dict_cols_map[selected_fields[i]] = i;
-        }
-
-        // Create dict builders for columns we will be reading
-        // with dict-encoding (either directly from Arrow or doing the
-        // dict-encoding ourselves).
-        for (int str_as_dict_col : str_as_dict_cols) {
-            int32_t index = str_as_dict_cols_map[str_as_dict_col];
-            this->dict_builders[index] = create_dict_builder_for_array(
-                std::make_unique<bodo::DataType>(bodo_array_type::DICT,
-                                                 Bodo_CTypes::STRING),
-                false);
-        }
+        this->init_stream_dict_builders(str_as_dict_cols);
         auto empty_table = get_empty_out_table();
         this->out_batches = std::make_shared<ChunkedTableBuilder>(
             empty_table->schema(), this->dict_builders, (size_t)batch_size);

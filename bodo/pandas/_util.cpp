@@ -1385,6 +1385,65 @@ std::shared_ptr<array_info> ConvertDatumToArrayInfo(arrow::Datum datum) {
     return arrow_array_to_bodo(arrow_arr, bodo::BufferPool::DefaultPtr());
 }
 
+std::shared_ptr<array_info> decode_dict_string_array(
+    std::shared_ptr<array_info> arr) {
+    arrow::Datum src = prepare_arrow_compute(arr);
+    arrow::Result<arrow::Datum> cast_res =
+        arrow::compute::Cast(src, arrow::large_utf8());
+    if (!cast_res.ok()) [[unlikely]] {
+        throw std::runtime_error(
+            "decode_dict_string_array: Error casting dictionary array to "
+            "string: " +
+            cast_res.status().message());
+    }
+    return ConvertDatumToArrayInfo(cast_res.ValueOrDie());
+}
+
+std::shared_ptr<table_info> decode_dict_string_columns(
+    std::shared_ptr<table_info> table, const std::vector<uint64_t> &col_inds) {
+    std::vector<std::shared_ptr<array_info>> out_cols = table->columns;
+    bool any_decoded = false;
+    for (uint64_t i : col_inds) {
+        std::shared_ptr<array_info> &col = out_cols[i];
+        if (col->arr_type == bodo_array_type::DICT &&
+            col->dtype == Bodo_CTypes::STRING) {
+            col = decode_dict_string_array(col);
+            any_decoded = true;
+        }
+    }
+    if (!any_decoded) {
+        return table;
+    }
+    return std::make_shared<table_info>(out_cols, table->nrows(),
+                                        table->column_names, table->metadata);
+}
+
+std::shared_ptr<arrow::Schema> wrap_str_as_dict_fields(
+    std::shared_ptr<arrow::Schema> arrow_schema,
+    const std::vector<int> &selected_columns,
+    const std::vector<int32_t> &str_as_dict_cols) {
+    // Create a new schema with only the selected columns.
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(selected_columns.size());
+    std::set<int32_t> dict_col_set(str_as_dict_cols.begin(),
+                                   str_as_dict_cols.end());
+    for (int i : selected_columns) {
+        if (!(i >= 0 && i < arrow_schema->num_fields())) {
+            throw std::runtime_error(
+                "wrap_str_as_dict_fields(): invalid column index " +
+                std::to_string(i) + " for schema with " +
+                std::to_string(arrow_schema->num_fields()) + " fields");
+        }
+        std::shared_ptr<arrow::Field> field = arrow_schema->field(i);
+        if (dict_col_set.contains(i)) {
+            field = field->WithType(
+                arrow::dictionary(arrow::int32(), field->type()));
+        }
+        fields.push_back(field);
+    }
+    return arrow::schema(fields, arrow_schema->metadata());
+}
+
 arrow::Datum ConvertExprResultToDatum(std::shared_ptr<ExprResult> res,
                                       std::string res_name) {
     // Try to convert the results of our children into array

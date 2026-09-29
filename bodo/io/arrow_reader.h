@@ -486,6 +486,57 @@ class ArrowReader {
                            bool create_dict_from_string = false);
 
     /**
+     * @brief Create dict builders for streaming output batches: one builder
+     * per selected field (plus num_extra_output_cols extra builders appended
+     * after them, e.g. partition columns, left as nullptr), with
+     * dict-encoded string builders replacing the builders of the columns in
+     * str_as_dict_cols.
+     * NOTE: str_as_dict_cols are indices into the full schema, so columns
+     * that aren't selected are skipped.
+     *
+     * @param str_as_dict_cols indices (into the full schema) of columns to
+     * read with dictionary encoding
+     * @param num_extra_output_cols number of extra output columns (such as
+     * partition columns) appended after the selected fields
+     */
+    void init_stream_dict_builders(std::span<int32_t> str_as_dict_cols,
+                                   size_t num_extra_output_cols = 0) {
+        this->dict_builders = std::vector<std::shared_ptr<DictionaryBuilder>>(
+            selected_fields.size() + num_extra_output_cols);
+        // This will create dict-builders for the nested types. The target
+        // schema doesn't have dict-encoding information, so this will
+        // essentially create nullptrs.
+        for (size_t i = 0; i < selected_fields.size(); i++) {
+            const std::shared_ptr<arrow::Field>& field =
+                this->schema->field(selected_fields[i]);
+            this->dict_builders[i] = create_dict_builder_for_array(
+                arrow_type_to_bodo_data_type(field->type()), false);
+        }
+
+        // Generate a mapping from schema index to selected fields for the
+        // str_as_dict_cols.
+        std::vector<int32_t> str_as_dict_cols_map(this->schema->num_fields(),
+                                                  -1);
+        for (size_t i = 0; i < selected_fields.size(); i++) {
+            str_as_dict_cols_map[selected_fields[i]] = i;
+        }
+
+        // Create dict builders for columns we will be reading
+        // with dict-encoding (either directly from Arrow or doing the
+        // dict-encoding ourselves).
+        for (int str_as_dict_col : str_as_dict_cols) {
+            int32_t index = str_as_dict_cols_map[str_as_dict_col];
+            if (index == -1) {
+                continue;
+            }
+            this->dict_builders[index] = create_dict_builder_for_array(
+                std::make_unique<bodo::DataType>(bodo_array_type::DICT,
+                                                 Bodo_CTypes::STRING),
+                false);
+        }
+    }
+
+    /**
      * @brief Distribute and assign rows to all ranks from the global set of
      * pieces. Only applicable in the row_level=True case.
      *

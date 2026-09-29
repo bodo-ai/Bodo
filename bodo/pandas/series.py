@@ -3649,7 +3649,15 @@ def validate_dtype(name, obj):
     accessor = name.split(".")[0]
     if accessor == "str":
         if dtype not in allowed_types_map.get(
-            name, (pd.ArrowDtype(pa.string()), pd.ArrowDtype(pa.large_string()))
+            name,
+            (
+                pd.ArrowDtype(pa.string()),
+                pd.ArrowDtype(pa.large_string()),
+                # Dictionary-encoded string arrays (e.g. dict-encoded Iceberg
+                # reads)
+                pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())),
+                pd.ArrowDtype(pa.dictionary(pa.int32(), pa.large_string())),
+            ),
         ):
             raise AttributeError("Can only use .str accessor with string values!")
     if accessor == "dt":
@@ -3922,6 +3930,9 @@ allowed_types_map = {
         pd.ArrowDtype(pa.list_(pa.string())),
         pd.ArrowDtype(pa.large_binary()),
         pd.ArrowDtype(pa.binary()),
+        # Dictionary-encoded string arrays (e.g. dict-encoded Iceberg reads)
+        pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())),
+        pd.ArrowDtype(pa.dictionary(pa.int32(), pa.large_string())),
     ),
     "dt.round": (pd.ArrowDtype(pa.timestamp("ns")),),
     "dt_default": (

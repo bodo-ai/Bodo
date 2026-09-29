@@ -10,10 +10,25 @@
 std::shared_ptr<arrow::Array> prepare_arrow_compute(
     std::shared_ptr<array_info> arr) {
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), arr,
-                               false /*convert_timedelta_to_int64*/, "",
-                               time_unit, false, /*downcast_time_ns_to_us*/
-                               bodo::default_buffer_memory_manager());
+    std::shared_ptr<arrow::Array> arrow_arr =
+        bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), arr,
+                            false /*convert_timedelta_to_int64*/, "", time_unit,
+                            false, /*downcast_time_ns_to_us*/
+                            bodo::default_buffer_memory_manager());
+    // Arrow compute kernels generally don't support dictionary arrays, so
+    // decode dictionary-encoded string arrays into regular strings before
+    // evaluation.
+    if (arrow_arr->type()->id() == arrow::Type::DICTIONARY) {
+        arrow::Result<arrow::Datum> decode_res =
+            arrow::compute::Cast(arrow_arr, arrow::large_utf8());
+        if (!decode_res.ok()) [[unlikely]] {
+            throw std::runtime_error(
+                "prepare_arrow_compute: Error decoding dictionary array: " +
+                decode_res.status().message());
+        }
+        arrow_arr = decode_res.ValueOrDie().make_array();
+    }
+    return arrow_arr;
 }
 
 #define CHECK_ARROW(expr, msg)                                \
