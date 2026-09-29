@@ -72,6 +72,28 @@ jobs:
 
       - uses: actions/checkout@v5
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEnginePrCiSession
+          role-skip-session-tagging: true
+          role-duration-seconds: 14400 # Max duration: 4 hours
+
+      - name: Authenticate to ECR Public
+        run: |
+          aws ecr-public get-login-password --region us-east-1 \
+          | docker login --username AWS --password-stdin public.ecr.aws
+
+      - name: Restore Docker Cache
+        uses: actions/cache@v4
+        with:
+          path: /var/lib/docker
+          key: docker-cache-${{ runner.os }}-${{ inputs.test-type }}
+          restore-keys: |
+            docker-cache-${{ runner.os }}-
+
       - name: Build from Source
         uses: ./.github/actions/build-source
         with:
@@ -82,15 +104,6 @@ jobs:
       - name: Clean Maven and Spark Ivy Cache
         run: |
           rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: us-east-2
-          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
-          role-session-name: BodoEnginePrCiSession
-          role-skip-session-tagging: true
-          role-duration-seconds: 14400 # Max duration: 4 hours
 
       - name: Configure GCP Credentials
         uses: google-github-actions/auth@v3
