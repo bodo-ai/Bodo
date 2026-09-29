@@ -72,6 +72,11 @@ jobs:
 
       - uses: actions/checkout@v5
 
+      - name: Authenticate to ECR Public
+        run: |
+          aws ecr-public get-login-password --region us-east-1 \
+          | docker login --username AWS --password-stdin public.ecr.aws
+
       - name: Restore Docker Cache
         uses: actions/cache@v4
         with:
