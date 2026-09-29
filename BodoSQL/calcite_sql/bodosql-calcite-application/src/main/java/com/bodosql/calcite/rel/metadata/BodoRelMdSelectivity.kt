@@ -4,6 +4,7 @@ import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.plan.volcano.RelSubset
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Aggregate
+import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.metadata.RelMdSelectivity
 import org.apache.calcite.rel.metadata.RelMdUtil
@@ -174,7 +175,8 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
         /**
          * Selectivity of `CONTAINS/STARTSWITH/ENDSWITH(<col>, ...)` (what `LIKE '%abc%'`, `'abc%'`
          * and `'%abc'` simplify to) or their negation, using the column's NDV on [rel] (when known).
-         * Returns null if [pred] is not a substring search.
+         * Returns null if [pred] is not a substring search for a literal pattern (e.g. a
+         * column-to-column join condition like `STARTSWITH(a.x, b.y)`).
          */
         private fun substringSelectivity(
             rel: RelNode?,
@@ -185,14 +187,15 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
             if (search !is RexCall ||
                 search.operands.size != 2 ||
                 search.operator.name.uppercase() !in SUBSTRING_SEARCH_FUNCTIONS ||
-                !SqlTypeUtil.inCharFamily(search.operands[0].type)
+                !SqlTypeUtil.inCharFamily(search.operands[0].type) ||
+                RexUtil.removeCast(search.operands[1]) !is RexLiteral
             ) {
                 return null
             }
             val column = RexUtil.removeCast(search.operands[0])
             val ndv =
                 if (rel != null && mq != null && column is RexInputRef) {
-                    mq.getDistinctRowCount(rel, ImmutableBitSet.of(column.index), null)
+                    columnDistinctCount(rel, mq, column.index)
                 } else {
                     null
                 }
@@ -204,6 +207,27 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
                     else -> SUBSTRING_SELECTIVITY
                 }
             return if (search !== pred) 1.0 - sel else sel
+        }
+
+        /**
+         * NDV of column [index] of [rel]. For a Join, asks the input that owns the column instead:
+         * the Join's own NDV depends on its row count, which depends on the selectivity of its
+         * condition, so asking the Join causes a CyclicMetadataException.
+         */
+        private fun columnDistinctCount(
+            rel: RelNode,
+            mq: RelMetadataQuery,
+            index: Int,
+        ): Double? {
+            if (rel is Join) {
+                val leftCount = rel.left.rowType.fieldCount
+                return if (index < leftCount) {
+                    columnDistinctCount(rel.left, mq, index)
+                } else {
+                    columnDistinctCount(rel.right, mq, index - leftCount)
+                }
+            }
+            return mq.getDistinctRowCount(rel, ImmutableBitSet.of(index), null)
         }
 
         /**
