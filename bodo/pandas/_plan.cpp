@@ -1558,7 +1558,7 @@ std::pair<int64_t, PyObject *> execute_plan(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows, bool has_partitioning) {
+    int64_t num_rows, bool has_partitioning, int64_t calcite_op_id) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1578,6 +1578,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
             binder->GenerateTableIndex(), table_function, std::move(bind_data1),
             return_types, return_names, virtual_columns);
     out_get->SetEstimatedCardinality(num_rows);
+    out_get->calcite_op_id = calcite_op_id;
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:

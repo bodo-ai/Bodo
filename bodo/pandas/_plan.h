@@ -581,7 +581,7 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows, bool has_partitioning);
+    int64_t num_rows, bool has_partitioning, int64_t calcite_op_id);
 
 /**
  * @brief Create a LogicalCopyToFile node for writing a Parquet dataset.
