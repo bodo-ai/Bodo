@@ -4,6 +4,7 @@ import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.plan.volcano.RelSubset
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Aggregate
+import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.metadata.RelMdSelectivity
 import org.apache.calcite.rel.metadata.RelMdUtil
@@ -14,7 +15,9 @@ import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexUtil
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.type.SqlTypeUtil
 import org.apache.calcite.util.ImmutableBitSet
+import kotlin.math.max
 
 class BodoRelMdSelectivity : RelMdSelectivity() {
     fun getSelectivity(
@@ -93,6 +96,23 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
          */
         private const val MIN_NDV_SELECTIVITY = 1e-4
 
+        /** String search functions handled by [substringSelectivity]. */
+        private val SUBSTRING_SEARCH_FUNCTIONS = setOf("CONTAINS", "STARTSWITH", "ENDSWITH")
+
+        /** Selectivity of a substring search (CONTAINS/STARTSWITH/ENDSWITH) on a free-text column (almost all distinct values). */
+        private const val SUBSTRING_SELECTIVITY = 0.05
+
+        /** Selectivity of a substring search on a categorical column (few distinct values), where matches select whole categories. */
+        private const val CATEGORICAL_SUBSTRING_SELECTIVITY = 0.2
+
+        /** Columns with fewer distinct values than this are treated as categorical. */
+        private const val CATEGORICAL_MAX_NDV = 1000.0
+
+        /**
+         * Selectivity of a substring search when the column's NDV is unknown.
+         */
+        private const val UNKNOWN_NDV_SUBSTRING_SELECTIVITY = 0.15
+
         /**
          *
          * Same as [guessSelectivity], except that an equality between a column of
@@ -115,7 +135,9 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
             var sel = 1.0
             for (pred in RelOptUtil.conjunctions(predicate)) {
                 // Use NDVs for selectivity when available
-                sel *= ndvEqualitySelectivity(rel, mq, pred) ?: guessSelectivity(pred)
+                sel *= ndvEqualitySelectivity(rel, mq, pred)
+                    ?: substringSelectivity(rel, mq, pred)
+                    ?: guessSelectivity(pred)
             }
             return sel
         }
@@ -151,6 +173,64 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
         }
 
         /**
+         * Selectivity of `CONTAINS/STARTSWITH/ENDSWITH(<col>, ...)` (what `LIKE '%abc%'`, `'abc%'`
+         * and `'%abc'` simplify to) or their negation, using the column's NDV on [rel] (when known).
+         * Returns null if [pred] is not a substring search for a literal pattern (e.g. a
+         * column-to-column join condition like `STARTSWITH(a.x, b.y)`).
+         */
+        private fun substringSelectivity(
+            rel: RelNode?,
+            mq: RelMetadataQuery?,
+            pred: RexNode,
+        ): Double? {
+            val search = if (pred.kind == SqlKind.NOT && pred is RexCall) pred.operands[0] else pred
+            if (search !is RexCall ||
+                search.operands.size != 2 ||
+                search.operator.name.uppercase() !in SUBSTRING_SEARCH_FUNCTIONS ||
+                !SqlTypeUtil.inCharFamily(search.operands[0].type) ||
+                RexUtil.removeCast(search.operands[1]) !is RexLiteral
+            ) {
+                return null
+            }
+            val column = RexUtil.removeCast(search.operands[0])
+            val ndv =
+                if (rel != null && mq != null && column is RexInputRef) {
+                    columnDistinctCount(rel, mq, column.index)
+                } else {
+                    null
+                }
+            val sel =
+                when {
+                    ndv == null || ndv.isNaN() -> UNKNOWN_NDV_SUBSTRING_SELECTIVITY
+                    // Never below the 1/NDV estimate for an equality on the same column.
+                    ndv < CATEGORICAL_MAX_NDV -> max(CATEGORICAL_SUBSTRING_SELECTIVITY, 1.0 / max(ndv, 1.0))
+                    else -> SUBSTRING_SELECTIVITY
+                }
+            return if (search !== pred) 1.0 - sel else sel
+        }
+
+        /**
+         * NDV of column [index] of [rel]. For a Join, asks the input that owns the column instead:
+         * the Join's own NDV depends on its row count, which depends on the selectivity of its
+         * condition, so asking the Join causes a CyclicMetadataException.
+         */
+        private fun columnDistinctCount(
+            rel: RelNode,
+            mq: RelMetadataQuery,
+            index: Int,
+        ): Double? {
+            if (rel is Join) {
+                val leftCount = rel.left.rowType.fieldCount
+                return if (index < leftCount) {
+                    columnDistinctCount(rel.left, mq, index)
+                } else {
+                    columnDistinctCount(rel.right, mq, index - leftCount)
+                }
+            }
+            return mq.getDistinctRowCount(rel, ImmutableBitSet.of(index), null)
+        }
+
+        /**
          * Estimates the selectivity of a predicate. Replaces RelMdUtil.guessSelectivity.
          */
         @JvmStatic
@@ -163,6 +243,7 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
             var artificialSel = 1.0
 
             for (pred in RelOptUtil.conjunctions(predicate)) {
+                val substringSel = substringSelectivity(null, null, pred)
                 if (pred.kind == SqlKind.IS_NOT_NULL) {
                     sel *= .99
                 } else if (pred.kind == SqlKind.IS_NULL) {
@@ -174,6 +255,8 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
                     )
                 ) {
                     artificialSel *= RelMdUtil.getSelectivityValue(pred)
+                } else if (substringSel != null) {
+                    sel *= substringSel
                 } else if (pred.isA(SqlKind.EQUALS)) {
                     sel *= .15
                 } else if (pred.isA(SqlKind.COMPARISON)) {
