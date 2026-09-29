@@ -13,8 +13,11 @@ class PhysicalResultCollector : public PhysicalSink {
 
    public:
     explicit PhysicalResultCollector(std::shared_ptr<bodo::Schema> in_schema,
-                                     std::shared_ptr<bodo::Schema> out_schema)
-        : in_schema(in_schema), out_schema(out_schema) {
+                                     std::shared_ptr<bodo::Schema> out_schema,
+                                     int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          in_schema(in_schema),
+          out_schema(out_schema) {
         // TODO: check that the input schema is compatible with the output
         // schema
         if (in_schema->ncols() != out_schema->ncols()) {

@@ -112,7 +112,9 @@ inline bool gpu_capable(duckdb::LogicalDistinct& logical_distinct) {
 class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
    public:
     explicit PhysicalGPUAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
-                                  duckdb::LogicalAggregate& op) {
+                                  duckdb::LogicalAggregate& op,
+                                  int64_t op_id = -1)
+        : PhysicalOperator(op_id) {
         time_pt start_init = start_timer();
         batch_size = get_gpu_streaming_batch_size();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
@@ -215,7 +217,9 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
     }
 
     explicit PhysicalGPUAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
-                                  duckdb::LogicalDistinct& op) {
+                                  duckdb::LogicalDistinct& op,
+                                  int64_t op_id = -1)
+        : PhysicalOperator(op_id) {
         time_pt start_init = start_timer();
         batch_size = get_gpu_streaming_batch_size();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
@@ -255,11 +259,11 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
-        PhysicalGPUSource::addPipelineInfo(1, pipeline_num, pipeline_position);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             metrics.produce_time);
-        PhysicalGPUSource::addPipelineInfo(2, pipeline_num, pipeline_position);
+        addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**
@@ -333,10 +337,6 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
         return output_schema;
     }
 
-    std::string ToString() override { return PhysicalGPUSink::ToString(); }
-
-    int64_t getOpId() const { return PhysicalGPUSink::getOpId(); }
-
    private:
     /**
      * @brief Initialize the key column indices for the groupby operation
@@ -406,7 +406,8 @@ class PhysicalGPUAggregate : public PhysicalGPUSource, public PhysicalGPUSink {
  */
 class PhysicalGPUCountStar : public PhysicalGPUSource, public PhysicalGPUSink {
    public:
-    explicit PhysicalGPUCountStar() : local_count(0), global_count(0) {
+    explicit PhysicalGPUCountStar(int64_t op_id = -1)
+        : PhysicalOperator(op_id), local_count(0), global_count(0) {
         std::vector<std::unique_ptr<bodo::DataType>> types;
         types.emplace_back(std::make_unique<bodo::DataType>(
             bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL,

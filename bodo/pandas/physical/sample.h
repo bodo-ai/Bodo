@@ -22,8 +22,11 @@ struct PhysicalSampleMetrics {
 class PhysicalSample : public PhysicalProcessBatch {
    public:
     explicit PhysicalSample(float percent,
-                            std::shared_ptr<bodo::Schema> input_schema)
-        : percentage(percent), output_schema(input_schema) {}
+                            std::shared_ptr<bodo::Schema> input_schema,
+                            int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          percentage(percent),
+          output_schema(input_schema) {}
 
     virtual ~PhysicalSample() = default;
 

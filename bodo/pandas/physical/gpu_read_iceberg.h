@@ -250,7 +250,7 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
         const int64_t snapshot_id, const std::vector<int>& selected_columns,
         duckdb::TableFilterSet& filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode>& limit_val,
-        JoinFilterColStats join_filter_col_stats);
+        JoinFilterColStats join_filter_col_stats, int64_t op_id = -1);
 
     virtual ~PhysicalGPUReadIceberg();
 

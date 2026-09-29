@@ -145,9 +145,10 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
     explicit PhysicalReduce(std::shared_ptr<bodo::Schema> out_schema,
                             std::vector<std::string> function_names,
                             std::vector<int> input_column_indices,
-                            bool use_sql_rules = false)
+                            bool use_sql_rules = false, int64_t op_id = -1)
         // Drop Index columns since not necessary in output
-        : out_schema(std::move(out_schema)),
+        : PhysicalOperator(op_id),
+          out_schema(std::move(out_schema)),
           function_names(std::move(function_names)),
           input_column_indices(std::move(input_column_indices)),
           use_sql_rules(use_sql_rules) {}
@@ -168,17 +169,14 @@ class PhysicalReduce : public PhysicalSource, public PhysicalSink {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
+            getOpId(), PhysicalSink::ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.output_row_count);
-        PhysicalSink::addPipelineInfo(1, build_pipeline_num,
-                                      build_pipeline_position);
+        addPipelineInfo(1, build_pipeline_num, build_pipeline_position);
     }
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,

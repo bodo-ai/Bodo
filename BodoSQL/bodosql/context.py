@@ -722,9 +722,14 @@ class BodoSQLContext:
             java_named_params_map = create_java_named_parameter_type_map(
                 named_params_dict
             )
-            java_plan = JavaEntryPoint.getOptimizedPlan(
+            java_plan_and_op_map = JavaEntryPoint.getOptimizedPlan(
                 generator, sql, java_params_array, java_named_params_map
             )
+            java_plan = java_plan_and_op_map.getLeft()
+
+            # Mapping from relnode -> operator id, used to associate physical plan
+            # nodes with operators for the query profiler.
+            self.op_map: dict[int, int] = dict(java_plan_and_op_map.getRight())
             # Keeps track of join ids and their join filter key locations for join
             # filter translation during conversion to Python plan.
             self.join_filter_info = {}

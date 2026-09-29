@@ -19,6 +19,7 @@ import com.bodosql.calcite.table.LocalTable
 import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.rel.RelNode
 import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.commons.lang3.tuple.Pair
 import java.util.Properties
 
 /**
@@ -99,7 +100,7 @@ class PythonEntryPoint {
             sql: String,
             dynamicParamTypes: MutableList<ColumnDataTypeInfo>,
             namedParamTypeMap: MutableMap<String, ColumnDataTypeInfo>,
-        ): RelNode =
+        ): Pair<RelNode, Map<Int, Int>> =
             generator.getOptimizedPlan(
                 sql,
                 dynamicParamTypes,

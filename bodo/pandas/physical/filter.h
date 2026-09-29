@@ -26,8 +26,9 @@ class PhysicalFilter : public PhysicalProcessBatch {
         duckdb::LogicalFilter& logical_filter,
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
         std::shared_ptr<bodo::Schema> input_schema,
-        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>&
-            col_ref_map) {
+        std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t>& col_ref_map,
+        int64_t op_id = -1)
+        : PhysicalOperator(op_id) {
         this->output_schema = std::make_shared<bodo::Schema>();
         if (logical_filter.projection_map.empty()) {
             for (size_t i = 0; i < input_schema->ncols(); i++) {

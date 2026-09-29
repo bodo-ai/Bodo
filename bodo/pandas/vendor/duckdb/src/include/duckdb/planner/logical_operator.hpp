@@ -45,6 +45,9 @@ public:
 	idx_t estimated_cardinality;
 	bool has_estimated_cardinality;
 
+	// Bodo Change: Add Calcite_op_id to relate logical duckdb operators back to Calcite
+	// plan nodes for profiling purposes. Only used in BodoSQL plans.
+	int64_t calcite_op_id = -1;
 public:
 	virtual vector<ColumnBinding> GetColumnBindings();
 	virtual idx_t GetRootIndex();

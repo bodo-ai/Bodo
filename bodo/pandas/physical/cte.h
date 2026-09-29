@@ -19,8 +19,9 @@ class PhysicalCTERef;
  */
 class PhysicalCTE : public PhysicalSink {
    public:
-    explicit PhysicalCTE(const std::shared_ptr<bodo::Schema> sink_schema)
-        : output_schema(sink_schema) {}
+    explicit PhysicalCTE(const std::shared_ptr<bodo::Schema> sink_schema,
+                         int64_t op_id = -1)
+        : PhysicalOperator(op_id), output_schema(sink_schema) {}
 
     virtual ~PhysicalCTE() = default;
 
@@ -56,10 +57,6 @@ class PhysicalCTE : public PhysicalSink {
         throw std::runtime_error("GetResult called on a CTE node.");
     }
 
-    std::string ToString() override { return PhysicalSink::ToString(); }
-
-    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
-
    private:
     std::unique_ptr<ChunkedTableBuilderState> collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
@@ -68,7 +65,9 @@ class PhysicalCTE : public PhysicalSink {
 
 class PhysicalCTERef : public PhysicalSource {
    public:
-    explicit PhysicalCTERef(std::shared_ptr<PhysicalCTE> _cte) : cte(_cte) {}
+    explicit PhysicalCTERef(std::shared_ptr<PhysicalCTE> _cte,
+                            int64_t op_id = -1)
+        : PhysicalOperator(op_id), cte(_cte) {}
 
     virtual ~PhysicalCTERef() = default;
 
@@ -99,10 +98,6 @@ class PhysicalCTERef : public PhysicalSource {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return cte->output_schema;
     }
-
-    std::string ToString() override { return PhysicalSource::ToString(); }
-
-    int64_t getOpId() const override { return PhysicalSource::getOpId(); }
 
     void FinalizeSource(int64_t pipeline_num,
                         int64_t pipeline_position) override {

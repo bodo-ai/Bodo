@@ -28,8 +28,10 @@ class PhysicalGPUJoinFilter : public PhysicalGPUProcessBatch {
         bodo::LogicalJoinFilter& logical_filter,
         std::shared_ptr<bodo::Schema>& input_schema,
         std::shared_ptr<std::unordered_map<int, join_state_t>>&
-            join_filter_states)
-        : filter_ids(std::move(logical_filter.filter_ids)),
+            join_filter_states,
+        int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          filter_ids(std::move(logical_filter.filter_ids)),
           is_first_locations(std::move(logical_filter.is_first_locations)),
           join_filter_states(join_filter_states) {
         this->output_schema = input_schema;
