@@ -1188,6 +1188,10 @@ PhysicalGPUReadIceberg::~PhysicalGPUReadIceberg() {
     }
 }
 
+std::string PhysicalGPUReadIceberg::ToString() {
+    return std::string(typeid(*this).name()) + "(" + table_id + ")";
+}
+
 void PhysicalGPUReadIceberg::FinalizeSource(long pipeline_num,
                                             long pipeline_position) {
     std::vector<MetricBase> metrics_out;

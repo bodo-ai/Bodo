@@ -254,6 +254,8 @@ class PhysicalGPUReadIceberg : public PhysicalGPUSource {
 
     virtual ~PhysicalGPUReadIceberg();
 
+    std::string ToString() override;
+
     void FinalizeSource(int64_t pipeline_num,
                         int64_t pipeline_position) override;
 

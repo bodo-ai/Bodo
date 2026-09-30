@@ -13,6 +13,7 @@ from bodo.tests.utils import temp_env_override
 from bodosql import BodoSQLContext, FileSystemCatalog, TablePath
 
 
+@pytest.mark.gpu
 @pytest.mark.bodosql_cpp
 def test_query_profiler_end_to_end(iceberg_database, tmp_path, datapath):
     """
@@ -68,14 +69,29 @@ def test_query_profiler_end_to_end(iceberg_database, tmp_path, datapath):
         bc.sql(query)
 
     expected_report = {
-        "10001": {"name": "19PhysicalReadIceberg(INT_TABLE)"},
-        "10003": {"name": "18PhysicalJoinFilter"},
-        "10005": {"name": "19PhysicalReadParquet"},
-        "10007": {"name": "14PhysicalFilter"},
-        "10008": {"name": "12PhysicalJoin"},
-        "10009": {"name": "18PhysicalProjection"},
-        "10010": {"name": "17PhysicalAggregate"},
-        "10011": {"name": "18PhysicalProjection"},
+        "10001": {
+            "name": "19PhysicalReadIceberg(INT_TABLE)",
+            "gpu_name": "22PhysicalGPUReadIceberg(INT_TABLE)",
+        },
+        "10003": {
+            "name": "18PhysicalJoinFilter",
+            "gpu_name": "21PhysicalGPUJoinFilter",
+        },
+        "10005": {
+            "name": "19PhysicalReadParquet",
+            "gpu_name": "22PhysicalGPUReadParquet",
+        },
+        "10007": {"name": "14PhysicalFilter", "gpu_name": "17PhysicalGPUFilter"},
+        "10008": {"name": "12PhysicalJoin", "gpu_name": "15PhysicalGPUJoin"},
+        "10009": {
+            "name": "18PhysicalProjection",
+            "gpu_name": "21PhysicalGPUProjection",
+        },
+        "10010": {"name": "17PhysicalAggregate", "gpu_name": "20PhysicalGPUAggregate"},
+        "10011": {
+            "name": "18PhysicalProjection",
+            "gpu_name": "21PhysicalGPUProjection",
+        },
     }
 
     for trace_dir in os.listdir(tmp_path):
@@ -87,4 +103,7 @@ def test_query_profiler_end_to_end(iceberg_database, tmp_path, datapath):
                 op_reports.items(), expected_report.items()
             ):
                 assert op_id == expected_op_id
-                assert op_report["name"] == expected_op_report["name"]
+                assert (
+                    op_report["name"] == expected_op_report["name"]
+                    or op_report["name"] == expected_op_report["gpu_name"]
+                )
