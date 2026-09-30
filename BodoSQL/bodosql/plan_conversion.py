@@ -6,6 +6,7 @@ import re
 import zoneinfo
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -50,7 +51,6 @@ from bodo.pandas.plan import (
 
 CastOptions = CastExpression.CastOptions
 BodoStringCastOptions = CastExpression.BodoStringCastOptions
-from typing import TYPE_CHECKING
 
 from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
@@ -140,23 +140,23 @@ def _mysql_date_format_to_arrow_format(mysql_fmt: str) -> str:
 
 def rel_to_op_id(rel, op_map: dict[int, int]) -> int:
     """
-    Get the operator id (plus 10,000) from the operator map corresponding to the given
-    relational node.
+    Get the operator id (plus 10,000) from the operator map corresponding to the
+    given relational node.
     """
     op_id = op_map.get(rel.getId())
     assert op_id is not None, (
         f"Operator ID not found for relational node with ID: {rel.getId()}"
     )
 
-    # Add 10,000 to op_id if coming for calcite to avoid conflicts with non-Calcite operator IDs
-    # (Currently CTE references use their own generated ID since we insert LogicalCTERef nodes after
-    # converting the entire calcite plan to Python)
+    # Add 10,000 to op_id if coming for Calcite to avoid conflicts with non-Calcite
+    # operator IDs. Currently CTE references use their own generated ID since we
+    # insert LogicalCTERef nodes after converting the entire Calcite plan to Python
     return op_id + 10000
 
 
 def add_calcite_op_id_to_plan(plan: LogicalOperator, calcite_op_id: int) -> int:
-    """Add the Calcite operator ID to the given plan node and children if those
-    children are not already associated with another operator.
+    """Add the Calcite operator ID to the given plan node and its children if they
+    are not already associated with another operator.
 
     To make operator ids unique, 10000 is added to each subsequent operator id
     starting from the first plan node to not be assigned an id yet.
@@ -206,8 +206,10 @@ class IcebergReadInfo:
     limit: int = None
     # The op id for the inner most read node.
     # Filters, projections will use this ID instead of their original op id
+    # since they are merged with the read.
     read_op_id: int | None = None
-    # Runtime join filters will use their original op id.
+    # Runtime join filters generated on top of read nodes will use their
+    # original op id.
     join_filter_op_id: int | None = None
 
 
@@ -248,7 +250,6 @@ def java_plan_to_python_plan(ctx: BodoSQLContext, java_plan):
         visit_iceberg_node(ctx, input, read_info)
         return generate_iceberg_read(read_info)
 
-    plan: LogicalOperator
     if java_class_name == "PandasTableScan":
         # TODO: support other table types and check table details
         table_name = JavaEntryPoint.getLocalTableName(java_plan)
@@ -324,8 +325,8 @@ def java_plan_to_python_plan(ctx: BodoSQLContext, java_plan):
     else:
         raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
 
-    # Recursively add calcite op id to plan,
-    # since some calcite plan nodes might map to multiple LogicalOperator nodes.
+    # Recursively add calcite op id to plan, since some calcite plan nodes might map
+    # to multiple LogicalOperator nodes.
     add_calcite_op_id_to_plan(plan, op_id)
     return plan
 

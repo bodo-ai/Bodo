@@ -318,7 +318,7 @@ class LogicalOperator(LazyPlan):
     """Base class for all logical operators in the Bodo query plan."""
 
     # The Calcite operator ID associated with this plan node, if any,
-    # for query profiling.
+    # for query profiling in BodoSQL.
     calcite_op_id: int | None = None
 
     def __init__(self, empty_data, *args):
