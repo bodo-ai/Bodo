@@ -44,6 +44,10 @@ PhysicalReadIceberg::PhysicalReadIceberg(
     }
 }
 
+std::string PhysicalReadIceberg::ToString() {
+    return std::string(typeid(*this).name()) + "(" + table_id + ")";
+}
+
 std::pair<std::shared_ptr<table_info>, OperatorResult>
 PhysicalReadIceberg::ProduceBatch() {
     if (!this->internal_reader) {

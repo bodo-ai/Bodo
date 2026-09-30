@@ -39,6 +39,8 @@ class PhysicalReadIceberg : public PhysicalSource {
     JoinFilterColStats join_filter_col_stats;
     PhysicalReadIcebergMetrics metrics;
 
+    std::string ToString() override;
+
     static std::vector<std::string> create_out_column_names(
         const std::vector<int> &selected_columns,
         const std::shared_ptr<arrow::Schema> schema);

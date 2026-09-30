@@ -13,7 +13,6 @@ from bodo.tests.utils import temp_env_override
 from bodosql import BodoSQLContext, FileSystemCatalog, TablePath
 
 
-@pytest.mark.gpu
 @pytest.mark.bodosql_cpp
 def test_query_profiler_end_to_end(iceberg_database, tmp_path, datapath):
     """
@@ -69,7 +68,7 @@ def test_query_profiler_end_to_end(iceberg_database, tmp_path, datapath):
         bc.sql(query)
 
     expected_report = {
-        "10001": {"name": "19PhysicalReadIceberg"},
+        "10001": {"name": "19PhysicalReadIceberg(INT_TABLE)"},
         "10003": {"name": "18PhysicalJoinFilter"},
         "10005": {"name": "19PhysicalReadParquet"},
         "10007": {"name": "14PhysicalFilter"},
