@@ -185,11 +185,12 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
  * @param duplicated - the duplicated part of the plan
  * @param out_schema_py - the schema of data coming out
  * @param cte_index - a pre-allocated CTE index to match with CTE references
+ * @param calcite_op_id - the Calcite operation ID
  * @return duckdb::unique_ptr<bodo::LogicalInlinedCTE> output node
  */
 duckdb::unique_ptr<bodo::LogicalInlinedCTE> make_inlined_cte(
     std::unique_ptr<duckdb::LogicalOperator> &duplicated,
-    PyObject *out_schema_py, duckdb::idx_t cte_index);
+    PyObject *out_schema_py, duckdb::idx_t cte_index, int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalComparisonJoin node.

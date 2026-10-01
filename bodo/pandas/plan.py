@@ -1178,13 +1178,13 @@ def execute_plan(plan: LazyPlan, optimize=True, use_sql_rules=False):
 
     PlanExecutionCounter.increment()
 
-    def _exec_plan(plan, optimize=True):
+    def _exec_plan(plan: LazyPlan, optimize=True):
         import bodo
         from bodo.ext import plan_optimizer
 
         if bodo.get_rank() == 0:
             start_time = time.perf_counter()
-        duckdb_plan = plan.generate_duckdb()
+        duckdb_plan = plan.generate_duckdb(do_cte_check=optimize)
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time gen", time.perf_counter() - start_time)
 
