@@ -178,6 +178,9 @@ class DevicePlanNode {
             case duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
                 return ::gpu_capable(op.Cast<duckdb::LogicalMaterializedCTE>());
 
+            case duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE:
+                return ::gpu_capable(op.Cast<bodo::LogicalInlinedCTE>());
+
             case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN:
                 return ::gpu_capable(op.Cast<duckdb::LogicalComparisonJoin>());
 

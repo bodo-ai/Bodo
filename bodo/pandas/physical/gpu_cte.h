@@ -8,6 +8,8 @@ inline bool gpu_capable(duckdb::LogicalMaterializedCTE &cte) { return true; }
 
 inline bool gpu_capable(duckdb::LogicalCTERef &cteref) { return true; }
 
+inline bool gpu_capable(bodo::LogicalInlinedCTE &inlinedcte) { return true; }
+
 /**
  * @brief Physical CTE node.
  *
