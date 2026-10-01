@@ -46,6 +46,15 @@ class LogicalInlinedCTE : public duckdb::LogicalOperator {
         return children[0]->GetColumnBindings();
     }
 
+    duckdb::InsertionOrderPreservingMap<duckdb::string> ParamsToString()
+        const override {
+        duckdb::InsertionOrderPreservingMap<duckdb::string> map;
+        map["cte_index"] = fmt::format("{}", this->cte_index);
+        return map;
+    }
+
+    duckdb::optional_idx GetCTEIndex() const override { return cte_index; }
+
     duckdb::idx_t cte_index;
 
    protected:
