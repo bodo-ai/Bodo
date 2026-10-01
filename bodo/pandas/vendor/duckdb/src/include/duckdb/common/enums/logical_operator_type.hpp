@@ -108,6 +108,9 @@ enum class LogicalOperatorType : uint8_t {
 	// -----------------------------
 	LOGICAL_CREATE_SECRET = 190,
 
+	// Bodo Change: new operator types:
+	LOGICAL_INLINED_CTE = 191,
+
 	LOGICAL_EXTENSION_OPERATOR = 255
 };
 

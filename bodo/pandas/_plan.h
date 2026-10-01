@@ -23,6 +23,29 @@
 namespace bodo {
 
 /**
+ * @brief Logical Inlined CTE (extension of DuckDB logical operator) can be used
+ * to either generate or utilize a cached result, depending on it's position in
+ * the plan. This logical operator is used in BodoSQL, where the duckdb
+ * optimizer is not run, and we want to use Calcite-style cache node semantics.
+ *
+ */
+class LogicalInlinedCTE : public duckdb::LogicalOperator {
+   public:
+    static constexpr const duckdb::LogicalOperatorType TYPE =
+        duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE;
+
+    LogicalInlinedCTE(duckdb::unique_ptr<duckdb::LogicalOperator> subplan,
+                      duckdb::idx_t cte_index)
+        : duckdb::LogicalOperator(
+              duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE),
+          cte_index(cte_index) {
+        this->children.push_back(std::move(subplan));
+    }
+
+    duckdb::idx_t cte_index;
+};
+
+/**
  * @brief Logical join filter operator (extension of DuckDB logical operator).
  *
  */

@@ -132,6 +132,9 @@ string LogicalOperatorToString(LogicalOperatorType type) {
 		return "PIVOT";
 	case LogicalOperatorType::LOGICAL_UPDATE_EXTENSIONS:
 		return "UPDATE_EXTENSIONS";
+	// Bodo Change: add new operator type
+	case LogicalOperatorType::LOGICAL_INLINED_CTE:
+		return "INLINED_CTE";
 	}
 	return "INVALID";
 }

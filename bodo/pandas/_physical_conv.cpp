@@ -1004,7 +1004,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
     this->active_pipeline->addRunBefore(cte_index_info.cte_pipeline_root);
 }
 
-void PhysicalPlanBuilder::Visit(duckdb::LogicalInlinedCTE& op) {
+void PhysicalPlanBuilder::Visit(bodo::LogicalInlinedCTE& op) {
     auto table_index_iter = ctes.find(op.cte_index);
     // If this is the first inlined CTE for this cte_index that we have visited
     // then insert it into the ctes structure.

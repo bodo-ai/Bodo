@@ -178,7 +178,9 @@ PhysicalOperator &PhysicalPlanGenerator::CreatePlan(LogicalOperator &op) {
 	}
 	case LogicalOperatorType::LOGICAL_JOIN:
 	case LogicalOperatorType::LOGICAL_DEPENDENT_JOIN:
-	case LogicalOperatorType::LOGICAL_INVALID: {
+	case LogicalOperatorType::LOGICAL_INVALID:
+	// Bodo Change: add new operator type
+	case LogicalOperatorType::LOGICAL_INLINED_CTE: {
 		throw NotImplementedException("Unimplemented logical operator type!");
 	}
 	}
