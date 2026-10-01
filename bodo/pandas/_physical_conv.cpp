@@ -1014,7 +1014,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalInlinedCTE& op) {
                      std::shared_ptr<PhysicalGPUCTE>>
             physical_cte;
 
-        if (node_run_on_gpu(cte_index_info.cte_logical_node)) {
+        if (node_run_on_gpu(op)) {
             physical_cte = std::make_shared<PhysicalGPUCTE>(in_table_schema);
         } else {
             physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
