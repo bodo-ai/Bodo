@@ -255,6 +255,9 @@ def test_iceberg_drop_table_purge_sql(
     bc.sql(query_drop_table)
 
 
+@pytest.mark.skip(
+    "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
+)
 @pytest_mark_one_rank
 @pytest.mark.parametrize("purge", [True, False])
 def test_iceberg_drop_table_purge(
