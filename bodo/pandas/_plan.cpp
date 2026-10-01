@@ -4,6 +4,7 @@
 #include <arrow/type.h>
 #include <fmt/format.h>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <utility>
 
@@ -607,32 +608,36 @@ duckdb::unique_ptr<duckdb::Expression> make_case_expr(
 
 duckdb::unique_ptr<duckdb::LogicalCrossProduct> make_cross_product(
     std::unique_ptr<duckdb::LogicalOperator> &left,
-    std::unique_ptr<duckdb::LogicalOperator> &right, bool force_broadcast) {
+    std::unique_ptr<duckdb::LogicalOperator> &right, bool force_broadcast,
+    int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto left_duck = to_duckdb(left);
     auto right_duck = to_duckdb(right);
     auto logical_cp = duckdb::make_uniq<duckdb::LogicalCrossProduct>(
         std::move(left_duck), std::move(right_duck));
     logical_cp->force_broadcast = force_broadcast;
+    logical_cp->calcite_op_id = calcite_op_id;
 
     return logical_cp;
 }
 
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::unique_ptr<duckdb::Expression> &filter_expr) {
+    std::unique_ptr<duckdb::Expression> &filter_expr, int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     auto filter_expr_duck = to_duckdb(filter_expr);
     auto logical_filter =
         duckdb::make_uniq<duckdb::LogicalFilter>(std::move(filter_expr_duck));
+    logical_filter->calcite_op_id = calcite_op_id;
 
     logical_filter->children.push_back(std::move(source_duck));
     return logical_filter;
 }
 
 duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
-    std::unique_ptr<duckdb::LogicalOperator> &source, int n) {
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n,
+    int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     duckdb::unique_ptr<duckdb::SampleOptions> sampleOptions =
@@ -643,17 +648,20 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
     sampleOptions->repeatable = true;  // Not sure if this is correct.
     auto logical_sample = duckdb::make_uniq<duckdb::LogicalSample>(
         std::move(sampleOptions), std::move(source_duck));
+    logical_sample->calcite_op_id = calcite_op_id;
 
     return logical_sample;
 }
 
 duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
-    std::unique_ptr<duckdb::LogicalOperator> &source, int n) {
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n,
+    int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     auto logical_limit = duckdb::make_uniq<duckdb::LogicalLimit>(
         duckdb::BoundLimitNode::ConstantValue(n),
         duckdb::BoundLimitNode::ConstantValue(0));
+    logical_limit->calcite_op_id = calcite_op_id;
 
     logical_limit->children.push_back(std::move(source_duck));
     return logical_limit;
@@ -662,7 +670,7 @@ duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
-    PyObject *out_schema_py) {
+    PyObject *out_schema_py, int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
 
@@ -680,6 +688,7 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     duckdb::unique_ptr<duckdb::LogicalProjection> proj =
         duckdb::make_uniq<duckdb::LogicalProjection>(
             table_idx, std::move(projection_expressions));
+    proj->calcite_op_id = calcite_op_id;
 
     // Add the source of the projection.
     proj->children.push_back(std::move(source_duck));
@@ -690,7 +699,7 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
 duckdb::unique_ptr<duckdb::LogicalDistinct> make_distinct(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
-    PyObject *out_schema_py) {
+    PyObject *out_schema_py, int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
 
@@ -705,6 +714,7 @@ duckdb::unique_ptr<duckdb::LogicalDistinct> make_distinct(
     duckdb::unique_ptr<duckdb::LogicalDistinct> distinct =
         duckdb::make_uniq<duckdb::LogicalDistinct>(
             std::move(distinct_expressions), duckdb::DistinctType::DISTINCT);
+    distinct->calcite_op_id = calcite_op_id;
 
     // Add the source of the distinct.
     distinct->children.push_back(std::move(source_duck));
@@ -714,8 +724,8 @@ duckdb::unique_ptr<duckdb::LogicalDistinct> make_distinct(
 
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
-    std::vector<bool> &na_position, std::vector<int> &cols,
-    PyObject *schema_py) {
+    std::vector<bool> &na_position, std::vector<int> &cols, PyObject *schema_py,
+    int64_t calcite_op_id) {
     auto schema_res = arrow::py::unwrap_schema(schema_py);
     std::shared_ptr<arrow::Schema> schema;
     CHECK_ARROW_AND_ASSIGN(schema_res, "make_order: unable to unwrap schema",
@@ -737,6 +747,7 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     // Create projection node.
     duckdb::unique_ptr<duckdb::LogicalOrder> order =
         duckdb::make_uniq<duckdb::LogicalOrder>(std::move(col_orders));
+    order->calcite_op_id = calcite_op_id;
 
     // Add the source of the order.
     order->children.push_back(std::move(source_duck));
@@ -747,7 +758,7 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
 duckdb::unique_ptr<duckdb::LogicalTopN> make_topn(
     std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
     std::vector<bool> &na_position, std::vector<int> &cols, PyObject *schema_py,
-    duckdb::idx_t limit, duckdb::idx_t offset) {
+    duckdb::idx_t limit, duckdb::idx_t offset, int64_t calcite_op_id) {
     auto schema_res = arrow::py::unwrap_schema(schema_py);
     std::shared_ptr<arrow::Schema> schema;
     CHECK_ARROW_AND_ASSIGN(schema_res, "make_topn: unable to unwrap schema",
@@ -770,6 +781,7 @@ duckdb::unique_ptr<duckdb::LogicalTopN> make_topn(
     duckdb::unique_ptr<duckdb::LogicalTopN> topn =
         duckdb::make_uniq<duckdb::LogicalTopN>(std::move(col_orders), limit,
                                                offset);
+    topn->calcite_op_id = calcite_op_id;
 
     // Add the source of the topn.
     topn->children.push_back(std::move(source_duck));
@@ -781,7 +793,7 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> &key_indices,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
-    PyObject *out_schema_py) {
+    PyObject *out_schema_py, int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto source_duck = to_duckdb(source);
     std::vector<duckdb::ColumnBinding> source_cols =
@@ -803,6 +815,7 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
         duckdb::make_uniq<duckdb::LogicalAggregate>(
             binder->GenerateTableIndex(), binder->GenerateTableIndex(),
             std::move(aggregate_expressions));
+    aggr->calcite_op_id = calcite_op_id;
 
     std::vector<duckdb::unique_ptr<duckdb::Expression>> group_exprs;
     for (int key_idx : key_indices) {
@@ -1407,7 +1420,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
     std::vector<std::pair<int, int>> &cond_vec, int join_id,
-    bool force_broadcast) {
+    bool force_broadcast, int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
@@ -1444,6 +1457,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     }
 
     comp_join->join_id = join_id;
+    comp_join->calcite_op_id = calcite_op_id;
     comp_join->force_broadcast = force_broadcast;
     return comp_join;
 }
@@ -1453,16 +1467,19 @@ duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
     std::vector<int> filter_ids,
     std::vector<std::vector<int64_t>> filter_columns,
     std::vector<std::vector<bool>> is_first_locations,
-    std::vector<std::vector<int64_t>> orig_build_key_cols) {
-    return duckdb::make_uniq<bodo::LogicalJoinFilter>(
+    std::vector<std::vector<int64_t>> orig_build_key_cols,
+    int64_t calcite_op_id) {
+    auto join_filter = duckdb::make_uniq<bodo::LogicalJoinFilter>(
         to_duckdb(source), filter_ids, filter_columns, is_first_locations,
         orig_build_key_cols);
+    join_filter->calcite_op_id = calcite_op_id;
+    return join_filter;
 }
 
 duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, const std::string &setop,
-    int64_t num_cols) {
+    int64_t num_cols, int64_t calcite_op_id) {
     // Convert std::unique_ptr to duckdb::unique_ptr.
     auto lhs_duck = to_duckdb(lhs);
     auto rhs_duck = to_duckdb(rhs);
@@ -1481,6 +1498,7 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
     auto set_operation = duckdb::make_uniq<duckdb::LogicalSetOperation>(
         table_idx, num_cols, std::move(lhs_duck), std::move(rhs_duck), optype,
         setop_all);
+    set_operation->calcite_op_id = calcite_op_id;
     return set_operation;
 }
 
@@ -1540,7 +1558,7 @@ std::pair<int64_t, PyObject *> execute_plan(
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows, bool has_partitioning) {
+    int64_t num_rows, bool has_partitioning, int64_t calcite_op_id) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1560,6 +1578,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
             binder->GenerateTableIndex(), table_function, std::move(bind_data1),
             return_types, return_names, virtual_columns);
     out_get->SetEstimatedCardinality(num_rows);
+    out_get->calcite_op_id = calcite_op_id;
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:
@@ -1574,7 +1593,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
 duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
     std::string path, std::string compression, std::string bucket_region,
-    int64_t row_group_size) {
+    int64_t row_group_size, int64_t calcite_op_id) {
     auto source_duck = to_duckdb(source);
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1590,6 +1609,7 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
             duckdb::make_uniq<duckdb::CopyInfo>());
 
     copy_node->return_type = duckdb::CopyFunctionReturnType::CHANGED_ROWS;
+    copy_node->calcite_op_id = calcite_op_id;
     copy_node->AddChild(std::move(source_duck));
 
     return copy_node;
@@ -1600,7 +1620,7 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
     std::string table_loc, std::string bucket_region, int64_t max_pq_chunksize,
     std::string compression, PyObject *partition_tuples, PyObject *sort_tuples,
     std::string iceberg_schema_str, PyObject *output_pa_schema, PyObject *pyfs,
-    PyObject *theta_columns_bitmask) {
+    PyObject *theta_columns_bitmask, int64_t calcite_op_id) {
     auto source_duck = to_duckdb(source);
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1632,6 +1652,7 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
             duckdb::make_uniq<duckdb::CopyInfo>());
 
     copy_node->return_type = duckdb::CopyFunctionReturnType::CHANGED_ROWS;
+    copy_node->calcite_op_id = calcite_op_id;
     copy_node->AddChild(std::move(source_duck));
 
     return copy_node;
@@ -1639,7 +1660,8 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
 
 duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_s3_vectors_write_node(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
-    std::string vector_bucket_name, std::string index_name, PyObject *region) {
+    std::string vector_bucket_name, std::string index_name, PyObject *region,
+    int64_t calcite_op_id) {
     auto source_duck = to_duckdb(source);
 
     duckdb::CopyFunction copy_function =
@@ -1654,13 +1676,15 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_s3_vectors_write_node(
             duckdb::make_uniq<duckdb::CopyInfo>());
 
     copy_node->return_type = duckdb::CopyFunctionReturnType::CHANGED_ROWS;
+    copy_node->calcite_op_id = calcite_op_id;
     copy_node->AddChild(std::move(source_duck));
 
     return copy_node;
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
-    PyObject *df, PyObject *pyarrow_schema, int64_t num_rows) {
+    PyObject *df, PyObject *pyarrow_schema, int64_t num_rows,
+    int64_t calcite_op_id) {
     // See DuckDB Pandas scan code:
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_scan.hpp#L19
     // https://github.com/duckdb/duckdb/blob/d29a92f371179170688b4df394478f389bf7d1a6/tools/pythonpkg/src/include/duckdb_python/pandas/pandas_bind.hpp#L19
@@ -1684,6 +1708,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
         return_types, return_names, virtual_columns);
     out_get->SetEstimatedCardinality(num_rows);
+    out_get->calcite_op_id = calcite_op_id;
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:
@@ -1696,7 +1721,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
 }
 
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
-    std::string result_id, PyObject *pyarrow_schema, int64_t num_rows) {
+    std::string result_id, PyObject *pyarrow_schema, int64_t num_rows,
+    int64_t calcite_op_id) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
     std::shared_ptr<arrow::Schema> arrow_schema = unwrap_schema(pyarrow_schema);
 
@@ -1713,6 +1739,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
         binder->GenerateTableIndex(), table_function, std::move(bind_data1),
         return_types, return_names);
     out_get->SetEstimatedCardinality(num_rows);
+    out_get->calcite_op_id = calcite_op_id;
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:
@@ -1730,7 +1757,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
     std::optional<std::vector<int>> selected_columns_opt,
     std::optional<int64_t> limit_opt,
-    std::optional<JoinFilterProgramState> rtjf_state_map_opt) {
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt,
+    int64_t calcite_op_id) {
     duckdb::shared_ptr<duckdb::Binder> binder = get_duckdb_binder();
 
     // Convert Arrow schema to DuckDB
@@ -1773,6 +1801,7 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
             return_types, return_names, virtual_columns);
 
     out_get->SetEstimatedCardinality(table_len_estimate);
+    out_get->calcite_op_id = calcite_op_id;
 
     // Column ids need to be added separately.
     // DuckDB column id initialization example:

@@ -9,30 +9,36 @@
 
 std::variant<std::shared_ptr<PhysicalSink>, std::shared_ptr<PhysicalGPUSink>>
 ParquetWriteFunctionData::CreatePhysicalOperator(
-    std::shared_ptr<bodo::Schema> in_table_schema, bool run_on_gpu) {
+    std::shared_ptr<bodo::Schema> in_table_schema, bool run_on_gpu,
+    int64_t op_id) {
 #ifdef USE_CUDF
     if (run_on_gpu) {
-        return std::make_shared<PhysicalGPUWriteParquet>(in_table_schema,
-                                                         *this);
+        return std::make_shared<PhysicalGPUWriteParquet>(in_table_schema, *this,
+                                                         op_id);
     }
 #endif
-    return std::make_shared<PhysicalWriteParquet>(in_table_schema, *this);
+    return std::make_shared<PhysicalWriteParquet>(in_table_schema, *this,
+                                                  op_id);
 }
 
 std::variant<std::shared_ptr<PhysicalSink>, std::shared_ptr<PhysicalGPUSink>>
 IcebergWriteFunctionData::CreatePhysicalOperator(
-    std::shared_ptr<bodo::Schema> in_table_schema, bool run_on_gpu) {
+    std::shared_ptr<bodo::Schema> in_table_schema, bool run_on_gpu,
+    int64_t op_id) {
 #ifdef USE_CUDF
     if (run_on_gpu) {
-        return std::make_shared<PhysicalGPUWriteIceberg>(in_table_schema,
-                                                         *this);
+        return std::make_shared<PhysicalGPUWriteIceberg>(in_table_schema, *this,
+                                                         op_id);
     }
 #endif
-    return std::make_shared<PhysicalWriteIceberg>(in_table_schema, *this);
+    return std::make_shared<PhysicalWriteIceberg>(in_table_schema, *this,
+                                                  op_id);
 }
 
 std::variant<std::shared_ptr<PhysicalSink>, std::shared_ptr<PhysicalGPUSink>>
 S3VectorsWriteFunctionData::CreatePhysicalOperator(
-    std::shared_ptr<bodo::Schema> in_table_schema, bool run_on_gpu) {
-    return std::make_shared<PhysicalWriteS3Vectors>(in_table_schema, *this);
+    std::shared_ptr<bodo::Schema> in_table_schema, bool run_on_gpu,
+    int64_t op_id) {
+    return std::make_shared<PhysicalWriteS3Vectors>(in_table_schema, *this,
+                                                    op_id);
 }

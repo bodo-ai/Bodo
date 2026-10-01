@@ -102,15 +102,19 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     }
 
    public:
-    explicit PhysicalGPUJoin(duckdb::LogicalComparisonJoin& logical_join)
-        : is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
+    explicit PhysicalGPUJoin(duckdb::LogicalComparisonJoin& logical_join,
+                             int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI),
           is_broadcast_join(doBroadcastJoin(logical_join)) {}
 
     PhysicalGPUJoin(duckdb::LogicalCrossProduct& logical_join,
                     const std::shared_ptr<bodo::Schema> build_table_schema,
-                    const std::shared_ptr<bodo::Schema> probe_table_schema) {
+                    const std::shared_ptr<bodo::Schema> probe_table_schema,
+                    int64_t op_id = -1)
+        : PhysicalOperator(op_id) {
         time_pt start_init = start_timer();
         std::vector<int64_t> build_kept_cols;
         std::vector<int64_t> probe_kept_cols;
@@ -376,16 +380,14 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
-        PhysicalGPUProcessBatch::addPipelineInfo(1, build_pipeline_num,
-                                                 build_pipeline_position);
+        addPipelineInfo(1, build_pipeline_num, build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             metrics.process_batch_time);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
-        PhysicalGPUProcessBatch::addPipelineInfo(2, pipeline_num,
-                                                 pipeline_position);
+        addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**
@@ -460,10 +462,6 @@ class PhysicalGPUJoin : public PhysicalGPUProcessBatch, public PhysicalGPUSink {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
-
-    std::string ToString() override { return PhysicalGPUSink::ToString(); }
-
-    int64_t getOpId() const { return PhysicalGPUSink::getOpId(); }
 
     std::shared_ptr<CudaJoin> getJoinStatePtr() { return this->cuda_join; }
 

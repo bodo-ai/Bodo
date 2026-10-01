@@ -35,8 +35,9 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalQuantile(
         std::shared_ptr<bodo::Schema> out_schema, std::vector<double> quantiles,
-        uint16_t k = datasketches::kll_constants::DEFAULT_K)
-        : out_schema(std::move(out_schema)),
+        uint16_t k = datasketches::kll_constants::DEFAULT_K, int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          out_schema(std::move(out_schema)),
           quantiles(std::move(quantiles)),
           sketch(std::make_shared<KllSketch>(k)) {
         assert(this->out_schema->ncols() == 1);
@@ -148,16 +149,14 @@ class PhysicalQuantile : public PhysicalSource, public PhysicalSink {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
+            getOpId(), PhysicalSink::ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.output_row_count);
-        PhysicalSink::addPipelineInfo(1, pipeline_num, pipeline_position);
+        addPipelineInfo(1, pipeline_num, pipeline_position);
     }
 
     void FinalizeSource(int64_t pipeline_num,

@@ -18,8 +18,12 @@ inline bool gpu_capable(duckdb::LogicalLimit& logical_limit) { return true; }
 class PhysicalGPULimit : public PhysicalGPUSource, public PhysicalGPUSink {
    public:
     explicit PhysicalGPULimit(uint64_t nrows,
-                              std::shared_ptr<bodo::Schema> input_schema)
-        : n(nrows), local_remaining(nrows), output_schema(input_schema) {
+                              std::shared_ptr<bodo::Schema> input_schema,
+                              int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          n(nrows),
+          local_remaining(nrows),
+          output_schema(input_schema) {
         if (is_gpu_rank()) {
             collected_rows = std::make_unique<GPUBatchGenerator>(
                 GPU_DATA(empty_table_from_arrow_schema(

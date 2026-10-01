@@ -57,8 +57,10 @@ void setExprTreeLeftRight(
  */
 class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
    public:
-    explicit PhysicalJoin(duckdb::LogicalComparisonJoin& logical_join)
-        : has_non_equi_cond(false),
+    explicit PhysicalJoin(duckdb::LogicalComparisonJoin& logical_join,
+                          int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          has_non_equi_cond(false),
           is_mark_join(logical_join.join_type == duckdb::JoinType::MARK),
           is_anti_join(logical_join.join_type == duckdb::JoinType::ANTI ||
                        logical_join.join_type == duckdb::JoinType::RIGHT_ANTI) {
@@ -356,8 +358,9 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
      */
     PhysicalJoin(duckdb::LogicalCrossProduct& logical_join,
                  const std::shared_ptr<bodo::Schema> build_table_schema,
-                 const std::shared_ptr<bodo::Schema> probe_table_schema)
-        : has_non_equi_cond(false) {
+                 const std::shared_ptr<bodo::Schema> probe_table_schema,
+                 int64_t op_id = -1)
+        : PhysicalOperator(op_id), has_non_equi_cond(false) {
         time_pt start_init = start_timer();
         this->join_state_ = std::make_shared<NestedLoopJoinState>(
             build_table_schema, probe_table_schema, false, false,
@@ -396,8 +399,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
 
-        PhysicalProcessBatch::addPipelineInfo(1, build_pipeline_num,
-                                              build_pipeline_position);
+        addPipelineInfo(1, build_pipeline_num, build_pipeline_position);
 
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
@@ -406,8 +408,7 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
 
-        PhysicalProcessBatch::addPipelineInfo(2, pipeline_num,
-                                              pipeline_position);
+        addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**
@@ -658,10 +659,6 @@ class PhysicalJoin : public PhysicalProcessBatch, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
-
-    std::string ToString() override { return PhysicalSink::ToString(); }
-
-    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
 
     /**
      * @brief Get pointer to JoinState used in join filters

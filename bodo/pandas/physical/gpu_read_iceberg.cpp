@@ -1152,8 +1152,9 @@ PhysicalGPUReadIceberg::PhysicalGPUReadIceberg(
     const int64_t snapshot_id, const std::vector<int>& selected_columns,
     duckdb::TableFilterSet& filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode>& limit_val,
-    JoinFilterColStats join_filter_col_stats)
-    : catalog(catalog),
+    JoinFilterColStats join_filter_col_stats, int64_t op_id)
+    : PhysicalOperator(op_id),
+      catalog(catalog),
       table_id(table_id),
       iceberg_filter(iceberg_filter),
       iceberg_schema(iceberg_schema),
@@ -1185,6 +1186,10 @@ PhysicalGPUReadIceberg::~PhysicalGPUReadIceberg() {
     if (this->comm != MPI_COMM_NULL) {
         MPI_Comm_free(&this->comm);
     }
+}
+
+std::string PhysicalGPUReadIceberg::ToString() {
+    return std::string(typeid(*this).name()) + "(" + table_id + ")";
 }
 
 void PhysicalGPUReadIceberg::FinalizeSource(long pipeline_num,

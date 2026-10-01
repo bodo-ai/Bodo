@@ -136,8 +136,10 @@ class PhysicalGPUWriteParquet : public PhysicalGPUSink {
 
    public:
     explicit PhysicalGPUWriteParquet(std::shared_ptr<bodo::Schema> in_schema,
-                                     ParquetWriteFunctionData &bind_data)
-        : path(std::move(bind_data.path)),
+                                     ParquetWriteFunctionData &bind_data,
+                                     int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          path(std::move(bind_data.path)),
           compression(std::move(bind_data.compression)),
           row_group_size(bind_data.row_group_size),
           bucket_region(std::move(bind_data.bucket_region)),

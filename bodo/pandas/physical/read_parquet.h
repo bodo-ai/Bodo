@@ -42,8 +42,9 @@ class PhysicalReadParquet : public PhysicalSource {
         std::vector<int> &selected_columns,
         duckdb::TableFilterSet &filter_exprs,
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-        JoinFilterColStats join_filter_col_stats)
-        : join_filter_col_stats(std::move(join_filter_col_stats)),
+        JoinFilterColStats join_filter_col_stats, int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          join_filter_col_stats(std::move(join_filter_col_stats)),
           py_path(py_path),
           pyarrow_schema(pyarrow_schema),
           storage_options(storage_options),

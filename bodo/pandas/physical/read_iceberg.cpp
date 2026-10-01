@@ -10,8 +10,9 @@ PhysicalReadIceberg::PhysicalReadIceberg(
     const int64_t snapshot_id, const std::vector<int> &selected_columns,
     duckdb::TableFilterSet &filter_exprs,
     duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
-    JoinFilterColStats join_filter_col_stats)
-    : catalog(catalog),
+    JoinFilterColStats join_filter_col_stats, int64_t op_id)
+    : PhysicalOperator(op_id),
+      catalog(catalog),
       table_id(table_id),
       iceberg_filter(iceberg_filter),
       iceberg_schema(iceberg_schema),
@@ -41,6 +42,10 @@ PhysicalReadIceberg::PhysicalReadIceberg(
         // Limit the rows to read to the limit value.
         this->total_rows_to_read = limit_val->GetConstantValue();
     }
+}
+
+std::string PhysicalReadIceberg::ToString() {
+    return std::string(typeid(*this).name()) + "(" + table_id + ")";
 }
 
 std::pair<std::shared_ptr<table_info>, OperatorResult>

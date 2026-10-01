@@ -188,8 +188,9 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
     explicit PhysicalGPUReduce(std::shared_ptr<bodo::Schema> out_schema,
                                std::vector<std::string> function_names,
                                std::vector<int> input_column_indices,
-                               bool use_sql_rules = false)
-        : out_schema(std::move(out_schema)),
+                               bool use_sql_rules = false, int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          out_schema(std::move(out_schema)),
           function_names(std::move(function_names)),
           input_column_indices(std::move(input_column_indices)),
           use_sql_rules(use_sql_rules) {
@@ -222,8 +223,7 @@ class PhysicalGPUReduce : public PhysicalGPUSource, public PhysicalGPUSink {
             QueryProfileCollector::MakeOperatorStageID(
                 PhysicalGPUSink::getOpId(), 1),
             this->metrics.output_row_count);
-        PhysicalGPUSource::addPipelineInfo(1, build_pipeline_num,
-                                           build_pipeline_position);
+        addPipelineInfo(1, build_pipeline_num, build_pipeline_position);
     }
 
     /**

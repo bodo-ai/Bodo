@@ -66,7 +66,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
                                duckdb::LogicalAggregate& op,
-                               bool use_sql_rules = false) {
+                               bool use_sql_rules = false, int64_t op_id = -1)
+        : PhysicalOperator(op_id) {
         time_pt start_init = start_timer();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
@@ -208,7 +209,8 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
 
     explicit PhysicalAggregate(std::shared_ptr<bodo::Schema> in_table_schema,
                                duckdb::LogicalDistinct& op,
-                               bool use_sql_rules = false) {
+                               bool use_sql_rules = false, int64_t op_id = -1)
+        : PhysicalOperator(op_id) {
         time_pt start_init = start_timer();
         std::map<std::pair<duckdb::idx_t, duckdb::idx_t>, size_t> col_ref_map =
             getColRefMap(op.children[0]->GetColumnBindings());
@@ -255,12 +257,11 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             metrics.consume_time);
-        PhysicalSource::addPipelineInfo(1, build_pipeline_num,
-                                        build_pipeline_position);
+        addPipelineInfo(1, build_pipeline_num, build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             metrics.produce_time);
-        PhysicalSource::addPipelineInfo(2, pipeline_num, pipeline_position);
+        addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**
@@ -317,10 +318,6 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
-
-    std::string ToString() override { return PhysicalSink::ToString(); }
-
-    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
 
    private:
     /**
@@ -414,7 +411,8 @@ const std::map<std::string, int32_t> PhysicalAggregate::function_to_ftype = {
  */
 class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
    public:
-    explicit PhysicalCountStar() : local_count(0), global_count(0) {
+    explicit PhysicalCountStar(int64_t op_id = -1)
+        : PhysicalOperator(op_id), local_count(0), global_count(0) {
         std::vector<std::unique_ptr<bodo::DataType>> types;
         types.emplace_back(std::make_unique<bodo::DataType>(
             bodo_array_type::arr_type_enum::NULLABLE_INT_BOOL,
@@ -441,7 +439,7 @@ class PhysicalCountStar : public PhysicalSource, public PhysicalSink {
     void FinalizeSource(int64_t pipeline_num,
                         int64_t pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
+            getOpId(), PhysicalSink::ToString());
     }
 
     OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,

@@ -28,8 +28,10 @@ struct PhysicalGPUUnionAllMetrics {
 class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
                             public PhysicalGPUSink {
    public:
-    explicit PhysicalGPUUnionAll(std::shared_ptr<bodo::Schema> input_schema)
-        : output_schema(input_schema),
+    explicit PhysicalGPUUnionAll(std::shared_ptr<bodo::Schema> input_schema,
+                                 int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          output_schema(input_schema),
           arrow_output_schema(input_schema->ToArrowSchema()) {}
 
     virtual ~PhysicalGPUUnionAll() = default;
@@ -50,14 +52,12 @@ class PhysicalGPUUnionAll : public PhysicalGPUProcessBatch,
             QueryProfileCollector::MakeOperatorStageID(
                 PhysicalGPUSink::getOpId(), 1),
             std::move(metrics_out));
-        PhysicalGPUProcessBatch::addPipelineInfo(1, build_pipeline_num,
-                                                 build_pipeline_position);
+        addPipelineInfo(1, build_pipeline_num, build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(
                 PhysicalGPUSink::getOpId(), 2),
             this->metrics.output_row_count);
-        PhysicalGPUProcessBatch::addPipelineInfo(2, pipeline_num,
-                                                 pipeline_position);
+        addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**

@@ -157,7 +157,7 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
      */
     explicit PhysicalGPUWriteIceberg(
         std::shared_ptr<bodo::Schema> in_bodo_schema,
-        IcebergWriteFunctionData& bind_data);
+        IcebergWriteFunctionData& bind_data, int64_t op_id = -1);
 
     virtual ~PhysicalGPUWriteIceberg() = default;
 

@@ -41,7 +41,7 @@ class BodoScanFunctionData : public duckdb::TableFunctionData {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
-        bool run_on_gpu) = 0;
+        bool run_on_gpu, int64_t op_id = -1) = 0;
 
     // This allows pushing runtime join filter state from the optimizer to the
     // physical read operators which can generate filters from join key
@@ -108,7 +108,7 @@ class BodoParquetScanFunctionData : public BodoScanFunctionData {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
-        bool run_on_gpu) override;
+        bool run_on_gpu, int64_t op_id = -1) override;
 
     bool canRunOnGPU(bool has_filters, bool has_limit) override {
         return !has_limit && !has_partitioning;
@@ -164,7 +164,7 @@ class BodoDataFrameSeqScanFunctionData : public BodoScanFunctionData {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
-        bool run_on_gpu) override;
+        bool run_on_gpu, int64_t op_id = -1) override;
 
     PyObject *df;
     const std::shared_ptr<arrow::Schema> arrow_schema;
@@ -194,7 +194,7 @@ class BodoDataFrameParallelScanFunctionData : public BodoScanFunctionData {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
-        bool run_on_gpu) override;
+        bool run_on_gpu, int64_t op_id = -1) override;
     std::string result_id;
     const std::shared_ptr<arrow::Schema> arrow_schema;
 };
@@ -257,7 +257,7 @@ class BodoIcebergScanFunctionData : public BodoScanFunctionData {
         duckdb::unique_ptr<duckdb::BoundLimitNode> &limit_val,
         std::shared_ptr<std::unordered_map<int, join_state_t>>
             join_filter_states,
-        bool run_on_gpu) override;
+        bool run_on_gpu, int64_t op_id = -1) override;
 
     bool canRunOnGPU(bool has_filters, bool has_limit) override {
         return !has_limit;

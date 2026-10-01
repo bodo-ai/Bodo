@@ -66,7 +66,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
     bool run_on_gpu = node_run_on_gpu(op);
     auto physical_op = scan_data.CreatePhysicalOperator(
         selected_columns, op.table_filters, op.extra_info.limit_val,
-        this->join_filter_states, run_on_gpu);
+        this->join_filter_states, run_on_gpu, op.calcite_op_id);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalGet operator should be the first operator in the pipeline");
@@ -86,7 +86,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalGet& op) {
 }
 
 void PhysicalPlanBuilder::Visit(duckdb::LogicalEmptyResult& op) {
-    auto physical_op = std::make_shared<PhysicalReadEmpty>(op.return_types);
+    auto physical_op =
+        std::make_shared<PhysicalReadEmpty>(op.return_types, op.calcite_op_id);
     if (this->active_pipeline != nullptr) {
         throw std::runtime_error(
             "LogicalEmptyResult operator should be the first operator in the "
@@ -112,15 +113,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalProjection& op) {
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
         physical_op = std::make_shared<PhysicalGPUProjection>(
-            source_cols, op.expressions, in_table_schema);
+            source_cols, op.expressions, in_table_schema, op.calcite_op_id);
     } else {
         physical_op = std::make_shared<PhysicalProjection>(
-            source_cols, op.expressions, in_table_schema);
+            source_cols, op.expressions, in_table_schema, op.calcite_op_id);
     }
 #else   // USE_CUDF
     std::variant<std::shared_ptr<PhysicalProjection>> physical_op;
     physical_op = std::make_shared<PhysicalProjection>(
-        source_cols, op.expressions, in_table_schema);
+        source_cols, op.expressions, in_table_schema, op.calcite_op_id);
 #endif  // USE_CUDF
 
     std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
@@ -150,15 +151,15 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalFilter& op) {
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
         physical_op = std::make_shared<PhysicalGPUFilter>(
-            op, op.expressions, in_table_schema, col_ref_map);
+            op, op.expressions, in_table_schema, col_ref_map, op.calcite_op_id);
     } else {
         physical_op = std::make_shared<PhysicalFilter>(
-            op, op.expressions, in_table_schema, col_ref_map);
+            op, op.expressions, in_table_schema, col_ref_map, op.calcite_op_id);
     }
 #else   // USE_CUDF
     std::variant<std::shared_ptr<PhysicalFilter>> physical_op;
     physical_op = std::make_shared<PhysicalFilter>(
-        op, op.expressions, in_table_schema, col_ref_map);
+        op, op.expressions, in_table_schema, col_ref_map, op.calcite_op_id);
 #endif  // USE_CUDF
 
     std::visit([&](auto& vop) { this->active_pipeline->AddOperator(vop); },
@@ -240,14 +241,17 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
                          std::shared_ptr<PhysicalGPUCountStar>>
                 physical_op;
             if (node_run_on_gpu(op)) {
-                physical_op = std::make_shared<PhysicalGPUCountStar>();
+                physical_op =
+                    std::make_shared<PhysicalGPUCountStar>(op.calcite_op_id);
             } else {
-                physical_op = std::make_shared<PhysicalCountStar>();
+                physical_op =
+                    std::make_shared<PhysicalCountStar>(op.calcite_op_id);
             }
             std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); },
                        physical_op);
 #else   // USE_CUDF
-            auto physical_op = std::make_shared<PhysicalCountStar>();
+            auto physical_op =
+                std::make_shared<PhysicalCountStar>(op.calcite_op_id);
             // Finish the pipeline at this point so that Finalize can run
             // to reduce the number of collected rows to the desired amount.
             // The same operator will exist in both pipelines.  The sink of the
@@ -276,7 +280,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
     if (in_table_schema->column_types[0]->c_type == dtype) {                \
         auto physical_op =                                                  \
             std::make_shared<PhysicalQuantile<dtype_to_type<dtype>::type>>( \
-                bodo_schema, quantiles);                                    \
+                bodo_schema, quantiles,                                     \
+                datasketches::kll_constants::DEFAULT_K, op.calcite_op_id);  \
         FinishPipelineOneOperator(physical_op);                             \
         return;                                                             \
     }
@@ -305,18 +310,19 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
         if (run_on_gpu) {
             physical_op = std::make_shared<PhysicalGPUReduce>(
                 bodo_schema, function_names, input_column_indices,
-                use_sql_rules);
+                use_sql_rules, op.calcite_op_id);
         } else {
             physical_op = std::make_shared<PhysicalReduce>(
                 bodo_schema, function_names, input_column_indices,
-                use_sql_rules);
+                use_sql_rules, op.calcite_op_id);
         }
         std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); },
                    physical_op);
 #else   // USE_CUDF
         // Otherwise, create a PhysicalReduce operator
         auto physical_op = std::make_shared<PhysicalReduce>(
-            bodo_schema, function_names, input_column_indices, use_sql_rules);
+            bodo_schema, function_names, input_column_indices, use_sql_rules,
+            op.calcite_op_id);
         FinishPipelineOneOperator(physical_op);
 #endif  // USE_CUDF
         return;
@@ -330,16 +336,16 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalAggregate& op) {
 
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
-        physical_op =
-            std::make_shared<PhysicalGPUAggregate>(in_table_schema, op);
+        physical_op = std::make_shared<PhysicalGPUAggregate>(
+            in_table_schema, op, op.calcite_op_id);
     } else {
-        physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op,
-                                                          use_sql_rules);
+        physical_op = std::make_shared<PhysicalAggregate>(
+            in_table_schema, op, use_sql_rules, op.calcite_op_id);
     }
 #else   // USE_CUDF
     std::variant<std::shared_ptr<PhysicalAggregate>> physical_op;
-    physical_op =
-        std::make_shared<PhysicalAggregate>(in_table_schema, op, use_sql_rules);
+    physical_op = std::make_shared<PhysicalAggregate>(
+        in_table_schema, op, use_sql_rules, op.calcite_op_id);
 #endif  // USE_CUDF
 
     // Finish the current pipeline with groupby build sink.
@@ -358,12 +364,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalOrder& op) {
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
         auto physical_sort = std::make_shared<PhysicalGPUSortOperator>(
-            op, in_table_schema, source_cols);
+            op, in_table_schema, source_cols, -1, -1, op.calcite_op_id);
         FinishPipelineOneOperator(physical_sort);
     } else {
 #endif
-        auto physical_sort =
-            std::make_shared<PhysicalSort>(op, in_table_schema, source_cols);
+        auto physical_sort = std::make_shared<PhysicalSort>(
+            op, in_table_schema, source_cols, -1, -1, op.calcite_op_id);
         FinishPipelineOneOperator(physical_sort);
 #ifdef USE_CUDF
     }
@@ -720,7 +726,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
                  std::shared_ptr<PhysicalGPUJoin>>
         physical_join;
     if (node_run_on_gpu(op)) {
-        physical_join = std::make_shared<PhysicalGPUJoin>(op);
+        physical_join = std::make_shared<PhysicalGPUJoin>(op, op.calcite_op_id);
         (*this->join_on_gpu).insert({op.join_id, true});
     } else {
         // Move non-equi join conditions into a filter node.
@@ -733,7 +739,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
             return;
         }
 
-        physical_join = std::make_shared<PhysicalJoin>(op);
+        physical_join = std::make_shared<PhysicalJoin>(op, op.calcite_op_id);
         (*this->join_on_gpu).insert({op.join_id, false});
     }
 #else   // USE_CUDF
@@ -748,7 +754,7 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalComparisonJoin& op) {
     }
 
     std::shared_ptr<PhysicalJoin> physical_join =
-        std::make_shared<PhysicalJoin>(op);
+        std::make_shared<PhysicalJoin>(op, op.calcite_op_id);
 #endif  // USE_CUDF
 
     // Create pipelines for the build side of the join (right child)
@@ -829,16 +835,16 @@ void PhysicalPlanBuilder::Visit(bodo::LogicalJoinFilter& op) {
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
         physical_op = std::make_shared<PhysicalGPUJoinFilter>(
-            op, in_table_schema, this->join_filter_states);
+            op, in_table_schema, this->join_filter_states, op.calcite_op_id);
     } else {
         physical_op = std::make_shared<PhysicalJoinFilter>(
-            op, in_table_schema, this->join_filter_states);
+            op, in_table_schema, this->join_filter_states, op.calcite_op_id);
     }
     bool found_join_on_same_device = false;
 #else   // USE_CUDF
     std::shared_ptr<PhysicalJoinFilter> physical_op =
-        std::make_shared<PhysicalJoinFilter>(op, in_table_schema,
-                                             this->join_filter_states);
+        std::make_shared<PhysicalJoinFilter>(
+            op, in_table_schema, this->join_filter_states, op.calcite_op_id);
     bool found_join_on_same_device = true;
 #endif  // USE_CUDF
 
@@ -926,9 +932,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
             physical_cte;
 
         if (node_run_on_gpu(cte_index_info.cte_logical_node)) {
-            physical_cte = std::make_shared<PhysicalGPUCTE>(in_table_schema);
+            physical_cte = std::make_shared<PhysicalGPUCTE>(
+                in_table_schema, cte_index_info.cte_logical_node.calcite_op_id);
         } else {
-            physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
+            physical_cte = std::make_shared<PhysicalCTE>(
+                in_table_schema, cte_index_info.cte_logical_node.calcite_op_id);
         }
 
         std::visit(
@@ -940,7 +948,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
             physical_cte);
 #else   // USE_CUDF
         std::shared_ptr<PhysicalCTE> physical_cte =
-            std::make_shared<PhysicalCTE>(in_table_schema);
+            std::make_shared<PhysicalCTE>(
+                in_table_schema, cte_index_info.cte_logical_node.calcite_op_id);
         done_pipeline = this->active_pipeline->Build(physical_cte);
         cte_index_info.physical_node = physical_cte;
         cte_index_info.cte_pipeline_root = done_pipeline;
@@ -961,12 +970,14 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
                         "Got mismatch with CPU CTE and GPU CTERef in "
                         "PhysicalPlanBuidler::Visit(LogicalCTEref).");
                 } else {
-                    physical_cte_ref = std::make_shared<PhysicalCTERef>(pn);
+                    physical_cte_ref =
+                        std::make_shared<PhysicalCTERef>(pn, op.calcite_op_id);
                 }
             } else if constexpr (std::is_same_v<
                                      U, std::shared_ptr<PhysicalGPUCTE>>) {
                 if (node_run_on_gpu(op)) {
-                    physical_cte_ref = std::make_shared<PhysicalGPUCTERef>(pn);
+                    physical_cte_ref = std::make_shared<PhysicalGPUCTERef>(
+                        pn, op.calcite_op_id);
                 } else {
                     throw std::runtime_error(
                         "Got mismatch with GPU CTE and CPU CTERef in "
@@ -986,7 +997,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
         physical_cte_ref);
 #else   // USE_CUDF
     std::shared_ptr<PhysicalCTERef> physical_cte_ref =
-        std::make_shared<PhysicalCTERef>(cte_index_info.physical_node);
+        std::make_shared<PhysicalCTERef>(cte_index_info.physical_node,
+                                         op.calcite_op_id);
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_cte_ref);
 #endif  // USE_CUDF
     this->active_pipeline->addRunBefore(cte_index_info.cte_pipeline_root);
@@ -1102,14 +1114,14 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCrossProduct& op) {
         physical_join;
     if (node_run_on_gpu(op)) {
         physical_join = std::make_shared<PhysicalGPUJoin>(
-            op, build_table_schema, probe_table_schema);
+            op, build_table_schema, probe_table_schema, op.calcite_op_id);
     } else {
-        physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
-                                                       probe_table_schema);
+        physical_join = std::make_shared<PhysicalJoin>(
+            op, build_table_schema, probe_table_schema, op.calcite_op_id);
     }
 #else   // USE_CUDF
-    auto physical_join = std::make_shared<PhysicalJoin>(op, build_table_schema,
-                                                        probe_table_schema);
+    auto physical_join = std::make_shared<PhysicalJoin>(
+        op, build_table_schema, probe_table_schema, op.calcite_op_id);
 #endif  // USE_CUDF
 
     std::shared_ptr<Pipeline> done_pipeline;
@@ -1176,11 +1188,11 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                          std::shared_ptr<PhysicalGPUUnionAll>>
                 physical_union_all;
             if (node_run_on_gpu(op)) {
-                physical_union_all =
-                    std::make_shared<PhysicalGPUUnionAll>(rhs_table_schema);
+                physical_union_all = std::make_shared<PhysicalGPUUnionAll>(
+                    rhs_table_schema, op.calcite_op_id);
             } else {
-                physical_union_all =
-                    std::make_shared<PhysicalUnionAll>(rhs_table_schema);
+                physical_union_all = std::make_shared<PhysicalUnionAll>(
+                    rhs_table_schema, op.calcite_op_id);
             }
 
             std::visit(
@@ -1190,8 +1202,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSetOperation& op) {
                 physical_union_all);
 
 #else   // USE_CUDF
-            auto physical_union_all =
-                std::make_shared<PhysicalUnionAll>(rhs_table_schema);
+            auto physical_union_all = std::make_shared<PhysicalUnionAll>(
+                rhs_table_schema, op.calcite_op_id);
             done_pipeline =
                 rhs_builder.active_pipeline->Build(physical_union_all);
 #endif  // USE_CUDF
@@ -1246,13 +1258,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalSample& op) {
     std::shared_ptr<PhysicalSample> physical_op;
 
     std::visit(
-        [&physical_op, &in_table_schema](const auto& value) {
+        [&physical_op, &in_table_schema, &op](const auto& value) {
             using T = std::decay_t<decltype(value)>;
 
             // Allow only types that can safely convert to int
             if constexpr (std::is_convertible_v<T, uint64_t>) {
-                physical_op =
-                    std::make_shared<PhysicalSample>(value, in_table_schema);
+                physical_op = std::make_shared<PhysicalSample>(
+                    value, in_table_schema, op.calcite_op_id);
             }
         },
         extractValue(sampleOptions->sample_size));
@@ -1285,14 +1297,17 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalLimit& op) {
 
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
-        physical_op = std::make_shared<PhysicalGPULimit>(n, in_table_schema);
+        physical_op = std::make_shared<PhysicalGPULimit>(n, in_table_schema,
+                                                         op.calcite_op_id);
     } else {
-        physical_op = std::make_shared<PhysicalLimit>(n, in_table_schema);
+        physical_op = std::make_shared<PhysicalLimit>(n, in_table_schema,
+                                                      op.calcite_op_id);
     }
     std::visit([&](auto& vop) { FinishPipelineOneOperator(vop); }, physical_op);
 #else   // USE_CUDF
     // Otherwise, create a PhysicalLimit operator
-    auto physical_op = std::make_shared<PhysicalLimit>(n, in_table_schema);
+    auto physical_op =
+        std::make_shared<PhysicalLimit>(n, in_table_schema, op.calcite_op_id);
     // Finish the pipeline at this point so that Finalize can run
     // to reduce the number of collected rows to the desired amount.
     // The same operator will exist in both pipelines.  The sink of the
@@ -1315,12 +1330,14 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalTopN& op) {
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
         auto physical_sort = std::make_shared<PhysicalGPUSortOperator>(
-            op, in_table_schema, source_cols, op.limit, op.offset);
+            op, in_table_schema, source_cols, op.limit, op.offset,
+            op.calcite_op_id);
         FinishPipelineOneOperator(physical_sort);
     } else {
 #endif
         auto physical_sort = std::make_shared<PhysicalSort>(
-            op, in_table_schema, source_cols, op.limit, op.offset);
+            op, in_table_schema, source_cols, op.limit, op.offset,
+            op.calcite_op_id);
         FinishPipelineOneOperator(physical_sort);
 #ifdef USE_CUDF
     }
@@ -1335,8 +1352,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCopyToFile& op) {
     BodoWriteFunctionData& write_data =
         op.bind_data->Cast<BodoWriteFunctionData>();
     bool run_on_gpu = node_run_on_gpu(op);
-    auto physical_op =
-        write_data.CreatePhysicalOperator(in_table_schema, run_on_gpu);
+    auto physical_op = write_data.CreatePhysicalOperator(
+        in_table_schema, run_on_gpu, op.calcite_op_id);
 
     this->terminal_pipeline = this->active_pipeline->Build(physical_op);
     this->active_pipeline = nullptr;
@@ -1360,16 +1377,16 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalDistinct& op) {
 
     bool run_on_gpu = node_run_on_gpu(op);
     if (run_on_gpu) {
-        physical_op =
-            std::make_shared<PhysicalGPUAggregate>(in_table_schema, op);
+        physical_op = std::make_shared<PhysicalGPUAggregate>(
+            in_table_schema, op, op.calcite_op_id);
     } else {
-        physical_op = std::make_shared<PhysicalAggregate>(in_table_schema, op,
-                                                          use_sql_rules);
+        physical_op = std::make_shared<PhysicalAggregate>(
+            in_table_schema, op, use_sql_rules, op.calcite_op_id);
     }
 #else   // USE_CUDF
     std::variant<std::shared_ptr<PhysicalAggregate>> physical_op;
-    physical_op =
-        std::make_shared<PhysicalAggregate>(in_table_schema, op, use_sql_rules);
+    physical_op = std::make_shared<PhysicalAggregate>(
+        in_table_schema, op, use_sql_rules, op.calcite_op_id);
 #endif  // USE_CUDF
 
     // Finish the current pipeline with groupby build sink.
