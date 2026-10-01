@@ -42,7 +42,14 @@ class LogicalInlinedCTE : public duckdb::LogicalOperator {
         this->children.push_back(std::move(subplan));
     }
 
+    duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {
+        return children[0]->GetColumnBindings();
+    }
+
     duckdb::idx_t cte_index;
+
+   protected:
+    void ResolveTypes() override { types = children[0]->types; }
 };
 
 /**
@@ -171,6 +178,18 @@ duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> make_cte(
  */
 duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
     PyObject *out_schema_py, duckdb::idx_t table_index);
+
+/**
+ * @brief Creates a LogicalInlinedCTE node.
+ *
+ * @param duplicated - the duplicated part of the plan
+ * @param out_schema_py - the schema of data coming out
+ * @param cte_index - a pre-allocated CTE index to match with CTE references
+ * @return duckdb::unique_ptr<bodo::LogicalInlinedCTE> output node
+ */
+duckdb::unique_ptr<bodo::LogicalInlinedCTE> make_inlined_cte(
+    std::unique_ptr<duckdb::LogicalOperator> &duplicated,
+    PyObject *out_schema_py, duckdb::idx_t cte_index);
 
 /**
  * @brief Creates a LogicalComparisonJoin node.

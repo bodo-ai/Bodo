@@ -1416,6 +1416,15 @@ duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
         new_table_index, table_index, return_types, return_names);
 }
 
+duckdb::unique_ptr<bodo::LogicalInlinedCTE> make_inlined_cte(
+    std::unique_ptr<duckdb::LogicalOperator> &duplicated,
+    PyObject *out_schema_py, duckdb::idx_t cte_index) {
+    auto duplicated_duck = to_duckdb(duplicated);
+
+    return duckdb::make_uniq<bodo::LogicalInlinedCTE>(
+        std::move(duplicated_duck), cte_index);
+}
+
 duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
