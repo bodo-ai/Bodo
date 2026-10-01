@@ -762,6 +762,7 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
             break;
 
         case duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
+        case duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE:
             // This node itself doesn't do any real work.
             t = 0;
             break;
