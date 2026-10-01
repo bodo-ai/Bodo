@@ -407,6 +407,12 @@ class LogicalCTERef(LogicalOperator):
     pass
 
 
+class LogicalInlinedCTE(LogicalOperator):
+    """Logical operator for inlined CTEs."""
+
+    pass
+
+
 class LogicalComparisonJoin(LogicalOperator):
     """Logical operator for comparison-based joins."""
 
