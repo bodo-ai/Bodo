@@ -267,7 +267,7 @@ struct multi_col_key {
                             return false;
                         }
                     } else {
-                        size_type = numpy_item_size[c1->dtype];
+                        size_type = bodo_array_item_size(*c1);
                         if (memcmp(c1->data1<
                                        bodo_array_type::NULLABLE_INT_BOOL>() +
                                        size_type * row,
@@ -550,12 +550,23 @@ class ElementComparator {
                  DType != Bodo_CTypes::CTypeEnum::_BOOL && is_na_equal)
     constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
+        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
+        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
+        if constexpr (DType == Bodo_CTypes::DECIMAL) {
+            // Width-aware: 8-byte int64-backed or 16-byte decimal.
+            size_t w = (size_t)bodo_array_item_size(*this->arr1);
+            __int128_t val1 =
+                decimal_get_value((const uint8_t*)this->data_ptr_1 + w * iRowA,
+                                  this->arr1->precision);
+            __int128_t val2 =
+                decimal_get_value((const uint8_t*)this->data_ptr_2 + w * iRowB,
+                                  this->arr1->precision);
+            return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
+        }
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
         T val1 = data1[iRowA];
         T val2 = data2[iRowB];
-        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
-        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
         return (isna1 && isna2) || (!isna1 && !isna2 && val1 == val2);
     }
 
@@ -566,12 +577,23 @@ class ElementComparator {
                  DType != Bodo_CTypes::_BOOL && !is_na_equal)
     constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
         using T = typename dtype_to_type<DType>::type;
+        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
+        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
+        if constexpr (DType == Bodo_CTypes::DECIMAL) {
+            // Width-aware: 8-byte int64-backed or 16-byte decimal.
+            size_t w = (size_t)bodo_array_item_size(*this->arr1);
+            __int128_t val1 =
+                decimal_get_value((const uint8_t*)this->data_ptr_1 + w * iRowA,
+                                  this->arr1->precision);
+            __int128_t val2 =
+                decimal_get_value((const uint8_t*)this->data_ptr_2 + w * iRowB,
+                                  this->arr1->precision);
+            return !isna1 && !isna2 && (val1 == val2);
+        }
         T* data1 = (T*)this->data_ptr_1;
         T* data2 = (T*)this->data_ptr_2;
         T val1 = data1[iRowA];
         T val2 = data2[iRowB];
-        bool isna1 = !GetBit(this->null_bitmask_1, iRowA);
-        bool isna2 = !GetBit(this->null_bitmask_2, iRowB);
         return !isna1 && !isna2 && (val1 == val2);
     }
 

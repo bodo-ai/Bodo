@@ -686,6 +686,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_dict_builder.cpp"
     "bodo/tests/test_groupby_common.cpp"
     "bodo/tests/test_groupby.cpp"
+    "bodo/tests/test_decimal_int64.cpp"
     "bodo/tests/test_window.cpp"
     "bodo/tests/test_json_col_reader.cpp"
     "bodo/tests/test_memory_budget.cpp"

@@ -303,7 +303,11 @@ class AsyncShuffleSendState {
         std::shared_ptr<array_info> send_arr =
             this->addArray(in_arr, comm_info, str_comm_info);
 
-        const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+        const size_t item_size = (size_t)bodo_array_item_size(*send_arr);
+        const MPI_Datatype mpi_type =
+            (dtype == Bodo_CTypes::DECIMAL && item_size == 8)
+                ? get_MPI_typ<Bodo_CTypes::INT64>()
+                : get_MPI_typ<dtype>();
         for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
             // Skip ranks that don't have any data and don't need to be shuffled
             // to They need to be shuffled to if they are the child of an array
@@ -311,9 +315,8 @@ class AsyncShuffleSendState {
             if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
                 continue;
             }
-            const void* buff =
-                send_arr->template data1<arr_type>() +
-                (numpy_item_size[dtype] * comm_info.send_disp[p]);
+            const void* buff = send_arr->template data1<arr_type>() +
+                               (item_size * comm_info.send_disp[p]);
             MPI_Request send_req;
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
@@ -340,7 +343,11 @@ class AsyncShuffleSendState {
         std::shared_ptr<array_info> send_arr =
             this->addArray(in_arr, comm_info, str_comm_info);
 
-        const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+        const size_t item_size = (size_t)bodo_array_item_size(*send_arr);
+        const MPI_Datatype mpi_type =
+            (dtype == Bodo_CTypes::DECIMAL && item_size == 8)
+                ? get_MPI_typ<Bodo_CTypes::INT64>()
+                : get_MPI_typ<dtype>();
         for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
             // Skip ranks that don't have any data and don't need to be shuffled
             // to They need to be shuffled to if they are the child of an array
@@ -350,9 +357,8 @@ class AsyncShuffleSendState {
             }
 
             MPI_Request send_req;
-            const void* buff =
-                send_arr->template data1<arr_type>() +
-                (numpy_item_size[dtype] * comm_info.send_disp[p]);
+            const void* buff = send_arr->template data1<arr_type>() +
+                               (item_size * comm_info.send_disp[p]);
             CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
@@ -1111,12 +1117,19 @@ std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
     AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
-    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+    const size_t item_size =
+        (size_t)bodo_dtype_item_size(dtype, data_type->precision);
+    const MPI_Datatype mpi_type =
+        (dtype == Bodo_CTypes::DECIMAL && item_size == 8)
+            ? get_MPI_typ<Bodo_CTypes::INT64>()
+            : get_MPI_typ<dtype>();
 
     uint64_t arr_len = *lens_iter++;
 
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
-        arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
+        arr_len, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false,
+        bodo::BufferPool::DefaultPtr(), bodo::default_buffer_memory_manager(),
+        data_type->timezone, data_type->precision, data_type->scale);
     MPI_Request recv_req;
     CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_type, source,
                         curr_tag++, shuffle_comm, &recv_req),
@@ -1136,11 +1149,18 @@ std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
     AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
-    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+    const size_t item_size =
+        (size_t)bodo_dtype_item_size(dtype, data_type->precision);
+    const MPI_Datatype mpi_type =
+        (dtype == Bodo_CTypes::DECIMAL && item_size == 8)
+            ? get_MPI_typ<Bodo_CTypes::INT64>()
+            : get_MPI_typ<dtype>();
     uint64_t arr_len = *lens_iter++;
 
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
-        arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
+        arr_len, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false,
+        bodo::BufferPool::DefaultPtr(), bodo::default_buffer_memory_manager(),
+        data_type->timezone, data_type->precision, data_type->scale);
 
     MPI_Request recv_req;
     CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_type, source,

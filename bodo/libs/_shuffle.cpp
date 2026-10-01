@@ -391,6 +391,27 @@ static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
 }
 
 /**
+ * @brief Width-aware variant of fill_send_array_inner_decimal for decimal
+ * arrays using 8-byte int64 storage (BODO_DECIMAL_INT64_STORAGE): both the
+ * send and input buffers are 8 bytes per element.
+ */
+static void fill_send_array_inner_decimal64(
+    uint8_t* send_buff, uint8_t* data, std::vector<int64_t> const& send_disp,
+    const size_t n_rows, const std::span<const int> row_dest,
+    bool is_parallel) {
+    tracing::Event ev("fill_send_array_inner_decimal64", is_parallel);
+    std::vector<int64_t> tmp_offset(send_disp);
+    for (size_t i = 0; i < n_rows; i++) {
+        if (row_dest[i] == -1) {
+            continue;
+        }
+        int64_t& ind = tmp_offset[row_dest[i]];
+        memcpy(send_buff + ind * 8, data + i * 8, 8);
+        ind++;
+    }
+}
+
+/**
  * @brief Fill output send_length_buff array for array item array, with the
  * lengths calculated from arr_offsets
  *
@@ -560,6 +581,13 @@ void fill_send_array(std::shared_ptr<array_info> send_arr,
                 comm_info.send_disp, n_rows, comm_info.row_dest,
                 comm_info.filtered, is_parallel);
         case Bodo_CTypes::DECIMAL:
+            if (bodo_array_item_size(*in_arr) == 8) {
+                assert(bodo_array_item_size(*send_arr) == 8);
+                return fill_send_array_inner_decimal64(
+                    (uint8_t*)send_arr->data1(), (uint8_t*)in_arr->data1(),
+                    comm_info.send_disp, n_rows, comm_info.row_dest,
+                    is_parallel);
+            }
             return fill_send_array_inner_decimal(
                 (uint8_t*)send_arr->data1(), (uint8_t*)in_arr->data1(),
                 comm_info.send_disp, n_rows, comm_info.row_dest, is_parallel);
@@ -671,12 +699,19 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
     // in the same byte).
     std::shared_ptr<array_info> send_arr = alloc_array_top_level(
         comm_info.n_rows_send, str_comm_info.n_sub_send, 0, in_arr->arr_type,
-        in_arr->dtype, -1, 2 * comm_info.n_pes, in_arr->num_categories);
+        in_arr->dtype, -1, 2 * comm_info.n_pes, in_arr->num_categories, false,
+        false, false, bodo::BufferPool::DefaultPtr(),
+        bodo::default_buffer_memory_manager(), "", in_arr->precision,
+        in_arr->scale);
+    send_arr->precision = in_arr->precision;
+    send_arr->scale = in_arr->scale;
     fill_send_array(send_arr, in_arr, comm_info, str_comm_info, is_parallel);
 
     std::shared_ptr<array_info> out_arr = alloc_array_top_level(
         comm_info.n_rows_recv, str_comm_info.n_sub_recv, 0, in_arr->arr_type,
-        in_arr->dtype, -1, 0, in_arr->num_categories);
+        in_arr->dtype, -1, 0, in_arr->num_categories, false, false, false,
+        bodo::BufferPool::DefaultPtr(), bodo::default_buffer_memory_manager(),
+        "", in_arr->precision, in_arr->scale);
     out_arr->precision = in_arr->precision;
     out_arr->scale = in_arr->scale;
 
@@ -720,7 +755,10 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
         }
         case bodo_array_type::NULLABLE_INT_BOOL: {
             // data
-            MPI_Datatype mpi_typ = get_MPI_typ(send_arr->dtype);
+            MPI_Datatype mpi_typ = (send_arr->dtype == Bodo_CTypes::DECIMAL &&
+                                    bodo_array_item_size(*send_arr) == 8)
+                                       ? get_MPI_typ(Bodo_CTypes::INT64)
+                                       : get_MPI_typ(send_arr->dtype);
             if (send_arr->dtype == Bodo_CTypes::_BOOL) {
                 // Nullable booleans use 1 bit per boolean so we have to use
                 // an intermediate array and copy the same as the null bitmap.
@@ -755,7 +793,10 @@ std::shared_ptr<array_info> shuffle_array(std::shared_ptr<array_info> in_arr,
         case bodo_array_type::NUMPY:
         case bodo_array_type::CATEGORICAL: {
             // data
-            MPI_Datatype mpi_typ = get_MPI_typ(send_arr->dtype);
+            MPI_Datatype mpi_typ = (send_arr->dtype == Bodo_CTypes::DECIMAL &&
+                                    bodo_array_item_size(*send_arr) == 8)
+                                       ? get_MPI_typ(Bodo_CTypes::INT64)
+                                       : get_MPI_typ(send_arr->dtype);
             bodo_alltoallv(send_arr->data1(), comm_info.send_count,
                            comm_info.send_disp, mpi_typ, out_arr->data1(),
                            comm_info.recv_count, comm_info.recv_disp, mpi_typ,
@@ -1305,8 +1346,11 @@ void reverse_shuffle_preallocated_data_array(
         reverse_shuffle_data(data2_i, data2_o, out_arr->length, sizeof(int16_t),
                              mpi_typ, comm_info);
     } else {
-        const uint64_t siztype = numpy_item_size[in_arr->dtype];
-        MPI_Datatype mpi_typ = get_MPI_typ(in_arr->dtype);
+        const uint64_t siztype = bodo_array_item_size(*in_arr);
+        MPI_Datatype mpi_typ =
+            (in_arr->dtype == Bodo_CTypes::DECIMAL && siztype == 8)
+                ? get_MPI_typ(Bodo_CTypes::INT64)
+                : get_MPI_typ(in_arr->dtype);
         char* data1_i = in_arr->data1();
         char* data1_o = out_arr->data1();
         reverse_shuffle_data(data1_i, data1_o, out_arr->length, siztype,
@@ -1319,9 +1363,11 @@ std::shared_ptr<array_info> reverse_shuffle_data_array(
     tracing::Event ev("reverse_shuffle_data_array");
     size_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
                                         comm_info.send_count.end(), size_t(0));
-    std::shared_ptr<array_info> out_arr =
-        alloc_array_top_level(n_rows_ret, 0, 0, in_arr->arr_type, in_arr->dtype,
-                              -1, 0, in_arr->num_categories);
+    std::shared_ptr<array_info> out_arr = alloc_array_top_level(
+        n_rows_ret, 0, 0, in_arr->arr_type, in_arr->dtype, -1, 0,
+        in_arr->num_categories, false, false, false,
+        bodo::BufferPool::DefaultPtr(), bodo::default_buffer_memory_manager(),
+        "", in_arr->precision, in_arr->scale);
     reverse_shuffle_preallocated_data_array(in_arr, out_arr, comm_info);
     return out_arr;
 }

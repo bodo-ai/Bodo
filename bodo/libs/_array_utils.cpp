@@ -308,7 +308,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     assert(arr_type == bodo_array_type::NUMPY);
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
-    uint64_t siztype = numpy_item_size[dtype];
+    uint64_t siztype = bodo_array_item_size(*in_arr);
     std::vector<char> vectNaN = RetrieveNaNentry(dtype);
     char* in_data1 = in_arr->data1<bodo_array_type::NUMPY>();
     // use nullable int/float/bool array if dtype is integer/float/bool and
@@ -428,7 +428,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
         nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false, false, false, pool,
         std::move(mm), in_arr->timezone, in_arr->precision, in_arr->scale);
 
-    uint64_t siztype = numpy_item_size[dtype];
+    uint64_t siztype = bodo_array_item_size(*in_arr);
 
     if (dtype == Bodo_CTypes::_BOOL) {
         // Nullable boolean arrays use 1 bit per boolean
@@ -902,7 +902,9 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // suffices for the copy.
         // In the case of missing array a value of false is assigned
         // to the bitmask.
-        out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype);
+        out_arr = alloc_array_top_level(
+            nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false, false, false,
+            pool, std::move(mm), "", arr1->precision, arr1->scale);
         if (dtype == Bodo_CTypes::_BOOL) {
             // Nullable boolean arrays store 1 bit per boolean so we
             // need to use a different loop.
@@ -927,7 +929,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
                     iRow, null_bit);
             }
         } else {
-            uint64_t siztype = numpy_item_size[dtype];
+            uint64_t siztype = bodo_array_item_size(*arr1);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                     get_iRow(iRow);
@@ -983,9 +985,11 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // ---signed integer: value -1
         // ---unsigned integer: value 0
         // ---floating point: std::nan as here both notions match.
-        uint64_t siztype = numpy_item_size[dtype];
+        uint64_t siztype = bodo_array_item_size(*arr1);
         std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype);
+        out_arr = alloc_array_top_level(
+            nRowOut, -1, -1, arr_type, dtype, -1, 0, 0, false, false, false,
+            pool, std::move(mm), "", arr1->precision, arr1->scale);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);
@@ -1308,10 +1312,11 @@ int KeyComparisonAsPython_Column_impl<bodo_array_type::NUMPY>(
     size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
     size_t const& iRow2) {
     // In the case of NUMPY, we compare the values for concluding.
-    uint64_t siztype = numpy_item_size[arr1->dtype];
+    uint64_t siztype = bodo_array_item_size(*arr1);
     char* ptr1 = arr1->data1<bodo_array_type::NUMPY>() + (siztype * iRow1);
     char* ptr2 = arr2->data1() + (siztype * iRow2);
-    return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+    return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis,
+                             arr1->precision);
 }
 
 template <>
@@ -1375,12 +1380,12 @@ int KeyComparisonAsPython_Column_impl<bodo_array_type::NULLABLE_INT_BOOL>(
                 return 1;
             }
         } else {
-            uint64_t siztype = numpy_item_size[arr1->dtype];
+            uint64_t siztype = bodo_array_item_size(*arr1);
             char* ptr1 = arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
                          (siztype * iRow1);
             char* ptr2 = arr2->data1() + (siztype * iRow2);
-            int test =
-                NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+            int test = NumericComparison(arr1->dtype, ptr1, ptr2,
+                                         na_position_bis, arr1->precision);
             return test;
         }
     }
@@ -1880,7 +1885,7 @@ uint8_t* bitwise_and_null_bitmasks(
  * @return The string on output.
  */
 std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
-                                char* ptrdata, int scale) {
+                                char* ptrdata, int scale, int precision = 0) {
     if (dtype == Bodo_CTypes::_BOOL) {
         bool* ptr = (bool*)ptrdata;
         return std::to_string(*ptr);
@@ -1928,8 +1933,8 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         return std::to_string(*ptr);
     }
     if (dtype == Bodo_CTypes::DECIMAL) {
-        __int128_t* val = (__int128_t*)ptrdata;
-        return int128_decimal_to_std_string(*val, scale);
+        __int128_t val = decimal_get_value((const uint8_t*)ptrdata, precision);
+        return int128_decimal_to_std_string(val, scale);
     }
     if (dtype == Bodo_CTypes::FLOAT64) {
         double* ptr = (double*)ptrdata;
@@ -2236,7 +2241,7 @@ bodo::vector<std::string> GetColumn_as_ListString(
                 ListStr[iRow] = strOut;
             }
         } else {
-            uint64_t siztype = numpy_item_size[arr->dtype];
+            uint64_t siztype = bodo_array_item_size(*arr);
             for (size_t iRow = 0; iRow < nRow; iRow++) {
                 bool bit =
                     arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow);
@@ -2244,8 +2249,8 @@ bodo::vector<std::string> GetColumn_as_ListString(
                     char* ptrdata1 =
                         &(arr->data1<bodo_array_type::NULLABLE_INT_BOOL>()
                               [siztype * iRow]);
-                    strOut =
-                        GetStringExpression(arr->dtype, ptrdata1, arr->scale);
+                    strOut = GetStringExpression(arr->dtype, ptrdata1,
+                                                 arr->scale, arr->precision);
                 } else {
                     strOut = "NA";
                 }
@@ -2254,11 +2259,12 @@ bodo::vector<std::string> GetColumn_as_ListString(
         }
     }
     if (arr->arr_type == bodo_array_type::NUMPY) {
-        uint64_t siztype = numpy_item_size[arr->dtype];
+        uint64_t siztype = bodo_array_item_size(*arr);
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 =
                 &(arr->data1<bodo_array_type::NUMPY>()[siztype * iRow]);
-            strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
+            strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale,
+                                         arr->precision);
             ListStr[iRow] = strOut;
         }
     }
@@ -2312,11 +2318,12 @@ bodo::vector<std::string> GetColumn_as_ListString(
         }
     }
     if (arr->arr_type == bodo_array_type::CATEGORICAL) {
-        uint64_t siztype = numpy_item_size[arr->dtype];
+        uint64_t siztype = bodo_array_item_size(*arr);
         for (size_t iRow = 0; iRow < nRow; iRow++) {
             char* ptrdata1 =
                 &(arr->data1<bodo_array_type::CATEGORICAL>()[siztype * iRow]);
-            strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
+            strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale,
+                                         arr->precision);
             ListStr[iRow] = strOut;
         }
     }

@@ -901,7 +901,7 @@ void median_computation(std::shared_ptr<array_info> arr,
                         bool const use_sql_rules,
                         bodo::IBufferPool* const pool) {
     size_t num_group = grp_info.group_to_first_row.size();
-    size_t siztype = numpy_item_size[arr->dtype];
+    size_t siztype = bodo_array_item_size(*arr);
     std::string error_msg = std::string("There is no median for the ") +
                             std::string(GetDtype_as_string(arr->dtype));
     if (arr->arr_type == bodo_array_type::STRING) {
@@ -986,7 +986,9 @@ void median_computation(std::shared_ptr<array_info> arr,
                 }
                 if (!isnan_entry(i)) {
                     char* ptr = arr->data1() + i * siztype;
-                    arrow::Decimal128 eVal = GetTentry<arrow::Decimal128>(ptr);
+                    __int128_t raw =
+                        decimal_get_value((const uint8_t*)ptr, arr->precision);
+                    arrow::Decimal128 eVal((int64_t)(raw >> 64), (uint64_t)raw);
                     ListValue.emplace_back(eVal);
                 } else {
                     if (!skipna) {
@@ -1800,7 +1802,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             }
             return false;
         };
-        const size_t siztype = numpy_item_size[arr->dtype];
+        const size_t siztype = bodo_array_item_size(*arr);
         const uint32_t seed = SEED_HASH_CONTAINER;
 
         HashNuniqueComputationNumpyOrNullableIntBool hash_fct{
@@ -1883,7 +1885,7 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             out_arr->at<int64_t>(igrp) = size;
         }
     } else if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        const size_t siztype = numpy_item_size[arr->dtype];
+        const size_t siztype = bodo_array_item_size(*arr);
         HashNuniqueComputationNumpyOrNullableIntBool hash_fct{
             .arr = arr, .siztype = siztype};
         KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{

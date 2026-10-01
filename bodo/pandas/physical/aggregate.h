@@ -1,6 +1,7 @@
 #pragma once
 
 #include <object.h>
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -164,8 +165,17 @@ class PhysicalAggregate : public PhysicalSource, public PhysicalSink {
                     precision =
                         in_table_schema->column_types[col_idx]->precision;
                     scale = in_table_schema->column_types[col_idx]->scale;
-                    if (agg_expr.function.name == "sum") {
+                    // The output type must match what the aggregation
+                    // kernels produce (and what the input decimal's storage
+                    // width is derived from): sum and mean accumulate in a
+                    // decimal(38, s) column, median/percentile widen the
+                    // input by 3 digits.
+                    if (agg_expr.function.name == "sum" ||
+                        agg_expr.function.name == "mean") {
                         precision = 38;
+                    } else if (agg_expr.function.name == "median") {
+                        precision = std::min(38, precision + 3);
+                        scale = std::min(37, scale + 3);
                     }
                 }
                 out_arr_type = std::make_unique<bodo::DataType>(

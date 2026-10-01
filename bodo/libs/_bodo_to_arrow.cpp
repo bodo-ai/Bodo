@@ -475,6 +475,42 @@ std::shared_ptr<arrow::Array> bodo_array_to_arrow(
                 return arrow::MakeArray(arr_data);
             }
 
+            // 8-byte int64 decimal storage: widen each value to the 16-byte
+            // little-endian form Arrow's Decimal128Array expects.
+            if (array->dtype == Bodo_CTypes::DECIMAL &&
+                decimal_item_bytes(array->precision,
+                                   array->decimal_int64_layout) == 8) {
+                if (getenv("BODO_DEC_DEBUG")) {
+                    long long sum8 = 0;
+                    const uint8_t *dbg_data = (const uint8_t *)array->data1();
+                    for (size_t i = 0; i < array->length; i++) {
+                        long long v = 0;
+                        memcpy(&v, dbg_data + 8 * i, 8);
+                        sum8 += v;
+                    }
+                    fprintf(stderr,
+                            "[DEC-TOARROW-8B] len=%lld p=%d bufsz=%lld "
+                            "expect8=%lld sum8=%lld\n",
+                            (long long)array->length, array->precision,
+                            (long long)array->buffers[0]->size(),
+                            (long long)(8 * array->length), sum8);
+                }
+                std::shared_ptr<arrow::Buffer> out_buffer;
+                arrow::Result<std::unique_ptr<arrow::Buffer>> res =
+                    AllocateBuffer(in_num_bytes, pool);
+                CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
+                const uint8_t *in_data = (const uint8_t *)array->data1();
+                for (size_t i = 0; i < array->length; i++) {
+                    __int128_t v = decimal_load_wide(in_data + i * 8, 8);
+                    memcpy(out_buffer->mutable_data() + i * BYTES_PER_DECIMAL,
+                           &v, BYTES_PER_DECIMAL);
+                }
+                auto arr_data = arrow::ArrayData::Make(
+                    type, array->length, {null_bitmap, out_buffer}, null_count_,
+                    0);
+                return arrow::MakeArray(arr_data);
+            }
+
             // Can't reuse the same BodoBuffer because Bodo arrays have data
             // offsets due to slicing, which is applied in data1(). Can't pass
             // the offset directly to Arrow since Bodo only applies the offset
@@ -1109,28 +1145,83 @@ std::shared_ptr<array_info> arrow_map_array_to_bodo(
  * @return std::shared_ptr<array_info> Output Bodo array
  * (NULLABLE_INT_BOOL/DECIMAL type)
  */
-std::shared_ptr<array_info> arrow_decimal_array_to_bodo(
-    std::shared_ptr<arrow::Decimal128Array> arrow_decimal_arr,
-    bool force_aligned, bodo::IBufferPool *pool) {
+/**
+ * @brief Convert an Arrow Decimal64Array to a Bodo decimal array_info.
+ * Decimal64Array stores values as 8-byte little-endian int64 (scaled), which
+ * matches Bodo's 8-byte int64 decimal storage layout exactly, so the
+ * conversion is zero-copy when possible. For 16-byte storage mode the values
+ * are widened (sign-extended) to the 16-byte little-endian form.
+ *
+ * @param arrow_decimal_arr Input Arrow Decimal64Array
+ * @param force_aligned Whether to force 16-byte alignment (unused for 8-byte
+ * storage)
+ * @param pool Buffer pool for allocations
+ * @param int64_storage Whether Bodo buffers use 8-byte int64 storage for
+ * decimal(p <= 18)
+ * @return std::shared_ptr<array_info> Output Bodo array
+ */
+std::shared_ptr<array_info> arrow_decimal64_array_to_bodo(
+    std::shared_ptr<arrow::Decimal64Array> arrow_decimal_arr,
+    bool force_aligned, bodo::IBufferPool *pool,
+    bool int64_storage = decimal_int64_storage_enabled()) {
     int64_t n = arrow_decimal_arr->length();
-    // Pass Arrow null bitmap and data buffer to Bodo
+    auto dtype = std::static_pointer_cast<arrow::Decimal64Type>(
+        arrow_decimal_arr->type());
+    int32_t precision = dtype->precision();
+    int32_t scale = dtype->scale();
+
+    // Pass Arrow null bitmap to Bodo
     std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
         arrow_decimal_arr->null_bitmap(), arrow_decimal_arr->null_bitmap_data(),
         arrow_decimal_arr->offset(), arrow_decimal_arr->null_count(), n, pool);
     const uint8_t *raw_data = arrow_decimal_arr->raw_values();
-    int64_t n_bytes = n * numpy_item_size[Bodo_CTypes::DECIMAL];
-    std::shared_ptr<BodoBuffer> data_buf_buffer;
-    if (force_aligned && (reinterpret_cast<uintptr_t>(raw_data) % 16 != 0)) {
-        // Allocate a new 16 byte aligned buffer (default alignment is 64B, so
-        // it should always be 16B aligned)
-        data_buf_buffer = AllocateBodoBuffer(n_bytes, Bodo_CTypes::DECIMAL);
-        // Copy the data into the new buffer.
-        memcpy(data_buf_buffer->mutable_data(), raw_data, n_bytes);
-    } else {
+
+    if (int64_storage && decimal_is_int64(precision)) {
+        // 8-byte storage: the layouts match. Zero-copy when the array has no
+        // offset, otherwise copy the values.
+        bodo::IBufferPool *alloc_pool =
+            pool != nullptr ? pool : bodo::BufferPool::DefaultPtr();
+        int64_t n_bytes = n * 8;
+        std::shared_ptr<BodoBuffer> data_buf_buffer;
         data_buf_buffer =
-            arrow_buffer_to_bodo(arrow_decimal_arr->values(), (void *)raw_data,
-                                 n_bytes, Bodo_CTypes::DECIMAL, pool);
+            AllocateBodoBuffer(n_bytes, Bodo_CTypes::DECIMAL, alloc_pool);
+        memcpy(data_buf_buffer->mutable_data(), raw_data, n_bytes);
+        return std::make_shared<array_info>(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::DECIMAL, n,
+            std::vector<std::shared_ptr<BodoBuffer>>(
+                {data_buf_buffer, null_bitmap_buffer}),
+            std::vector<std::shared_ptr<array_info>>({}), precision, scale, 0,
+            -1, false, false, false, 0, std::vector<std::string>{}, "",
+            int64_storage);
     }
+
+    // 16-byte storage: widen each 8-byte value (sign-extend into the high
+    // 8 bytes).
+    bodo::IBufferPool *alloc_pool =
+        pool != nullptr ? pool : bodo::BufferPool::DefaultPtr();
+    int64_t n_bytes = n * BYTES_PER_DECIMAL;
+    std::shared_ptr<BodoBuffer> data_buf_buffer =
+        AllocateBodoBuffer(n_bytes, Bodo_CTypes::DECIMAL, alloc_pool);
+    uint8_t *out_data = data_buf_buffer->mutable_data();
+    for (int64_t i = 0; i < n; i++) {
+        int64_t v = 0;
+        memcpy(&v, arrow_decimal_arr->GetValue(i), 8);
+        __int128_t wide = (__int128_t)v;
+        memcpy(out_data + i * BYTES_PER_DECIMAL, &wide, BYTES_PER_DECIMAL);
+    }
+    return std::make_shared<array_info>(
+        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::DECIMAL, n,
+        std::vector<std::shared_ptr<BodoBuffer>>(
+            {data_buf_buffer, null_bitmap_buffer}),
+        std::vector<std::shared_ptr<array_info>>({}), precision, scale, 0, -1,
+        false, false, false, 0, std::vector<std::string>{}, "", int64_storage);
+}
+
+std::shared_ptr<array_info> arrow_decimal_array_to_bodo(
+    std::shared_ptr<arrow::Decimal128Array> arrow_decimal_arr,
+    bool force_aligned, bodo::IBufferPool *pool,
+    bool int64_storage = decimal_int64_storage_enabled()) {
+    int64_t n = arrow_decimal_arr->length();
     // get precision/scale info
     std::shared_ptr<arrow::Decimal128Type> dtype =
         std::static_pointer_cast<arrow::Decimal128Type>(
@@ -1139,11 +1230,70 @@ std::shared_ptr<array_info> arrow_decimal_array_to_bodo(
     int32_t precision = dtype->precision();
     int32_t scale = dtype->scale();
 
+    if (getenv("BODO_DEC_DEBUG")) {
+        fprintf(stderr, "[DEC-ARROW2BODO] decimal128 n=%lld p=%d storage=%d\n",
+                (long long)n, precision, (int)int64_storage);
+    }
+
+    // Pass Arrow null bitmap and data buffer to Bodo
+    std::shared_ptr<BodoBuffer> null_bitmap_buffer = arrow_null_bitmap_to_bodo(
+        arrow_decimal_arr->null_bitmap(), arrow_decimal_arr->null_bitmap_data(),
+        arrow_decimal_arr->offset(), arrow_decimal_arr->null_count(), n, pool);
+    const uint8_t *raw_data = arrow_decimal_arr->raw_values();
+    if (!int64_storage || !decimal_is_int64(precision)) {
+        // 16-byte storage: zero-copy the Arrow Decimal128 values.
+        int64_t n_bytes = n * BYTES_PER_DECIMAL;
+        std::shared_ptr<BodoBuffer> data_buf_buffer;
+        if (force_aligned &&
+            (reinterpret_cast<uintptr_t>(raw_data) % 16 != 0)) {
+            // Allocate a new 16 byte aligned buffer (default alignment is
+            // 64B, so it should always be 16B aligned)
+            data_buf_buffer = AllocateBodoBuffer(n_bytes, Bodo_CTypes::DECIMAL);
+            // Copy the data into the new buffer.
+            memcpy(data_buf_buffer->mutable_data(), raw_data, n_bytes);
+        } else {
+            data_buf_buffer = arrow_buffer_to_bodo(arrow_decimal_arr->values(),
+                                                   (void *)raw_data, n_bytes,
+                                                   Bodo_CTypes::DECIMAL, pool);
+        }
+        return std::make_shared<array_info>(
+            bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::DECIMAL, n,
+            std::vector<std::shared_ptr<BodoBuffer>>(
+                {data_buf_buffer, null_bitmap_buffer}),
+            std::vector<std::shared_ptr<array_info>>({}), precision, scale, 0,
+            -1, false, false, false, 0, std::vector<std::string>{}, "",
+            int64_storage);
+    }
+    // 8-byte int64 storage for decimal(p <= 18): decode each Arrow Decimal128
+    // value to its int64 value. Arrow stores Decimal128 values as 16-byte
+    // LITTLE-endian two's complement in memory (only the parquet wire format
+    // is big-endian), and since the precision guarantees the value fits in
+    // int64, the value is the little-endian load of the low 8 bytes (the high
+    // 8 bytes are the sign extension by construction).
+    bodo::IBufferPool *alloc_pool =
+        pool != nullptr ? pool : bodo::BufferPool::DefaultPtr();
+    int64_t n_bytes = n * 8;
+    std::shared_ptr<BodoBuffer> data_buf_buffer =
+        AllocateBodoBuffer(n_bytes, Bodo_CTypes::DECIMAL, alloc_pool);
+    uint8_t *out_data = data_buf_buffer->mutable_data();
+    for (int64_t i = 0; i < n; i++) {
+        memcpy(out_data + i * 8, arrow_decimal_arr->GetValue(i), 8);
+    }
+    if (getenv("BODO_DEC_DEBUG")) {
+        fprintf(stderr, "[DEC128-8B] n=%lld p=%d v:", (long long)n, precision);
+        for (int64_t i = 0; i < n && i < 5; i++) {
+            long long v = 0;
+            memcpy(&v, out_data + i * 8, 8);
+            fprintf(stderr, " %lld", v);
+        }
+        fprintf(stderr, "\n");
+    }
     return std::make_shared<array_info>(
         bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::DECIMAL, n,
         std::vector<std::shared_ptr<BodoBuffer>>(
             {data_buf_buffer, null_bitmap_buffer}),
-        std::vector<std::shared_ptr<array_info>>({}), precision, scale);
+        std::vector<std::shared_ptr<array_info>>({}), precision, scale, 0, -1,
+        false, false, false, 0, std::vector<std::string>{}, "", int64_storage);
 }
 
 /**
@@ -1366,7 +1516,8 @@ std::shared_ptr<array_info> arrow_dictionary_array_to_bodo(
 
 std::shared_ptr<array_info> arrow_array_to_bodo(
     std::shared_ptr<arrow::Array> arrow_arr, bodo::IBufferPool *src_pool,
-    int64_t array_id, std::shared_ptr<array_info> dicts_ref_arr) {
+    int64_t array_id, std::shared_ptr<array_info> dicts_ref_arr,
+    bool decimal_int64_storage) {
     switch (arrow_arr->type_id()) {
         case arrow::Type::LARGE_STRING:
             return arrow_string_binary_array_to_bodo<arrow::LargeStringArray,
@@ -1418,7 +1569,11 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
         case arrow::Type::DECIMAL128:
             return arrow_decimal_array_to_bodo(
                 std::static_pointer_cast<arrow::Decimal128Array>(arrow_arr),
-                /*force_aligned*/ true, src_pool);
+                /*force_aligned*/ true, src_pool, decimal_int64_storage);
+        case arrow::Type::DECIMAL64:
+            return arrow_decimal64_array_to_bodo(
+                std::static_pointer_cast<arrow::Decimal64Array>(arrow_arr),
+                /*force_aligned*/ true, src_pool, decimal_int64_storage);
         case arrow::Type::DOUBLE:
             return arrow_numeric_array_to_bodo<arrow::DoubleArray>(
                 std::static_pointer_cast<arrow::DoubleArray>(arrow_arr),
@@ -1556,7 +1711,8 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
 }
 
 std::shared_ptr<table_info> arrow_table_to_bodo(
-    std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool) {
+    std::shared_ptr<arrow::Table> table, bodo::IBufferPool *src_pool,
+    bool decimal_int64_storage) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(table->num_columns());
     for (int64_t i = 0; i < table->num_columns(); i++) {
@@ -1567,8 +1723,8 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
                 std::to_string(table->column(i)->num_chunks()));
         }
         std::shared_ptr<arrow::Array> arr = table->column(i)->chunk(0);
-        std::shared_ptr<array_info> out_arr =
-            arrow_array_to_bodo(arr, src_pool);
+        std::shared_ptr<array_info> out_arr = arrow_array_to_bodo(
+            arr, src_pool, -1, nullptr, decimal_int64_storage);
         out_arrs.push_back(out_arr);
     }
     std::shared_ptr<table_info> out_table =
@@ -1581,12 +1737,14 @@ std::shared_ptr<table_info> arrow_table_to_bodo(
 }
 
 std::shared_ptr<table_info> arrow_recordbatch_to_bodo(
-    std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length) {
+    std::shared_ptr<arrow::RecordBatch> arrow_rb, int64_t length,
+    bool decimal_int64_storage) {
     std::vector<std::shared_ptr<array_info>> cols;
     cols.reserve(arrow_rb->num_columns());
 
     for (auto col : arrow_rb->columns()) {
-        cols.push_back(arrow_array_to_bodo(col, nullptr));
+        cols.push_back(arrow_array_to_bodo(col, nullptr, -1, nullptr,
+                                           decimal_int64_storage));
     }
 
     return std::make_shared<table_info>(cols, length);

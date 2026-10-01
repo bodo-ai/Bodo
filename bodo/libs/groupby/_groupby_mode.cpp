@@ -36,7 +36,8 @@ void mode_operation(
             // If the current entry is non-null, increment
             // the hashtable or the nan count
             if (non_null_at<ArrType, T, DType>(*arr, i)) {
-                if (isnan_alltype<T, DType>(getv<T, ArrType>(arr, i))) {
+                if (isnan_alltype<T, DType>(
+                        get_arr_item<ArrType, T, DType>(*arr, i))) {
                     nan_count++;
                 } else {
                     counts[get_arr_item<ArrType, T, DType>(*arr, i)] += 1;

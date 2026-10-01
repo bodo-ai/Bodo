@@ -18,12 +18,16 @@
  * bitmask size.
  */
 inline std::tuple<int64_t, int64_t> get_nullable_arr_alloc_sizes(
-    Bodo_CTypes::CTypeEnum dtype, int64_t size) {
+    Bodo_CTypes::CTypeEnum dtype, int32_t precision, int64_t size,
+    bool decimal_int64_layout = decimal_int64_storage_enabled()) {
     if (dtype == Bodo_CTypes::_BOOL) {
         int64_t req_size = ::arrow::bit_util::BytesForBits(size);
         return std::tuple(req_size, req_size);
     } else {
-        uint64_t size_type = numpy_item_size[dtype];
+        uint64_t size_type =
+            dtype == Bodo_CTypes::DECIMAL
+                ? decimal_item_bytes(precision, decimal_int64_layout)
+                : numpy_item_size[dtype];
         int64_t data_buffer_req_size = static_cast<int64_t>(size * size_type);
         int64_t null_bitmap_buffer_req_size =
             ::arrow::bit_util::BytesForBits(size);
@@ -69,8 +73,9 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
     switch (this->data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
             auto [data_buffer_alloc_size, null_bitmap_buffer_alloc_size] =
-                get_nullable_arr_alloc_sizes(this->data_array->dtype,
-                                             this->capacity);
+                get_nullable_arr_alloc_sizes(
+                    this->data_array->dtype, this->data_array->precision,
+                    this->capacity, this->data_array->decimal_int64_layout);
             data_buffer_alloc_size =
                 std::max(data_buffer_alloc_size, min_buffer_allocation_size);
             null_bitmap_buffer_alloc_size = std::max(
@@ -114,7 +119,7 @@ ChunkedTableArrayBuilder::ChunkedTableArrayBuilder(
                              "ChunkedTableArrayBuilder: Resize failed!");
         } break;
         case bodo_array_type::NUMPY: {
-            uint64_t size_type = numpy_item_size[this->data_array->dtype];
+            uint64_t size_type = bodo_array_item_size(*this->data_array);
             int64_t data_buffer_alloc_size =
                 std::max(static_cast<int64_t>(this->capacity * size_type),
                          min_buffer_allocation_size);
@@ -356,8 +361,18 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
     switch (this->data_array->arr_type) {
         case bodo_array_type::NULLABLE_INT_BOOL: {
             auto [data_buffer_req_size, null_bitmap_buffer_req_size] =
-                get_nullable_arr_alloc_sizes(this->data_array->dtype,
-                                             this->size);
+                get_nullable_arr_alloc_sizes(
+                    this->data_array->dtype, this->data_array->precision,
+                    this->size, this->data_array->decimal_int64_layout);
+            if (getenv("BODO_DEC_DEBUG") &&
+                this->data_array->dtype == Bodo_CTypes::DECIMAL) {
+                fprintf(stderr,
+                        "[DEC-FINALIZE] len=%lld p=%d req=%lld bufsz_before="
+                        "%lld\n",
+                        (long long)this->size, this->data_array->precision,
+                        (long long)data_buffer_req_size,
+                        (long long)this->data_array->buffers[0]->size());
+            }
             int64_t data_buffer_alloc_size =
                 std::max(data_buffer_req_size, min_buffer_allocation_size);
             int64_t null_bitmap_buffer_alloc_size = std::max(
@@ -464,7 +479,7 @@ void ChunkedTableArrayBuilder::Finalize(bool shrink_to_fit) {
                 "ChunkedTableArrayBuilder::Finalize: Resize failed!");
         } break;
         case bodo_array_type::NUMPY: {
-            uint64_t size_type = numpy_item_size[this->data_array->dtype];
+            uint64_t size_type = bodo_array_item_size(*this->data_array);
             int64_t data_buffer_req_size =
                 static_cast<int64_t>(this->size * size_type);
             int64_t data_buffer_alloc_size =

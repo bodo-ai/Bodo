@@ -319,9 +319,15 @@ bool idx_compare_column(const std::shared_ptr<array_info>& out_arr,
             }
             case Bodo_CTypes::DECIMAL: {
                 // Decimal can just compare the underlying integers
-                // as the types must be the same.
-                __int128_t old_value = getv<__int128_t>(in_arr, curr_idx);
-                __int128_t new_value = getv<__int128_t>(in_arr, in_idx);
+                // as the types must be the same (width-aware: 8-byte
+                // int64-backed decimal columns hold the value in the
+                // low 8 bytes).
+                const uint8_t* base = (const uint8_t*)in_arr->data1();
+                size_t w = (size_t)bodo_array_item_size(*in_arr);
+                __int128_t old_value =
+                    decimal_get_value(base + w * curr_idx, in_arr->precision);
+                __int128_t new_value =
+                    decimal_get_value(base + w * in_idx, in_arr->precision);
                 STANDARD_EQUALITY_CHECK
             }
             default:

@@ -280,8 +280,8 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
             this->rows_to_skip -= batch_offset;
             // This is zero-copy slice.
             batch = batch->Slice(batch_offset, length);
-            std::shared_ptr<table_info> bodo_table =
-                arrow_recordbatch_to_bodo(batch, length);
+            std::shared_ptr<table_info> bodo_table = arrow_recordbatch_to_bodo(
+                batch, length, decimal_int64_storage_enabled());
             // Append the partition columns to the final output table
             if (part_cols.size() > 0) {
                 std::vector<std::shared_ptr<array_info>> batch_part_cols;

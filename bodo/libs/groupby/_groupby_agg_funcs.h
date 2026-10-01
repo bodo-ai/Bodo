@@ -253,6 +253,27 @@ inline static void sum_decimal128(arrow::Decimal128* out_ptr,
     *out_ptr = result_decimal;
 }
 
+/**
+ * Int64-backed fast path for decimal sum: for input values that fit in a
+ * signed 64-bit integer (decimal precision <= 18), accumulate with a single
+ * __int128 add instead of the multi-word Decimal128 add. The running value
+ * and overflow semantics are identical to sum_decimal128.
+ */
+inline static void sum_decimal128_int64(arrow::Decimal128* out_ptr,
+                                        int64_t data_val, bool& success) {
+    __int128 acc = ((__int128)out_ptr->high_bits() << 64) | out_ptr->low_bits();
+    acc += (__int128)data_val;
+    // Equivalent to Decimal128FitsInMaxPrecision but evaluated on __int128
+    // to avoid the Decimal128 Abs per row.
+    static constexpr __int128 kDecimal128Max =
+        (__int128)1000000000000000000LL * (__int128)10000000000000000000ULL -
+        1;  // 10^38 - 1
+    __int128 abs_acc = acc < 0 ? -acc : acc;
+    success &= abs_acc < kDecimal128Max;
+    arrow::Decimal128 result_decimal((int64_t)(acc >> 64), (uint64_t)acc);
+    *out_ptr = result_decimal;
+}
+
 template <>
 struct aggliststring<Bodo_FTypes::sum> {
     template <typename Alloc1, typename Alloc2>

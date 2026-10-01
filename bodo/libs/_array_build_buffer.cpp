@@ -420,7 +420,7 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
                         arrow::bit_util::BytesForBits(new_size)),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
             } else {
-                uint64_t size_type = numpy_item_size[this->data_array->dtype];
+                uint64_t size_type = bodo_array_item_size(*this->data_array);
                 CHECK_ARROW_BASE(
                     data_array->buffers[0]->SetSize(new_size * size_type),
                     "ArrayBuildBuffer::IncrementSize: SetSize failed!");
@@ -432,7 +432,7 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
 
         } break;
         case bodo_array_type::TIMESTAMPTZ: {
-            uint64_t utc_size_type = numpy_item_size[this->data_array->dtype];
+            uint64_t utc_size_type = bodo_array_item_size(*this->data_array);
             uint64_t offset_size_type = numpy_item_size[Bodo_CTypes::INT16];
             CHECK_ARROW_BASE(
                 data_array->buffers[0]->SetSize(new_size * utc_size_type),
@@ -456,7 +456,7 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
         } break;
         case bodo_array_type::CATEGORICAL:
         case bodo_array_type::NUMPY: {
-            uint64_t size_type = numpy_item_size[this->data_array->dtype];
+            uint64_t size_type = bodo_array_item_size(*this->data_array);
             CHECK_ARROW_BASE(
                 data_array->buffers[0]->SetSize(new_size * size_type),
                 "ArrayBuildBuffer::IncrementSize: SetSize failed!");
@@ -641,7 +641,7 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
                         "ArrayBuildBuffer::ReserveSize: Reserve failed!");
                 } else {
                     uint64_t size_type =
-                        numpy_item_size[this->data_array->dtype];
+                        bodo_array_item_size(*this->data_array);
                     CHECK_ARROW_BASE(
                         data_array->buffers[0]->Reserve(new_capacity *
                                                         size_type),
@@ -674,7 +674,7 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
         } break;
         case bodo_array_type::CATEGORICAL:
         case bodo_array_type::NUMPY: {
-            uint64_t size_type = numpy_item_size[this->data_array->dtype];
+            uint64_t size_type = bodo_array_item_size(*this->data_array);
             if (min_capacity > capacity) {
                 int64_t new_capacity = std::max(min_capacity, capacity * 2);
                 CHECK_ARROW_BASE(

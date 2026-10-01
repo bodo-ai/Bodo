@@ -1589,11 +1589,29 @@ void apply_to_column_nullable(
             break;                                                             \
         case Bodo_FTypes::mean:                                                \
             if (DType == Bodo_CTypes::DECIMAL) {                               \
-                sum_decimal128(                                                \
-                    out_col->data1<bodo_array_type::NULLABLE_INT_BOOL,         \
-                                   arrow::Decimal128>() +                      \
-                        i_grp,                                                 \
-                    getv<arrow::Decimal128, ArrType>(in_col, i), success);     \
+                const uint8_t* in_dec_ptr =                                    \
+                    (const uint8_t*)in_col->data1<ArrType>() +                 \
+                    i * (size_t)bodo_array_item_size(*in_col);                 \
+                __int128_t in_val =                                            \
+                    decimal_get_value(in_dec_ptr, in_col->precision);          \
+                int64_t in_lo = (int64_t)in_val;                               \
+                int64_t in_hi = (int64_t)(in_val >> 64);                       \
+                if ((size_t)bodo_array_item_size(*in_col) == 8 ||              \
+                    in_hi == (in_lo >> 63)) {                                  \
+                    /* Value fits in int64: accumulate with a single           \
+                     * __int128 add. */                                        \
+                    sum_decimal128_int64(                                      \
+                        out_col->data1<bodo_array_type::NULLABLE_INT_BOOL,     \
+                                       arrow::Decimal128>() +                  \
+                            i_grp,                                             \
+                        in_lo, success);                                       \
+                } else {                                                       \
+                    sum_decimal128(                                            \
+                        out_col->data1<bodo_array_type::NULLABLE_INT_BOOL,     \
+                                       arrow::Decimal128>() +                  \
+                            i_grp,                                             \
+                        getv<arrow::Decimal128, ArrType>(in_col, i), success); \
+                }                                                              \
                 getv<uint64_t>(aux_cols[0], i_grp)++;                          \
                 out_col->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(     \
                     i_grp, true);                                              \
@@ -1808,11 +1826,29 @@ void apply_to_column_nullable(
                 break;                                                         \
             }                                                                  \
             if (DType == Bodo_CTypes::DECIMAL) {                               \
-                sum_decimal128(                                                \
-                    out_col->data1<bodo_array_type::NULLABLE_INT_BOOL,         \
-                                   arrow::Decimal128>() +                      \
-                        i_grp,                                                 \
-                    getv<arrow::Decimal128, ArrType>(in_col, i), success);     \
+                const uint8_t* in_dec_ptr =                                    \
+                    (const uint8_t*)in_col->data1<ArrType>() +                 \
+                    i * (size_t)bodo_array_item_size(*in_col);                 \
+                __int128_t in_val =                                            \
+                    decimal_get_value(in_dec_ptr, in_col->precision);          \
+                int64_t in_lo = (int64_t)in_val;                               \
+                int64_t in_hi = (int64_t)(in_val >> 64);                       \
+                if ((size_t)bodo_array_item_size(*in_col) == 8 ||              \
+                    in_hi == (in_lo >> 63)) {                                  \
+                    /* Value fits in int64: accumulate with a single           \
+                     * __int128 add. */                                        \
+                    sum_decimal128_int64(                                      \
+                        out_col->data1<bodo_array_type::NULLABLE_INT_BOOL,     \
+                                       arrow::Decimal128>() +                  \
+                            i_grp,                                             \
+                        in_lo, success);                                       \
+                } else {                                                       \
+                    sum_decimal128(                                            \
+                        out_col->data1<bodo_array_type::NULLABLE_INT_BOOL,     \
+                                       arrow::Decimal128>() +                  \
+                            i_grp,                                             \
+                        getv<arrow::Decimal128, ArrType>(in_col, i), success); \
+                }                                                              \
                 out_col->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(     \
                     i_grp, true);                                              \
                 break;                                                         \
@@ -1828,6 +1864,45 @@ void apply_to_column_nullable(
             }                                                                  \
             [[fallthrough]];                                                   \
         default:                                                               \
+            if (DType == Bodo_CTypes::DECIMAL &&                               \
+                (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max)) {    \
+                /* Int64-backed fast path: min/max of decimal values that      \
+                 * fit in int64 is an int64 comparison. With 8-byte storage    \
+                 * every value fits; with 16-byte storage rows whose values    \
+                 * do not fit fall back to the 128-bit comparison. */          \
+                size_t out_w = (size_t)bodo_array_item_size(*out_col);         \
+                size_t in_w = (size_t)bodo_array_item_size(*in_col);           \
+                uint8_t* out_data = (uint8_t*)out_col->data1<ArrType>();       \
+                uint8_t* in_data = (uint8_t*)in_col->data1<ArrType>();         \
+                __int128_t out_val = decimal_get_value(                        \
+                    out_data + out_w * i_grp, out_col->precision);             \
+                __int128_t in_val =                                            \
+                    decimal_get_value(in_data + in_w * i, in_col->precision);  \
+                int64_t out_lo = (int64_t)out_val;                             \
+                int64_t out_hi = (int64_t)(out_val >> 64);                     \
+                int64_t in_lo = (int64_t)in_val;                               \
+                int64_t in_hi = (int64_t)(in_val >> 64);                       \
+                bool out_fits = out_w == 8 ||                                  \
+                                decimal_is_int64(out_col->precision) ||        \
+                                out_hi == (out_lo >> 63);                      \
+                bool in_fits = in_w == 8 ||                                    \
+                               decimal_is_int64(in_col->precision) ||          \
+                               in_hi == (in_lo >> 63);                         \
+                if (out_fits && in_fits) {                                     \
+                    bool replace = ftype == Bodo_FTypes::min                   \
+                                       ? (in_lo < out_lo)                      \
+                                       : (in_lo > out_lo);                     \
+                    if (replace) {                                             \
+                        decimal_set_value(out_data + out_w * i_grp,            \
+                                          out_col->precision, in_val);         \
+                    }                                                          \
+                } else {                                                       \
+                    aggfunc<T, DType, ftype>::apply(                           \
+                        getv<T>(out_col, i_grp), getv<T, ArrType>(in_col, i)); \
+                }                                                              \
+                out_col->set_null_bit(i_grp, true);                            \
+                break;                                                         \
+            }                                                                  \
             if (DType == Bodo_CTypes::_BOOL) {                                 \
                 bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i); \
                 bool_aggfunc<bool, DType, ftype>::apply(out_col, i_grp,        \
@@ -2130,11 +2205,19 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
                         std::shared_ptr<::arrow::MemoryManager> mm) {
     // macro to reduce code duplication
 #ifndef APPLY_TO_COLUMN_CALL
-#define APPLY_TO_COLUMN_CALL(FTYPE, CTYPE)                                 \
-    if (ftype == FTYPE && in_col->dtype == CTYPE) {                        \
-        return apply_to_column<typename dtype_to_type<CTYPE>::type, FTYPE, \
-                               CTYPE>(in_col, out_col, aux_cols, grp_info, \
-                                      pool, std::move(mm));                \
+#define APPLY_TO_COLUMN_CALL(FTYPE, CTYPE)                                     \
+    if (ftype == FTYPE && in_col->dtype == CTYPE) {                            \
+        /* 8-byte int64-backed decimal columns are processed with T =          \
+         * int64_t so every getv/aggfunc access uses the 8-byte stride. */     \
+        if constexpr (CTYPE == Bodo_CTypes::DECIMAL) {                         \
+            if (bodo_array_item_size(*in_col) == 8) {                          \
+                return apply_to_column<int64_t, FTYPE, CTYPE>(                 \
+                    in_col, out_col, aux_cols, grp_info, pool, std::move(mm)); \
+            }                                                                  \
+        }                                                                      \
+        return apply_to_column<typename dtype_to_type<CTYPE>::type, FTYPE,     \
+                               CTYPE>(in_col, out_col, aux_cols, grp_info,     \
+                                      pool, std::move(mm));                    \
     }
 #endif
 

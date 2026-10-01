@@ -270,7 +270,8 @@ inline T GetTentry(const char* ptr) {
  * @param ptr the value of the pointer passed in argument
  * @return the value as a double.
  */
-inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, const char* ptr) {
+inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, const char* ptr,
+                             int32_t precision = 0) {
     if (dtype == Bodo_CTypes::INT8)
         return double(GetTentry<int8_t>(ptr));
     if (dtype == Bodo_CTypes::UINT8)
@@ -300,7 +301,8 @@ inline double GetDoubleEntry(Bodo_CTypes::CTypeEnum dtype, const char* ptr) {
     if (dtype == Bodo_CTypes::TIMEDELTA)
         return double(GetTentry<int64_t>(ptr));
     if (dtype == Bodo_CTypes::DECIMAL)
-        return decimal_to_double(GetTentry<__int128_t>(ptr));
+        return decimal_to_double(
+            decimal_get_value((const uint8_t*)ptr, precision));
     throw std::runtime_error(
         "_array_utils.h::GetDoubleEntry: Unsupported case in GetDoubleEntry");
 }
@@ -679,7 +681,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
     if constexpr (arr_type == bodo_array_type::NUMPY ||
                   arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of NUMPY, we compare the values for concluding.
-        uint64_t siztype = numpy_item_size[arr1->dtype];
+        uint64_t siztype = bodo_array_item_size(*arr1);
         char* ptr1 = arr1->data1() + siztype * pos1;
         char* ptr2 = arr2->data1() + siztype * pos2;
         if (memcmp(ptr1, ptr2, siztype) != 0) {
@@ -735,7 +737,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
                     return false;
                 }
             } else {
-                uint64_t siztype = numpy_item_size[arr1->dtype];
+                uint64_t siztype = bodo_array_item_size(*arr1);
                 char* ptr1 = arr1->data1<arr_type>() + siztype * pos1;
                 char* ptr2 = arr2->data1<arr_type>() + siztype * pos2;
                 if (memcmp(ptr1, ptr2, siztype) != 0) {
@@ -786,7 +788,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
         }
         // If both bitmasks are false, then no need to check the data values
         if (bit1) {
-            uint64_t siztype = numpy_item_size[arr1->dtype];
+            uint64_t siztype = numpy_item_size[Bodo_CTypes::INT64];
             char* ptr1 =
                 arr1->data1<bodo_array_type::TIMESTAMPTZ>() + siztype * pos1;
             char* ptr2 =
@@ -985,11 +987,12 @@ int NumericComparison_int(const char* ptr1, const char* ptr2,
  * @return 1 if *ptr1 < *ptr2
  */
 inline int NumericComparison_decimal(const char* ptr1, const char* ptr2,
-                                     bool const& na_position) {
-    __int128_t* ptr1_dec = (__int128_t*)ptr1;
-    __int128_t* ptr2_dec = (__int128_t*)ptr2;
-    double value1 = decimal_to_double(*ptr1_dec);
-    double value2 = decimal_to_double(*ptr2_dec);
+                                     bool const& na_position,
+                                     int32_t precision = 0) {
+    __int128_t val1 = decimal_get_value((const uint8_t*)ptr1, precision);
+    __int128_t val2 = decimal_get_value((const uint8_t*)ptr2, precision);
+    double value1 = decimal_to_double(val1);
+    double value2 = decimal_to_double(val2);
     if (value1 > value2) {
         return -1;
     } else if (value1 < value2) {
@@ -1118,7 +1121,9 @@ getNumericComparisonFunc(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::FLOAT64)
         return NumericComparison_float<double>;
     if (dtype == Bodo_CTypes::DECIMAL)
-        return NumericComparison_decimal;
+        return [](const char* p1, const char* p2, bool const& na_position) {
+            return NumericComparison_decimal(p1, p2, na_position);
+        };
     throw std::runtime_error(
         "_array_utils.h::getNumericComparisonFunc: Invalid dtype put on input "
         "to "
@@ -1136,7 +1141,10 @@ getNumericComparisonFunc(Bodo_CTypes::CTypeEnum const& dtype) {
  */
 inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype,
                              const char* ptr1, const char* ptr2,
-                             bool const& na_position) {
+                             bool const& na_position, int32_t precision = 0) {
+    if (dtype == Bodo_CTypes::DECIMAL) {
+        return NumericComparison_decimal(ptr1, ptr2, na_position, precision);
+    }
     return getNumericComparisonFunc(dtype)(ptr1, ptr2, na_position);
 }
 
@@ -1615,6 +1623,19 @@ inline bool distinct_from_other_row(
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 inline T get_arr_item(array_info& arr, int64_t idx) {
+    if constexpr ((std::is_same_v<T, __int128_t> ||
+                   std::is_same_v<T, arrow::Decimal128>) &&
+                  DType == Bodo_CTypes::DECIMAL) {
+        // Width-aware decimal read (8-byte int64-backed or 16-byte).
+        const uint8_t* p = (const uint8_t*)arr.data1<ArrType>();
+        __int128_t v = decimal_get_value(
+            p + idx * (int64_t)bodo_array_item_size(arr), arr.precision);
+        if constexpr (std::is_same_v<T, arrow::Decimal128>) {
+            return T((int64_t)(v >> 64), (uint64_t)v);
+        } else {
+            return v;
+        }
+    }
     return ((T*)arr.data1<ArrType>())[idx];
 }
 
@@ -1860,6 +1881,24 @@ inline void set_to_null(array_info& arr, size_t idx) {}
 template <bodo_array_type::arr_type_enum ArrType, typename T,
           Bodo_CTypes::CTypeEnum DType>
 inline void set_arr_item(array_info& arr, size_t idx, T val) {
+    if constexpr ((std::is_same_v<T, __int128_t> ||
+                   std::is_same_v<T, arrow::Decimal128>) &&
+                  DType == Bodo_CTypes::DECIMAL) {
+        // Width-aware decimal write (8-byte int64-backed or 16-byte).
+        if (bodo_array_item_size(arr) == 8) {
+            __int128_t v;
+            if constexpr (std::is_same_v<T, arrow::Decimal128>) {
+                v = (__int128_t)(((__int128_t)val.high_bits() << 64) |
+                                 val.low_bits());
+            } else {
+                v = (__int128_t)val;
+            }
+            decimal_set_value((uint8_t*)arr.data1<ArrType>() +
+                                  idx * (size_t)bodo_array_item_size(arr),
+                              arr.precision, v);
+            return;
+        }
+    }
     ((T*)arr.data1<ArrType>())[idx] = val;
 }
 

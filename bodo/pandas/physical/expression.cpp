@@ -571,6 +571,137 @@ std::shared_ptr<array_info> do_arrow_compute_binary(
     const std::string& comparator,
     const arrow::compute::FunctionOptions* func_options,
     const std::shared_ptr<arrow::DataType> result_type) {
+    // Int64-backed decimal fast path: evaluate directly on the Bodo arrays
+    // (no Arrow Datum round trip) when both operands are decimal arrays
+    // with values that fit in int64, or decimal-integer mixes.
+    if (decimal_int64_fastpath_enabled() && func_options == nullptr) {
+        auto left_array = std::dynamic_pointer_cast<ArrayExprResult>(left_res);
+        auto left_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(left_res);
+        auto right_array =
+            std::dynamic_pointer_cast<ArrayExprResult>(right_res);
+        auto right_scalar =
+            std::dynamic_pointer_cast<ScalarExprResult>(right_res);
+        if ((left_array || left_scalar) && (right_array || right_scalar)) {
+            bool left_is_scalar = left_scalar != nullptr;
+            bool right_is_scalar = right_scalar != nullptr;
+            const std::shared_ptr<array_info>& left_arr =
+                left_is_scalar ? left_scalar->result : left_array->result;
+            const std::shared_ptr<array_info>& right_arr =
+                right_is_scalar ? right_scalar->result : right_array->result;
+
+            bool op_is_comparison =
+                comparator == "equal" || comparator == "not_equal" ||
+                comparator == "less" || comparator == "greater" ||
+                comparator == "less_equal" || comparator == "greater_equal";
+            bool op_is_arithmetic = comparator == "add" ||
+                                    comparator == "subtract" ||
+                                    comparator == "multiply";
+            if (op_is_comparison || op_is_arithmetic) {
+                // Precision/scale of each operand, mirroring
+                // getPrecisionScaleNonDecimal for integer operands.
+                auto get_operand_precision_scale =
+                    [](const std::shared_ptr<array_info>& arr)
+                    -> std::pair<int, int> {
+                    if (arr->dtype == Bodo_CTypes::DECIMAL) {
+                        return {arr->precision, arr->scale};
+                    }
+                    switch (arr->dtype) {
+                        case Bodo_CTypes::INT8:
+                        case Bodo_CTypes::UINT8:
+                            return {3, 0};
+                        case Bodo_CTypes::INT16:
+                        case Bodo_CTypes::UINT16:
+                            return {5, 0};
+                        case Bodo_CTypes::INT32:
+                        case Bodo_CTypes::UINT32:
+                            return {10, 0};
+                        case Bodo_CTypes::INT64:
+                        case Bodo_CTypes::UINT64:
+                            return {19, 0};
+                        default:
+                            return {0, 0};
+                    }
+                };
+                auto [p1, s1] = get_operand_precision_scale(left_arr);
+                auto [p2, s2] = get_operand_precision_scale(right_arr);
+                int l1 = p1 - s1;
+                int l2 = p2 - s2;
+                // The fast path only supports decimal and integer operands;
+                // anything else (e.g. floats) has no meaningful precision
+                // here and must go through the generic path.
+                auto operand_dtype_ok =
+                    [](const std::shared_ptr<array_info>& arr) {
+                        if (arr->dtype == Bodo_CTypes::DECIMAL) {
+                            return true;
+                        }
+                        switch (arr->dtype) {
+                            case Bodo_CTypes::INT8:
+                            case Bodo_CTypes::INT16:
+                            case Bodo_CTypes::INT32:
+                            case Bodo_CTypes::INT64:
+                            case Bodo_CTypes::UINT8:
+                            case Bodo_CTypes::UINT16:
+                            case Bodo_CTypes::UINT32:
+                            case Bodo_CTypes::UINT64:
+                                return true;
+                            default:
+                                return false;
+                        }
+                    };
+                if (!operand_dtype_ok(left_arr) ||
+                    !operand_dtype_ok(right_arr)) {
+                    // Fall through to the generic Datum path below.
+                } else {
+                    auto [result_precision, result_scale] =
+                        getOpPrecisionScale(comparator, p1, s1, l1, p2, s2, l2);
+                    // Result precision beyond decimal128 max is evaluated at
+                    // precision 38 (matching decimal_arithmetic).
+                    int out_precision = std::min(result_precision, 38);
+                    bool check_max_precision = result_precision > 38;
+                    bool both_decimal =
+                        left_arr->dtype == Bodo_CTypes::DECIMAL &&
+                        right_arr->dtype == Bodo_CTypes::DECIMAL;
+                    // The exact (non-check) path requires decimal operands that
+                    // fit in int64 and no scale reduction for multiply; the
+                    // check path requires both operands to be decimal (matching
+                    // decimal_arithmetic, which casts non-decimal sides first).
+                    bool operands_ok =
+                        check_max_precision
+                            ? both_decimal
+                            : (!both_decimal ||
+                               (decimal_is_int64(left_arr->precision) &&
+                                decimal_is_int64(right_arr->precision)));
+                    bool no_scale_reduction =
+                        comparator != "multiply" || s1 + s2 == result_scale;
+                    if (operands_ok && no_scale_reduction && s1 >= 0 &&
+                        s2 >= 0 && out_precision >= 1) {
+                        // Guard against result types the fast path does not
+                        // produce directly.
+                        std::shared_ptr<arrow::DataType> fast_output_type =
+                            op_is_comparison
+                                ? std::static_pointer_cast<arrow::DataType>(
+                                      arrow::boolean())
+                                : std::static_pointer_cast<arrow::DataType>(
+                                      arrow::decimal128(out_precision,
+                                                        result_scale));
+                        if (!result_type ||
+                            result_type->Equals(fast_output_type)) {
+                            std::shared_ptr<array_info> fast_res =
+                                decimal_int64_binary_op_arrays(
+                                    left_arr, left_is_scalar, right_arr,
+                                    right_is_scalar, out_precision,
+                                    result_scale, comparator,
+                                    check_max_precision);
+                            if (fast_res != nullptr) {
+                                return fast_res;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     arrow::Datum src1 =
         ConvertExprResultToDatum(left_res, "do_arrow_compute left");
     arrow::Datum src2 =
@@ -728,9 +859,82 @@ arrow::Datum do_arrow_compute_binary(
                 right_res =
                     do_arrow_compute_cast(right_res, arrow::decimal128(p2, s2));
             }
+            // Int64-backed fast path: operands that fit in int64 (checked
+            // per row) are evaluated with __int128 arithmetic and gandiva
+            // rounding/overflow semantics, matching decimal_arithmetic.
+            if (decimal_int64_fastpath_enabled() &&
+                (comparator == "add" || comparator == "subtract" ||
+                 comparator == "multiply")) {
+                arrow::Result<arrow::Datum> fast_res = decimal_int64_binary_op(
+                    left_res, p1, s1, right_res, p2, s2, 38, result_scale,
+                    comparator, true /* check_max_precision */);
+                if (!fast_res.ok()) [[unlikely]] {
+                    throw std::runtime_error("Decimal overflow in operation " +
+                                             comparator);
+                }
+                return std::move(fast_res).ValueOrDie();
+            }
             // Use decimal_arithmetic elementwise with overflow checking
             return decimal_arithmetic(left_res, right_res, comparator, 38,
                                       result_scale, p1, s1, p2, s2);
+        }
+
+        // Int64-backed fast path for decimal operands whose values fit in
+        // int64 (precision <= 18) and integer operands: add, subtract,
+        // multiply (without scale reduction) and all comparisons are
+        // computed exactly with __int128 arithmetic, replacing the generic
+        // Arrow compute call and the trailing result-type cast.
+        if (decimal_int64_fastpath_enabled() && func_options == nullptr) {
+            bool op_is_comparison =
+                comparator == "equal" || comparator == "not_equal" ||
+                comparator == "less" || comparator == "greater" ||
+                comparator == "less_equal" || comparator == "greater_equal";
+            bool op_is_arithmetic = comparator == "add" ||
+                                    comparator == "subtract" ||
+                                    comparator == "multiply";
+            auto side_fastpath_ok = [](const arrow::Datum& datum,
+                                       bool is_decimal, int precision,
+                                       int scale) {
+                if (scale < 0) {
+                    return false;
+                }
+                if (is_decimal) {
+                    return decimal_is_int64(precision);
+                }
+                // Only integer operand types are handled in the fast path.
+                switch (datum.type()->id()) {
+                    case arrow::Type::INT8:
+                    case arrow::Type::INT16:
+                    case arrow::Type::INT32:
+                    case arrow::Type::INT64:
+                    case arrow::Type::UINT8:
+                    case arrow::Type::UINT16:
+                    case arrow::Type::UINT32:
+                    case arrow::Type::UINT64:
+                        return true;
+                    default:
+                        return false;
+                }
+            };
+            bool sides_fastpath_ok =
+                side_fastpath_ok(left_res, left_is_decimal, p1, s1) &&
+                side_fastpath_ok(right_res, right_is_decimal, p2, s2);
+            bool no_scale_reduction =
+                comparator != "multiply" || s1 + s2 == result_scale;
+            if (sides_fastpath_ok && no_scale_reduction &&
+                (op_is_comparison || op_is_arithmetic)) {
+                arrow::Result<arrow::Datum> fast_res = decimal_int64_binary_op(
+                    left_res, p1, s1, right_res, p2, s2, result_precision,
+                    result_scale, comparator, false /* check_max_precision */);
+                if (!fast_res.ok()) [[unlikely]] {
+                    throw std::runtime_error(
+                        "do_arrow_compute_binary: Error in decimal int64 "
+                        "fast path (" +
+                        comparator + "): " + fast_res.status().message());
+                }
+                return do_arrow_compute_cast(std::move(fast_res).ValueOrDie(),
+                                             result_type);
+            }
         }
     }
 

@@ -2370,7 +2370,11 @@ int64_t pyarrow_to_cpp_table(PyObject *pyarrow_table) {
     // Unwrap Arrow table from Python object
     std::shared_ptr<arrow::Table> table =
         arrow::py::unwrap_table(pyarrow_table).ValueOrDie();
-    std::shared_ptr<table_info> out_table = arrow_table_to_bodo(table, nullptr);
+    // These tables feed the C++ pipeline / MPI machinery, so decimal buffers
+    // should use the same layout as arrays produced inside the pipeline
+    // (8-byte for decimal(p <= 18) when int64 decimal storage is enabled).
+    std::shared_ptr<table_info> out_table =
+        arrow_table_to_bodo(table, nullptr, decimal_int64_storage_enabled());
     return reinterpret_cast<int64_t>(new table_info(*out_table));
 }
 
@@ -2383,7 +2387,9 @@ int64_t pyarrow_array_to_cpp_table(PyObject *arrow_array, std::string name,
         reinterpret_cast<table_info *>(in_cpp_table));
 
     std::vector<std::shared_ptr<array_info>> out_arrs = {
-        arrow_array_to_bodo(array, nullptr)};
+        arrow_array_to_bodo(array, nullptr,
+                            /*array_id=*/-1, /*dicts_ref_arr=*/nullptr,
+                            decimal_int64_storage_enabled())};
 
     // Add Index arrays if any
     for (size_t i = 1; i < in_table->ncols(); i++) {

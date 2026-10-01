@@ -361,9 +361,16 @@ void aggfunc_output_initialize_kernel(
                               std::numeric_limits<double>::quiet_NaN());
                     return;
                 case Bodo_CTypes::DECIMAL:
-                    std::fill((int64_t*)out_col->data1() + 2 * start_row,
-                              (int64_t*)out_col->data1() + 2 * out_col->length,
-                              std::numeric_limits<int64_t>::max());
+                    if (bodo_array_item_size(*out_col) == 8) {
+                        std::fill((int64_t*)out_col->data1() + start_row,
+                                  (int64_t*)out_col->data1() + out_col->length,
+                                  std::numeric_limits<int64_t>::max());
+                    } else {
+                        std::fill(
+                            (int64_t*)out_col->data1() + 2 * start_row,
+                            (int64_t*)out_col->data1() + 2 * out_col->length,
+                            std::numeric_limits<int64_t>::max());
+                    }
                     return;
                 case Bodo_CTypes::STRING:
                 case Bodo_CTypes::BINARY:
@@ -464,9 +471,16 @@ void aggfunc_output_initialize_kernel(
                               std::numeric_limits<double>::quiet_NaN());
                     return;
                 case Bodo_CTypes::DECIMAL:
-                    std::fill((int64_t*)out_col->data1() + 2 * start_row,
-                              (int64_t*)out_col->data1() + 2 * out_col->length,
-                              std::numeric_limits<int64_t>::min());
+                    if (bodo_array_item_size(*out_col) == 8) {
+                        std::fill((int64_t*)out_col->data1() + start_row,
+                                  (int64_t*)out_col->data1() + out_col->length,
+                                  std::numeric_limits<int64_t>::min());
+                    } else {
+                        std::fill(
+                            (int64_t*)out_col->data1() + 2 * start_row,
+                            (int64_t*)out_col->data1() + 2 * out_col->length,
+                            std::numeric_limits<int64_t>::min());
+                    }
                     return;
                 case Bodo_CTypes::STRING:
                 case Bodo_CTypes::BINARY:
@@ -543,11 +557,13 @@ void aggfunc_output_initialize_kernel(
                         out_col->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
                     out_col->length, false, start_row);
             } else {
-                memset(out_col->data1() +
-                           numpy_item_size[out_col->dtype] * start_row,
-                       0,
-                       numpy_item_size[out_col->dtype] *
-                           (out_col->length - start_row));
+                memset(
+                    out_col->data1() + bodo_dtype_item_size(
+                                           out_col->dtype, out_col->precision) *
+                                           start_row,
+                    0,
+                    bodo_dtype_item_size(out_col->dtype, out_col->precision) *
+                        (out_col->length - start_row));
             }
     }
 }
@@ -716,7 +732,8 @@ void alloc_init_keys(
             case bodo_array_type::NULLABLE_INT_BOOL: {
                 new_key_col = alloc_array_top_level(
                     num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
-                    key_col->num_categories, false, false, false, pool, mm);
+                    key_col->num_categories, false, false, false, pool, mm, "",
+                    key_col->precision, key_col->scale);
                 if (key_col->dtype == Bodo_CTypes::_BOOL) {
                     // Nullable booleans store 1 bit per boolean
                     for (size_t j = 0; j < num_groups; j++) {
@@ -732,7 +749,7 @@ void alloc_init_keys(
                             j, bit);
                     }
                 } else {
-                    int64_t dtype_size = numpy_item_size[key_col->dtype];
+                    int64_t dtype_size = bodo_array_item_size(*key_col);
                     char* new_data1 = new_key_col->data1();
                     char* old_data1 = key_col->data1();
                     for (size_t j = 0; j < num_groups; j++) {
@@ -761,9 +778,10 @@ void alloc_init_keys(
             case bodo_array_type::NUMPY: {
                 new_key_col = alloc_array_top_level(
                     num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
-                    key_col->num_categories, false, false, false, pool, mm);
+                    key_col->num_categories, false, false, false, pool, mm, "",
+                    key_col->precision, key_col->scale);
 
-                int64_t dtype_size = numpy_item_size[key_col->dtype];
+                int64_t dtype_size = bodo_array_item_size(*key_col);
                 char* new_data1 = new_key_col->data1();
                 char* old_data1 = key_col->data1();
                 for (size_t j = 0; j < num_groups; j++) {

@@ -1711,6 +1711,13 @@ void PercentileColSet::alloc_update_columns(
         }
         this->update_cols[0]->scale = new_scale;
         this->update_cols[0]->precision = new_precision;
+        // The running-value column was allocated with the input precision;
+        // resize its data buffer for the final (possibly wider) precision.
+        CHECK_ARROW_MEM(this->update_cols[0]->buffers[0]->Resize(
+                            num_groups * (int64_t)bodo_array_item_size(
+                                             *this->update_cols[0]),
+                            /*shrink_to_fit*/ false),
+                        "alloc_update_columns: Resize failed");
     }
 }
 
@@ -1751,6 +1758,13 @@ void MedianColSet::alloc_update_columns(
         }
         this->update_cols[0]->scale = new_scale;
         this->update_cols[0]->precision = new_precision;
+        // The running-value column was allocated with the input precision;
+        // resize its data buffer for the final (possibly wider) precision.
+        CHECK_ARROW_MEM(this->update_cols[0]->buffers[0]->Resize(
+                            num_groups * (int64_t)bodo_array_item_size(
+                                             *this->update_cols[0]),
+                            /*shrink_to_fit*/ false),
+                        "alloc_update_columns: Resize failed");
     }
 }
 

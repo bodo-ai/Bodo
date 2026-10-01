@@ -125,7 +125,9 @@ def run_queries(
     if use_parquet:
         tpch_data = get_tpch_data_parquet(root, use_stats)
     else:
-        tpch_data = FileSystemCatalog(root)
+        tpch_data = FileSystemCatalog(
+            root, default_schema=os.environ.get("BODO_FS_CATALOG_SCHEMA", ".")
+        )
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]

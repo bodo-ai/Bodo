@@ -70,8 +70,33 @@ std::shared_ptr<::arrow::Array> EvolveArray(
             source_field_iceberg_field_id, target_field_iceberg_field_id));
     }
     // Verify that the source field is the same type as the column (including
-    // dict-encoding).
-    if (column->type()->id() != source_field->type()->id()) {
+    // dict-encoding). Decimal columns may arrive as decimal32/64 when the
+    // reader produces narrow decimal arrays for decimal(p <= 18) (the storage
+    // width is derived from the precision), so any decimal type is accepted
+    // as long as the precision and scale match the source field.
+    bool decimal_type_match = false;
+    {
+        auto col_is_decimal = column->type()->id() == arrow::Type::DECIMAL32 ||
+                              column->type()->id() == arrow::Type::DECIMAL64 ||
+                              column->type()->id() == arrow::Type::DECIMAL128;
+        auto src_is_decimal =
+            source_field->type()->id() == arrow::Type::DECIMAL32 ||
+            source_field->type()->id() == arrow::Type::DECIMAL64 ||
+            source_field->type()->id() == arrow::Type::DECIMAL128;
+        if (col_is_decimal && src_is_decimal) {
+            auto col_decimal_type =
+                std::static_pointer_cast<arrow::DecimalType>(column->type());
+            auto src_decimal_type =
+                std::static_pointer_cast<arrow::DecimalType>(
+                    source_field->type());
+            decimal_type_match =
+                col_decimal_type->precision() ==
+                    src_decimal_type->precision() &&
+                col_decimal_type->scale() == src_decimal_type->scale();
+        }
+    }
+    if (column->type()->id() != source_field->type()->id() &&
+        !decimal_type_match) {
         throw std::runtime_error(fmt::format(
             "IcebergParquetReader::EvolveArray: Column field type ({}) "
             "does not match expected field type ({})!",
@@ -886,8 +911,8 @@ IcebergParquetReader::read_inner_row_level() {
 
             time_pt start_rb_to_bodo = start_timer();
             // TODO Pass BufferPool as the source pool!
-            std::shared_ptr<table_info> bodo_table =
-                arrow_recordbatch_to_bodo(batch, length);
+            std::shared_ptr<table_info> bodo_table = arrow_recordbatch_to_bodo(
+                batch, length, decimal_int64_storage_enabled());
             this->iceberg_reader_metrics.arrow_rb_to_bodo_time +=
                 end_timer(start_rb_to_bodo);
             if (length == this->batch_size) {
@@ -1001,8 +1026,8 @@ IcebergParquetReader::read_inner_piece_level() {
             int64_t nrows = batch->num_rows();
             time_pt start_rb_to_bodo = start_timer();
             // TODO Pass BufferPool as the source pool!
-            std::shared_ptr<table_info> bodo_table =
-                arrow_recordbatch_to_bodo(std::move(batch), nrows);
+            std::shared_ptr<table_info> bodo_table = arrow_recordbatch_to_bodo(
+                std::move(batch), nrows, decimal_int64_storage_enabled());
             this->iceberg_reader_metrics.arrow_rb_to_bodo_time +=
                 end_timer(start_rb_to_bodo);
             if (nrows == this->batch_size) {

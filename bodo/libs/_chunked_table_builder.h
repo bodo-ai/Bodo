@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdio>
+#include <cstdlib>
 #include <deque>
 
 #include "_array_build_buffer.h"
@@ -272,7 +274,7 @@ struct ChunkedTableArrayBuilder {
               Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-                 dtype != Bodo_CTypes::_BOOL)
+                 dtype != Bodo_CTypes::_BOOL && dtype != Bodo_CTypes::DECIMAL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
@@ -312,6 +314,74 @@ struct ChunkedTableArrayBuilder {
      * @param idx_start The start location in idxs from which to insert.
      * @param idx_length The number of rows we will insert.
      */
+    /**
+     * @brief Append rows for DECIMAL arrays using width-aware strides
+     * (8 bytes per element for p <= 18 when int64-backed decimal storage is
+     * enabled, 16 bytes otherwise). The input and output arrays may in
+     * principle have different widths, so both strides are computed
+     * independently.
+     */
+    template <bodo_array_type::arr_type_enum out_arr_type,
+              bodo_array_type::arr_type_enum in_arr_type,
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
+        requires((out_arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+                  out_arr_type == bodo_array_type::NUMPY) &&
+                 (in_arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+                  in_arr_type == bodo_array_type::NUMPY) &&
+                 dtype == Bodo_CTypes::DECIMAL)
+    void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
+                          const std::span<const IndexT> idxs, size_t idx_start,
+                          size_t idx_length) {
+        size_t out_w = bodo_array_item_size(*this->data_array);
+        size_t in_w = bodo_array_item_size(*in_arr);
+        uint8_t* out_data = (uint8_t*)this->data_array->data1<out_arr_type>();
+        const uint8_t* in_data = (const uint8_t*)in_arr->data1<in_arr_type>();
+        if (getenv("BODO_DEC_DEBUG")) {
+            fprintf(stderr,
+                    "[DEC-APPENDROWS] sz=%lld n=%lld out_w=%zu in_w=%zu "
+                    "out_prec=%d in_prec=%d out_bufsz=%lld\n",
+                    (long long)this->size, (long long)idx_length, out_w, in_w,
+                    this->data_array->precision, in_arr->precision,
+                    (long long)this->data_array->buffers[0]->size());
+            if (idx_length > 0) {
+                fprintf(stderr, "[DEC-APPENDROWS] in_vals:");
+                for (size_t i = 0; i < idx_length && i < 5; i++) {
+                    int64_t row_idx = idxs[i + idx_start];
+                    long long v = 0;
+                    if (row_idx >= 0)
+                        memcpy(&v, in_data + in_w * row_idx, 8);
+                    fprintf(stderr, " %lld", v);
+                }
+                fprintf(stderr, "\n");
+            }
+        }
+        uint8_t* out_bitmask =
+            (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
+        const uint8_t* in_bitmask =
+            (uint8_t*)in_arr->null_bitmask<in_arr_type>();
+
+        for (size_t i = 0; i < idx_length; i++) {
+            int64_t row_idx = idxs[i + idx_start];
+            if (row_idx >= 0) {
+                if (out_w == in_w) {
+                    memcpy(out_data + out_w * (this->size + i),
+                           in_data + in_w * row_idx, out_w);
+                } else {
+                    // Mixed widths: read the value at the input width and
+                    // store it (sign-extended if needed) at the output width.
+                    // The value of a decimal(p <= 18) fits either width.
+                    __int128_t v =
+                        decimal_load_wide(in_data + in_w * row_idx, in_w);
+                    decimal_store_wide(out_data + out_w * (this->size + i),
+                                       out_w, v);
+                }
+            }
+            bool null_bit = (row_idx >= 0) && GetBit(in_bitmask, row_idx);
+            SetBitTo(out_bitmask, this->size + i, null_bit);
+        }
+        this->data_array->length += idx_length;
+    }
+
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
               Bodo_CTypes::CTypeEnum dtype, typename IndexT>
@@ -414,7 +484,7 @@ struct ChunkedTableArrayBuilder {
               Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  in_arr_type == bodo_array_type::NUMPY &&
-                 dtype != Bodo_CTypes::_BOOL)
+                 dtype != Bodo_CTypes::_BOOL && dtype != Bodo_CTypes::DECIMAL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
@@ -501,7 +571,7 @@ struct ChunkedTableArrayBuilder {
               Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NUMPY &&
                  in_arr_type == bodo_array_type::NUMPY &&
-                 !SQLNASentinelDtype<dtype>)
+                 !SQLNASentinelDtype<dtype> && dtype != Bodo_CTypes::DECIMAL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
@@ -538,7 +608,8 @@ struct ChunkedTableArrayBuilder {
               Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NUMPY &&
                  in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-                 !SQLNASentinelDtype<dtype> && dtype != Bodo_CTypes::_BOOL)
+                 !SQLNASentinelDtype<dtype> && dtype != Bodo_CTypes::_BOOL &&
+                 dtype != Bodo_CTypes::DECIMAL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
                           const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {

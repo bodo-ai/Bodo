@@ -353,6 +353,11 @@ int64_t pq_write(const char *_path_name,
     }
     parquet::WriterProperties::Builder prop_builder;
     prop_builder.compression(codec_type);
+    // Store decimal(p <= 18) as INT32/INT64 physical type (per the Parquet and
+    // Iceberg specs, and matching Spark/Iceberg defaults). Much cheaper for
+    // Bodo to read back (8-byte little-endian values instead of big-endian
+    // 16-byte FLBA decoding).
+    prop_builder.enable_store_decimal_as_integer();
     std::shared_ptr<parquet::WriterProperties> writer_properties =
         prop_builder.build();
     std::shared_ptr<parquet::ArrowWriterProperties> arrow_writer_properties =

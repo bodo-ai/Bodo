@@ -824,6 +824,21 @@ void fill_numeric_array_with_value(const std::shared_ptr<array_info> &arr,
 #define FILL_DTYPE_CASE(dtype)                                                 \
     case dtype: {                                                              \
         using T = typename dtype_to_type<dtype>::type;                         \
+        if constexpr (dtype == Bodo_CTypes::DECIMAL) {                         \
+            /* Width-aware: 8-byte int64-backed or 16-byte decimal. */         \
+            size_t w = (size_t)bodo_array_item_size(*arr);                     \
+            __int128_t val = decimal_get_value(                                \
+                (const uint8_t *)                                              \
+                    value_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),    \
+                value_arr->precision);                                         \
+            uint8_t *write_buffer =                                            \
+                (uint8_t *)arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();   \
+            for (size_t idx = start; idx < end; idx++) {                       \
+                decimal_set_value(write_buffer + idx * w, arr->precision,      \
+                                  val);                                        \
+            }                                                                  \
+            break;                                                             \
+        }                                                                      \
         T val = value_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, T>()[0];  \
         T *write_buffer = arr->data1<bodo_array_type::NULLABLE_INT_BOOL, T>(); \
         std::fill(write_buffer + start, write_buffer + end, val);              \

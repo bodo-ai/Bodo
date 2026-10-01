@@ -170,8 +170,10 @@ std::unique_ptr<array_info> lead_lag_seq(
     int step = loop_backwards ? -1 : 1;
 
     // Allocate output array as nullable array with every element non-null
-    std::unique_ptr<array_info> out_col =
-        alloc_nullable_array_no_nulls(n, in_col->dtype);
+    std::unique_ptr<array_info> out_col = alloc_nullable_array_no_nulls(
+        n, in_col->dtype, 0, bodo::BufferPool::DefaultPtr(),
+        bodo::default_buffer_memory_manager(), "", in_col->precision,
+        in_col->scale);
 
     // Cursor referring to position in the output that we want to copy *to*.
     int64_t write_i = loop_backwards ? n - 1 : 0;

@@ -210,7 +210,13 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
                       const uint8_t* null_bitmap_buff,
                       bodo_array_type::arr_type_enum array_type,
                       Bodo_CTypes::CTypeEnum out_dtype, int64_t curr_offset,
-                      int dtype_size) {
+                      int dtype_size, int in_dtype_size = 0) {
+    // in_dtype_size is the stride of the Arrow source buffer, which can
+    // differ from the Bodo output stride for DECIMAL with 8-byte int64
+    // storage enabled (Arrow Decimal128Array is always 16 bytes/item).
+    if (in_dtype_size == 0) {
+        in_dtype_size = dtype_size;
+    }
     // unpack booleans from bits
     if (out_dtype == Bodo_CTypes::_BOOL) {
         if (arrow_type->id() != Type::BOOL) {
@@ -238,7 +244,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     if (arrowBodoTypesEqual(arrow_type, out_dtype)) {
         // fast path if no conversion required
         memcpy(out_data + (curr_offset * dtype_size),
-               buff + rows_to_skip * dtype_size, rows_to_read * dtype_size);
+               buff + rows_to_skip * in_dtype_size, rows_to_read * dtype_size);
     } else {
         copy_data_dispatch(out_data + (curr_offset * dtype_size), buff,
                            rows_to_skip, rows_to_read, arrow_type, out_dtype);
@@ -448,11 +454,17 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
             const uint8_t* null_bitmap_buff =
                 arr->null_count() == 0 ? nullptr : arr->null_bitmap_data();
 
-            int dtype_size = numpy_item_size[dtype];
+            // The Arrow buffer stride and the Bodo output stride can differ
+            // for DECIMAL with 8-byte int64 storage enabled (Arrow
+            // Decimal128Array is always 16 bytes/item, the Bodo output array
+            // is width-aware).
+            int dtype_size =
+                (int)bodo_dtype_item_size(dtype, out_array->precision);
+            int in_dtype_size = numpy_item_size[dtype];
             uint8_t* data_ptr = reinterpret_cast<uint8_t*>(out_array->data1());
             copy_data(data_ptr, buff, in_offset, in_length, arrow_type,
                       null_bitmap_buff, out_array->arr_type, out_array->dtype,
-                      cur_offset, dtype_size);
+                      cur_offset, dtype_size, in_dtype_size);
             if (is_nullable) {
                 copy_nulls(
                     reinterpret_cast<uint8_t*>(out_array->null_bitmask()),

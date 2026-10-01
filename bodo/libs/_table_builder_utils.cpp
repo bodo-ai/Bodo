@@ -52,7 +52,8 @@ std::unique_ptr<array_info> alloc_empty_array(
     } else {
         std::unique_ptr<array_info> array_out = alloc_array_top_level(
             0, 0, 0, datatype->array_type, datatype->c_type, -1, 0, 0, false,
-            false, false, pool, mm);
+            false, false, pool, mm, datatype->timezone, datatype->precision,
+            datatype->scale);
         array_out->precision = datatype->precision;
         array_out->scale = datatype->scale;
         array_out->timezone = datatype->timezone;

@@ -540,7 +540,9 @@ inline void collecting_non_nan_entries(bodo::vector<T> &my_array,
     const uint8_t *null_bitmask = (uint8_t *)arr->null_bitmask();
     for (size_t i_row = 0; i_row < arr->length; i_row++) {
         if (GetBit(null_bitmask, i_row)) {
-            __int128_t eVal = arr->at<__int128_t>(i_row);
+            const uint8_t *ptr = (const uint8_t *)arr->data1() +
+                                 i_row * (size_t)bodo_array_item_size(*arr);
+            __int128_t eVal = decimal_get_value(ptr, arr->precision);
             double eVal_d = decimal_to_double(eVal);
             my_array.emplace_back(eVal_d);
         }
@@ -903,9 +905,12 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
         std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), size_t(0));
     uint64_t ghost_length = std::min(sumnext, size_t(level_next));
     std::shared_ptr<array_info> ghost_arr =
-        alloc_numpy(ghost_length, arr->dtype);
-    uint64_t siztype = numpy_item_size[arr->dtype];
-    MPI_Datatype mpi_typ = get_MPI_typ(arr->dtype);
+        alloc_numpy(ghost_length, arr->dtype, bodo::BufferPool::DefaultPtr(),
+                    bodo::default_buffer_memory_manager(), arr->precision);
+    uint64_t siztype = bodo_array_item_size(*arr);
+    MPI_Datatype mpi_typ = (arr->dtype == Bodo_CTypes::DECIMAL && siztype == 8)
+                               ? get_MPI_typ(Bodo_CTypes::INT64)
+                               : get_MPI_typ(arr->dtype);
     uint64_t pos_index = 0;
     std::vector<MPI_Request> ListReq;
     for (int64_t i_next = 0; i_next < n_next; i_next++) {
@@ -974,7 +979,7 @@ void compute_series_monotonicity_py_entry(double *res, array_info *p_arr,
     try {
         std::shared_ptr<array_info> arr(p_arr);
         int64_t n_rows = arr->length;
-        uint64_t siztype = numpy_item_size[arr->dtype];
+        uint64_t siztype = bodo_array_item_size(*arr);
         // First checking monotonicity locally
         auto do_local_computation = [&]() -> int {
             char *arr_data1 = arr->data1();
@@ -982,8 +987,8 @@ void compute_series_monotonicity_py_entry(double *res, array_info *p_arr,
                 char *ptr1 = arr_data1 + siztype * i_row;
                 char *ptr2 = arr_data1 + siztype * (i_row + 1);
                 bool na_position = false;
-                int test =
-                    NumericComparison(arr->dtype, ptr1, ptr2, na_position);
+                int test = NumericComparison(arr->dtype, ptr1, ptr2,
+                                             na_position, arr->precision);
                 if (test == -1) {  // this corresponds to *ptr1 > *ptr2
                     if (inc_dec == 1) {
                         return 1;  // We reach a contradiction
@@ -1025,7 +1030,8 @@ void compute_series_monotonicity_py_entry(double *res, array_info *p_arr,
             char *ptr1 = arr->data1() + siztype * (n_rows - 1);
             char *ptr2 = ghost_arr->data1();
             bool na_position = false;
-            int test = NumericComparison(arr->dtype, ptr1, ptr2, na_position);
+            int test = NumericComparison(arr->dtype, ptr1, ptr2, na_position,
+                                         arr->precision);
             if (test == -1) {  // this corresponds to *ptr1 > *ptr2
                 if (inc_dec == 1) {
                     value_glob = 1;  // We reach a contradiction
@@ -1057,7 +1063,7 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
     try {
         std::shared_ptr<array_info> arr(p_arr);
         uint64_t n_rows = arr->length;
-        uint64_t siztype = numpy_item_size[arr->dtype];
+        uint64_t siztype = bodo_array_item_size(*arr);
         if (!is_parallel) {
             if (uint64_t(lag) >= n_rows - 1) {
                 *res = std::nan("1.0");
@@ -1068,8 +1074,8 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
             for (uint64_t i_row = 0; i_row < n_rows - lag; i_row++) {
                 const char *ptr1 = arr_data1 + siztype * i_row;
                 const char *ptr2 = arr_data1 + siztype * (i_row + lag);
-                double val1 = GetDoubleEntry(arr->dtype, ptr1);
-                double val2 = GetDoubleEntry(arr->dtype, ptr2);
+                double val1 = GetDoubleEntry(arr->dtype, ptr1, arr->precision);
+                double val2 = GetDoubleEntry(arr->dtype, ptr2, arr->precision);
                 sum1 += val1;
                 sum2 += val2;
                 sum12 += val1 * val2;
@@ -1114,12 +1120,12 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
             const char *ghost_arr_data1 = ghost_arr->data1();
             for (uint64_t i_row = 0; i_row < n_rows_cons; i_row++) {
                 const char *ptr1 = arr_data1 + siztype * i_row;
-                double val1 = GetDoubleEntry(arr->dtype, ptr1);
+                double val1 = GetDoubleEntry(arr->dtype, ptr1, arr->precision);
                 const char *ptr2 =
                     (i_row < n_rows - lag)
                         ? (arr_data1 + siztype * (i_row + lag))
                         : (ghost_arr_data1 + siztype * (i_row - n_rows + lag));
-                double val2 = GetDoubleEntry(arr->dtype, ptr2);
+                double val2 = GetDoubleEntry(arr->dtype, ptr2, arr->precision);
                 sum1 += val1;
                 sum2 += val2;
                 sum11 += val1 * val1;

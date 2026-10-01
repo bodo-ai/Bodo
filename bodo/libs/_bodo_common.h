@@ -558,6 +558,130 @@ inline bool is_valid_decimal128(int8_t precision, int8_t scale) {
     return (precision > 0 && scale >= 0 && precision <= 38 && scale < 38);
 }
 
+/**
+ * @brief Maximum decimal precision whose values are guaranteed to fit in a
+ * signed 64-bit integer (10^18 - 1 < 2^63), matching DuckDB's physical width
+ * mapping for decimals.
+ */
+#define DECIMAL_INT64_MAX_PRECISION 18
+
+/**
+ * @brief Whether decimal values of the given precision can be processed with
+ * int64 arithmetic on the low 8 bytes of the 16 byte little-endian two's
+ * complement representation (the high 8 bytes are the sign extension).
+ * Used to select int64 fast paths for decimal compute kernels.
+ *
+ */
+inline bool decimal_is_int64(int32_t precision) {
+    return precision > 0 && precision <= DECIMAL_INT64_MAX_PRECISION;
+}
+
+/**
+ * @brief Whether decimal(p <= 18) values are *stored* as 8-byte little-endian
+ * int64 (scaled by 10^scale) in Bodo buffers instead of the 16-byte
+ * little-endian form. Controlled by the BODO_DECIMAL_INT64_STORAGE
+ * environment variable (default on; set to 0 to force the 16-byte layout).
+ *
+ */
+inline bool decimal_int64_storage_enabled() {
+    static const bool enabled = [] {
+        const char* v = std::getenv("BODO_DECIMAL_INT64_STORAGE");
+        return v == nullptr || v[0] == '\0' || v[0] != '0';
+    }();
+    return enabled;
+}
+
+/**
+ * @brief Physical item width in bytes for a decimal value stored with the
+ * given layout flag (as carried on array_info). 8 bytes for p <= 18 with
+ * int64 layout, 16 bytes otherwise.
+ *
+ */
+inline size_t decimal_item_bytes(int32_t precision, bool int64_layout) {
+    return (int64_layout && decimal_is_int64(precision))
+               ? 8
+               : (size_t)BYTES_PER_DECIMAL;
+}
+
+/**
+ * @brief Physical item width in bytes for a decimal of the given precision:
+ * 8 bytes for p <= 18 when int64 storage is enabled, 16 bytes otherwise.
+ *
+ */
+inline size_t decimal_item_bytes(int32_t precision) {
+    return decimal_item_bytes(precision, decimal_int64_storage_enabled());
+}
+
+/**
+ * @brief Width-aware item size in bytes for a value of the given dtype:
+ * DECIMAL uses decimal_item_bytes(precision) (8 or 16), every other dtype
+ * uses the numpy item size table.
+ *
+ */
+inline size_t bodo_dtype_item_size(Bodo_CTypes::CTypeEnum dtype,
+                                   int32_t precision) {
+    return dtype == Bodo_CTypes::DECIMAL ? decimal_item_bytes(precision)
+                                         : numpy_item_size[dtype];
+}
+
+/**
+ * @brief Read the decimal value at ptr with an explicit storage width (8 or
+ * 16-byte little-endian two's complement) as a 128-bit value. Works on
+ * unaligned pointers.
+ *
+ */
+inline __int128_t decimal_load_wide(const uint8_t* ptr, size_t width) {
+    if (width == 8) {
+        int64_t v;
+        memcpy(&v, ptr, 8);
+        return (__int128_t)v;
+    }
+    __int128_t v;
+    memcpy(&v, ptr, 16);
+    return v;
+}
+
+/**
+ * @brief Read the decimal value at ptr (8-byte or 16-byte little-endian
+ * two's complement depending on the width) as a 128-bit value. Works on
+ * unaligned pointers.
+ *
+ */
+inline __int128_t decimal_get_value(const uint8_t* ptr, int32_t precision) {
+    return decimal_load_wide(ptr, decimal_item_bytes(precision));
+}
+
+/**
+ * @brief Write a decimal value at ptr in the width decimal(precision) is
+ * stored in (8-byte for p <= 18 when int64 storage is enabled, else
+ * 16-byte). The caller must guarantee the value fits the width. Works on
+ * unaligned pointers.
+ *
+ */
+inline void decimal_set_value(uint8_t* ptr, int32_t precision, __int128_t v) {
+    if (decimal_item_bytes(precision) == 8) {
+        int64_t lo = (int64_t)v;
+        memcpy(ptr, &lo, 8);
+    } else {
+        memcpy(ptr, &v, 16);
+    }
+}
+
+/**
+ * @brief Write a decimal value at ptr with an explicit storage width (8 or
+ * 16 bytes). The caller must guarantee the value fits the width. Works on
+ * unaligned pointers.
+ *
+ */
+inline void decimal_store_wide(uint8_t* ptr, size_t width, __int128_t v) {
+    if (width == 8) {
+        int64_t lo = (int64_t)v;
+        memcpy(ptr, &lo, 8);
+    } else {
+        memcpy(ptr, &v, 16);
+    }
+}
+
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
 
 inline std::string GetDtype_as_string(int8_t dtype) {
@@ -978,6 +1102,14 @@ struct array_info {
     // an offset of 16 bytes for int64 arrays (and n_items=2).
     int64_t offset;
 
+    // Storage layout of decimal(p <= 18) data buffers when this is a DECIMAL
+    // array: true means 8-byte little-endian int64 values (int64 storage),
+    // false means 16-byte little-endian. Defaults to the BODO_DECIMAL_INT64
+    // _STORAGE env setting, matching buffers allocated by C++ kernels. Arrow
+    // to Bodo conversions done for the JIT boundary pass false explicitly to
+    // force the 16-byte layout numba-generated code expects.
+    bool decimal_int64_layout;
+
     array_info(bodo_array_type::arr_type_enum _arr_type,
                Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
                std::vector<std::shared_ptr<BodoBuffer>> _buffers,
@@ -987,7 +1119,8 @@ struct array_info {
                bool _is_globally_replicated = false,
                bool _is_locally_unique = false, bool _is_locally_sorted = false,
                int64_t _offset = 0, std::vector<std::string> _field_names = {},
-               std::string _timezone_param = "")
+               std::string _timezone_param = "",
+               bool _decimal_int64_layout = decimal_int64_storage_enabled())
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -1002,7 +1135,8 @@ struct array_info {
           is_globally_replicated(_is_globally_replicated),
           is_locally_unique(_is_locally_unique),
           is_locally_sorted(_is_locally_sorted),
-          offset(_offset) {}
+          offset(_offset),
+          decimal_int64_layout(_decimal_int64_layout) {}
 
     /**
      * @brief returns the first data pointer for the array if any.
@@ -1376,11 +1510,24 @@ struct array_info {
     }
 };
 
+/**
+ * @brief Width-aware item size in bytes for an element of the given array
+ * (DECIMAL arrays carry their precision on the array_info).
+ *
+ */
+inline size_t bodo_array_item_size(const array_info& arr) {
+    if (arr.dtype == Bodo_CTypes::DECIMAL) {
+        return decimal_item_bytes(arr.precision, arr.decimal_int64_layout);
+    }
+    return numpy_item_size[arr.dtype];
+}
+
 std::unique_ptr<array_info> alloc_numpy(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
+        bodo::default_buffer_memory_manager(),
+    int precision = 0, int scale = 0);
 
 /**
  * @brief Allocate a numpy array with all nulls.
@@ -1466,7 +1613,8 @@ std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
+        bodo::default_buffer_memory_manager(),
+    std::string timezone = "", int precision = 0, int scale = 0);
 
 std::unique_ptr<array_info> alloc_nullable_array_all_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,

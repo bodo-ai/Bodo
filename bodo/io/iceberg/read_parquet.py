@@ -823,6 +823,31 @@ def distribute_pieces(
     return pieces_myrank
 
 
+def schema_with_decimal64(schema: pa.Schema) -> pa.Schema:
+    """
+    Map decimal(p <= 18) fields in an Arrow schema to decimal64(p, s).
+    Arrow reads these columns as 8-byte little-endian int64 values
+    (Decimal64Array), which matches Bodo's int64-backed decimal storage
+    layout. decimal(p > 18) fields are left as decimal128.
+    """
+    changed = False
+    fields = []
+    for field in schema:
+        if isinstance(field.type, pa.Decimal128Type) and field.type.precision <= 18:
+            fields.append(
+                pa.field(
+                    field.name,
+                    pa.decimal64(field.type.precision, field.type.scale),
+                    nullable=field.nullable,
+                    metadata=field.metadata,
+                )
+            )
+            changed = True
+        else:
+            fields.append(field)
+    return pa.schema(fields) if changed else schema
+
+
 def get_dataset_for_schema_group(
     schema_group: IcebergSchemaGroup,
     files: list[str],
@@ -880,10 +905,13 @@ def get_dataset_for_schema_group(
     # Set columns to be read as dictionary encoded in the read schema
     read_schema = schema_with_dict_cols(read_schema, schema_group_str_as_dict_cols)
 
+    # Read decimal(p <= 18) columns as decimal64 (8-byte int64 values) so the
+    # scanned batches match Bodo's int64-backed decimal storage. The final
+    # schema reported to the rest of the system keeps decimal128.
     dataset = ds.dataset(
         files,
         filesystem=filesystem,
-        schema=read_schema,
+        schema=schema_with_decimal64(read_schema),
         format=pq_format,
     )
 

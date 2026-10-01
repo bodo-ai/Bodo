@@ -929,7 +929,12 @@ std::shared_ptr<array_info> AsyncShuffleSendState::addArray(
     const mpi_str_comm_info& str_comm_info) {
     std::shared_ptr<array_info> send_arr = alloc_array_top_level(
         comm_info.n_rows_send, str_comm_info.n_sub_send, 0, in_arr->arr_type,
-        in_arr->dtype, -1, 2 * comm_info.n_pes, in_arr->num_categories);
+        in_arr->dtype, -1, 2 * comm_info.n_pes, in_arr->num_categories, false,
+        false, false, bodo::BufferPool::DefaultPtr(),
+        bodo::default_buffer_memory_manager(), "", in_arr->precision,
+        in_arr->scale);
+    send_arr->precision = in_arr->precision;
+    send_arr->scale = in_arr->scale;
     fill_send_array(send_arr, in_arr, comm_info, str_comm_info, true);
     this->send_arrs.push_back(send_arr);
     return send_arr;

@@ -1,13 +1,20 @@
 // C/C++ code for DecimalArray handling
 #include <Python.h>
 #include <arrow/util/basic_decimal.h>
+#include <array>
+#include <cassert>
+#include <cstdlib>
 #include <iostream>
 
+#include <arrow/array.h>
 #include <arrow/array/builder_decimal.h>
 #include <arrow/array/builder_primitive.h>
+#include <arrow/array/util.h>
 #include <arrow/compute/cast.h>
 #include <arrow/python/pyarrow.h>
+#include <arrow/scalar.h>
 #include <arrow/util/bit_util.h>
+#include <arrow/util/checked_cast.h>
 #include <arrow/util/decimal.h>
 #include <fmt/format.h>
 #include "_array_utils.h"
@@ -3227,6 +3234,944 @@ std::shared_ptr<arrow::Array> arrow_array_decimal_arithmetic_util(
             "arrow_array_decimal_arithmetic_util does not support operation " +
             op);
     }
+}
+
+// ------------------- Int64-backed decimal fast path -------------------------
+
+bool decimal_int64_fastpath_enabled() {
+    static const bool enabled = [] {
+        const char* v = std::getenv("BODO_DISABLE_DECIMAL_INT64_FASTPATH");
+        return v == nullptr || v[0] == '\0' || v[0] == '0';
+    }();
+    return enabled;
+}
+
+namespace {
+
+inline __int128 decimal_int64_pow10(int32_t k) {
+    static const std::array<__int128, 39> table = [] {
+        std::array<__int128, 39> t{};
+        t[0] = 1;
+        for (int i = 1; i < 39; i++) {
+            t[i] = t[i - 1] * 10;
+        }
+        return t;
+    }();
+    return table[k];
+}
+
+// Whether the 16 byte little-endian two's complement decimal value fits in a
+// signed 64-bit integer (i.e. the high 8 bytes are the sign extension of the
+// low 8 bytes).
+inline bool decimal_bytes_fit_int64(const uint8_t* p) {
+    int64_t lo;
+    int64_t hi;
+    memcpy(&lo, p, 8);
+    memcpy(&hi, p + 8, 8);
+    return hi == (lo >> 63);
+}
+
+inline __int128 load_decimal128_bytes(const uint8_t* p) {
+    int64_t lo;
+    int64_t hi;
+    memcpy(&lo, p, 8);
+    memcpy(&hi, p + 8, 8);
+    return ((__int128)hi << 64) | (uint64_t)lo;
+}
+
+inline void store_decimal128_bytes(uint8_t* p, __int128 v) {
+    int64_t lo = (int64_t)v;
+    int64_t hi = (int64_t)(v >> 64);
+    memcpy(p, &lo, 8);
+    memcpy(p + 8, &hi, 8);
+}
+
+// Divide by 10^reduce_by rounding half away from zero, matching the gandiva
+// ReduceScaleBy helper (and arrow::BasicDecimal128::ReduceScaleBy) used by
+// multiply_decimal_scalars_util.
+inline __int128 reduce_scale_round_half_away(__int128 in, int32_t reduce_by) {
+    if (reduce_by == 0) {
+        return in;
+    }
+    __int128 divisor = decimal_int64_pow10(reduce_by);
+    __int128 q = in / divisor;
+    __int128 r = in % divisor;
+    if (r < 0) {
+        r = -r;
+    }
+    if (r * 2 >= divisor) {
+        q += (in > 0 ? 1 : -1);
+    }
+    return q;
+}
+
+inline bool decimal_fits_in_precision_38(__int128 v) {
+    // |v| <= 10^38 - 1 (matches gandiva ConvertToDecimal128 overflow check)
+    __int128 abs_v = v < 0 ? -v : v;
+    return abs_v <= decimal_int64_pow10(38) - 1;
+}
+
+enum class DecimalOpKind {
+    ADD,
+    SUBTRACT,
+    MULTIPLY,
+    CMP_EQ,
+    CMP_NE,
+    CMP_LT,
+    CMP_GT,
+    CMP_LE,
+    CMP_GE,
+    UNSUPPORTED,
+};
+
+inline DecimalOpKind classify_decimal_op(const std::string& op) {
+    if (op == "add") {
+        return DecimalOpKind::ADD;
+    } else if (op == "subtract") {
+        return DecimalOpKind::SUBTRACT;
+    } else if (op == "multiply") {
+        return DecimalOpKind::MULTIPLY;
+    } else if (op == "equal") {
+        return DecimalOpKind::CMP_EQ;
+    } else if (op == "not_equal") {
+        return DecimalOpKind::CMP_NE;
+    } else if (op == "less") {
+        return DecimalOpKind::CMP_LT;
+    } else if (op == "greater") {
+        return DecimalOpKind::CMP_GT;
+    } else if (op == "less_equal") {
+        return DecimalOpKind::CMP_LE;
+    } else if (op == "greater_equal") {
+        return DecimalOpKind::CMP_GE;
+    }
+    return DecimalOpKind::UNSUPPORTED;
+}
+
+inline bool is_comparison_decimal_op(DecimalOpKind kind) {
+    return kind >= DecimalOpKind::CMP_EQ;
+}
+
+inline bool compare_int128(DecimalOpKind kind, __int128 a, __int128 b) {
+    switch (kind) {
+        case DecimalOpKind::CMP_EQ:
+            return a == b;
+        case DecimalOpKind::CMP_NE:
+            return a != b;
+        case DecimalOpKind::CMP_LT:
+            return a < b;
+        case DecimalOpKind::CMP_GT:
+            return a > b;
+        case DecimalOpKind::CMP_LE:
+            return a <= b;
+        case DecimalOpKind::CMP_GE:
+            return a >= b;
+        default:
+            assert(false);
+            return false;
+    }
+}
+
+// Description of one operand of the int64-backed decimal kernel.
+struct DecimalOpSide {
+    bool is_decimal = false;
+    bool is_scalar = false;
+    // For arrays: raw values pointer (offset already applied). Decimals store
+    // 16 bytes per element, integers bit_width / 8 bytes per element.
+    const uint8_t* values = nullptr;
+    int64_t length = 0;
+    // For integer sides.
+    int bit_width = 0;
+    bool is_signed = true;
+    // For scalar sides.
+    __int128 scalar_value = 0;
+    bool scalar_valid = true;
+    // For decimal scalar sides (built from the scalar value).
+    uint8_t scalar_bytes[16];
+};
+
+inline bool load_side_fits_int64(const DecimalOpSide& s, int64_t i) {
+    if (s.is_scalar) {
+        if (s.is_decimal) {
+            return decimal_bytes_fit_int64(s.scalar_bytes);
+        }
+        if (s.is_signed) {
+            return true;  // signed integers always fit int64
+        }
+        return s.scalar_value <= __INT64_MAX__;
+    }
+    if (s.is_decimal) {
+        return decimal_bytes_fit_int64(s.values + 16 * i);
+    }
+    if (s.is_signed) {
+        return true;  // signed integers always fit int64
+    }
+    // Unsigned: reload and bounds check.
+    __int128 v = 0;
+    switch (s.bit_width) {
+        case 8:
+            v = (uint64_t)*reinterpret_cast<const uint8_t*>(s.values + i);
+            break;
+        case 16:
+            v = (uint64_t)*reinterpret_cast<const uint16_t*>(s.values + 2 * i);
+            break;
+        case 32:
+            v = (uint64_t)*reinterpret_cast<const uint32_t*>(s.values + 4 * i);
+            break;
+        case 64:
+            v = (uint64_t)*reinterpret_cast<const uint64_t*>(s.values + 8 * i);
+            break;
+    }
+    return v <= __INT64_MAX__;
+}
+
+inline __int128 load_side_value(const DecimalOpSide& s, int64_t i) {
+    if (s.is_scalar) {
+        return s.scalar_value;
+    }
+    if (s.is_decimal) {
+        return load_decimal128_bytes(s.values + 16 * i);
+    }
+    switch (s.bit_width) {
+        case 8:
+            if (s.is_signed) {
+                return (
+                    __int128)(int64_t)(int8_t)(*reinterpret_cast<const int8_t*>(
+                    s.values + i));
+            }
+            return (__int128)(uint64_t)*reinterpret_cast<const uint8_t*>(
+                s.values + i);
+        case 16:
+            if (s.is_signed) {
+                return (__int128)(int64_t)(int16_t)(*reinterpret_cast<
+                                                    const int16_t*>(s.values +
+                                                                    2 * i));
+            }
+            return (__int128)(uint64_t)*reinterpret_cast<const uint16_t*>(
+                s.values + 2 * i);
+        case 32:
+            if (s.is_signed) {
+                return (__int128)(int64_t)(int32_t)(*reinterpret_cast<
+                                                    const int32_t*>(s.values +
+                                                                    4 * i));
+            }
+            return (__int128)(uint64_t)*reinterpret_cast<const uint32_t*>(
+                s.values + 4 * i);
+        case 64:
+            if (s.is_signed) {
+                return (__int128)(*reinterpret_cast<const int64_t*>(s.values +
+                                                                    8 * i));
+            }
+            return (__int128)(uint64_t)*reinterpret_cast<const uint64_t*>(
+                s.values + 8 * i);
+    }
+    throw std::runtime_error("load_side_value: unsupported bit width");
+}
+
+inline bool load_side_null(const DecimalOpSide& s,
+                           const std::shared_ptr<arrow::Array>& arr,
+                           int64_t i) {
+    if (s.is_scalar) {
+        return !s.scalar_valid;
+    }
+    return arr->IsNull(i);
+}
+
+// Convert a loaded value to arrow::Decimal128 for the slow (128-bit) path.
+inline arrow::Decimal128 side_value_to_decimal128(const DecimalOpSide& s,
+                                                  __int128 v) {
+    if (s.is_decimal) {
+        return arrow::Decimal128((int64_t)(v >> 64), (uint64_t)v);
+    }
+    // Integer side: zero-extend into the 128-bit two's complement value.
+    return arrow::Decimal128((int64_t)(v >> 64), (uint64_t)v);
+}
+
+// Build an array from raw value and validity buffers.
+inline std::shared_ptr<arrow::Array> make_array_from_buffers(
+    std::shared_ptr<arrow::DataType> type, int64_t length,
+    std::shared_ptr<arrow::Buffer> values_buf,
+    std::shared_ptr<arrow::Buffer> null_buf, int64_t null_count) {
+    auto data = arrow::ArrayData::Make(
+        std::move(type), length, {std::move(null_buf), std::move(values_buf)},
+        null_count);
+    return arrow::MakeArray(data);
+}
+
+inline std::shared_ptr<arrow::DataType> decimal_int64_output_type(
+    bool is_comparison, int result_precision, int result_scale) {
+    if (is_comparison) {
+        return arrow::boolean();
+    }
+    return arrow::decimal128(result_precision, result_scale);
+}
+
+}  // namespace
+
+arrow::Result<arrow::Datum> decimal_int64_binary_op(
+    const arrow::Datum& left, int left_precision, int left_scale,
+    const arrow::Datum& right, int right_precision, int right_scale,
+    int result_precision, int result_scale, const std::string& op,
+    bool check_max_precision) {
+    DecimalOpKind op_kind = classify_decimal_op(op);
+    if (op_kind == DecimalOpKind::UNSUPPORTED) {
+        return arrow::Status::Invalid(
+            "decimal_int64_binary_op: unsupported operation " + op);
+    }
+    bool is_comparison = is_comparison_decimal_op(op_kind);
+
+    // Parse operands.
+    DecimalOpSide sides[2];
+    std::shared_ptr<arrow::Array> side_arrays[2];
+    const arrow::Datum* datums[2] = {&left, &right};
+    for (int d = 0; d < 2; d++) {
+        const arrow::Datum& datum = *datums[d];
+        auto type_id = datum.type()->id();
+        DecimalOpSide& side = sides[d];
+        if (type_id == arrow::Type::DECIMAL128) {
+            side.is_decimal = true;
+            if (datum.is_array()) {
+                side_arrays[d] = datum.make_array();
+                auto dec_arr = std::static_pointer_cast<arrow::Decimal128Array>(
+                    side_arrays[d]);
+                side.is_scalar = false;
+                side.values = dec_arr->raw_values();
+                side.length = dec_arr->length();
+            } else {
+                auto scalar = datum.scalar();
+                auto dec_scalar =
+                    std::static_pointer_cast<arrow::Decimal128Scalar>(scalar);
+                side.is_scalar = true;
+                side.scalar_valid = dec_scalar->is_valid;
+                side.scalar_value =
+                    ((__int128)dec_scalar->value.high_bits() << 64) |
+                    dec_scalar->value.low_bits();
+                side.length = 1;
+                store_decimal128_bytes(side.scalar_bytes, side.scalar_value);
+                side.values = side.scalar_bytes;
+            }
+        } else if (type_id == arrow::Type::INT8 ||
+                   type_id == arrow::Type::INT16 ||
+                   type_id == arrow::Type::INT32 ||
+                   type_id == arrow::Type::INT64 ||
+                   type_id == arrow::Type::UINT8 ||
+                   type_id == arrow::Type::UINT16 ||
+                   type_id == arrow::Type::UINT32 ||
+                   type_id == arrow::Type::UINT64) {
+            side.is_decimal = false;
+            switch (type_id) {
+                case arrow::Type::INT8:
+                    side.bit_width = 8;
+                    side.is_signed = true;
+                    break;
+                case arrow::Type::INT16:
+                    side.bit_width = 16;
+                    side.is_signed = true;
+                    break;
+                case arrow::Type::INT32:
+                    side.bit_width = 32;
+                    side.is_signed = true;
+                    break;
+                case arrow::Type::INT64:
+                    side.bit_width = 64;
+                    side.is_signed = true;
+                    break;
+                case arrow::Type::UINT8:
+                    side.bit_width = 8;
+                    side.is_signed = false;
+                    break;
+                case arrow::Type::UINT16:
+                    side.bit_width = 16;
+                    side.is_signed = false;
+                    break;
+                case arrow::Type::UINT32:
+                    side.bit_width = 32;
+                    side.is_signed = false;
+                    break;
+                case arrow::Type::UINT64:
+                    side.bit_width = 64;
+                    side.is_signed = false;
+                    break;
+                default:
+                    break;
+            }
+            if (datum.is_array()) {
+                side_arrays[d] = datum.make_array();
+                side.is_scalar = false;
+                side.values = side_arrays[d]->data()->GetValues<uint8_t>(1) +
+                              side_arrays[d]->offset() * (side.bit_width / 8);
+                side.length = side_arrays[d]->length();
+            } else {
+                auto scalar = datum.scalar();
+                side.is_scalar = true;
+                side.scalar_valid = scalar->is_valid;
+                // Extract scalar value by type.
+                switch (type_id) {
+                    case arrow::Type::INT8:
+                        side.scalar_value =
+                            (__int128)(int64_t)arrow::internal::checked_cast<
+                                const arrow::Int8Scalar&>(*scalar)
+                                .value;
+                        break;
+                    case arrow::Type::INT16:
+                        side.scalar_value =
+                            (__int128)(int64_t)arrow::internal::checked_cast<
+                                const arrow::Int16Scalar&>(*scalar)
+                                .value;
+                        break;
+                    case arrow::Type::INT32:
+                        side.scalar_value =
+                            (__int128)(int64_t)arrow::internal::checked_cast<
+                                const arrow::Int32Scalar&>(*scalar)
+                                .value;
+                        break;
+                    case arrow::Type::INT64:
+                        side.scalar_value =
+                            (__int128)arrow::internal::checked_cast<
+                                const arrow::Int64Scalar&>(*scalar)
+                                .value;
+                        break;
+                    case arrow::Type::UINT8:
+                        side.scalar_value =
+                            (__int128)(uint64_t)arrow::internal::checked_cast<
+                                const arrow::UInt8Scalar&>(*scalar)
+                                .value;
+                        break;
+                    case arrow::Type::UINT16:
+                        side.scalar_value =
+                            (__int128)(uint64_t)arrow::internal::checked_cast<
+                                const arrow::UInt16Scalar&>(*scalar)
+                                .value;
+                        break;
+                    case arrow::Type::UINT32:
+                        side.scalar_value =
+                            (__int128)(uint64_t)arrow::internal::checked_cast<
+                                const arrow::UInt32Scalar&>(*scalar)
+                                .value;
+                        break;
+                    case arrow::Type::UINT64:
+                        side.scalar_value =
+                            (__int128)(uint64_t)arrow::internal::checked_cast<
+                                const arrow::UInt64Scalar&>(*scalar)
+                                .value;
+                        break;
+                    default:
+                        break;
+                }
+                side.length = 1;
+            }
+        } else {
+            return arrow::Status::Invalid(
+                "decimal_int64_binary_op: unsupported operand type " +
+                datum.type()->ToString());
+        }
+    }
+
+    // Determine output length and scalar-ness.
+    bool out_is_scalar = sides[0].is_scalar && sides[1].is_scalar;
+    int64_t n = out_is_scalar
+                    ? 1
+                    : (sides[0].is_scalar ? sides[1].length : sides[0].length);
+
+    std::shared_ptr<arrow::DataType> out_type = decimal_int64_output_type(
+        is_comparison, result_precision, result_scale);
+
+    // Scalar-scalar case: compute a single value. A null scalar operand
+    // produces a null scalar.
+    if (out_is_scalar) {
+        if (!sides[0].scalar_valid || !sides[1].scalar_valid) {
+            return arrow::Datum(arrow::MakeNullScalar(out_type));
+        }
+        __int128 v1 = load_side_value(sides[0], 0);
+        __int128 v2 = load_side_value(sides[1], 0);
+        if (is_comparison) {
+            __int128 a = v1, b = v2;
+            int max_scale = std::max(left_scale, right_scale);
+            a *= decimal_int64_pow10(max_scale - left_scale);
+            b *= decimal_int64_pow10(max_scale - right_scale);
+            return arrow::Datum(std::make_shared<arrow::BooleanScalar>(
+                compare_int128(op_kind, a, b)));
+        }
+        bool fits1 = load_side_fits_int64(sides[0], 0);
+        bool fits2 = load_side_fits_int64(sides[1], 0);
+        __int128 res;
+        if (check_max_precision && !(fits1 && fits2)) {
+            // Slow path with gandiva semantics for large values.
+            arrow::Decimal128 d1 = side_value_to_decimal128(sides[0], v1);
+            arrow::Decimal128 d2 = side_value_to_decimal128(sides[1], v2);
+            bool overflow = false;
+            arrow::Decimal128 res_dec;
+            if (op_kind == DecimalOpKind::MULTIPLY) {
+                res_dec = multiply_decimal_scalars_util(
+                    d1, left_precision, left_scale, d2, right_precision,
+                    right_scale, result_precision, result_scale, &overflow);
+            } else {
+                res_dec = add_or_subtract_decimal_scalars_util(
+                    d1, left_precision, left_scale, d2, right_precision,
+                    right_scale, result_precision, result_scale,
+                    op_kind == DecimalOpKind::ADD, &overflow);
+            }
+            if (overflow) {
+                return arrow::Status::Invalid("Decimal overflow in operation " +
+                                              op);
+            }
+            res = ((__int128)res_dec.high_bits() << 64) | res_dec.low_bits();
+        } else if (op_kind == DecimalOpKind::MULTIPLY) {
+            res = v1 * v2;
+            int delta = left_scale + right_scale - result_scale;
+            if (delta > 0) {
+                if (check_max_precision) {
+                    res = reduce_scale_round_half_away(res, delta);
+                } else {
+                    return arrow::Status::Invalid(
+                        "decimal_int64_binary_op: unexpected scale reduction");
+                }
+            }
+        } else {
+            v1 *= decimal_int64_pow10(result_scale - left_scale);
+            v2 *= decimal_int64_pow10(result_scale - right_scale);
+            res = op_kind == DecimalOpKind::ADD ? v1 + v2 : v1 - v2;
+        }
+        if (check_max_precision && !decimal_fits_in_precision_38(res)) {
+            return arrow::Status::Invalid("Decimal overflow in operation " +
+                                          op);
+        }
+        arrow::Decimal128 out_dec((int64_t)(res >> 64), (uint64_t)res);
+        return arrow::Datum(
+            std::make_shared<arrow::Decimal128Scalar>(out_dec, out_type));
+    }
+
+    // Allocate output buffers.
+    std::shared_ptr<arrow::Buffer> out_values_buf;
+    std::shared_ptr<arrow::Buffer> out_null_buf;
+    arrow::Result<std::unique_ptr<arrow::Buffer>> val_buf_res =
+        arrow::AllocateBuffer(
+            is_comparison ? arrow::bit_util::BytesForBits(n) : n * 16,
+            arrow::default_memory_pool());
+    if (!val_buf_res.ok()) {
+        return val_buf_res.status();
+    }
+    out_values_buf =
+        std::shared_ptr<arrow::Buffer>(std::move(val_buf_res).ValueOrDie());
+    // Zero the values so null slots contain defined (zero) values.
+    memset(out_values_buf->mutable_data(), 0,
+           is_comparison ? arrow::bit_util::BytesForBits(n) : n * 16);
+    arrow::Result<std::unique_ptr<arrow::Buffer>> null_buf_res =
+        arrow::AllocateBuffer(arrow::bit_util::BytesForBits(n),
+                              arrow::default_memory_pool());
+    if (!null_buf_res.ok()) {
+        return null_buf_res.status();
+    }
+    out_null_buf =
+        std::shared_ptr<arrow::Buffer>(std::move(null_buf_res).ValueOrDie());
+    memset(out_null_buf->mutable_data(), 0, arrow::bit_util::BytesForBits(n));
+
+    uint8_t* out_values = out_values_buf->mutable_data();
+    uint8_t* out_bits = out_null_buf->mutable_data();
+    int64_t null_count = 0;
+
+    // Scale alignment for comparisons: align both operands to the max scale.
+    int max_scale = std::max(left_scale, right_scale);
+
+    for (int64_t i = 0; i < n; i++) {
+        int64_t i1 = sides[0].is_scalar ? 0 : i;
+        int64_t i2 = sides[1].is_scalar ? 0 : i;
+        bool null1 = load_side_null(sides[0], side_arrays[0], i1);
+        bool null2 = load_side_null(sides[1], side_arrays[1], i2);
+        if (null1 || null2) {
+            null_count++;
+            continue;
+        }
+        arrow::bit_util::SetBitTo(out_bits, i, true);
+        if (is_comparison) {
+            __int128 a = load_side_value(sides[0], i1) *
+                         decimal_int64_pow10(max_scale - left_scale);
+            __int128 b = load_side_value(sides[1], i2) *
+                         decimal_int64_pow10(max_scale - right_scale);
+            bool res = compare_int128(op_kind, a, b);
+            arrow::bit_util::SetBitTo(out_values, i, res);
+            continue;
+        }
+        bool fits1 = load_side_fits_int64(sides[0], i1);
+        bool fits2 = load_side_fits_int64(sides[1], i2);
+        if (fits1 && fits2) {
+            __int128 v1 = load_side_value(sides[0], i1);
+            __int128 v2 = load_side_value(sides[1], i2);
+            __int128 res;
+            if (op_kind == DecimalOpKind::MULTIPLY) {
+                res = v1 * v2;
+                int delta = left_scale + right_scale - result_scale;
+                if (delta > 0) {
+                    if (check_max_precision) {
+                        res = reduce_scale_round_half_away(res, delta);
+                    } else {
+                        return arrow::Status::Invalid(
+                            "decimal_int64_binary_op: unexpected scale "
+                            "reduction");
+                    }
+                }
+            } else {
+                v1 *= decimal_int64_pow10(result_scale - left_scale);
+                v2 *= decimal_int64_pow10(result_scale - right_scale);
+                res = op_kind == DecimalOpKind::ADD ? v1 + v2 : v1 - v2;
+            }
+            if (check_max_precision && !decimal_fits_in_precision_38(res)) {
+                // Overflowing rows only occur on some ranks, and raising an
+                // error on just those ranks skips their remaining MPI
+                // collectives while other ranks keep executing the query,
+                // deadlocking all ranks. Match the legacy array utility
+                // instead, which stores its zero-initialized result.
+                store_decimal128_bytes(out_values + 16 * i, 0);
+            } else {
+                store_decimal128_bytes(out_values + 16 * i, res);
+            }
+        } else {
+            // Slow path for values that do not fit in int64: fall back to the
+            // existing 128-bit scalar utilities (same semantics).
+            arrow::Decimal128 d1 = side_value_to_decimal128(
+                sides[0], load_side_value(sides[0], i1));
+            arrow::Decimal128 d2 = side_value_to_decimal128(
+                sides[1], load_side_value(sides[1], i2));
+            bool overflow = false;
+            arrow::Decimal128 res_dec;
+            switch (op_kind) {
+                case DecimalOpKind::ADD:
+                    res_dec = add_or_subtract_decimal_scalars_util(
+                        d1, left_precision, left_scale, d2, right_precision,
+                        right_scale, result_precision, result_scale,
+                        true /* do_addition */, &overflow);
+                    break;
+                case DecimalOpKind::SUBTRACT:
+                    res_dec = add_or_subtract_decimal_scalars_util(
+                        d1, left_precision, left_scale, d2, right_precision,
+                        right_scale, result_precision, result_scale,
+                        false /* do_addition */, &overflow);
+                    break;
+                case DecimalOpKind::MULTIPLY:
+                    res_dec = multiply_decimal_scalars_util(
+                        d1, left_precision, left_scale, d2, right_precision,
+                        right_scale, result_precision, result_scale, &overflow);
+                    break;
+                default:
+                    return arrow::Status::Invalid(
+                        "decimal_int64_binary_op: unsupported slow path op");
+            }
+            store_decimal128_bytes(
+                out_values + 16 * i,
+                overflow ? ((__int128)0)
+                         : (((__int128)res_dec.high_bits() << 64) |
+                            res_dec.low_bits()));
+        }
+    }
+
+    std::shared_ptr<arrow::Buffer> null_buf_out =
+        null_count == 0 ? nullptr : out_null_buf;
+    std::shared_ptr<arrow::Array> out_arr;
+    if (is_comparison) {
+        out_arr = make_array_from_buffers(out_type, n, out_values_buf,
+                                          null_buf_out, null_count);
+    } else {
+        out_arr = make_array_from_buffers(out_type, n, out_values_buf,
+                                          null_buf_out, null_count);
+    }
+    return arrow::Datum(out_arr);
+}
+
+/**
+ * @brief Load an integer value of the given Bodo dtype as __int128.
+ */
+inline __int128 load_bodo_int_as_int128(Bodo_CTypes::CTypeEnum dtype,
+                                        const uint8_t* values, int64_t i) {
+    switch (dtype) {
+        case Bodo_CTypes::INT8:
+            return (__int128)(int64_t)(int8_t)(*reinterpret_cast<const int8_t*>(
+                values + i));
+        case Bodo_CTypes::INT16:
+            return (
+                __int128)(int64_t)(int16_t)(*reinterpret_cast<const int16_t*>(
+                values + 2 * i));
+        case Bodo_CTypes::INT32:
+            return (
+                __int128)(int64_t)(int32_t)(*reinterpret_cast<const int32_t*>(
+                values + 4 * i));
+        case Bodo_CTypes::INT64:
+            return (
+                __int128)(*reinterpret_cast<const int64_t*>(values + 8 * i));
+        case Bodo_CTypes::UINT8:
+            return (__int128)(uint64_t)*reinterpret_cast<const uint8_t*>(
+                values + i);
+        case Bodo_CTypes::UINT16:
+            return (__int128)(uint64_t)*reinterpret_cast<const uint16_t*>(
+                values + 2 * i);
+        case Bodo_CTypes::UINT32:
+            return (__int128)(uint64_t)*reinterpret_cast<const uint32_t*>(
+                values + 4 * i);
+        case Bodo_CTypes::UINT64:
+            return (__int128)(uint64_t)*reinterpret_cast<const uint64_t*>(
+                values + 8 * i);
+        default:
+            throw std::runtime_error(
+                "load_bodo_int_as_int128: unsupported dtype");
+    }
+}
+
+/**
+ * @brief Whether a value of the given Bodo integer dtype fits in a signed
+ * 64-bit integer (unsigned types may not).
+ */
+inline bool bodo_int_fits_int64(Bodo_CTypes::CTypeEnum dtype,
+                                const uint8_t* values, int64_t i) {
+    if (dtype == Bodo_CTypes::UINT64) {
+        return *reinterpret_cast<const uint64_t*>(values + 8 * i) <=
+               (uint64_t)INT64_MAX;
+    }
+    if (dtype == Bodo_CTypes::UINT32 || dtype == Bodo_CTypes::UINT16 ||
+        dtype == Bodo_CTypes::UINT8) {
+        return true;
+    }
+    return true;  // signed types always fit by construction
+}
+
+// Description of one operand of the array-level int64-backed decimal kernel.
+struct DecimalArrOpSide {
+    bool is_decimal = false;
+    bool is_scalar = false;
+    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
+    const uint8_t* values = nullptr;
+    const std::shared_ptr<array_info>* arr = nullptr;
+    int64_t length = 0;
+};
+
+std::shared_ptr<array_info> decimal_int64_binary_op_arrays(
+    const std::shared_ptr<array_info>& left, bool left_is_scalar,
+    const std::shared_ptr<array_info>& right, bool right_is_scalar,
+    int result_precision, int result_scale, const std::string& op,
+    bool check_max_precision) {
+    DecimalOpKind op_kind = classify_decimal_op(op);
+    if (op_kind == DecimalOpKind::UNSUPPORTED) {
+        return nullptr;
+    }
+    bool is_comparison = is_comparison_decimal_op(op_kind);
+
+    // Validate operand arrays and collect metadata.
+    auto side_supported = [](const std::shared_ptr<array_info>& arr) {
+        if (arr->arr_type != bodo_array_type::NULLABLE_INT_BOOL) {
+            return false;
+        }
+        if (arr->dtype == Bodo_CTypes::DECIMAL) {
+            return arr->scale >= 0 && arr->precision > 0 &&
+                   arr->precision <= 38;
+        }
+        switch (arr->dtype) {
+            case Bodo_CTypes::INT8:
+            case Bodo_CTypes::INT16:
+            case Bodo_CTypes::INT32:
+            case Bodo_CTypes::INT64:
+            case Bodo_CTypes::UINT8:
+            case Bodo_CTypes::UINT16:
+            case Bodo_CTypes::UINT32:
+            case Bodo_CTypes::UINT64:
+                return true;
+            default:
+                return false;
+        }
+    };
+    if (!side_supported(left) || !side_supported(right)) {
+        return nullptr;
+    }
+
+    int left_scale = left->dtype == Bodo_CTypes::DECIMAL ? left->scale : 0;
+    int right_scale = right->dtype == Bodo_CTypes::DECIMAL ? right->scale : 0;
+    int left_precision = left->dtype == Bodo_CTypes::DECIMAL
+                             ? left->precision
+                             : 0;  // only used by the slow path
+    int right_precision =
+        right->dtype == Bodo_CTypes::DECIMAL ? right->precision : 0;
+
+    // Non-check mode (exact results, no rounding): decimal operands must
+    // fit in int64 by construction (precision <= 18) since values that do
+    // not fit are only handled with gandiva rounding semantics.
+    if (!check_max_precision) {
+        if ((left->dtype == Bodo_CTypes::DECIMAL &&
+             !decimal_is_int64(left->precision)) ||
+            (right->dtype == Bodo_CTypes::DECIMAL &&
+             !decimal_is_int64(right->precision))) {
+            return nullptr;
+        }
+        if (op_kind == DecimalOpKind::MULTIPLY &&
+            left_scale + right_scale != result_scale) {
+            return nullptr;
+        }
+    }
+
+    if (!left_is_scalar && !right_is_scalar && left->length != right->length) {
+        return nullptr;
+    }
+
+    DecimalArrOpSide sides[2] = {
+        {left->dtype == Bodo_CTypes::DECIMAL, left_is_scalar, left->dtype,
+         (const uint8_t*)left->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+         &left, (int64_t)left->length},
+        {right->dtype == Bodo_CTypes::DECIMAL, right_is_scalar, right->dtype,
+         (const uint8_t*)right->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+         &right, (int64_t)right->length}};
+
+    // Width-aware decimal access: 8-byte int64-backed or 16-byte storage.
+    const size_t left_w =
+        sides[0].is_decimal ? (size_t)bodo_array_item_size(*left) : 0;
+    const size_t right_w =
+        sides[1].is_decimal ? (size_t)bodo_array_item_size(*right) : 0;
+    auto load_dec = [&](const DecimalArrOpSide& s, size_t w,
+                        int64_t i) -> __int128 {
+        return decimal_get_value(s.values + w * i, s.arr->get()->precision);
+    };
+    auto dec_fits_int64 = [&](const DecimalArrOpSide& s, size_t w,
+                              int64_t i) -> bool {
+        if (w == 8) {
+            return true;  // 8-byte storage always fits by construction
+        }
+        return decimal_bytes_fit_int64(s.values + w * i);
+    };
+
+    int64_t n = left_is_scalar ? right->length : left->length;
+
+    std::unique_ptr<array_info> out_arr = alloc_nullable_array_no_nulls(
+        n, is_comparison ? Bodo_CTypes::_BOOL : Bodo_CTypes::DECIMAL, 0,
+        bodo::BufferPool::DefaultPtr(), bodo::default_buffer_memory_manager(),
+        "", is_comparison ? 0 : result_precision,
+        is_comparison ? 0 : result_scale);
+    if (!is_comparison) {
+        out_arr->precision = result_precision;
+        out_arr->scale = result_scale;
+    }
+    uint8_t* out_values =
+        (uint8_t*)out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+    const size_t out_w =
+        is_comparison ? 0 : (size_t)bodo_array_item_size(*out_arr);
+    int max_scale = std::max(left_scale, right_scale);
+
+    for (int64_t i = 0; i < n; i++) {
+        int64_t i1 = sides[0].is_scalar ? 0 : i;
+        int64_t i2 = sides[1].is_scalar ? 0 : i;
+        bool null1 =
+            !sides[0]
+                 .arr->get()
+                 ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i1);
+        bool null2 =
+            !sides[1]
+                 .arr->get()
+                 ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i2);
+        if (null1 || null2) {
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
+            continue;
+        }
+        if (is_comparison) {
+            __int128 a = sides[0].is_decimal
+                             ? load_dec(sides[0], left_w, i1)
+                             : load_bodo_int_as_int128(sides[0].dtype,
+                                                       sides[0].values, i1);
+            __int128 b = sides[1].is_decimal
+                             ? load_dec(sides[1], right_w, i2)
+                             : load_bodo_int_as_int128(sides[1].dtype,
+                                                       sides[1].values, i2);
+            a *= decimal_int64_pow10(max_scale - left_scale);
+            b *= decimal_int64_pow10(max_scale - right_scale);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, true);
+            SetBitTo(out_values, i, compare_int128(op_kind, a, b));
+            continue;
+        }
+        bool fits1 =
+            sides[0].is_decimal
+                ? dec_fits_int64(sides[0], left_w, i1)
+                : bodo_int_fits_int64(sides[0].dtype, sides[0].values, i1);
+        bool fits2 =
+            sides[1].is_decimal
+                ? dec_fits_int64(sides[1], right_w, i2)
+                : bodo_int_fits_int64(sides[1].dtype, sides[1].values, i2);
+        if (fits1 && fits2) {
+            __int128 v1 = sides[0].is_decimal
+                              ? load_dec(sides[0], left_w, i1)
+                              : load_bodo_int_as_int128(sides[0].dtype,
+                                                        sides[0].values, i1);
+            __int128 v2 = sides[1].is_decimal
+                              ? load_dec(sides[1], right_w, i2)
+                              : load_bodo_int_as_int128(sides[1].dtype,
+                                                        sides[1].values, i2);
+            __int128 res;
+            if (op_kind == DecimalOpKind::MULTIPLY) {
+                res = v1 * v2;
+                int delta = left_scale + right_scale - result_scale;
+                if (delta > 0) {
+                    if (check_max_precision) {
+                        res = reduce_scale_round_half_away(res, delta);
+                    } else {
+                        return nullptr;  // guarded at entry
+                    }
+                }
+            } else {
+                v1 *= decimal_int64_pow10(result_scale - left_scale);
+                v2 *= decimal_int64_pow10(result_scale - right_scale);
+                res = op_kind == DecimalOpKind::ADD ? v1 + v2 : v1 - v2;
+            }
+            if (check_max_precision && !decimal_fits_in_precision_38(res)) {
+                // Overflowing rows only occur on some ranks, and raising an
+                // error on just those ranks skips their remaining MPI
+                // collectives while other ranks keep executing the query,
+                // deadlocking all ranks. Match the legacy array utility
+                // instead, which stores its zero-initialized result.
+                decimal_set_value(out_values + out_w * i, result_precision, 0);
+            } else {
+                decimal_set_value(out_values + out_w * i, result_precision,
+                                  res);
+            }
+        } else {
+            // Slow path for values that do not fit in int64: fall back to
+            // the existing 128-bit scalar utilities (same semantics).
+            __int128 raw1 = sides[0].is_decimal
+                                ? load_dec(sides[0], left_w, i1)
+                                : load_bodo_int_as_int128(sides[0].dtype,
+                                                          sides[0].values, i1);
+            __int128 raw2 = sides[1].is_decimal
+                                ? load_dec(sides[1], right_w, i2)
+                                : load_bodo_int_as_int128(sides[1].dtype,
+                                                          sides[1].values, i2);
+            arrow::Decimal128 d1((int64_t)(raw1 >> 64),
+                                 (uint64_t)(unsigned __int128)raw1);
+            arrow::Decimal128 d2((int64_t)(raw2 >> 64),
+                                 (uint64_t)(unsigned __int128)raw2);
+            bool overflow = false;
+            arrow::Decimal128 res_dec;
+            switch (op_kind) {
+                case DecimalOpKind::ADD:
+                    res_dec = add_or_subtract_decimal_scalars_util(
+                        d1, left_precision, left_scale, d2, right_precision,
+                        right_scale, result_precision, result_scale,
+                        true /* do_addition */, &overflow);
+                    break;
+                case DecimalOpKind::SUBTRACT:
+                    res_dec = add_or_subtract_decimal_scalars_util(
+                        d1, left_precision, left_scale, d2, right_precision,
+                        right_scale, result_precision, result_scale,
+                        false /* do_addition */, &overflow);
+                    break;
+                case DecimalOpKind::MULTIPLY:
+                    res_dec = multiply_decimal_scalars_util(
+                        d1, left_precision, left_scale, d2, right_precision,
+                        right_scale, result_precision, result_scale, &overflow);
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "decimal_int64_binary_op_arrays: unsupported slow "
+                        "path op");
+            }
+            decimal_set_value(out_values + out_w * i, result_precision,
+                              overflow
+                                  ? (__int128)0
+                                  : (((__int128)res_dec.high_bits() << 64) |
+                                     res_dec.low_bits()));
+        }
+        out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, true);
+    }
+    return std::shared_ptr<array_info>(out_arr.release());
 }
 
 template <ct_string op>

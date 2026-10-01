@@ -769,6 +769,12 @@ void hash_array(uint32_t* const out_hashes, std::shared_ptr<array_info> array,
                 start_row_offset);
         }
         case Bodo_CTypes::DECIMAL: {
+            if (bodo_array_item_size(*array) == 8) {
+                // 8-byte int64-backed decimal: hash the int64 values.
+                return hash_array_inner<int64_t, use_murmurhash>(
+                    out_hashes, data1, n_rows, seed, null_bitmask,
+                    start_row_offset);
+            }
             return hash_array_inner<__int128_t, use_murmurhash>(
                 out_hashes, data1, n_rows, seed, null_bitmask,
                 start_row_offset);
@@ -1097,8 +1103,17 @@ void hash_array_combine(uint32_t* const out_hashes,
             out_hashes, (double*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask(), start_row_offset);
     }
-    if (array->dtype == Bodo_CTypes::DECIMAL ||
-        array->dtype == Bodo_CTypes::INT128) {
+    if (array->dtype == Bodo_CTypes::DECIMAL) {
+        if (bodo_array_item_size(*array) == 8) {
+            return hash_array_combine_inner<int64_t>(
+                out_hashes, (int64_t*)array->data1(), n_rows, seed,
+                (uint8_t*)array->null_bitmask(), start_row_offset);
+        }
+        return hash_array_combine_inner<__int128_t>(
+            out_hashes, (__int128_t*)array->data1(), n_rows, seed,
+            (uint8_t*)array->null_bitmask(), start_row_offset);
+    }
+    if (array->dtype == Bodo_CTypes::INT128) {
         return hash_array_combine_inner<__int128_t>(
             out_hashes, (__int128_t*)array->data1(), n_rows, seed,
             (uint8_t*)array->null_bitmask(), start_row_offset);
@@ -1198,6 +1213,35 @@ void coherent_hash_array_inner_double(uint32_t* const out_hashes,
     }
 }
 
+/**
+ * @brief Copy an 8-byte int64-backed decimal array into the 16-byte
+ * little-endian representation, so its hash matches that of a 16-byte
+ * decimal array holding the same values (used when join/groupby keys of
+ * mixed decimal widths must hash coherently).
+ */
+static std::shared_ptr<array_info> widen_decimal_to_128(
+    const std::shared_ptr<array_info>& arr) {
+    int64_t n = arr->length;
+    int64_t n_bytes = ((n + 7) >> 3);
+    std::shared_ptr<BodoBuffer> data_buf =
+        AllocateBodoBuffer(n * BYTES_PER_DECIMAL, Bodo_CTypes::DECIMAL,
+                           bodo::BufferPool::DefaultPtr());
+    std::shared_ptr<BodoBuffer> null_buf =
+        AllocateBodoBuffer(n_bytes, bodo::BufferPool::DefaultPtr());
+    memcpy(null_buf->mutable_data(), arr->null_bitmask(), n_bytes);
+    const uint8_t* in = (const uint8_t*)arr->data1();
+    uint8_t* out = data_buf->mutable_data();
+    for (int64_t i = 0; i < n; i++) {
+        __int128_t v = decimal_get_value(in + i * 8, arr->precision);
+        memcpy(out + i * BYTES_PER_DECIMAL, &v, BYTES_PER_DECIMAL);
+    }
+    return std::make_shared<array_info>(
+        arr->arr_type, arr->dtype, n,
+        std::vector<std::shared_ptr<BodoBuffer>>({data_buf, null_buf}),
+        std::vector<std::shared_ptr<array_info>>({}), arr->precision,
+        arr->scale);
+}
+
 void coherent_hash_array(uint32_t* const out_hashes,
                          std::shared_ptr<array_info> array,
                          std::shared_ptr<array_info> ref_array, size_t n_rows,
@@ -1239,6 +1283,15 @@ void coherent_hash_array(uint32_t* const out_hashes,
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
     // For DATE / TIME / DATETIME / TIMEDELTA / TIMESTAMPTZ / DECIMAL no type
     // conversion is allowed
+    if (array->dtype == Bodo_CTypes::DECIMAL &&
+        ref_array->dtype == Bodo_CTypes::DECIMAL &&
+        bodo_array_item_size(*array) != bodo_array_item_size(*ref_array) &&
+        bodo_array_item_size(*array) == 8) {
+        // Mixed decimal widths hash differently (int64 vs __int128); widen
+        // the 8-byte side so both sides hash the 16-byte representation.
+        return hash_array(out_hashes, widen_decimal_to_128(array), n_rows, seed,
+                          is_parallel, true);
+    }
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::DATETIME ||
@@ -1450,6 +1503,15 @@ void coherent_hash_array_combine(uint32_t* const out_hashes,
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
     // For DATE / DATETIME / TIMEDELTA / TIMESTAMPTZ/ DECIMAL no type conversion
     // is allowed
+    if (array->dtype == Bodo_CTypes::DECIMAL &&
+        ref_array->dtype == Bodo_CTypes::DECIMAL &&
+        bodo_array_item_size(*array) != bodo_array_item_size(*ref_array) &&
+        bodo_array_item_size(*array) == 8) {
+        // Mixed decimal widths hash differently (int64 vs __int128); widen
+        // the 8-byte side so both sides hash the 16-byte representation.
+        return hash_array_combine(out_hashes, widen_decimal_to_128(array),
+                                  n_rows, seed, true, is_parallel);
+    }
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA ||

@@ -226,11 +226,17 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                          recv_count_bytes, rows_counts);
             }
         } else {
-            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+            const bool dec64 = (dtype == Bodo_CTypes::DECIMAL) &&
+                               (bodo_array_item_size(*in_arr) == 8);
+            MPI_Datatype mpi_typ =
+                dec64 ? get_MPI_typ(Bodo_CTypes::INT64) : get_MPI_typ(dtype);
             char *data1_ptr = nullptr;
             if (is_receiver || all_gather) {
-                out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type,
-                                                dtype, -1, 0, num_categories);
+                out_arr = alloc_array_top_level(
+                    n_rows_tot, -1, -1, arr_type, dtype, -1, 0, num_categories,
+                    false, false, false, bodo::BufferPool::DefaultPtr(),
+                    bodo::default_buffer_memory_manager(), "",
+                    in_arr->precision, in_arr->scale);
                 data1_ptr = out_arr->data1();
             }
             CHECK_MPI(
@@ -629,9 +635,15 @@ std::shared_ptr<array_info> scatter_array(
                       "MPI_Genscatterv:");
 
         } else {
-            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
-            out_arr = alloc_array_top_level(n_loc, -1, -1, arr_type, dtype, -1,
-                                            0, num_categories);
+            const bool dec64 = (dtype == Bodo_CTypes::DECIMAL) &&
+                               (bodo_array_item_size(*in_arr) == 8);
+            MPI_Datatype mpi_typ =
+                dec64 ? get_MPI_typ(Bodo_CTypes::INT64) : get_MPI_typ(dtype);
+            out_arr = alloc_array_top_level(
+                n_loc, -1, -1, arr_type, dtype, -1, 0, num_categories, false,
+                false, false, bodo::BufferPool::DefaultPtr(),
+                bodo::default_buffer_memory_manager(), "", in_arr->precision,
+                in_arr->scale);
             char *data1_ptr = out_arr->data1();
             CHECK_MPI(MPI_Genscatterv(in_arr->data1(), send_counts.data(),
                                       rows_disps.data(), data1_ptr, n_loc,

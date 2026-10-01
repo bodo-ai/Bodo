@@ -151,6 +151,10 @@ void Bodo_PyErr_SetString(PyObject* type, const char* message) {
 
 Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
     switch (type) {
+        case arrow::Type::DECIMAL64:
+            // Decimal64 is a decimal in the Bodo type system (the storage
+            // width is derived from the precision).
+            return Bodo_CTypes::DECIMAL;
         case arrow::Type::INT8:
             return Bodo_CTypes::INT8;
         case arrow::Type::UINT8:
@@ -302,9 +306,10 @@ std::unique_ptr<bodo::DataType> arrow_type_to_bodo_data_type(
         }
 
         // decimal array
-        case arrow::Type::DECIMAL128: {
+        case arrow::Type::DECIMAL128:
+        case arrow::Type::DECIMAL64: {
             auto arrow_decimal_type =
-                std::static_pointer_cast<arrow::Decimal128Type>(arrow_type);
+                std::static_pointer_cast<arrow::DecimalType>(arrow_type);
             return std::make_unique<bodo::DataType>(
                 bodo_array_type::NULLABLE_INT_BOOL,
                 arrow_to_bodo_type(arrow_type->id()),
@@ -1131,13 +1136,15 @@ std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
 std::unique_ptr<array_info> alloc_numpy(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     bodo::IBufferPool* const pool,
-    const std::shared_ptr<::arrow::MemoryManager> mm) {
-    int64_t size = length * numpy_item_size[typ_enum];
+    const std::shared_ptr<::arrow::MemoryManager> mm, int precision,
+    int scale) {
+    int64_t size = length * bodo_dtype_item_size(typ_enum, precision);
     std::unique_ptr<BodoBuffer> buffer =
         AllocateBodoBuffer(size, pool, std::move(mm));
     return std::make_unique<array_info>(
         bodo_array_type::NUMPY, typ_enum, length,
-        std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}));
+        std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}),
+        std::vector<std::shared_ptr<array_info>>({}), precision, scale);
 }
 
 std::unique_ptr<array_info> alloc_numpy_array_all_nulls(
@@ -1277,7 +1284,7 @@ std::unique_ptr<array_info> alloc_nullable_array(
         // we need these for the data as well.
         size = n_bytes;
     } else {
-        size = length * numpy_item_size[typ_enum];
+        size = length * bodo_dtype_item_size(typ_enum, precision);
     }
     std::unique_ptr<BodoBuffer> buffer = AllocateBodoBuffer(size, pool, mm);
     std::unique_ptr<BodoBuffer> buffer_bitmask =
@@ -1293,13 +1300,15 @@ std::unique_ptr<array_info> alloc_nullable_array(
 std::unique_ptr<array_info> alloc_nullable_array_no_nulls(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t extra_null_bytes,
     bodo::IBufferPool* const pool,
-    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    const std::shared_ptr<::arrow::MemoryManager> mm, std::string timezone,
+    int precision, int scale) {
     // Same as alloc_nullable_array but we set the null_bitmask
     // such that there are no null values in the output.
     // Useful for cases like allocating indices array of dictionary-encoded
     // string arrays such as input_file_name column where nulls are not possible
-    std::unique_ptr<array_info> arr = alloc_nullable_array(
-        length, typ_enum, extra_null_bytes, pool, std::move(mm));
+    std::unique_ptr<array_info> arr =
+        alloc_nullable_array(length, typ_enum, extra_null_bytes, pool,
+                             std::move(mm), timezone, precision, scale);
     size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
     memset(arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(), 0xff,
            n_bytes);  // null not possible
@@ -1655,7 +1664,8 @@ std::unique_ptr<array_info> alloc_array_like(
                 {std::move(array_item_arr)}));
     } else {
         std::unique_ptr<array_info> out_arr = alloc_array_top_level(
-            0, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false, pool, mm);
+            0, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false, pool, mm,
+            "", in_arr->precision, in_arr->scale);
         out_arr->precision = in_arr->precision;
         out_arr->scale = in_arr->scale;
         // For dict encoded columns, re-use the same dictionary if
@@ -1672,7 +1682,7 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
                           bool approximate_string_size) {
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
-        uint64_t siztype = numpy_item_size[earr->dtype];
+        uint64_t siztype = bodo_array_item_size(*earr);
         return siztype * earr->length;
     } else if (earr->arr_type == bodo_array_type::DICT) {
         // Not all functions want to consider the size of the dictionary.
@@ -1690,7 +1700,7 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
             // Nullable boolean arrays store 1 bit per boolean.
             return n_bytes * 2;
         } else {
-            uint64_t siztype = numpy_item_size[earr->dtype];
+            uint64_t siztype = bodo_array_item_size(*earr);
             return n_bytes + siztype * earr->length;
         }
     } else if (earr->arr_type == bodo_array_type::TIMESTAMPTZ) {
@@ -1818,7 +1828,10 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
             earr->length, earr->n_sub_elems(), 0, earr->arr_type, earr->dtype,
             earr->arr_type == bodo_array_type::STRING ? earr->array_id : -1, 0,
             earr->num_categories, earr->is_globally_replicated,
-            earr->is_locally_unique, earr->is_locally_sorted);
+            earr->is_locally_unique, earr->is_locally_sorted,
+            bodo::BufferPool::DefaultPtr(),
+            bodo::default_buffer_memory_manager(), "", earr->precision,
+            earr->scale);
         farr->scale = earr->scale;
         farr->precision = earr->precision;
     }
@@ -1841,7 +1854,7 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
         if (earr->dtype == Bodo_CTypes::_BOOL) {
             data_copy_size = n_bytes;
         } else {
-            data_copy_size = earr->length * numpy_item_size[earr->dtype];
+            data_copy_size = earr->length * bodo_array_item_size(*earr);
         }
         memcpy(farr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
                earr->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
