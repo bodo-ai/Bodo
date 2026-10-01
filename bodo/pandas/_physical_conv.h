@@ -24,7 +24,8 @@ struct CTEInfo {
     std::shared_ptr<PhysicalCTE> physical_node;
 #endif  // USE_CUDF
     std::shared_ptr<Pipeline> cte_pipeline_root;
-    duckdb::LogicalMaterializedCTE& cte_logical_node;
+    std::optional<std::reference_wrapper<duckdb::LogicalMaterializedCTE>>
+        cte_logical_node;
 };
 
 class PhysicalPlanBuilder {

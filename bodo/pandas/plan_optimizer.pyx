@@ -463,10 +463,6 @@ cdef extern from "duckdb/planner/operator/logical_cteref.hpp" namespace "duckdb"
     cdef cppclass CLogicalCTERef" duckdb::LogicalCTERef"(CLogicalOperator):
         idx_t table_index
 
-cdef extern from "duckdb/planner/operator/logical_inlined_cte.hpp" namespace "duckdb" nogil:
-    cdef cppclass CLogicalInlinedCTE" duckdb::LogicalInlinedCTE"(CLogicalOperator):
-        pass
-
 cdef extern from "duckdb/planner/operator/logical_comparison_join.hpp" namespace "duckdb" nogil:
     cdef cppclass CLogicalComparisonJoin" duckdb::LogicalComparisonJoin"(CLogicalOperator):
         CJoinType join_type
@@ -529,6 +525,9 @@ cdef extern from "optimizer/runtime_join_filter.h" nogil:
 
 cdef extern from "_plan.h" nogil:
     cdef cppclass CLogicalJoinFilter" bodo::LogicalJoinFilter"(CLogicalOperator):
+        pass
+
+    cdef cppclass CLogicalInlinedCTE" bodo::LogicalInlinedCTE"(CLogicalOperator):
         pass
 
     cdef idx_t getTableIndex() except +
