@@ -14,8 +14,9 @@ inline bool gpu_capable(duckdb::LogicalCTERef &cteref) { return true; }
  */
 class PhysicalGPUCTE : public PhysicalGPUSink {
    public:
-    explicit PhysicalGPUCTE(const std::shared_ptr<bodo::Schema> sink_schema)
-        : output_schema(sink_schema) {
+    explicit PhysicalGPUCTE(const std::shared_ptr<bodo::Schema> sink_schema,
+                            int64_t op_id = -1)
+        : PhysicalOperator(op_id), output_schema(sink_schema) {
         PhysicalGPUSource::EnsureNoNumpyColumns(this->output_schema);
         arrow_output_schema = this->output_schema->ToArrowSchema();
     }
@@ -53,10 +54,6 @@ class PhysicalGPUCTE : public PhysicalGPUSink {
         throw std::runtime_error("GetResult called on a CTE node.");
     }
 
-    std::string ToString() override { return PhysicalGPUSink::ToString(); }
-
-    int64_t getOpId() const { return PhysicalGPUSink::getOpId(); }
-
    private:
     std::vector<GPU_DATA> collected_rows;
     const std::shared_ptr<bodo::Schema> output_schema;
@@ -66,8 +63,9 @@ class PhysicalGPUCTE : public PhysicalGPUSink {
 
 class PhysicalGPUCTERef : public PhysicalGPUSource {
    public:
-    explicit PhysicalGPUCTERef(std::shared_ptr<PhysicalGPUCTE> _cte)
-        : cte(_cte) {}
+    explicit PhysicalGPUCTERef(std::shared_ptr<PhysicalGPUCTE> _cte,
+                               int64_t op_id = -1)
+        : PhysicalOperator(op_id), cte(_cte) {}
 
     virtual ~PhysicalGPUCTERef() = default;
 
@@ -103,10 +101,6 @@ class PhysicalGPUCTERef : public PhysicalGPUSource {
     const std::shared_ptr<bodo::Schema> getOutputSchemaInternal() override {
         return cte->output_schema;
     }
-
-    std::string ToString() override { return PhysicalGPUSource::ToString(); }
-
-    int64_t getOpId() const { return PhysicalGPUSource::getOpId(); }
 
     void FinalizeSource(int64_t pipeline_num,
                         int64_t pipeline_position) override {

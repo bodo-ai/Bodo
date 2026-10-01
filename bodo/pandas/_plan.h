@@ -163,7 +163,7 @@ duckdb::unique_ptr<duckdb::LogicalComparisonJoin> make_comparison_join(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, duckdb::JoinType join_type,
     std::vector<std::pair<int, int>> &cond_vec, int join_id,
-    bool force_broadcast);
+    bool force_broadcast, int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalJoinFilter node.
@@ -181,7 +181,8 @@ duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
     std::vector<int> filter_ids,
     std::vector<std::vector<int64_t>> filter_columns,
     std::vector<std::vector<bool>> is_first_locations,
-    std::vector<std::vector<int64_t>> orig_build_key_cols);
+    std::vector<std::vector<int64_t>> orig_build_key_cols,
+    int64_t calcite_op_id = -1);
 
 /**
  * @brief Creates a LogicalSetOperation node.
@@ -194,7 +195,7 @@ duckdb::unique_ptr<bodo::LogicalJoinFilter> make_join_filter(
 duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
     std::unique_ptr<duckdb::LogicalOperator> &rhs, const std::string &setop,
-    int64_t num_cols);
+    int64_t num_cols, int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalProjection node.
@@ -207,7 +208,7 @@ duckdb::unique_ptr<duckdb::LogicalSetOperation> make_set_operation(
 duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
-    PyObject *out_schema_py);
+    PyObject *out_schema_py, int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalDistinct node.
@@ -220,7 +221,7 @@ duckdb::unique_ptr<duckdb::LogicalProjection> make_projection(
 duckdb::unique_ptr<duckdb::LogicalDistinct> make_distinct(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
-    PyObject *out_schema_py);
+    PyObject *out_schema_py, int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalOrder node.
@@ -236,8 +237,8 @@ duckdb::unique_ptr<duckdb::LogicalDistinct> make_distinct(
  */
 duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
     std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
-    std::vector<bool> &na_position, std::vector<int> &cols,
-    PyObject *schema_py);
+    std::vector<bool> &na_position, std::vector<int> &cols, PyObject *schema_py,
+    int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalTopN node.
@@ -256,7 +257,7 @@ duckdb::unique_ptr<duckdb::LogicalOrder> make_order(
 duckdb::unique_ptr<duckdb::LogicalTopN> make_topn(
     std::unique_ptr<duckdb::LogicalOperator> &source, std::vector<bool> &asc,
     std::vector<bool> &na_position, std::vector<int> &cols, PyObject *schema_py,
-    duckdb::idx_t limit, duckdb::idx_t offset);
+    duckdb::idx_t limit, duckdb::idx_t offset, int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalAggregate node.
@@ -271,7 +272,7 @@ duckdb::unique_ptr<duckdb::LogicalAggregate> make_aggregate(
     std::unique_ptr<duckdb::LogicalOperator> &source,
     std::vector<int> &key_indices,
     std::vector<std::unique_ptr<duckdb::Expression>> &expr_vec,
-    PyObject *out_schema_py);
+    PyObject *out_schema_py, int64_t calcite_op_id);
 
 /**
  * @brief Get column indices that are pushed down from a projection node to its
@@ -533,7 +534,8 @@ duckdb::unique_ptr<duckdb::Expression> make_case_expr(
  */
 duckdb::unique_ptr<duckdb::LogicalCrossProduct> make_cross_product(
     std::unique_ptr<duckdb::LogicalOperator> &lhs,
-    std::unique_ptr<duckdb::LogicalOperator> &rhs, bool force_broadcast);
+    std::unique_ptr<duckdb::LogicalOperator> &rhs, bool force_broadcast,
+    int64_t calcite_op_id);
 
 /**
  * @brief Create a filter node.
@@ -544,7 +546,7 @@ duckdb::unique_ptr<duckdb::LogicalCrossProduct> make_cross_product(
  */
 duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
     std::unique_ptr<duckdb::LogicalOperator> &source,
-    std::unique_ptr<duckdb::Expression> &filter_expr);
+    std::unique_ptr<duckdb::Expression> &filter_expr, int64_t calcite_op_id);
 
 /**
  * @brief Create a limit node.
@@ -554,7 +556,8 @@ duckdb::unique_ptr<duckdb::LogicalFilter> make_filter(
  * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the limit node
  */
 duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
-    std::unique_ptr<duckdb::LogicalOperator> &source, int n);
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n,
+    int64_t calcite_op_id);
 
 /**
  * @brief Create a sample node.
@@ -564,7 +567,8 @@ duckdb::unique_ptr<duckdb::LogicalLimit> make_limit(
  * @return duckdb::unique_ptr<duckdb::LogicalLimit> - the sample node
  */
 duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
-    std::unique_ptr<duckdb::LogicalOperator> &source, int n);
+    std::unique_ptr<duckdb::LogicalOperator> &source, int n,
+    int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalGet node for reading a Parquet dataset in DuckDB with
@@ -577,7 +581,7 @@ duckdb::unique_ptr<duckdb::LogicalSample> make_sample(
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
     PyObject *parquet_path, PyObject *pyarrow_schema, PyObject *storage_options,
-    int64_t num_rows, bool has_partitioning);
+    int64_t num_rows, bool has_partitioning, int64_t calcite_op_id);
 
 /**
  * @brief Create a LogicalCopyToFile node for writing a Parquet dataset.
@@ -593,14 +597,14 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_parquet_get_node(
 duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_parquet_write_node(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
     std::string path, std::string compression, std::string bucket_region,
-    int64_t row_group_size);
+    int64_t row_group_size, int64_t calcite_op_id);
 
 duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
     std::string table_loc, std::string bucket_region, int64_t max_pq_chunksize,
     std::string compression, PyObject *partition_tuples, PyObject *sort_tuples,
     std::string iceberg_schema_str, PyObject *output_pa_schema, PyObject *pyfs,
-    PyObject *theta_columns_bitmask);
+    PyObject *theta_columns_bitmask, int64_t calcite_op_id);
 
 /**
  * @brief Create a LogicalCopyToFile node for writing S3 Vectors.
@@ -613,7 +617,8 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_iceberg_write_node(
  */
 duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_s3_vectors_write_node(
     std::unique_ptr<duckdb::LogicalOperator> &source, PyObject *pyarrow_schema,
-    std::string vector_bucket_name, std::string index_name, PyObject *region);
+    std::string vector_bucket_name, std::string index_name, PyObject *region,
+    int64_t calcite_op_id);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe sequentially
@@ -624,7 +629,8 @@ duckdb::unique_ptr<duckdb::LogicalCopyToFile> make_s3_vectors_write_node(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
-    PyObject *df, PyObject *pyarrow_schema, int64_t num_rows);
+    PyObject *df, PyObject *pyarrow_schema, int64_t num_rows,
+    int64_t calcite_op_id);
 
 /**
  * @brief Create LogicalGet node for reading a dataframe in parallel
@@ -635,7 +641,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_seq_node(
  * @return duckdb::unique_ptr<duckdb::LogicalGet> output DuckDB node
  */
 duckdb::unique_ptr<duckdb::LogicalGet> make_dataframe_get_parallel_node(
-    std::string result_id, PyObject *pyarrow_schema, int64_t num_rows);
+    std::string result_id, PyObject *pyarrow_schema, int64_t num_rows,
+    int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalGet node for reading an Iceberg dataset in DuckDB
@@ -656,7 +663,8 @@ duckdb::unique_ptr<duckdb::LogicalGet> make_iceberg_get_node(
     PyObject *iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate,
     std::optional<std::vector<int>> selected_columns_opt,
     std::optional<int64_t> limit_opt,
-    std::optional<JoinFilterProgramState> rtjf_state_map_opt);
+    std::optional<JoinFilterProgramState> rtjf_state_map_opt,
+    int64_t calcite_op_id);
 
 /**
  * @brief Returns a statically created DuckDB database.

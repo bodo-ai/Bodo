@@ -16,8 +16,10 @@ class PhysicalReadEmpty : public PhysicalSource {
     const std::shared_ptr<bodo::Schema> output_schema;
 
    public:
-    explicit PhysicalReadEmpty(std::vector<duckdb::LogicalType> return_types)
-        : output_schema(initOutputSchema(return_types)) {}
+    explicit PhysicalReadEmpty(std::vector<duckdb::LogicalType> return_types,
+                               int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          output_schema(initOutputSchema(return_types)) {}
 
     virtual ~PhysicalReadEmpty() = default;
 

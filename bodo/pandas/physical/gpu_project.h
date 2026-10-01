@@ -42,7 +42,8 @@ class PhysicalGPUProjection : public PhysicalGPUProcessBatch {
     explicit PhysicalGPUProjection(
         std::vector<duckdb::ColumnBinding>& source_cols,
         duckdb::vector<duckdb::unique_ptr<duckdb::Expression>>& exprs,
-        std::shared_ptr<bodo::Schema> input_schema) {
+        std::shared_ptr<bodo::Schema> input_schema, int64_t op_id = -1)
+        : PhysicalOperator(op_id) {
         time_pt start_init_time = start_timer();
         this->output_schema = getProjectionOutputSchema(
             source_cols, exprs, input_schema, col_names, physical_exprs,

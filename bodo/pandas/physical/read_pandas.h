@@ -21,8 +21,10 @@ class PhysicalReadPandas : public PhysicalSource {
    public:
     explicit PhysicalReadPandas(PyObject* _df_or_series,
                                 std::vector<int>& selected_columns,
-                                std::shared_ptr<arrow::Schema> arrow_schema)
-        : output_schema(initOutputSchema(selected_columns, arrow_schema)) {
+                                std::shared_ptr<arrow::Schema> arrow_schema,
+                                int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          output_schema(initOutputSchema(selected_columns, arrow_schema)) {
         this->setInputDF(_df_or_series);
 
         // Select only the specified columns if provided by the optimizer

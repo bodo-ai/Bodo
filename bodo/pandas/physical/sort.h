@@ -24,12 +24,13 @@ struct PhysicalSortMetrics {
  */
 class PhysicalSort : public PhysicalSource, public PhysicalSink {
    private:
-    explicit PhysicalSort(
-        duckdb::vector<duckdb::BoundOrderByNode>& orders,
-        std::shared_ptr<bodo::Schema> input_schema,
-        std::vector<duckdb::ColumnBinding>& source_cols, int64_t limit,
-        int64_t offset, unsigned node_cols,
-        const std::vector<duckdb::idx_t>& projection_map = {}) {
+    explicit PhysicalSort(duckdb::vector<duckdb::BoundOrderByNode>& orders,
+                          std::shared_ptr<bodo::Schema> input_schema,
+                          std::vector<duckdb::ColumnBinding>& source_cols,
+                          int64_t limit, int64_t offset, unsigned node_cols,
+                          const std::vector<duckdb::idx_t>& projection_map = {},
+                          int64_t op_id = -1)
+        : PhysicalOperator(op_id) {
         time_pt start_init = start_timer();
         // Calculate the output schema.
         this->output_schema = std::make_shared<bodo::Schema>();
@@ -125,17 +126,20 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     explicit PhysicalSort(duckdb::LogicalOrder& logical_order,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
-                          int64_t limit = -1, int64_t offset = -1)
+                          int64_t limit = -1, int64_t offset = -1,
+                          int64_t op_id = -1)
         : PhysicalSort(logical_order.orders, input_schema, source_cols, limit,
                        offset, logical_order.GetColumnBindings().size(),
-                       logical_order.projection_map) {}
+                       logical_order.projection_map, op_id) {}
 
     explicit PhysicalSort(duckdb::LogicalTopN& logical_topn,
                           std::shared_ptr<bodo::Schema> input_schema,
                           std::vector<duckdb::ColumnBinding>& source_cols,
-                          int64_t limit = -1, int64_t offset = -1)
+                          int64_t limit = -1, int64_t offset = -1,
+                          int64_t op_id = -1)
         : PhysicalSort(logical_topn.orders, input_schema, source_cols, limit,
-                       offset, logical_topn.GetColumnBindings().size()) {}
+                       offset, logical_topn.GetColumnBindings().size(), {},
+                       op_id) {}
 
     virtual ~PhysicalSort() = default;
 
@@ -158,15 +162,14 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             this->metrics.consume_time);
-        PhysicalSource::addPipelineInfo(1, build_pipeline_num,
-                                        build_pipeline_position);
+        addPipelineInfo(1, build_pipeline_num, build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageTime(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.produce_time);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
             QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
-        PhysicalSource::addPipelineInfo(2, pipeline_num, pipeline_position);
+        addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**
@@ -237,10 +240,6 @@ class PhysicalSort : public PhysicalSource, public PhysicalSink {
     const std::shared_ptr<bodo::Schema> getOutputSchema() override {
         return output_schema;
     }
-
-    std::string ToString() override { return PhysicalSink::ToString(); }
-
-    int64_t getOpId() const override { return PhysicalSink::getOpId(); }
 
    private:
     static void bidirectionalColumnMapping(

@@ -229,18 +229,14 @@ inline std::shared_ptr<StreamAndEvent> make_stream_and_event(bool use_async) {
  */
 class PhysicalOperator {
    public:
-    PhysicalOperator() : op_id(next_op_id++) {}
-
-    virtual OperatorType operator_type() const = 0;
-
-    bool is_source() const { return operator_type() != OperatorType::SINK; }
-    bool is_sink() const { return operator_type() != OperatorType::SOURCE; }
+    PhysicalOperator(int64_t op_id_ = -1)
+        : op_id(op_id_ == -1 ? next_op_id++ : op_id_) {}
 
     virtual std::string ToString() {
         return typeid(*this).name();  // returns mangled name
     }
 
-    virtual int64_t getOpId() const { return op_id; }
+    int64_t getOpId() const { return op_id; }
 
     void addPipelineInfo(int stage, int64_t pipeline_num,
                          int64_t pipeline_position) {
@@ -264,9 +260,9 @@ class PhysicalOperator {
  * pipelines.
  *
  */
-class PhysicalSource : public PhysicalOperator {
+class PhysicalSource : public virtual PhysicalOperator {
    public:
-    OperatorType operator_type() const override { return OperatorType::SOURCE; }
+    PhysicalSource(int64_t op_id_ = -1) : PhysicalOperator(op_id_) {}
 
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult>
     ProduceBatch() = 0;
@@ -289,9 +285,14 @@ class PhysicalSource : public PhysicalOperator {
  * @brief Base class for operators that consume batches at the end of pipelines.
  *
  */
-class PhysicalSink : public PhysicalOperator {
+class PhysicalSink : public virtual PhysicalOperator {
    public:
-    OperatorType operator_type() const override { return OperatorType::SINK; }
+#ifdef USE_CUDF
+    PhysicalSink(int64_t op_id_ = -1)
+        : PhysicalOperator(op_id_), gpu_to_cpu_exchange(this->op_id) {}
+#else
+    PhysicalSink(int64_t op_id_ = -1) : PhysicalOperator(op_id_) {}
+#endif
 
     virtual OperatorResult ConsumeBatch(std::shared_ptr<table_info> input_batch,
                                         OperatorResult prev_op_result) = 0;
@@ -317,8 +318,6 @@ class PhysicalSink : public PhysicalOperator {
     }
 
 #ifdef USE_CUDF
-    PhysicalSink() : gpu_to_cpu_exchange(this->op_id) {}
-
    protected:
     GPUtoCPUExchange gpu_to_cpu_exchange;
 #endif
@@ -329,11 +328,14 @@ class PhysicalSink : public PhysicalOperator {
  * middle of pipelines.
  *
  */
-class PhysicalProcessBatch : public PhysicalOperator {
+class PhysicalProcessBatch : public virtual PhysicalOperator {
    public:
-    OperatorType operator_type() const override {
-        return OperatorType::SOURCE_AND_SINK;
-    }
+#ifdef USE_CUDF
+    PhysicalProcessBatch(int64_t op_id_ = -1)
+        : PhysicalOperator(op_id_), gpu_to_cpu_exchange(this->op_id) {}
+#else
+    PhysicalProcessBatch(int64_t op_id_ = -1) : PhysicalOperator(op_id_) {}
+#endif
 
     virtual std::pair<std::shared_ptr<table_info>, OperatorResult> ProcessBatch(
         std::shared_ptr<table_info> input_batch,
@@ -366,8 +368,6 @@ class PhysicalProcessBatch : public PhysicalOperator {
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 
 #ifdef USE_CUDF
-    PhysicalProcessBatch() : gpu_to_cpu_exchange(this->op_id) {}
-
    protected:
     GPUtoCPUExchange gpu_to_cpu_exchange;
 #endif
@@ -378,11 +378,9 @@ class PhysicalProcessBatch : public PhysicalOperator {
  * pipelines.
  *
  */
-class PhysicalGPUSource : public PhysicalOperator {
+class PhysicalGPUSource : public virtual PhysicalOperator {
    public:
-    OperatorType operator_type() const override {
-        return OperatorType::GPU_SOURCE;
-    }
+    PhysicalGPUSource(int64_t op_id_ = -1) : PhysicalOperator(op_id_) {}
 
     std::pair<GPU_DATA, OperatorResult> ProduceBatch();
 
@@ -438,11 +436,14 @@ class PhysicalGPUSource : public PhysicalOperator {
  * @brief Base class for operators that consume batches at the end of pipelines.
  *
  */
-class PhysicalGPUSink : public PhysicalOperator {
+class PhysicalGPUSink : public virtual PhysicalOperator {
    public:
-    OperatorType operator_type() const override {
-        return OperatorType::GPU_SINK;
-    }
+#ifdef USE_CUDF
+    PhysicalGPUSink(int64_t op_id_ = -1)
+        : PhysicalOperator(op_id_), cpu_to_gpu_exchange(this->op_id) {}
+#else
+    PhysicalGPUSink(int64_t op_id_ = -1) : PhysicalOperator(op_id_) {}
+#endif
 
     OperatorResult ConsumeBatch(GPU_DATA input_batch,
                                 OperatorResult prev_op_result);
@@ -472,8 +473,6 @@ class PhysicalGPUSink : public PhysicalOperator {
     }
 
 #ifdef USE_CUDF
-    PhysicalGPUSink() : cpu_to_gpu_exchange(this->op_id) {}
-
    protected:
     CPUtoGPUExchange cpu_to_gpu_exchange;
 #endif
@@ -484,11 +483,14 @@ class PhysicalGPUSink : public PhysicalOperator {
  * middle of pipelines.
  *
  */
-class PhysicalGPUProcessBatch : public PhysicalOperator {
+class PhysicalGPUProcessBatch : public virtual PhysicalOperator {
    public:
-    OperatorType operator_type() const override {
-        return OperatorType::GPU_SOURCE_AND_SINK;
-    }
+#ifdef USE_CUDF
+    PhysicalGPUProcessBatch(int64_t op_id_ = -1)
+        : PhysicalOperator(op_id_), cpu_to_gpu_exchange(this->op_id) {}
+#else
+    PhysicalGPUProcessBatch(int64_t op_id_ = -1) : PhysicalOperator(op_id_) {}
+#endif
 
     std::pair<GPU_DATA, OperatorResult> ProcessBatch(
         GPU_DATA input_batch, OperatorResult prev_op_result);
@@ -524,8 +526,6 @@ class PhysicalGPUProcessBatch : public PhysicalOperator {
     virtual const std::shared_ptr<bodo::Schema> getOutputSchema() = 0;
 
 #ifdef USE_CUDF
-    PhysicalGPUProcessBatch() : cpu_to_gpu_exchange(this->op_id) {}
-
    protected:
     CPUtoGPUExchange cpu_to_gpu_exchange;
 #endif

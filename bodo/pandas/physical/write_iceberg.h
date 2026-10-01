@@ -83,8 +83,10 @@ static PyObject* gather_iceberg_files_info(PyObject* iceberg_files_info_py) {
 class PhysicalWriteIceberg : public PhysicalSink {
    public:
     explicit PhysicalWriteIceberg(std::shared_ptr<bodo::Schema> in_bodo_schema,
-                                  IcebergWriteFunctionData& bind_data)
-        : in_schema(std::move(bind_data.in_schema)),
+                                  IcebergWriteFunctionData& bind_data,
+                                  int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          in_schema(std::move(bind_data.in_schema)),
           table_loc(std::move(bind_data.table_loc)),
           bucket_region(std::move(bind_data.bucket_region)),
           max_pq_chunksize(bind_data.max_pq_chunksize),

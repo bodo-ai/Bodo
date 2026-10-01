@@ -84,7 +84,10 @@ class LazyPlan:
             func_name = args[1]
             return f"ArrowScalarFuncExpression({func_name})"
 
-        out = f"{self.plan_class}: \n"
+        out = f"{self.plan_class}"
+        if hasattr(self, "calcite_op_id") and self.calcite_op_id is not None:
+            out += f" (CalciteOpID: {self.calcite_op_id})"
+        out += ":\n"
         args_str = ""
         for arg in args:
             if isinstance(arg, pd.DataFrame):
@@ -282,7 +285,15 @@ class LazyPlan:
             args.reverse()
 
             # Create real duckdb class.
-            ret = getattr(plan_optimizer, self.plan_class)(self.pa_schema, *args)
+            kwargs = {}
+            if isinstance(self, LogicalOperator):
+                kwargs["calcite_op_id"] = (
+                    self.calcite_op_id if self.calcite_op_id else -1
+                )
+
+            ret = getattr(plan_optimizer, self.plan_class)(
+                self.pa_schema, *args, **kwargs
+            )
             # Add to cache so we don't convert it again.
             cache[id(self)] = ret
             return ret
@@ -305,6 +316,10 @@ class LazyPlan:
 
 class LogicalOperator(LazyPlan):
     """Base class for all logical operators in the Bodo query plan."""
+
+    # The Calcite operator ID associated with this plan node, if any,
+    # for query profiling in BodoSQL.
+    calcite_op_id: int | None = None
 
     def __init__(self, empty_data, *args):
         super().__init__(self.__class__.__name__, empty_data, *args)

@@ -16,8 +16,12 @@
 class PhysicalLimit : public PhysicalSource, public PhysicalSink {
    public:
     explicit PhysicalLimit(uint64_t nrows,
-                           std::shared_ptr<bodo::Schema> input_schema)
-        : n(nrows), local_remaining(nrows), output_schema(input_schema) {}
+                           std::shared_ptr<bodo::Schema> input_schema,
+                           int64_t op_id = -1)
+        : PhysicalOperator(op_id),
+          n(nrows),
+          local_remaining(nrows),
+          output_schema(input_schema) {}
 
     virtual ~PhysicalLimit() = default;
 
@@ -82,7 +86,7 @@ class PhysicalLimit : public PhysicalSource, public PhysicalSink {
     void FinalizeSource(int64_t pipeline_num,
                         int64_t pipeline_position) override {
         QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
+            getOpId(), PhysicalSink::ToString());
     }
 
     /**

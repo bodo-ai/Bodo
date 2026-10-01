@@ -29,8 +29,9 @@
 
 PhysicalGPUWriteIceberg::PhysicalGPUWriteIceberg(
     std::shared_ptr<bodo::Schema> in_bodo_schema,
-    IcebergWriteFunctionData& bind_data)
-    : in_schema(std::move(bind_data.in_schema)),
+    IcebergWriteFunctionData& bind_data, int64_t op_id)
+    : PhysicalOperator(op_id),
+      in_schema(std::move(bind_data.in_schema)),
       table_loc(std::move(bind_data.table_loc)),
       max_pq_chunksize(bind_data.max_pq_chunksize),
       compression(std::move(bind_data.compression)),

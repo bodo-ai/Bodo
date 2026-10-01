@@ -18,8 +18,9 @@ struct PhysicalUnionAllMetrics {
  */
 class PhysicalUnionAll : public PhysicalProcessBatch, public PhysicalSink {
    public:
-    explicit PhysicalUnionAll(std::shared_ptr<bodo::Schema> input_schema)
-        : output_schema(input_schema) {}
+    explicit PhysicalUnionAll(std::shared_ptr<bodo::Schema> input_schema,
+                              int64_t op_id = -1)
+        : PhysicalOperator(op_id), output_schema(input_schema) {}
 
     virtual ~PhysicalUnionAll() = default;
 
@@ -34,19 +35,15 @@ class PhysicalUnionAll : public PhysicalProcessBatch, public PhysicalSink {
         std::vector<MetricBase> metrics_out;
         this->ReportMetrics(metrics_out);
         QueryProfileCollector::Default().SubmitOperatorName(
-            PhysicalSink::getOpId(), PhysicalSink::ToString());
+            getOpId(), PhysicalSink::ToString());
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       1),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 1),
             std::move(metrics_out));
-        PhysicalProcessBatch::addPipelineInfo(1, build_pipeline_num,
-                                              build_pipeline_position);
+        addPipelineInfo(1, build_pipeline_num, build_pipeline_position);
         QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-            QueryProfileCollector::MakeOperatorStageID(PhysicalSink::getOpId(),
-                                                       2),
+            QueryProfileCollector::MakeOperatorStageID(getOpId(), 2),
             this->metrics.output_row_count);
-        PhysicalProcessBatch::addPipelineInfo(2, pipeline_num,
-                                              pipeline_position);
+        addPipelineInfo(2, pipeline_num, pipeline_position);
     }
 
     /**

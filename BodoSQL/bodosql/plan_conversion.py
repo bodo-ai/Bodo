@@ -6,6 +6,7 @@ import re
 import zoneinfo
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -36,6 +37,7 @@ from bodo.pandas.plan import (
     LogicalDistinct,
     LogicalFilter,
     LogicalJoinFilter,
+    LogicalOperator,
     LogicalOrder,
     LogicalProjection,
     LogicalSetOperation,
@@ -49,8 +51,12 @@ from bodo.pandas.plan import (
 
 CastOptions = CastExpression.CastOptions
 BodoStringCastOptions = CastExpression.BodoStringCastOptions
+
 from bodo.pandas.utils import wrap_plan
 from bodosql.imported_java_classes import JavaEntryPoint, gateway
+
+if TYPE_CHECKING:
+    from BodoSQL.bodosql.context import BodoSQLContext
 
 _DATE_PART_ARROW_FUNCS = {
     "YEAR": "year",
@@ -132,6 +138,62 @@ def _mysql_date_format_to_arrow_format(mysql_fmt: str) -> str:
     return _MYSQL_FORMAT_TOKEN_RE.sub(replace_mysql_token, mysql_fmt)
 
 
+def rel_to_op_id(rel, op_map: dict[int, int]) -> int:
+    """
+    Get the operator id (plus 10,000) from the operator map corresponding to the
+    given relational node.
+    """
+    op_id = op_map.get(rel.getId())
+    assert op_id is not None, (
+        f"Operator ID not found for relational node with ID: {rel.getId()}"
+    )
+
+    # Add 10,000 to op_id if coming for Calcite to avoid conflicts with non-Calcite
+    # operator IDs. Currently CTE references use their own generated ID since we
+    # insert LogicalCTERef nodes after converting the entire Calcite plan to Python
+    return op_id + 10000
+
+
+def add_calcite_op_id_to_plan(plan: LogicalOperator, calcite_op_id: int) -> int:
+    """Add the Calcite operator ID to the given plan node and its children if they
+    are not already associated with another operator.
+
+    To make operator ids unique, 10000 is added to each subsequent operator id
+    starting from the first plan node to not be assigned an id yet.
+
+    For example:
+    # operator id: 9
+    BodoPhysicalUnion(all=[true])
+        subplan 1
+        subplan 2
+        subplan 3
+        subplan 4
+
+    Would become:
+    LogicalSetOperation (OpID: 30009):
+        LogicalSetOperation (OpID: 20009):
+            LogicalSetOperation (OpID: 10009):
+                subplan 1
+                subplan 2
+            subplan 3
+        subplan 4
+    """
+    assert isinstance(plan, LogicalOperator), (
+        f"Expected plan argument to be a logical operator got type: {type(plan)}"
+    )
+
+    if plan.calcite_op_id is not None or calcite_op_id is None:
+        return calcite_op_id
+
+    for arg in plan.args:
+        if isinstance(arg, LogicalOperator):
+            next_op_id = add_calcite_op_id_to_plan(arg, calcite_op_id)
+            calcite_op_id = next_op_id
+
+    plan.calcite_op_id = calcite_op_id
+    return calcite_op_id + 10000
+
+
 @dataclass
 class IcebergReadInfo:
     """Information extracted from Iceberg read plan nodes."""
@@ -142,9 +204,16 @@ class IcebergReadInfo:
     # Columns to read from the table, in the order they should appear in output.
     colmap: list[int] = None
     limit: int = None
+    # The op id for the inner most read node.
+    # Filters, projections will use this ID instead of their original op id
+    # since they are merged with the read.
+    read_op_id: int | None = None
+    # Runtime join filters generated on top of read nodes will use their
+    # original op id.
+    join_filter_op_id: int | None = None
 
 
-def java_plan_to_python_plan(ctx, java_plan):
+def java_plan_to_python_plan(ctx: BodoSQLContext, java_plan):
     """Convert a BodoSQL Java plan (RelNode) to a DataFrame library plan
     (bodo.pandas.plan.LazyPlan) for execution in the C++ runtime backend.
     """
@@ -155,6 +224,7 @@ def java_plan_to_python_plan(ctx, java_plan):
     SqlKind = gateway.jvm.org.apache.calcite.sql.SqlKind
 
     java_class_name = java_plan.getClass().getSimpleName()
+    op_id = rel_to_op_id(java_plan, ctx.op_map)
 
     if java_class_name in (
         "PandasToBodoPhysicalConverter",
@@ -169,26 +239,6 @@ def java_plan_to_python_plan(ctx, java_plan):
         input = java_plan.getInput()
         return java_plan_to_python_plan(ctx, input)
 
-    if java_class_name == "PandasTableScan":
-        # TODO: support other table types and check table details
-        table_name = JavaEntryPoint.getLocalTableName(java_plan)
-        table = ctx.tables[table_name]
-        if isinstance(table, bodosql.TablePath):
-            if table._file_type == "pq":
-                return bd.read_parquet(table._file_path)._plan
-            else:
-                raise NotImplementedError(
-                    f"TablePath with file type {table._file_type} not supported in C++ backend yet"
-                )
-        elif isinstance(table, bodo.pandas.BodoDataFrame):
-            return table._plan
-        elif isinstance(table, pd.DataFrame):
-            return bodo.pandas.from_pandas(table)._plan
-        else:
-            raise NotImplementedError(
-                f"Table type {type(table)} not supported in C++ backend yet"
-            )
-
     # Traverse Iceberg plan nodes to extract read information similar to BodoSQL
     # (see flattenIcebergTree in BodoSQL Java code)
     if java_class_name == "IcebergToBodoPhysicalConverter":
@@ -200,7 +250,27 @@ def java_plan_to_python_plan(ctx, java_plan):
         visit_iceberg_node(ctx, input, read_info)
         return generate_iceberg_read(read_info)
 
-    if java_class_name in ("PandasProject", "BodoPhysicalProject"):
+    if java_class_name == "PandasTableScan":
+        # TODO: support other table types and check table details
+        table_name = JavaEntryPoint.getLocalTableName(java_plan)
+        table = ctx.tables[table_name]
+        if isinstance(table, bodosql.TablePath):
+            if table._file_type == "pq":
+                plan = bd.read_parquet(table._file_path)._plan
+            else:
+                raise NotImplementedError(
+                    f"TablePath with file type {table._file_type} not supported in C++ backend yet"
+                )
+        elif isinstance(table, bodo.pandas.BodoDataFrame):
+            plan = table._plan
+        elif isinstance(table, pd.DataFrame):
+            plan = bodo.pandas.from_pandas(table)._plan
+        else:
+            raise NotImplementedError(
+                f"Table type {type(table)} not supported in C++ backend yet"
+            )
+
+    elif java_class_name in ("PandasProject", "BodoPhysicalProject"):
         input_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
         exprs = [
             java_expr_to_python_expr(ctx, e, input_plan)
@@ -216,43 +286,49 @@ def java_plan_to_python_plan(ctx, java_plan):
             input_plan,
             exprs,
         )
-        return proj_plan
+        plan = proj_plan
 
-    if java_class_name == "BodoPhysicalJoin":
-        return java_join_to_python_join(ctx, java_plan)
+    elif java_class_name == "BodoPhysicalJoin":
+        plan = java_join_to_python_join(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalRuntimeJoinFilter":
+    elif java_class_name == "BodoPhysicalRuntimeJoinFilter":
         input_python_plan = java_plan_to_python_plan(ctx, java_plan.getInput())
         join_info = java_rtjf_to_join_info(ctx, java_plan)
-        return generate_runtime_join_filter(join_info, input_python_plan)
+        plan = generate_runtime_join_filter(join_info, input_python_plan)
 
-    if java_class_name == "BodoPhysicalFilter":
-        return java_filter_to_python_filter(ctx, java_plan)
+    elif java_class_name == "BodoPhysicalFilter":
+        plan = java_filter_to_python_filter(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalAggregate":
+    elif java_class_name == "BodoPhysicalAggregate":
         # TODO: support grouping sets
         if java_plan.usesGroupingSets():
             raise NotImplementedError(
                 "BodoPhysicalAggregate with grouping sets is not supported in C++ backend yet"
             )
-        return java_agg_to_python_agg(ctx, java_plan)
+        plan = java_agg_to_python_agg(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalSort":
-        return java_sort_to_python_sort(ctx, java_plan)
+    elif java_class_name == "BodoPhysicalSort":
+        plan = java_sort_to_python_sort(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalValues":
-        return java_values_to_python_values(ctx, java_plan)
+    elif java_class_name == "BodoPhysicalValues":
+        plan = java_values_to_python_values(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalCachedSubPlan":
-        return java_subplan_to_python_subplan(ctx, java_plan)
+    elif java_class_name == "BodoPhysicalCachedSubPlan":
+        plan = java_subplan_to_python_subplan(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalTableCreate":
-        return java_table_create_to_python(ctx, java_plan)
+    elif java_class_name == "BodoPhysicalTableCreate":
+        plan = java_table_create_to_python(ctx, java_plan)
 
-    if java_class_name == "BodoPhysicalUnion":
-        return java_union_to_python_union(ctx, java_plan)
+    elif java_class_name == "BodoPhysicalUnion":
+        plan = java_union_to_python_union(ctx, java_plan)
 
-    raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
+    else:
+        raise NotImplementedError(f"Plan node {java_class_name} not supported yet")
+
+    # Recursively add calcite op id to plan, since some calcite plan nodes might map
+    # to multiple LogicalOperator nodes.
+    add_calcite_op_id_to_plan(plan, op_id)
+    return plan
 
 
 def java_union_to_python_union(ctx, java_plan):
@@ -7479,6 +7555,7 @@ def visit_iceberg_node(ctx, java_plan, read_info: IcebergReadInfo):
 
     if java_class_name == "IcebergTableScan":
         read_info.scan_node = java_plan
+        read_info.read_op_id = rel_to_op_id(java_plan, ctx.op_map)
         return
 
     if java_class_name == "IcebergFilter":
@@ -7523,6 +7600,7 @@ def visit_iceberg_node(ctx, java_plan, read_info: IcebergReadInfo):
 
     if java_class_name == "IcebergRuntimeJoinFilter":
         read_info.join_filter_info = java_rtjf_to_join_info(ctx, java_plan)
+        read_info.join_filter_op_id = rel_to_op_id(java_plan, ctx.op_map)
         input = java_plan.getInput()
         visit_iceberg_node(ctx, input, read_info)
         return
@@ -7569,10 +7647,12 @@ def generate_iceberg_read(read_info: IcebergReadInfo):
         selected_fields=read_fields,
         limit=read_info.limit,
     )
+    add_calcite_op_id_to_plan(plan, read_info.read_op_id)
 
     # Insert Runtime Join Filters on top of the read if needed
     if read_info.join_filter_info is not None:
         plan = generate_runtime_join_filter(read_info.join_filter_info, plan)
+        add_calcite_op_id_to_plan(plan, read_info.join_filter_op_id)
 
     return plan
 

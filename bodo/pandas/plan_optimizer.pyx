@@ -141,7 +141,7 @@ cdef class _CastOptions(FunctionOptions):
     def __getstate__(self):
         if self.options == NULL:
             raise ValueError("CCastOptions pointer is unexpectedly NULL")
-        
+
         # NOTE: Arrow's CCastOptions defines `to_type` as shared_ptr[CDataType]
         # instead of as TypeHolder which is how C++ CastOptions declares it.
         # To reconcile such that both the Cython and C++ builds pass, we wrap
@@ -160,7 +160,7 @@ cdef class _CastOptions(FunctionOptions):
         py_to_type = state["to_type"]
         if py_to_type is not None:
             deref(self.options).to_type = pyarrow_unwrap_data_type(py_to_type)
-        
+
         for option_str in ["allow_int_overflow", "allow_time_truncate", "allow_time_overflow", "allow_decimal_truncate", "allow_float_truncate", "allow_invalid_utf8"]:
             setattr(self, option_str, state[option_str])
 
@@ -193,7 +193,7 @@ cdef class _BodoStringCastOptions(FunctionOptions):
     def __getstate__(self):
         if self.options == NULL:
             raise ValueError("CBodoStringCastOptions pointer is unexpectedly NULL")
-        
+
         cdef shared_ptr[CDataType] c_to_type = deref(self.options).to_type.GetSharedPtr()
         py_to_type = pyarrow_wrap_data_type(c_to_type) if c_to_type.get() != NULL else None
 
@@ -528,22 +528,22 @@ cdef extern from "_plan.h" nogil:
         pass
 
     cdef idx_t getTableIndex() except +
-    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, c_bool has_partitioning) except +
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows) except +
-    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows) except +
-    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate, optional[vector[int]] selected_columns_opt, optional[int64_t] limit_opt, optional[JoinFilterProgramState] join_info_opt) except +
+    cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, c_bool has_partitioning, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalGet] make_dataframe_get_parallel_node(c_string res_id, object arrow_schema, int64_t num_rows, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate, optional[vector[int]] selected_columns_opt, optional[int64_t] limit_opt, optional[JoinFilterProgramState] join_info_opt, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
-    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id, c_bool force_broadcast) except +
-    cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations, vector[vector[int64_t]] orig_build_key_cols) except +
-    cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_bool force_broadcast) except +
-    cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols) except +
+    cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id, c_bool force_broadcast, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations, vector[vector[int64_t]] orig_build_key_cols, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_bool force_broadcast, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalSetOperation] make_set_operation(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_string setop, int64_t num_cols, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalOperator] optimize_plan(unique_ptr[CLogicalOperator]) except +
-    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CLogicalDistinct] make_distinct(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
-    cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema) except +
-    cdef unique_ptr[CLogicalTopN] make_topn(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema, idx_t limit, idx_t offset) except +
-    cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema) except +
+    cdef unique_ptr[CLogicalProjection] make_projection(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalDistinct] make_distinct(unique_ptr[CLogicalOperator] source, vector[unique_ptr[CExpression]] expr_vec, object out_schema, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalOrder] make_order(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalTopN] make_topn(unique_ptr[CLogicalOperator] source, vector[c_bool] asc, vector[c_bool] na_position, vector[int] cols, object in_schema, idx_t limit, idx_t offset, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalAggregate] make_aggregate(unique_ptr[CLogicalOperator] source, vector[int] key_indices, vector[unique_ptr[CExpression]] expr_vec, object out_schema, int64_t calcite_op_id) except +
     cdef unique_ptr[CExpression] make_scalar_func_expr(object out_schema, vector[unique_ptr[CExpression]] in_exprs, object args, c_bool is_cfunc, c_bool has_state, c_string arrow_compute_func) except +
     cdef unique_ptr[CExpression] make_comparison_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_arithop_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, c_string opstr, object out_schema) except +
@@ -552,7 +552,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_conjunction_expr(unique_ptr[CExpression] lhs, unique_ptr[CExpression] rhs, CExpressionType etype) except +
     cdef unique_ptr[CExpression] make_unary_expr(unique_ptr[CExpression] lhs, CExpressionType etype, object out_schema) except +
     cdef unique_ptr[CExpression] make_case_expr(unique_ptr[CExpression] when, unique_ptr[CExpression] then, unique_ptr[CExpression] else_) except +
-    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr) except +
+    cdef unique_ptr[CLogicalFilter] make_filter(unique_ptr[CLogicalOperator] source, unique_ptr[CExpression] filter_expr, int64_t calcite_op_id) except +
     cdef unique_ptr[CExpression] make_const_null(object arrow_schema, int64_t field_idx) except +
     cdef unique_ptr[CExpression] make_const_list_expr(object list_scalar) except +
     cdef unique_ptr[CExpression] make_const_number_expr[T](object arrow_schema, T val) except +
@@ -566,14 +566,14 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CExpression] make_const_bool_expr(c_bool val) except +
     cdef unique_ptr[CExpression] make_col_ref_expr(unique_ptr[CLogicalOperator] source, object field, int col_idx) except +
     cdef unique_ptr[CExpression] make_agg_expr(unique_ptr[CLogicalOperator] source, object out_schema, c_string function_name, object py_udf_args, vector[int] input_column_indices, c_bool dropna) except +
-    cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size) except +
+    cdef unique_ptr[CLogicalCopyToFile] make_parquet_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string path, c_string compression, c_string bucket_region, int64_t row_group_size, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalCopyToFile] make_iceberg_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string table_loc,
         c_string bucket_region, int64_t max_pq_chunksize, c_string compression, object partition_tuples, object sort_tuples, c_string iceberg_schema_str,
-        object output_pa_schema, object fs, object theta_columns_bitmask) except +
+        object output_pa_schema, object fs, object theta_columns_bitmask, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalCopyToFile] make_s3_vectors_write_node(unique_ptr[CLogicalOperator] source, object out_schema, c_string vector_bucket_name,
-        c_string index_name, object region) except +
-    cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n) except +
-    cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n) except +
+        c_string index_name, object region, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalLimit] make_limit(unique_ptr[CLogicalOperator] source, int n, int64_t calcite_op_id) except +
+    cdef unique_ptr[CLogicalSample] make_sample(unique_ptr[CLogicalOperator] source, int n, int64_t calcite_op_id) except +
     cdef pair[int64_t, PyObjectPtr] execute_plan(unique_ptr[CLogicalOperator], object out_schema, c_bool use_sql_rules) except +
     cdef c_string plan_to_string(unique_ptr[CLogicalOperator], c_bool graphviz_format) except +
     cdef vector[int] get_projection_pushed_down_columns(unique_ptr[CLogicalOperator] proj) except +
@@ -681,13 +681,13 @@ cdef class LogicalComparisonJoin(LogicalOperator):
     """Wrapper around DuckDB's LogicalComparisonJoin to provide access in Python.
     """
 
-    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, CJoinType join_type, conditions, int join_id=-1, force_broadcast=False):
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, CJoinType join_type, conditions, int join_id=-1, force_broadcast=False, int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         cdef vector[int_pair] cond_vec
         for cond in conditions:
             cond_vec.push_back(int_pair(cond[0], cond[1]))
 
-        cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_comparison_join(lhs.c_logical_operator, rhs.c_logical_operator, join_type, cond_vec, join_id, force_broadcast)
+        cdef unique_ptr[CLogicalComparisonJoin] c_logical_comparison_join = make_comparison_join(lhs.c_logical_operator, rhs.c_logical_operator, join_type, cond_vec, join_id, force_broadcast, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_comparison_join.release())
 
     def __str__(self):
@@ -698,10 +698,10 @@ cdef class LogicalCrossProduct(LogicalOperator):
     """Wrapper around DuckDB's LogicalCrossProduct to provide access in Python.
     """
 
-    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, force_broadcast=False):
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, force_broadcast=False, int64_t calcite_op_id=-1):
         self.out_schema = out_schema
 
-        cdef unique_ptr[CLogicalCrossProduct] c_logical_cross_product = make_cross_product(lhs.c_logical_operator, rhs.c_logical_operator, force_broadcast)
+        cdef unique_ptr[CLogicalCrossProduct] c_logical_cross_product = make_cross_product(lhs.c_logical_operator, rhs.c_logical_operator, force_broadcast, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_cross_product.release())
 
     def __str__(self):
@@ -718,14 +718,14 @@ cdef class LogicalSetOperation(LogicalOperator):
     """Wrapper around DuckDB's LogicalSetOperation to provide access in Python.
     """
 
-    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, str setop):
+    def __cinit__(self, out_schema, LogicalOperator lhs, LogicalOperator rhs, str setop, int64_t calcite_op_id=-1):
         """
         setop - only value supported for now is "union all".  In the future,
                 "union" and "intersect" may be supported.
         """
         self.out_schema = out_schema
 
-        cdef unique_ptr[CLogicalSetOperation] c_logical_set_operation = make_set_operation(lhs.c_logical_operator, rhs.c_logical_operator, setop.encode(), len(self.out_schema))
+        cdef unique_ptr[CLogicalSetOperation] c_logical_set_operation = make_set_operation(lhs.c_logical_operator, rhs.c_logical_operator, setop.encode(), len(self.out_schema), calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_set_operation.release())
 
     def __str__(self):
@@ -736,7 +736,7 @@ cdef class LogicalProjection(LogicalOperator):
     """Wrapper around DuckDB's LogicalProjection to provide access in Python.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, object exprs):
+    def __cinit__(self, object out_schema, LogicalOperator source, object exprs, int64_t calcite_op_id=-1):
         cdef vector[unique_ptr[CExpression]] expr_vec
 
         for expr in exprs:
@@ -745,7 +745,7 @@ cdef class LogicalProjection(LogicalOperator):
         self.out_schema = out_schema
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, expr_vec, out_schema)
+        cdef unique_ptr[CLogicalProjection] c_logical_projection = make_projection(source.c_logical_operator, expr_vec, out_schema, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
 
     def __str__(self):
@@ -759,7 +759,7 @@ cdef class LogicalDistinct(LogicalOperator):
     """Wrapper around DuckDB's LogicalDistinct to provide access in Python.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, object exprs):
+    def __cinit__(self, object out_schema, LogicalOperator source, object exprs, int64_t calcite_op_id=-1):
         cdef vector[unique_ptr[CExpression]] expr_vec
 
         for expr in exprs:
@@ -768,7 +768,7 @@ cdef class LogicalDistinct(LogicalOperator):
         self.out_schema = out_schema
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalDistinct] c_logical_distinct = make_distinct(source.c_logical_operator, expr_vec, out_schema)
+        cdef unique_ptr[CLogicalDistinct] c_logical_distinct = make_distinct(source.c_logical_operator, expr_vec, out_schema, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_distinct.release())
 
     def __str__(self):
@@ -782,7 +782,7 @@ cdef class LogicalAggregate(LogicalOperator):
     """Wrapper around DuckDB's LogicalAggregate to provide access in Python.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, vector[int] key_indices, object exprs):
+    def __cinit__(self, object out_schema, LogicalOperator source, vector[int] key_indices, object exprs, int64_t calcite_op_id=-1):
         cdef vector[unique_ptr[CExpression]] expr_vec
 
         for expr in exprs:
@@ -791,7 +791,7 @@ cdef class LogicalAggregate(LogicalOperator):
         self.out_schema = out_schema
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalAggregate] c_logical_projection = make_aggregate(source.c_logical_operator, key_indices, expr_vec, out_schema)
+        cdef unique_ptr[CLogicalAggregate] c_logical_projection = make_aggregate(source.c_logical_operator, key_indices, expr_vec, out_schema, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_projection.release())
 
     def __str__(self):
@@ -808,11 +808,12 @@ cdef class LogicalOrder(LogicalOperator):
                   vector[c_bool] asc,
                   vector[c_bool] na_position,
                   vector[int] cols,
-                  object in_schema):
+                  object in_schema,
+                  int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalOrder] c_logical_order = make_order(source.c_logical_operator, asc, na_position, cols, in_schema)
+        cdef unique_ptr[CLogicalOrder] c_logical_order = make_order(source.c_logical_operator, asc, na_position, cols, in_schema, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_order.release())
 
     def __str__(self):
@@ -835,12 +836,13 @@ cdef class LogicalTopN(LogicalOperator):
                   vector[int] cols,
                   object in_schema,
                   idx_t limit,
-                  idx_t offset):
+                  idx_t offset,
+                  int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         self.sources = [source]
         self.limit = limit
 
-        cdef unique_ptr[CLogicalTopN] c_logical_topn = make_topn(source.c_logical_operator, asc, na_position, cols, in_schema, limit, offset)
+        cdef unique_ptr[CLogicalTopN] c_logical_topn = make_topn(source.c_logical_operator, asc, na_position, cols, in_schema, limit, offset, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_topn.release())
 
     def __str__(self):
@@ -1018,10 +1020,10 @@ cdef unique_ptr[CExpression] make_const_expr(object const_schema, val):
 
 
 cdef class LogicalFilter(LogicalOperator):
-    def __cinit__(self, out_schema, LogicalOperator source, Expression key):
+    def __cinit__(self, out_schema, LogicalOperator source, Expression key, int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         self.sources = [source]
-        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, key.c_expression)
+        cdef unique_ptr[CLogicalFilter] c_logical_filter = make_filter(source.c_logical_operator, key.c_expression, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_filter.release())
 
     def __str__(self):
@@ -1236,12 +1238,12 @@ cdef class CastExpression(Expression):
 cdef class LogicalLimit(LogicalOperator):
     cdef public int n
 
-    def __cinit__(self, out_schema, LogicalOperator source, n):
+    def __cinit__(self, out_schema, LogicalOperator source, n, int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         self.sources = [source]
         self.n = n
 
-        cdef unique_ptr[CLogicalLimit] c_logical_limit = make_limit(source.c_logical_operator, n)
+        cdef unique_ptr[CLogicalLimit] c_logical_limit = make_limit(source.c_logical_operator, n, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_limit.release())
 
     def __str__(self):
@@ -1255,7 +1257,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
     cdef readonly object storage_options
     cdef readonly int64_t nrows
 
-    def __cinit__(self, object out_schema, object parquet_path, object storage_options, bool has_partitioning):
+    def __cinit__(self, object out_schema, object parquet_path, object storage_options, bool has_partitioning, int64_t calcite_op_id=-1):
         from bodo.ext import hdist
 
         self.out_schema = out_schema
@@ -1263,7 +1265,7 @@ cdef class LogicalGetParquetRead(LogicalOperator):
         self.storage_options = storage_options
         self.nrows = -1
         cdef int64_t nrows_estimate = hdist.bcast_int64_py_wrapper(self._get_nrows(exact=False) if bodo.get_rank() == 0 else 0)
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate, has_partitioning)
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_parquet_get_node(parquet_path, out_schema, storage_options, nrows_estimate, has_partitioning, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
@@ -1315,10 +1317,10 @@ cdef class LogicalGetPandasReadSeq(LogicalOperator):
     """Represents sequential scan of a Pandas dataframe passed into from_pandas."""
     cdef readonly object df
 
-    def __cinit__(self, object out_schema, object df):
+    def __cinit__(self, object out_schema, object df, int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         self.df = df
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_seq_node(df, out_schema, self.getCardinality())
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_seq_node(df, out_schema, self.getCardinality(), calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def getCardinality(self):
@@ -1329,7 +1331,7 @@ cdef class LogicalGetPandasReadParallel(LogicalOperator):
     cdef int64_t nrows
 
     """Represents parallel scan of a Pandas dataframe passed into from_pandas."""
-    def __cinit__(self, object out_schema, int64_t nrows, object result_id):
+    def __cinit__(self, object out_schema, int64_t nrows, object result_id, int64_t calcite_op_id=-1):
         # result_id could be a string or LazyPlanDistributedArg if we are constructing the
         # plan locally for cardinality.  If so, extract res_id from that object.
         if not isinstance(result_id, str):
@@ -1340,7 +1342,7 @@ cdef class LogicalGetPandasReadParallel(LogicalOperator):
                 result_id = ""
         self.out_schema = out_schema
         self.nrows = nrows
-        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_parallel_node(result_id.encode(), out_schema, self.getCardinality())
+        cdef unique_ptr[CLogicalGet] c_logical_get = make_dataframe_get_parallel_node(result_id.encode(), out_schema, self.getCardinality(), calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def getCardinality(self):
@@ -1385,7 +1387,7 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
     def __cinit__(self, object arrow_out_schema, str table_identifier, object catalog_name,
         object catalog_properties, object iceberg_filter, object iceberg_schema,
         object arrow_read_schema, object snapshot_id, uint64_t table_len_estimate, object selected_columns,
-        object limit, object join_filter_info):
+        object limit, object join_filter_info, int64_t calcite_op_id=-1):
         import pyiceberg.catalog
 
         cdef object catalog = pyiceberg.catalog.load_catalog(catalog_name, **catalog_properties)
@@ -1410,7 +1412,7 @@ cdef class LogicalGetIcebergRead(LogicalOperator):
 
         cdef unique_ptr[CLogicalGet] c_logical_get = make_iceberg_get_node(arrow_read_schema,
             table_identifier.encode(), catalog, iceberg_filter, iceberg_schema, snapshot_id,
-            table_len_estimate, c_selected_columns, c_limit, c_rtjf_program_state)
+            table_len_estimate, c_selected_columns, c_limit, c_rtjf_program_state, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_get.release())
 
     def __str__(self):
@@ -1422,11 +1424,11 @@ cdef class LogicalParquetWrite(LogicalOperator):
     Wrapper around DuckDB's LogicalCopyToFile for writing Parquet datasets.
     """
 
-    def __cinit__(self, object out_schema, LogicalOperator source, str path, str compression, str bucket_region, int64_t row_group_size):
+    def __cinit__(self, object out_schema, LogicalOperator source, str path, str compression, str bucket_region, int64_t row_group_size, int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         self.sources = [source]
 
-        cdef unique_ptr[CLogicalCopyToFile] c_logical_copy_to_file = make_parquet_write_node(source.c_logical_operator, out_schema, path.encode(), compression.encode(), bucket_region.encode(), row_group_size)
+        cdef unique_ptr[CLogicalCopyToFile] c_logical_copy_to_file = make_parquet_write_node(source.c_logical_operator, out_schema, path.encode(), compression.encode(), bucket_region.encode(), row_group_size, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_copy_to_file.release())
 
     def __str__(self):
@@ -1449,13 +1451,14 @@ cdef class LogicalIcebergWrite(LogicalOperator):
             str iceberg_schema_str,
             object output_pa_schema,
             object fs,
-            object theta_columns_bitmask=None):
+            object theta_columns_bitmask=None,
+            int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         self.sources = [source]
         self.theta_columns_bitmask = theta_columns_bitmask
 
         cdef unique_ptr[CLogicalCopyToFile] c_logical_copy_to_file = make_iceberg_write_node(source.c_logical_operator, out_schema, table_loc.encode(),
-                bucket_region.encode(), max_pq_chunksize, compression.encode(), partition_tuples, sort_tuples, iceberg_schema_str.encode(), output_pa_schema, fs, theta_columns_bitmask)
+                bucket_region.encode(), max_pq_chunksize, compression.encode(), partition_tuples, sort_tuples, iceberg_schema_str.encode(), output_pa_schema, fs, theta_columns_bitmask, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_copy_to_file.release())
 
     def __str__(self):
@@ -1471,14 +1474,14 @@ cdef class LogicalS3VectorsWrite(LogicalOperator):
 
     def __cinit__(self, object out_schema, LogicalOperator source,
             str vector_bucket_name,
-            str index_name, object region):
+            str index_name, object region, int64_t calcite_op_id=-1):
         self.out_schema = out_schema
         self.sources = [source]
         self.vector_bucket_name = vector_bucket_name
         self.index_name = index_name
 
         cdef unique_ptr[CLogicalCopyToFile] c_logical_copy_to_file = make_s3_vectors_write_node(source.c_logical_operator, out_schema, vector_bucket_name.encode(),
-                index_name.encode(), region)
+                index_name.encode(), region, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_copy_to_file.release())
 
     def __str__(self):
@@ -1494,9 +1497,9 @@ cdef class LogicalJoinFilter(LogicalOperator):
             vector[int] join_filter_ids,
             vector[vector[int64_t]] equality_filter_columns,
             vector[vector[c_bool]] equality_is_first_locations,
-            vector[vector[int64_t]] orig_build_key_cols):
+            vector[vector[int64_t]] orig_build_key_cols, int64_t calcite_op_id=-1):
 
-        cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations, orig_build_key_cols)
+        cdef unique_ptr[CLogicalJoinFilter] c_logical_join_filter = make_join_filter(source.c_logical_operator, join_filter_ids, equality_filter_columns, equality_is_first_locations, orig_build_key_cols, calcite_op_id)
         self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalGet*> c_logical_join_filter.release())
 
     def __str__(self):

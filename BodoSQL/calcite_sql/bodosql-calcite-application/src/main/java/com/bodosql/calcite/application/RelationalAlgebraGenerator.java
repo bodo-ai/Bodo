@@ -568,7 +568,7 @@ public class RelationalAlgebraGenerator {
    * @return The optimized plan generated for the given SQL query.
    * @throws Exception If an error occurs while processing the SQL query.
    */
-  RelNode getOptimizedPlan(
+  Pair<RelNode, Map<Integer, Integer>> getOptimizedPlan(
       @NonNull String sql,
       @NonNull List<ColumnDataTypeInfo> dynamicParamTypes,
       @NonNull Map<String, ColumnDataTypeInfo> namedParamTypeMap)
@@ -576,7 +576,12 @@ public class RelationalAlgebraGenerator {
     try {
       SqlNode validatedSqlNode = validateQuery(sql, dynamicParamTypes, namedParamTypeMap);
       Pair<RelRoot, Map<Integer, Integer>> optimizedPlan = sqlToRel(validatedSqlNode);
-      return BodoUtilKt.bodoPhysicalProject(optimizedPlan.getLeft());
+      // Create a mapping for the new root/newly created nodes (similar to: getPandasStringFromPlan)
+      RelIDToOperatorIDVisitor v =
+          new RelIDToOperatorIDVisitor(new HashMap<>(optimizedPlan.getRight()));
+      RelNode finalPlan = BodoUtilKt.bodoPhysicalProject(optimizedPlan.getLeft());
+      v.visit(finalPlan, 0, null);
+      return Pair.of(finalPlan, v.getIDMapping());
     } finally {
       planner.close();
       // Close any open connections from catalogs
