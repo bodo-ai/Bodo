@@ -104,7 +104,7 @@ static void AddToContext(const LogicalOperator &op, LogicalRenderContext *contex
 
 template <class T>
 static void GetTreeWidthHeight(const T &op, idx_t &width, idx_t &height, LogicalRenderContext *context) {
-	// Bodo Change: Don't include inlined inlined CTE height in calculation.
+	// Bodo Change: Don't include LogicalInlinedCTEs' subplan heights in calculation.
 	if (SkipChildren(op, context) || !TreeChildrenIterator::HasChildren(op)) {
 		width = 1;
 		height = 1;
@@ -168,7 +168,7 @@ static unique_ptr<RenderTreeNode> CreateNode(const ProfilingNode &op, device_map
 	return result;
 }
 
-// Bodo Change: Add special handling for rendering CTE nodes.
+// Bodo Change: Add special handling for rendering LogicalInlinedCTE nodes.
 template <class T>
 static idx_t CreateTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t y, device_mapping_t *device_mapping,
 	LogicalRenderContext *context) {

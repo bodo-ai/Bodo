@@ -20,7 +20,7 @@ class PhysicalOperator;
 class Pipeline;
 struct PipelineRenderNode;
 
-// Bodo Change: Add context for rendering logical inlined CTEs
+// Bodo Change: Add context for rendering LogicalInlinedCTEs
 struct LogicalRenderContext {
     bool expand_inlined_ctes = false;
 
@@ -57,8 +57,6 @@ public:
 	string name;
 	InsertionOrderPreservingMap<string> extra_text;
 	vector<Coordinate> child_positions;
-	// Bodo Change: Add context for visualizing Inlined CTEs
-	LogicalRenderContext context;
 };
 
 struct RenderTree {
