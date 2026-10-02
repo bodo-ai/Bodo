@@ -24,7 +24,8 @@ struct CTEInfo {
     std::shared_ptr<PhysicalCTE> physical_node;
 #endif  // USE_CUDF
     std::shared_ptr<Pipeline> cte_pipeline_root;
-    duckdb::LogicalMaterializedCTE& cte_logical_node;
+    std::optional<std::reference_wrapper<duckdb::LogicalMaterializedCTE>>
+        cte_logical_node;
 };
 
 class PhysicalPlanBuilder {
@@ -126,6 +127,7 @@ class PhysicalPlanBuilder {
     void Visit(duckdb::LogicalMaterializedCTE& op);
     void Visit(duckdb::LogicalCTERef& op);
     void Visit(duckdb::LogicalEmptyResult& op);
+    void Visit(bodo::LogicalInlinedCTE& op);
     void Visit(bodo::LogicalJoinFilter& op);
 
     void Visit(duckdb::LogicalOperator& op) {
@@ -167,6 +169,9 @@ class PhysicalPlanBuilder {
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_EMPTY_RESULT) {
             Visit(op.Cast<duckdb::LogicalEmptyResult>());
+        } else if (op.type ==
+                   duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE) {
+            Visit(op.Cast<bodo::LogicalInlinedCTE>());
         } else if (op.type ==
                    duckdb::LogicalOperatorType::LOGICAL_EXTENSION_OPERATOR) {
             // TODO: add join filter to DuckDB operator types to allow more

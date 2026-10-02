@@ -23,6 +23,47 @@
 namespace bodo {
 
 /**
+ * @brief Logical operator representing a reusable, inlined cached subplan.
+ *
+ * This operator provides Calcite-style cache semantics for BodoSQL plans,
+ * where the DuckDB optimizer is not run. Each LogicalInlinedCTE contains only
+ * the subplan to be cached and a CTE index identifying the cached result. The
+ * first occurrence of a given CTE index materializes the subplan, while
+ * subsequent occurrences reuse the previously materialized result.
+ *
+ * A separate operator is needed instead of DuckDB's LogicalMaterializedCTE
+ * because LogicalMaterializedCTE represents both the subplan being
+ * materialized and the remainder of the plan that consumes it. This naturally
+ * encodes a nested CTE structure and makes it difficult to represent multiple
+ * independent, non-nested cached subplans.
+ *
+ * LogicalInlinedCTE instead makes each cache reference self-contained, allowing
+ * cached subplans to appear independently at arbitrary locations in the plan.
+ */
+class LogicalInlinedCTE : public duckdb::LogicalOperator {
+   public:
+    static constexpr const duckdb::LogicalOperatorType TYPE =
+        duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE;
+
+    LogicalInlinedCTE(duckdb::unique_ptr<duckdb::LogicalOperator> subplan,
+                      duckdb::idx_t cte_index)
+        : duckdb::LogicalOperator(
+              duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE),
+          cte_index(cte_index) {
+        this->children.push_back(std::move(subplan));
+    }
+
+    duckdb::vector<duckdb::ColumnBinding> GetColumnBindings() override {
+        return children[0]->GetColumnBindings();
+    }
+
+    duckdb::idx_t cte_index;
+
+   protected:
+    void ResolveTypes() override { types = children[0]->types; }
+};
+
+/**
  * @brief Logical join filter operator (extension of DuckDB logical operator).
  *
  */
@@ -148,6 +189,19 @@ duckdb::unique_ptr<duckdb::LogicalMaterializedCTE> make_cte(
  */
 duckdb::unique_ptr<duckdb::LogicalCTERef> make_cte_ref(
     PyObject *out_schema_py, duckdb::idx_t table_index);
+
+/**
+ * @brief Creates a LogicalInlinedCTE node.
+ *
+ * @param duplicated - the duplicated part of the plan
+ * @param out_schema_py - the schema of data coming out
+ * @param cte_index - a pre-allocated CTE index to match with CTE references
+ * @param calcite_op_id - the Calcite operation ID
+ * @return duckdb::unique_ptr<bodo::LogicalInlinedCTE> output node
+ */
+duckdb::unique_ptr<bodo::LogicalInlinedCTE> make_inlined_cte(
+    std::unique_ptr<duckdb::LogicalOperator> &duplicated,
+    PyObject *out_schema_py, duckdb::idx_t cte_index, int64_t calcite_op_id);
 
 /**
  * @brief Creates a LogicalComparisonJoin node.

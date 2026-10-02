@@ -905,8 +905,9 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalMaterializedCTE& op) {
     // non-duplicate side can find it.
     // The physical node and pipeline root will be filled in
     // the first time the CTE is referenced and reused afterwards.
-    ctes.insert({op.table_index,
-                 {.cte_pipeline_root = nullptr, .cte_logical_node = op}});
+    ctes.insert(
+        {op.table_index,
+         {.cte_pipeline_root = nullptr, .cte_logical_node = std::ref(op)}});
 
     this->Visit(*op.children[1]);
 }
@@ -922,7 +923,13 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
     CTEInfo& cte_index_info = table_index_iter->second;
 
     if (cte_index_info.cte_pipeline_root == nullptr) {
-        this->Visit(*cte_index_info.cte_logical_node.children[0]);
+        if (!cte_index_info.cte_logical_node) {
+            throw std::runtime_error(
+                "LogicalCTERef cte_logical_node is not present.");
+        }
+        duckdb::LogicalMaterializedCTE& cte_logical_node =
+            cte_index_info.cte_logical_node->get();
+        this->Visit(*cte_logical_node.children[0]);
         std::shared_ptr<bodo::Schema> in_table_schema =
             this->active_pipeline->getPrevOpOutputSchema();
         std::shared_ptr<Pipeline> done_pipeline;
@@ -931,12 +938,12 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
                      std::shared_ptr<PhysicalGPUCTE>>
             physical_cte;
 
-        if (node_run_on_gpu(cte_index_info.cte_logical_node)) {
+        if (node_run_on_gpu(cte_logical_node)) {
             physical_cte = std::make_shared<PhysicalGPUCTE>(
-                in_table_schema, cte_index_info.cte_logical_node.calcite_op_id);
+                in_table_schema, cte_logical_node.calcite_op_id);
         } else {
             physical_cte = std::make_shared<PhysicalCTE>(
-                in_table_schema, cte_index_info.cte_logical_node.calcite_op_id);
+                in_table_schema, cte_logical_node.calcite_op_id);
         }
 
         std::visit(
@@ -948,8 +955,8 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
             physical_cte);
 #else   // USE_CUDF
         std::shared_ptr<PhysicalCTE> physical_cte =
-            std::make_shared<PhysicalCTE>(
-                in_table_schema, cte_index_info.cte_logical_node.calcite_op_id);
+            std::make_shared<PhysicalCTE>(in_table_schema,
+                                          cte_logical_node.calcite_op_id);
         done_pipeline = this->active_pipeline->Build(physical_cte);
         cte_index_info.physical_node = physical_cte;
         cte_index_info.cte_pipeline_root = done_pipeline;
@@ -999,6 +1006,95 @@ void PhysicalPlanBuilder::Visit(duckdb::LogicalCTERef& op) {
     std::shared_ptr<PhysicalCTERef> physical_cte_ref =
         std::make_shared<PhysicalCTERef>(cte_index_info.physical_node,
                                          op.calcite_op_id);
+    this->active_pipeline = std::make_shared<PipelineBuilder>(physical_cte_ref);
+#endif  // USE_CUDF
+    this->active_pipeline->addRunBefore(cte_index_info.cte_pipeline_root);
+}
+
+void PhysicalPlanBuilder::Visit(bodo::LogicalInlinedCTE& op) {
+    auto table_index_iter = ctes.find(op.cte_index);
+    // If this is the first inlined CTE for this cte_index that we have visited
+    // then insert it into the ctes structure.
+    if (table_index_iter == ctes.end()) {
+        ctes.insert(
+            {op.cte_index,
+             {.cte_pipeline_root = nullptr, .cte_logical_node = std::nullopt}});
+        table_index_iter = ctes.find(op.cte_index);
+    }
+    CTEInfo& cte_index_info = table_index_iter->second;
+
+    if (cte_index_info.cte_pipeline_root == nullptr) {
+        this->Visit(*op.children[0]);
+        std::shared_ptr<bodo::Schema> in_table_schema =
+            this->active_pipeline->getPrevOpOutputSchema();
+        std::shared_ptr<Pipeline> done_pipeline;
+#ifdef USE_CUDF
+        std::variant<std::shared_ptr<PhysicalCTE>,
+                     std::shared_ptr<PhysicalGPUCTE>>
+            physical_cte;
+
+        if (node_run_on_gpu(op)) {
+            physical_cte = std::make_shared<PhysicalGPUCTE>(in_table_schema);
+        } else {
+            physical_cte = std::make_shared<PhysicalCTE>(in_table_schema);
+        }
+
+        std::visit(
+            [&](auto& vop) {
+                done_pipeline = this->active_pipeline->Build(vop);
+                cte_index_info.physical_node = vop;
+                cte_index_info.cte_pipeline_root = done_pipeline;
+            },
+            physical_cte);
+#else   // USE_CUDF
+        std::shared_ptr<PhysicalCTE> physical_cte =
+            std::make_shared<PhysicalCTE>(in_table_schema);
+        done_pipeline = this->active_pipeline->Build(physical_cte);
+        cte_index_info.physical_node = physical_cte;
+        cte_index_info.cte_pipeline_root = done_pipeline;
+#endif  // USE_CUDF
+    }
+
+#ifdef USE_CUDF
+    std::variant<std::shared_ptr<PhysicalCTERef>,
+                 std::shared_ptr<PhysicalGPUCTERef>>
+        physical_cte_ref;
+    std::visit(
+        [&](auto& pn) {
+            using U = std::decay_t<decltype(pn)>;
+
+            if constexpr (std::is_same_v<U, std::shared_ptr<PhysicalCTE>>) {
+                if (node_run_on_gpu(op)) {
+                    throw std::runtime_error(
+                        "Got mismatch with CPU CTE and GPU CTERef in "
+                        "PhysicalPlanBuidler::Visit(LogicalCTEref).");
+                } else {
+                    physical_cte_ref = std::make_shared<PhysicalCTERef>(pn);
+                }
+            } else if constexpr (std::is_same_v<
+                                     U, std::shared_ptr<PhysicalGPUCTE>>) {
+                if (node_run_on_gpu(op)) {
+                    physical_cte_ref = std::make_shared<PhysicalGPUCTERef>(pn);
+                } else {
+                    throw std::runtime_error(
+                        "Got mismatch with GPU CTE and CPU CTERef in "
+                        "PhysicalPlanBuidler::Visit(LogicalCTEref).");
+                }
+            } else {
+                throw std::runtime_error(
+                    "Got unknown type in "
+                    "PhysicalPlanBuidler::Visit(LogicalCTEref).");
+            }
+        },
+        cte_index_info.physical_node);
+    std::visit(
+        [&](auto& vop) {
+            this->active_pipeline = std::make_shared<PipelineBuilder>(vop);
+        },
+        physical_cte_ref);
+#else   // USE_CUDF
+    std::shared_ptr<PhysicalCTERef> physical_cte_ref =
+        std::make_shared<PhysicalCTERef>(cte_index_info.physical_node);
     this->active_pipeline = std::make_shared<PipelineBuilder>(physical_cte_ref);
 #endif  // USE_CUDF
     this->active_pipeline->addRunBefore(cte_index_info.cte_pipeline_root);

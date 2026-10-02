@@ -36,6 +36,7 @@ from bodo.pandas.plan import (
     LogicalCrossProduct,
     LogicalDistinct,
     LogicalFilter,
+    LogicalInlinedCTE,
     LogicalJoinFilter,
     LogicalOperator,
     LogicalOrder,
@@ -6795,13 +6796,14 @@ def java_subplan_to_python_subplan(ctx, java_subplan):
 
     subplan_id = java_subplan.getCacheID()
     if subplan_id in ctx.subplan_cache:
-        return ctx.subplan_cache[subplan_id]
+        subplan = ctx.subplan_cache[subplan_id]
+    else:
+        cached_plan = java_subplan.getCachedPlan()
+        assert cached_plan.getClass().getSimpleName() == "CachedPlanInfo"
+        subplan = java_plan_to_python_plan(ctx, cached_plan.getPlan())
+        ctx.subplan_cache[subplan_id] = subplan
 
-    cached_plan = java_subplan.getCachedPlan()
-    assert cached_plan.getClass().getSimpleName() == "CachedPlanInfo"
-    subplan = java_plan_to_python_plan(ctx, cached_plan.getPlan())
-    ctx.subplan_cache[subplan_id] = subplan
-    return subplan
+    return LogicalInlinedCTE(subplan.empty_data, subplan, subplan_id)
 
 
 def java_rtjf_to_join_info(ctx, java_plan) -> JoinFilterInfo:

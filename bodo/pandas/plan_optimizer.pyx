@@ -527,6 +527,9 @@ cdef extern from "_plan.h" nogil:
     cdef cppclass CLogicalJoinFilter" bodo::LogicalJoinFilter"(CLogicalOperator):
         pass
 
+    cdef cppclass CLogicalInlinedCTE" bodo::LogicalInlinedCTE"(CLogicalOperator):
+        pass
+
     cdef idx_t getTableIndex() except +
     cdef unique_ptr[CLogicalGet] make_parquet_get_node(object parquet_path, object arrow_schema, object storage_options, int64_t num_rows, c_bool has_partitioning, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalGet] make_dataframe_get_seq_node(object df, object arrow_schema, int64_t num_rows, int64_t calcite_op_id) except +
@@ -534,6 +537,7 @@ cdef extern from "_plan.h" nogil:
     cdef unique_ptr[CLogicalGet] make_iceberg_get_node(object arrow_schema, c_string table_identifier, object pyiceberg_catalog, object iceberg_filter, object iceberg_schema, int64_t snapshot_id, uint64_t table_len_estimate, optional[vector[int]] selected_columns_opt, optional[int64_t] limit_opt, optional[JoinFilterProgramState] join_info_opt, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalMaterializedCTE] make_cte(unique_ptr[CLogicalOperator] duplicated, unique_ptr[CLogicalOperator] uses_duplicated, object out_schema, idx_t table_index) except +
     cdef unique_ptr[CLogicalCTERef] make_cte_ref(object out_schema, idx_t table_index) except +
+    cdef unique_ptr[CLogicalInlinedCTE] make_inlined_cte(unique_ptr[CLogicalOperator] duplicated, object out_schema, idx_t table_index, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalComparisonJoin] make_comparison_join(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, CJoinType join_type, vector[int_pair] cond_vec, int join_id, c_bool force_broadcast, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalJoinFilter] make_join_filter(unique_ptr[CLogicalOperator] source, vector[int] join_filter_ids, vector[vector[int64_t]] equality_filter_columns, vector[vector[c_bool]] equality_is_first_locations, vector[vector[int64_t]] orig_build_key_cols, int64_t calcite_op_id) except +
     cdef unique_ptr[CLogicalCrossProduct] make_cross_product(unique_ptr[CLogicalOperator] lhs, unique_ptr[CLogicalOperator] rhs, c_bool force_broadcast, int64_t calcite_op_id) except +
@@ -675,6 +679,19 @@ cdef class LogicalCTERef(LogicalOperator):
 
     def __str__(self):
         return f"LogicalCTERef()"
+
+
+cdef class LogicalInlinedCTE(LogicalOperator):
+    """Wrapper around DuckDB's LogicalInlinedCTE to provide access in Python.
+    """
+
+    def __cinit__(self, out_schema, LogicalOperator duplicated, idx_t table_index, int64_t calcite_op_id=-1):
+        self.out_schema = out_schema
+        cdef unique_ptr[CLogicalInlinedCTE] c_logical_inlined_cte = make_inlined_cte(duplicated.c_logical_operator, out_schema, table_index, calcite_op_id)
+        self.c_logical_operator = unique_ptr[CLogicalOperator](<CLogicalOperator*> c_logical_inlined_cte.release())
+
+    def __str__(self):
+        return f"LogicalInlinedCTE()"
 
 
 cdef class LogicalComparisonJoin(LogicalOperator):

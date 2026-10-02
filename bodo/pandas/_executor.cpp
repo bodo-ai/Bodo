@@ -76,6 +76,7 @@ std::map<duckdb::LogicalOperatorType, std::vector<double>> ALPHA{
     {duckdb::LogicalOperatorType::LOGICAL_ORDER_BY, {6e-9, 1e-9}},
     {duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE, {1e-10, 1e-10}},
     {duckdb::LogicalOperatorType::LOGICAL_CTE_REF, {1e-10, 1e-10}},
+    {duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE, {1e-10, 1e-10}},
     {duckdb::LogicalOperatorType::LOGICAL_TOP_N, {8e-8, 1.5e-8}},
     {duckdb::LogicalOperatorType::LOGICAL_SAMPLE, {3e-9, 1e-9}},
     {duckdb::LogicalOperatorType::LOGICAL_UNION, {1.5e-9, 7e-10}},
@@ -95,6 +96,7 @@ std::map<duckdb::LogicalOperatorType, uint64_t> GPU_MIN_SIZE{
     {duckdb::LogicalOperatorType::LOGICAL_ORDER_BY, 5 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE, 0},
     {duckdb::LogicalOperatorType::LOGICAL_CTE_REF, 0},
+    {duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE, 0},
     {duckdb::LogicalOperatorType::LOGICAL_TOP_N, 5 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_SAMPLE, 3 * 1024 * 1024},
     {duckdb::LogicalOperatorType::LOGICAL_UNION, 4 * 1024 * 1024},
@@ -177,6 +179,9 @@ class DevicePlanNode {
 
             case duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
                 return ::gpu_capable(op.Cast<duckdb::LogicalMaterializedCTE>());
+
+            case duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE:
+                return ::gpu_capable(op.Cast<bodo::LogicalInlinedCTE>());
 
             case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN:
                 return ::gpu_capable(op.Cast<duckdb::LogicalComparisonJoin>());
@@ -676,6 +681,7 @@ static void init_cost_model() {
         {duckdb::LogicalOperatorType::LOGICAL_ORDER_BY, {cpu_s, gpu_s}},
         {duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE, {1e-10, 1e-10}},
         {duckdb::LogicalOperatorType::LOGICAL_CTE_REF, {1e-10, 1e-10}},
+        {duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE, {1e-10, 1e-10}},
         {duckdb::LogicalOperatorType::LOGICAL_TOP_N,
          {cpu_s * 1.3, gpu_s * 1.3}},
         {duckdb::LogicalOperatorType::LOGICAL_SAMPLE,
@@ -699,6 +705,7 @@ static void init_cost_model() {
         {duckdb::LogicalOperatorType::LOGICAL_ORDER_BY, 5 * 1024 * 1024},
         {duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE, 0},
         {duckdb::LogicalOperatorType::LOGICAL_CTE_REF, 0},
+        {duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE, 0},
         {duckdb::LogicalOperatorType::LOGICAL_TOP_N, 5 * 1024 * 1024},
         {duckdb::LogicalOperatorType::LOGICAL_SAMPLE, 3 * 1024 * 1024},
         {duckdb::LogicalOperatorType::LOGICAL_UNION, 4 * 1024 * 1024},
@@ -755,6 +762,7 @@ double compute_time(std::shared_ptr<DevicePlanNode> node, DEVICE device) {
             break;
 
         case duckdb::LogicalOperatorType::LOGICAL_MATERIALIZED_CTE:
+        case duckdb::LogicalOperatorType::LOGICAL_INLINED_CTE:
             // This node itself doesn't do any real work.
             t = 0;
             break;
