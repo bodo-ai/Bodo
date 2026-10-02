@@ -68,13 +68,12 @@ void TreeChildrenIterator::Iterate(const PipelineRenderNode &op,
 
 namespace duckdb {
 
-// Bodo Change: Add helper functions for rendering nested CTEs
+// Bodo Change: Add helper functions for rendering nested LogicalInlinedCTEs
 template <class T>
 static bool IsInlineCTE(const T &op) {
 	return false;
 }
 
-template <>
 bool IsInlineCTE(const LogicalOperator &op) {
 	return op.type == LogicalOperatorType::LOGICAL_INLINED_CTE;
 }
@@ -105,6 +104,7 @@ static void AddToContext(const LogicalOperator &op, LogicalRenderContext *contex
 
 template <class T>
 static void GetTreeWidthHeight(const T &op, idx_t &width, idx_t &height, LogicalRenderContext *context) {
+	// Bodo Change: Don't include inlined inlined CTE height in calculation.
 	if (SkipChildren(op, context) || !TreeChildrenIterator::HasChildren(op)) {
 		width = 1;
 		height = 1;
@@ -170,7 +170,8 @@ static unique_ptr<RenderTreeNode> CreateNode(const ProfilingNode &op, device_map
 
 // Bodo Change: Add special handling for rendering CTE nodes.
 template <class T>
-static idx_t CreateTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t y, device_mapping_t *device_mapping, LogicalRenderContext *context) {
+static idx_t CreateTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t y, device_mapping_t *device_mapping,
+	LogicalRenderContext *context) {
 	auto node = CreateNode(op, device_mapping);
 
 	if (context && !context->expand_inlined_ctes) {

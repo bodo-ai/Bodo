@@ -20,7 +20,7 @@ class PhysicalOperator;
 class Pipeline;
 struct PipelineRenderNode;
 
-// Bodo Change: Special handling for visualizing Inlined CTEs
+// Bodo Change: Add context for rendering logical inlined CTEs
 struct LogicalRenderContext {
     bool expand_inlined_ctes = false;
 

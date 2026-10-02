@@ -138,6 +138,8 @@ vector<ColumnBinding> LogicalOperator::MapBindings(const vector<ColumnBinding> &
 	}
 }
 
+// Bodo Change: Recursively render plans with LogicalInlinedCTEs by first rendering the main tree
+// and then rendering any inlined CTEs separately.
 static void RenderLogicalTree(
     const LogicalOperator &op,
     TreeRenderer &renderer,
@@ -167,8 +169,6 @@ static void RenderLogicalTree(
 string LogicalOperator::ToString(
     ExplainFormat format,
     device_mapping_t *device_mapping) const {
-
-	std::cout << "calling modified to_string" << '\n';
 
 	auto renderer = TreeRenderer::CreateRenderer(format);
 	stringstream ss;

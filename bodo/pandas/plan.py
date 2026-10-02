@@ -1188,7 +1188,7 @@ def execute_plan(plan: LazyPlan, optimize=True, use_sql_rules=False):
         if bodo.dataframe_library_profile and bodo.get_rank() == 0:
             print("profile_time gen", time.perf_counter() - start_time)
 
-        if bodo.dataframe_library_dump_plans and bodo.get_rank() == 0:
+        if bodo.dataframe_library_dump_plans and bodo.get_rank() == 0 and optimize:
             print("Unoptimized plan")
             print(duckdb_plan.toString())
 
