@@ -23,11 +23,22 @@
 namespace bodo {
 
 /**
- * @brief Logical Inlined CTE (extension of DuckDB logical operator) can be used
- * to either generate or utilize a cached result, depending on it's position in
- * the plan. This logical operator is used in BodoSQL, where the duckdb
- * optimizer is not run, and we want to use Calcite-style cache node semantics.
+ * @brief Logical operator representing a reusable, inlined cached subplan.
  *
+ * This operator provides Calcite-style cache semantics for BodoSQL plans,
+ * where the DuckDB optimizer is not run. Each LogicalInlinedCTE contains only
+ * the subplan to be cached and a CTE index identifying the cached result. The
+ * first occurrence of a given CTE index materializes the subplan, while
+ * subsequent occurrences reuse the previously materialized result.
+ *
+ * A separate operator is needed instead of DuckDB's LogicalMaterializedCTE
+ * because LogicalMaterializedCTE represents both the subplan being
+ * materialized and the remainder of the plan that consumes it. This naturally
+ * encodes a nested CTE structure and makes it difficult to represent multiple
+ * independent, non-nested cached subplans.
+ *
+ * LogicalInlinedCTE instead makes each cache reference self-contained, allowing
+ * cached subplans to appear independently at arbitrary locations in the plan.
  */
 class LogicalInlinedCTE : public duckdb::LogicalOperator {
    public:
