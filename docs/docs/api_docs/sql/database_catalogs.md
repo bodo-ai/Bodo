@@ -306,10 +306,10 @@ The following are the steps to find the cloud config role:
   * find the `Cloud Config uuid` in the workpace details.
   * find the `Cloud Config` that has the same uuid in the `Cloud Configurations` page.
   * find the `Role ARN` in the details of the `Cloud Config`. It may look like `BodoPlatformUser-XXXXXXXX`
-  if it was created using `Cloud Formation` or `Access Key`. 
+  if it was created using `Cloud Formation` or `Access Key`.
 
 The Bodo clusters that run the queries on the Glue Catalog need to be created with an instance role. This instance role needs to have read/write access to
-the Glue S3 bucket and also appropreate Glue permissions. The exact set of Glue permissions depend on the queries on the Glue database. The following is 
+the Glue S3 bucket and also appropriate Glue permissions. The exact set of Glue permissions depend on the queries on the Glue database. The following is
 an example that could work for most of the use cases.
 
 ```
@@ -364,7 +364,7 @@ For workspaces that have PrivateLink enabled, or have no internet access, users 
 
 ### API Reference
 
-- `bodosql.GlueCatalog(warehouse: str)`
+- `bodosql.GlueCatalog(warehouse: str, region: str = "")`
 <br><br>
 
     Constructor for `GlueCatalog`. This allows users to use an AWS Glue Iceberg Warehouse as a database for querying
@@ -373,6 +373,8 @@ For workspaces that have PrivateLink enabled, or have no internet access, users 
     ***Arguments***
 
     - `warehouse`: Name of the Glue S3 bucket, with or without the `s3://` prefix. I.e., both `s3://bucket_name` and `bucket_name` are valid.
+    - `region`: Name of the region where the S3 bucket is located.
+    If not set, the `AWS_DEFAULT_REGION` environment variable or the default region from your AWS CLI configuration will be used.
 
 #### Supported Query Types
 
