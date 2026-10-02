@@ -20,6 +20,14 @@ class PhysicalOperator;
 class Pipeline;
 struct PipelineRenderNode;
 
+// Bodo Change: Add context for rendering LogicalInlinedCTEs
+struct LogicalRenderContext {
+    bool expand_inlined_ctes = false;
+
+    // One representative LogicalInlinedCTE for each CTE index.
+    unordered_map<idx_t, reference<const LogicalOperator>> inlined_ctes;
+};
+
 struct RenderTreeNode {
 public:
 	static constexpr const char *CARDINALITY = "__cardinality__";
@@ -60,7 +68,9 @@ struct RenderTree {
 
 public:
 	// Bodo Change: Pass optional device mapping to CreateRenderTree for annotating name in node boxes.
-	static unique_ptr<RenderTree> CreateRenderTree(const LogicalOperator &op, device_mapping_t *device_mapping = nullptr);
+	// Also passes a render context for rendering inlined CTEs.
+	static unique_ptr<RenderTree> CreateRenderTree(const LogicalOperator &op,
+		device_mapping_t *device_mapping = nullptr, LogicalRenderContext *context = nullptr);
 	static unique_ptr<RenderTree> CreateRenderTree(const PhysicalOperator &op);
 	static unique_ptr<RenderTree> CreateRenderTree(const ProfilingNode &op);
 	static unique_ptr<RenderTree> CreateRenderTree(const Pipeline &op);

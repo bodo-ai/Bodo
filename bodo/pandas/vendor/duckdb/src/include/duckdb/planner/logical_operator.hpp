@@ -94,6 +94,12 @@ public:
 	//! Returns the set of table indexes of this operator
 	virtual vector<idx_t> GetTableIndex() const;
 
+	// Bodo Change: Add method to retrieve the optional CTE index for
+	// for rendering plan trees with LogicalInlinedCTEs.
+	virtual optional_idx GetCTEIndex() const {
+		return optional_idx();
+	}
+
 protected:
 	//! Resolve types for this specific operator
 	virtual void ResolveTypes() = 0;

@@ -138,11 +138,48 @@ vector<ColumnBinding> LogicalOperator::MapBindings(const vector<ColumnBinding> &
 	}
 }
 
-string LogicalOperator::ToString(ExplainFormat format, device_mapping_t *device_mapping) const {
+// Bodo Change: Recursively render plans with LogicalInlinedCTEs by first rendering the main tree
+// and then rendering any inlined CTEs separately.
+static void RenderLogicalTree(
+    const LogicalOperator &op,
+    TreeRenderer &renderer,
+    stringstream &ss,
+    device_mapping_t *device_mapping,
+    bool expand_inlined_ctes) {
+
+	LogicalRenderContext context;
+	context.expand_inlined_ctes = expand_inlined_ctes;
+
+	auto tree = RenderTree::CreateRenderTree(op, device_mapping, &context);
+	renderer.ToStream(*tree, ss);
+
+	// Render any CTEs referenced by this tree.
+	for (auto &entry : context.inlined_ctes) {
+		ss << "\n\n";
+
+		RenderLogicalTree(
+		    entry.second.get(),
+		    renderer,
+		    ss,
+		    device_mapping,
+		    true);
+	}
+}
+
+string LogicalOperator::ToString(
+    ExplainFormat format,
+    device_mapping_t *device_mapping) const {
+
 	auto renderer = TreeRenderer::CreateRenderer(format);
-	duckdb::stringstream ss;
-	auto tree = RenderTree::CreateRenderTree(*this, device_mapping);
-	renderer->ToStream(*tree, ss);
+	stringstream ss;
+
+	RenderLogicalTree(
+	    *this,
+	    *renderer,
+	    ss,
+	    device_mapping,
+	    false);
+
 	return ss.str();
 }
 

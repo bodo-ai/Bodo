@@ -68,9 +68,44 @@ void TreeChildrenIterator::Iterate(const PipelineRenderNode &op,
 
 namespace duckdb {
 
+// Bodo Change: Add helper functions for rendering nested LogicalInlinedCTEs
 template <class T>
-static void GetTreeWidthHeight(const T &op, idx_t &width, idx_t &height) {
-	if (!TreeChildrenIterator::HasChildren(op)) {
+static bool IsInlineCTE(const T &op) {
+	return false;
+}
+
+bool IsInlineCTE(const LogicalOperator &op) {
+	return op.type == LogicalOperatorType::LOGICAL_INLINED_CTE;
+}
+
+template <class T>
+static bool SkipChildren(const T &op, const LogicalRenderContext *context) {
+	return context && !context->expand_inlined_ctes && IsInlineCTE(op);
+}
+
+template <class T>
+static void AddToContext(const T &op, LogicalRenderContext *context) {
+}
+
+static void AddToContext(const LogicalOperator &op, LogicalRenderContext *context) {
+	if (!context) {
+		return;
+	}
+
+	auto cte_index = op.GetCTEIndex();
+	if (!cte_index.IsValid()) {
+		return;
+	}
+
+	context->inlined_ctes.emplace(
+	    cte_index.GetIndex(),
+	    std::cref(op));
+}
+
+template <class T>
+static void GetTreeWidthHeight(const T &op, idx_t &width, idx_t &height, LogicalRenderContext *context) {
+	// Bodo Change: Don't include LogicalInlinedCTEs' subplan heights in calculation.
+	if (SkipChildren(op, context) || !TreeChildrenIterator::HasChildren(op)) {
 		width = 1;
 		height = 1;
 		return;
@@ -80,7 +115,7 @@ static void GetTreeWidthHeight(const T &op, idx_t &width, idx_t &height) {
 
 	TreeChildrenIterator::Iterate<T>(op, [&](const T &child) {
 		idx_t child_width, child_height;
-		GetTreeWidthHeight<T>(child, child_width, child_height);
+		GetTreeWidthHeight<T>(child, child_width, child_height, context);
 		width += child_width;
 		height = MaxValue<idx_t>(height, child_height);
 	});
@@ -133,35 +168,47 @@ static unique_ptr<RenderTreeNode> CreateNode(const ProfilingNode &op, device_map
 	return result;
 }
 
+// Bodo Change: Add special handling for rendering LogicalInlinedCTE nodes.
 template <class T>
-static idx_t CreateTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t y, device_mapping_t *device_mapping) {
+static idx_t CreateTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t y, device_mapping_t *device_mapping,
+	LogicalRenderContext *context) {
 	auto node = CreateNode(op, device_mapping);
 
-	if (!TreeChildrenIterator::HasChildren(op)) {
+	if (context && !context->expand_inlined_ctes) {
+		AddToContext(op, context);
+	}
+
+	if (SkipChildren(op, context) || !TreeChildrenIterator::HasChildren(op)) {
 		result.SetNode(x, y, std::move(node));
 		return 1;
 	}
+
+	if (IsInlineCTE(op) && context && context->expand_inlined_ctes) {
+		context->expand_inlined_ctes = false;
+	}
+
 	idx_t width = 0;
 	// render the children of this node
 	TreeChildrenIterator::Iterate<T>(op, [&](const T &child) {
 		auto child_x = x + width;
 		auto child_y = y + 1;
 		node->AddChildPosition(child_x, child_y);
-		width += CreateTreeRecursive<T>(result, child, child_x, child_y, device_mapping);
+		width += CreateTreeRecursive<T>(result, child, child_x, child_y, device_mapping, context);
 	});
 	result.SetNode(x, y, std::move(node));
 	return width;
 }
 
 template <class T>
-static unique_ptr<RenderTree> CreateTree(const T &op, device_mapping_t *device_mapping = nullptr) {
+static unique_ptr<RenderTree> CreateTree(const T &op, device_mapping_t *device_mapping = nullptr,
+	LogicalRenderContext *context = nullptr) {
 	idx_t width, height;
-	GetTreeWidthHeight<T>(op, width, height);
+	GetTreeWidthHeight<T>(op, width, height, context);
 
 	auto result = make_uniq<RenderTree>(width, height);
 
 	// now fill in the tree
-	CreateTreeRecursive<T>(*result, op, 0, 0, device_mapping);
+	CreateTreeRecursive<T>(*result, op, 0, 0, device_mapping, context);
 	return result;
 }
 
@@ -191,8 +238,9 @@ void RenderTree::SetNode(idx_t x, idx_t y, unique_ptr<RenderTreeNode> node) {
 	nodes[GetPosition(x, y)] = std::move(node);
 }
 
-unique_ptr<RenderTree> RenderTree::CreateRenderTree(const LogicalOperator &op, device_mapping_t *device_mapping) {
-	return CreateTree<LogicalOperator>(op, device_mapping);
+unique_ptr<RenderTree> RenderTree::CreateRenderTree(const LogicalOperator &op, device_mapping_t *device_mapping,
+	 LogicalRenderContext *context) {
+	return CreateTree<LogicalOperator>(op, device_mapping, context);
 }
 
 unique_ptr<RenderTree> RenderTree::CreateRenderTree(const PhysicalOperator &op) {
