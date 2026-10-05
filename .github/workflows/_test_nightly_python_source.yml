@@ -149,6 +149,11 @@ jobs:
           fi
         shell: bash
 
+      - name: Debug AWS session
+        run: |
+          date -u
+          aws sts get-caller-identity --output json
+
       - name: Run Tests
         run: |
           set -exo pipefail

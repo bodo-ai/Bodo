@@ -1,3 +1,4 @@
+import datetime
 import os
 import random
 import subprocess
@@ -96,6 +97,16 @@ def polaris_server():
             env["AZURE_TENANT_ID"] = os.environ.get(
                 "AZURE_TENANT_ID", "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
             )
+
+            print("\n############# START DEBUG INFO #############")
+            print("AWS credential method:", credentials.method)
+            print("AWS credential type:", type(credentials))
+
+            if hasattr(credentials, "_expiry_time"):
+                print("AWS credential expiry:", credentials._expiry_time)
+
+            print("Current UTC time:", datetime.datetime.now(datetime.timezone.utc))
+            print("############# END DEBUG INFO #############\n")
 
             n_retries = 5
             for i in range(n_retries):
