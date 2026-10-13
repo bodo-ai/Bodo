@@ -60,6 +60,17 @@ required_tables = {
     22: ["CUSTOMER", "ORDERS"],
 }
 
+primaryKeys = {
+    "CUSTOMER": ["C_CUSTKEY"],
+    "ORDERS": ["O_ORDERKEY"],
+    "LINEITEM": ["L_ORDERKEY", "L_LINENUMBER"],
+    "NATION": ["N_NATIONKEY"],
+    "REGION": ["R_REGIONKEY"],
+    "SUPPLIER": ["S_SUPPKEY"],
+    "PART": ["P_PARTKEY"],
+    "PARTSUPP": ["PS_PARTKEY", "PS_SUPPKEY"],
+}
+
 
 def timethis(
     q: Callable,
@@ -125,7 +136,7 @@ def run_queries(
     if use_parquet:
         tpch_data = get_tpch_data_parquet(root, use_stats)
     else:
-        tpch_data = FileSystemCatalog(root)
+        tpch_data = FileSystemCatalog(root, primaryKeys=primaryKeys)
     for query in queries:
         print(f"Running query {query} at {datetime.datetime.now()}...")
         q = globals()[f"q{query:02}"]
@@ -202,6 +213,10 @@ def create_queries(queries, scale_factor, use_parquet, sql_dir="../sql"):
         # Calculate those f-string expressions if present.
         sql_text = eval(sql_text)
 
+        debug_text = ""
+        if os.environ.get("BODOSQL_TESTING_DEBUG", False):
+            debug_text = "    print(bc.generate_plan(tpch_query, None, None))\n"
+
         # Build the function source string
         func_src = (
             f"""
@@ -210,11 +225,10 @@ def {func_name}(tpch_data):
             + "'''\\\n"
             + sql_text
             + "\\\n'''\n"
-            + f"    bc = BodoSQLContext({data_param}, default_tz=None)"
-            + """
-    bodosql_output = bc.sql(tpch_query, None, None, {})
-    return bodosql_output
-"""
+            + f"    bc = BodoSQLContext({data_param}, default_tz=None)\n"
+            + "    bodosql_output = bc.sql(tpch_query, None, None, {})\n"
+            + debug_text
+            + "    return bodosql_output\n"
         )
 
         # Execute into provided globals (or module globals)
