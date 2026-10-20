@@ -103,6 +103,7 @@ jobs:
       - name: Build BodoSQL Wheels
         run: |
           set -exo pipefail
+          pip install setuptools-dynamic-dependencies==1.0.0
           pip install bodo --find-links "$(find . -name "cibw-wheels-*" -print)" --no-index --no-deps
           cd BodoSQL
           pip wheel --no-deps --no-build-isolation -v .
