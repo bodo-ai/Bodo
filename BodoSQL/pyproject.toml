@@ -1,10 +1,14 @@
 [build-system]
-requires = ["setuptools", "setuptools_scm"]
+requires = [
+    "setuptools",
+    "setuptools_scm",
+    "setuptools-dynamic-dependencies==1.0.0",
+]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "bodosql"
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 description = "Bodo's Vectorized SQL execution engine for clusters"
 readme = "README_pypi.md"
 requires-python = ">=3.10"
@@ -26,7 +30,11 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 
-dependencies = ["py4j==0.10.9.9"]
+[tool.setuptools_dynamic_dependencies]
+dependencies = [
+    "py4j==0.10.9.9",
+    "bodo=={version}",
+]
 
 [project.urls]
 Homepage = "https://bodo.ai"
