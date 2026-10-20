@@ -2,7 +2,7 @@
 requires = [
     "setuptools",
     "setuptools_scm",
-    "setuptools-dynamic-dependencies==1.0.0",
+    "setuptools-dynamic-dependencies",
 ]
 build-backend = "setuptools.build_meta"
 
