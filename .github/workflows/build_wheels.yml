@@ -119,7 +119,7 @@ jobs:
       fail-fast: false
       matrix:
         python_version: ${{ fromJson(vars.PYTHON_VERSIONS) }}
-    needs: [build_bodosql_wheels, get_version]
+    needs: build_bodosql_wheels
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -139,8 +139,7 @@ jobs:
         run: |
           python -m pip install \
             --find-links "./cibw-wheels-linux-x86-${{ matrix.python_version }}" \
-            --find-links "./bodosql-wheel-no-arch" \
-            "bodosql==${{ needs.get_version.outputs.bodo_version }}"
+            ./bodosql-wheel-no-arch/bodosql-*.whl
       - name: Test
         run: |
           set -exo pipefail
