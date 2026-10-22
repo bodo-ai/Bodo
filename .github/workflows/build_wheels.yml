@@ -103,6 +103,8 @@ jobs:
       - name: Build BodoSQL Wheels
         run: |
           set -exo pipefail
+          # Install setuptools-dynamic-dependencies to handle dynamic Bodo dependency in BodoSQL's pyproject.toml
+          pip install setuptools-dynamic-dependencies
           pip install bodo --find-links "$(find . -name "cibw-wheels-*" -print)" --no-index --no-deps
           cd BodoSQL
           pip wheel --no-deps --no-build-isolation -v .
@@ -135,10 +137,9 @@ jobs:
           path: ./bodosql-wheel-no-arch
       - name: Install
         run: |
-          # Install bodo and bodosql from the local wheel
-          pip install bodo  --find-links "$(find . -name "cibw-wheels-*" -print)" bodosql --find-links bodosql-wheel-no-arch --no-index --no-deps
-          # Install dependencies from pypi
-          pip install bodo bodosql
+          python -m pip install \
+            --find-links "./cibw-wheels-linux-x86-${{ matrix.python_version }}" \
+            ./bodosql-wheel-no-arch/bodosql-*.whl
       - name: Test
         run: |
           set -exo pipefail
