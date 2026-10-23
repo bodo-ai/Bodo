@@ -277,9 +277,6 @@ def check_table_comment(
             )
 
 
-@pytest.mark.skip(
-    "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-)
 @pytest.mark.parametrize("column_comments", [True, False])
 @pytest.mark.parametrize("table_properties", [True, False])
 @pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
@@ -381,9 +378,8 @@ def test_rest_catalog_iceberg_write(
             table_properties=ref_table_properties,
         )
         assert_tables_equal(output_df, in_df, check_dtype=False)
-
     except Exception as e:
-        # In the case that another exception ocurred within the body of the try,
+        # In the case that another exception occurred within the body of the try,
         # We may not have created a table to drop.
         # because of this, we call delete_table in a try/except, to avoid
         # masking the original exception
@@ -439,9 +435,6 @@ def test_limit_pushdown(
         check_logger_msg(stream, "Constant limit detected, reading at most 2 rows")
 
 
-@pytest.mark.skip(
-    "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-)
 def test_limit_filter_pushdown(
     memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
 ):
@@ -482,9 +475,6 @@ def test_limit_filter_pushdown(
         )
 
 
-@pytest.mark.skip(
-    "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-)
 def test_multi_limit_pushdown(
     memory_leak_check, polaris_catalog, polaris_catalog_iceberg_read_df
 ):
@@ -595,9 +585,6 @@ def test_filter_limit_filter_pushdown(
         )
 
 
-@pytest.mark.skip(
-    "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-)
 def test_dynamic_scalar_filter_pushdown(
     memory_leak_check, polaris_catalog, polaris_connection
 ):

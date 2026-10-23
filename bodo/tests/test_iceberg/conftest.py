@@ -80,6 +80,7 @@ def polaris_server():
                 "quarkus.otel.sdk.disabled": "true",
                 "POLARIS_BOOTSTRAP_CREDENTIALS": "default-realm,root,s3cr3t",
                 "polaris.realm-context.realms": "default-realm",
+                'polaris.features."DROP_WITH_PURGE_ENABLED"': "true",
                 "AWS_REGION": "us-east-2",
             }
             if credentials.access_key is not None:
@@ -101,9 +102,7 @@ def polaris_server():
             for i in range(n_retries):
                 try:
                     polaris = (
-                        DockerContainer(
-                            "public.ecr.aws/k7f6m2y1/bodo/polaris-unittests:latest"
-                        )
+                        DockerContainer("apache/polaris:1.8.0")
                         .with_bind_ports(8181, 8181)
                         .with_bind_ports(8282, 8182)
                         .with_name("polaris-server-unittests")
