@@ -3599,7 +3599,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "2c0bba6d8d0ed5d256de98fb218ab43c3e2d8239339670d4eee3fb701eb371ab"
+        != "8f52b64a14928d137603b7952342c0e0302af23bb77d3a10be8ad96422ddae8c"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.typing.builtins.NumberClassAttribute.resolve___call__ has changed"
