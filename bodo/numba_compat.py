@@ -5267,7 +5267,11 @@ def raise_on_unsupported_feature(func_ir, typemap):  # pragma: no cover
                     "compile a %s type as a constant."
                 )
                 # Bodo change: remove types.DictType, types.List
-                if isinstance(ty, types.ListType):
+                if numba.__version__ < "0.66":
+                    check_types = (types.ListType,)
+                else:
+                    check_types = (types.ListType, types.SetType)
+                if isinstance(ty, check_types):
                     raise TypingError(msg % (ty, stmt.value.name, ty), loc=stmt.loc)
 
             # checks for generator expressions (yield in use when func_ir has
@@ -5295,7 +5299,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ir_utils.raise_on_unsupported_feature)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "237a4fe8395a40899279c718bc3754102cd2577463ef2f48daceea78d79b2d5e"
+        != "f15d25d4ccb6cd5d498043386d3bbdd546527290b8dc344491a7c9862dcb3fb0"
     ):  # pragma: no cover
         warnings.warn("numba.core.ir_utils.raise_on_unsupported_feature has changed")
 
