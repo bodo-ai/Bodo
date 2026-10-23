@@ -112,19 +112,18 @@ else:
         )
         from pandas.core.arrays.string_arrow import (
             _check_pyarrow_available,
-            _is_string_view,
         )
 
         _check_pyarrow_available()
         if isinstance(values, (pa.Array, pa.ChunkedArray)) and (
-            pa.types.is_string(values.type) or _is_string_view(values.type)
+            pa.types.is_string(values.type) or pa.types.is_string_view(values.type)
             # Bodo change: allow dictionary-encoded string arrays
             # or (
             #     pa.types.is_dictionary(values.type)
             #     and (
             #         pa.types.is_string(values.type.value_type)
             #         or pa.types.is_large_string(values.type.value_type)
-            #         or _is_string_view(values.type.value_type)
+            #         or pa.types.is_string_view(values.type.value_type)
             #     )
             # )
         ):
@@ -144,7 +143,7 @@ else:
                 and (
                     pa.types.is_string(self._pa_array.type.value_type)
                     or pa.types.is_large_string(self._pa_array.type.value_type)
-                    or _is_string_view(self._pa_array.type.value_type)
+                    or pa.types.is_string_view(self._pa_array.type.value_type)
                 )
             )
         ):
@@ -157,7 +156,7 @@ else:
         lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.__init__)
         if (
             hashlib.sha256(lines.encode()).hexdigest()
-            != "5ca54168210292bd5d20a27b9fd40f28d54f7afb63a8468db2630ca33e84dc2c"
+            != "bef5f0a5eae2fa1434ca8ba108658ceb8fa39c17bc7bc97e1ec9a0dff27ae50f"
         ):  # pragma: no cover
             warnings.warn(
                 "pd.core.arrays.string_arrow.ArrowStringArray.__init__ has changed"
