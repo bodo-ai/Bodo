@@ -6668,15 +6668,18 @@ def generic(self, args, kws):
         return signature(types.int64, arg)
 
 
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.typing.builtins.Int.generic)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "23c51842905dea3a3516e54944223d76a4fe5e0719fd09a2c99e027952f2a8cb"
-    ):
-        warnings.warn("numba.core.typing.builtins.Int.generic has changed")
+# @infer_global(int) is removed in Numba 0.66 and the underlying issue is avoided
+if numba.__version__ < "0.66":
 
-numba.core.typing.builtins.Int.generic = generic
+    if _check_numba_change:  # pragma: no cover
+        lines = inspect.getsource(numba.core.typing.builtins.Int.generic)
+        if (
+            hashlib.sha256(lines.encode()).hexdigest()
+            != "23c51842905dea3a3516e54944223d76a4fe5e0719fd09a2c99e027952f2a8cb"
+        ):
+            warnings.warn("numba.core.typing.builtins.Int.generic has changed")
+
+    numba.core.typing.builtins.Int.generic = generic
 
 
 def _sequence_of_arrays(
