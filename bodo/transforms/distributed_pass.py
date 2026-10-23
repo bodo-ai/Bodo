@@ -25,7 +25,6 @@ from numba.core.ir_utils import (
     get_definition,
     guard,
     is_get_setitem,
-    mk_alloc,
     mk_unique_var,
     remove_dead,
     rename_labels,
@@ -39,6 +38,12 @@ from numba.parfors.parfor import (
     unwrap_parfor_blocks,
     wrap_parfor_blocks,
 )
+
+# Numba 0.66 moved mk_alloc to numba.parfors.ir_utils
+if numba.__version__ < "0.66":
+    from numba.core.ir_utils import mk_alloc
+else:
+    from numba.parfors.ir_utils import mk_alloc
 
 import bodo
 import bodo.utils.utils
