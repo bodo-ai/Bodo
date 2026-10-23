@@ -4722,7 +4722,7 @@ def nrt_adapt_ndarray_to_python(self, aryty, ary, dtypeptr):
         self.pyobj, [self.voidptr, self.pyobj, intty, intty, self.pyobj]
     )
     fn = self._get_function(fnty, name="NRT_adapt_ndarray_to_python_acqref")
-    fn.args[0].add_attribute("nocapture")
+    fn.args[0].add_attribute("captures(none)")
 
     ndim = self.context.get_constant(types.int32, aryty.ndim)
     writable = self.context.get_constant(types.int32, int(aryty.mutable))
@@ -4759,7 +4759,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "4291dd023268946ffe1d2a1c9f2c054164e92aaf3476ff6d08532d903f6779b4"
+        != "7cdf7786c08dac2dc9a2bfe7aa1bf29239e4797298c4c63338533eef6e4d30d3"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.pythonapi.PythonAPI.nrt_adapt_ndarray_to_python has changed"
