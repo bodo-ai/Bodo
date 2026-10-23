@@ -308,16 +308,22 @@ from numba.core.ir_utils import (
     alias_func_extensions,
 )
 
-# immutable scalar types, no aliasing possible
-_immutable_type_class = (
-    types.Number,
-    types.scalars._NPDatetimeBase,
-    types.iterators.RangeType,
-    types.UnicodeType,
-)
-
 
 def is_immutable_type(var, typemap):
+    # Numba 0.66 moved datetime scalars
+    if numba.__version__ < "0.66":
+        _NPDatetimeBase = types.scalars._NPDatetimeBase
+    else:
+        from numba.np.types.datetime import _NPDatetimeBase
+
+    # immutable scalar types, no aliasing possible
+    _immutable_type_class = (
+        types.Number,
+        _NPDatetimeBase,
+        types.iterators.RangeType,
+        types.UnicodeType,
+    )
+
     # Conservatively, assume mutable if type not available
     if typemap is None or var not in typemap:
         return False
