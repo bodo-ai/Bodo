@@ -99,6 +99,12 @@ _check_numba_change = False
 numba.core.typing.templates._IntrinsicTemplate.prefer_literal = True
 
 
+# Numba 0.66 moved get_type_min_value and get_type_max_value to numba.parfors.parfor
+if numba.__version__ >= "0.66":
+    numba.cpython.builtins.get_type_min_value = numba.parfors.parfor.get_type_min_value
+    numba.cpython.builtins.get_type_max_value = numba.parfors.parfor.get_type_max_value
+
+
 # Numba 0.59 removed generated_jit so adding a limited version for our internal usage
 # from here: https://github.com/numba/numba/issues/8466#issuecomment-1274593340
 # NOTE: this version is just an overload and cannot be called from regular Python

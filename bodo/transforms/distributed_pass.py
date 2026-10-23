@@ -2342,7 +2342,10 @@ class DistributedPass:
 
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
-        if fdef == ("get_type_max_value", "numba.cpython.builtins"):
+        if fdef == ("get_type_max_value", "numba.cpython.builtins") or fdef == (
+            "get_type_max_value",
+            "numba.parfors.parfor",
+        ):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 # XXX: not using replace since init block of parfor can't be
                 # processed. test_series_idxmin
@@ -2368,7 +2371,10 @@ class DistributedPass:
                 out = f_block.body[:-2]
                 out[-1].target = assign.target
 
-        if fdef == ("get_type_min_value", "numba.cpython.builtins"):
+        if fdef == ("get_type_min_value", "numba.cpython.builtins") or fdef == (
+            "get_type_min_value",
+            "numba.parfors.parfor",
+        ):
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 f_block = compile_to_numba_ir(
                     eval(
