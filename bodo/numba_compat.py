@@ -98,9 +98,10 @@ _check_numba_change = False
 # see test_join.py::test_merge_index_column_second"[df21-df10]"
 numba.core.typing.templates._IntrinsicTemplate.prefer_literal = True
 
+numba_version = tuple(int(x) for x in numba.__version__.split(".")[:2])
 
 # Numba 0.66 moved get_type_min_value and get_type_max_value to numba.parfors.parfor
-if numba.__version__ >= "0.66":
+if numba_version >= (0, 66):
     numba.cpython.builtins.get_type_min_value = numba.parfors.parfor.get_type_min_value
     numba.cpython.builtins.get_type_max_value = numba.parfors.parfor.get_type_max_value
 
@@ -317,7 +318,7 @@ from numba.core.ir_utils import (
 
 def is_immutable_type(var, typemap):
     # Numba 0.66 moved datetime scalars
-    if numba.__version__ < "0.66":
+    if numba_version < (0, 66):
         _NPDatetimeBase = types.scalars._NPDatetimeBase
     else:
         from numba.np.types.datetime import _NPDatetimeBase
@@ -5273,7 +5274,7 @@ def raise_on_unsupported_feature(func_ir, typemap):  # pragma: no cover
                     "compile a %s type as a constant."
                 )
                 # Bodo change: remove types.DictType, types.List
-                if numba.__version__ < "0.66":
+                if numba_version < (0, 66):
                     check_types = (types.ListType,)
                 else:
                     check_types = (types.ListType, types.SetType)
@@ -6679,7 +6680,7 @@ def generic(self, args, kws):
 
 
 # @infer_global(int) is removed in Numba 0.66 and the underlying issue is avoided
-if numba.__version__ < "0.66":
+if numba_version < (0, 66):
 
     if _check_numba_change:  # pragma: no cover
         lines = inspect.getsource(numba.core.typing.builtins.Int.generic)
