@@ -134,8 +134,8 @@ jobs:
 
       - name: Install Polaris
         run: |
-            # TODO(scott) add to pixi
-            pip install --no-deps apache-polaris==1.8.0
+            # TODO(scott) upgrade
+            pip install --no-deps 'git+https://github.com/apache/polaris.git@release/1.0.x#subdirectory=client/python'
 
       - name: Setup Snowflake Key Pair
         env:
