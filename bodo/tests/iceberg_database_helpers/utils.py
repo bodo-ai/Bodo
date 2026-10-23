@@ -146,7 +146,7 @@ def get_spark(
                 "PRINCIPAL_ROLE:ALL",
             )
             builder.config(
-                f"spark.sql.catalog.{catalog.catalog_name}.X-Iceberg-Access-Delegation",
+                f"spark.sql.catalog.{catalog.catalog_name}.header.X-Iceberg-Access-Delegation",
                 "vended-credentials",
             )
             builder.config(
