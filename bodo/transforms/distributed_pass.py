@@ -39,8 +39,10 @@ from numba.parfors.parfor import (
     wrap_parfor_blocks,
 )
 
+numba_version = tuple(int(x) for x in numba.__version__.split(".")[:2])
+
 # Numba 0.66 moved mk_alloc to numba.parfors.ir_utils
-if numba.__version__ < "0.66":
+if numba_version < (0, 66):
     from numba.core.ir_utils import mk_alloc
 else:
     from numba.parfors.ir_utils import mk_alloc
