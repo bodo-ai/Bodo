@@ -1750,7 +1750,10 @@ class BodoStringMethods:
         # This extra check was introduced in Pandas 3.0.0 but doesn't seem very critical in practice
         _has_unsupported_regex = (
             pd.core.arrays._arrow_string_mixins.ArrowStringArrayMixin._has_unsupported_regex
-            if pd.__version__ >= "3.0.0"
+            if hasattr(
+                pd.core.arrays._arrow_string_mixins.ArrowStringArrayMixin,
+                "_has_unsupported_regex",
+            )
             else lambda pat: False
         )
         if (
