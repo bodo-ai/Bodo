@@ -423,9 +423,7 @@ def polaris_connection(
                 f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_NAME": os.environ.get(
                     "AZURE_STORAGE_ACCOUNT_NAME", "bodosficebergazue2"
                 ),
-                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_KEY": os.environ.get(
-                    "AZURE_STORAGE_ACCOUNT_KEY"
-                ),
+                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_KEY": None,
                 f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__CLIENT_ID": os.environ.get(
                     "AZURE_CLIENT_ID"
                 ),
