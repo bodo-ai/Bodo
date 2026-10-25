@@ -527,7 +527,7 @@ def overload_setitem(A, ind, val):
         )
 
     is_tz_naive_dt = (
-        isinstance(val, numba.core.types.scalars.NPDatetime)
+        isinstance(val, numba.core.types.NPDatetime)
         or val == bodo.types.datetime_datetime_type
         or val == types.Array(bodo.types.datetime64ns, 1, "C")
     )
@@ -553,7 +553,7 @@ def overload_setitem(A, ind, val):
                 )
 
             return impl
-        elif isinstance(val, numba.core.types.scalars.NPDatetime):
+        elif isinstance(val, numba.core.types.NPDatetime):
 
             def impl(A, ind, val):  # pragma: no cover
                 dt64_val = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val)
