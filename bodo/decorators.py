@@ -718,7 +718,7 @@ def _load_wrap_python_function(pyapi, py_func):
 
     cached = builder.load(gv)
     with builder.if_then(cgutils.is_null(builder, cached)):
-        if serialize.is_serialiable(py_func):
+        if serialize.is_serializable(py_func):
             callee = pyapi.unserialize(pyapi.serialize_object(py_func))
         else:
             callee = tyctx.add_dynamic_addr(
