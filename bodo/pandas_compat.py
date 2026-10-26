@@ -265,6 +265,44 @@ else:
             _validate_setitem_value
         )
 
+        def _from_pyarrow_array(self, pa_array):
+            """
+            Construct from a pyarrow Array/ChunkedArray result of an operation.
+
+            Avoids full __init__ overhead (type checking, pc.cast, ArrowDtype
+            construction, etc.).
+            """
+            assert isinstance(pa_array, (pa.Array, pa.ChunkedArray))
+            # Bodo change: keep dictionary-encoded arrays as is
+            if not (
+                pa.types.is_large_string(pa_array.type)
+                or pa.types.is_dictionary(pa_array.type)
+            ):
+                pa_array = pa_array.cast(pa.large_string())
+            obj = type(self).__new__(type(self))
+            if isinstance(pa_array, pa.Array):
+                pa_array = pa.chunked_array([pa_array])
+            obj._pa_array = pa_array
+            obj._dtype = self._dtype
+            obj._cache = {}
+            return obj
+
+        if _check_pandas_change:
+            lines = inspect.getsource(
+                pd.core.arrays.string_arrow.ArrowStringArray._from_pyarrow_array
+            )
+            if (
+                hashlib.sha256(lines.encode()).hexdigest()
+                != "aedd6cfae1146adc08e83ece1fdbb6d23173959fdfed50e421db57f84c71551f"
+            ):  # pragma: no cover
+                warnings.warn(
+                    "pd.core.arrays.string_arrow.ArrowStringArray._from_pyarrow_array has changed"
+                )
+
+        pd.core.arrays.string_arrow.ArrowStringArray._from_pyarrow_array = (
+            _from_pyarrow_array
+        )
+
 
 @classmethod
 def _concat_same_type(cls, to_concat):
