@@ -206,7 +206,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         return output
 
     # This is useful for cases like df.head()
-    def get_slice(self, slobj: slice, axis: int = 0) -> ArrayManager:
+    def get_slice(
+        self, slobj: slice, axis: int = 0, new_index: pd.Index | None = None
+    ) -> ArrayManager:
         """
         Returns a new ArrayManager with the data sliced along the given axis.
         If we don't have the data yet, and the slice is within the head, we slice the head,
@@ -230,7 +232,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             tmp_arrs = self._md_head.arrays
             arrays = [arr[slobj] for arr in tmp_arrs]
             new_axes = list(self._axes)
-            new_axes[axis] = new_axes[axis]._getitem_slice(slobj)
+            if new_index is None:
+                new_index = new_axes[axis]._getitem_slice(slobj)
+            new_axes[axis] = new_index
             return ArrayManager(arrays, new_axes, verify_integrity=False)
 
         if axis == 0:
@@ -545,7 +549,9 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             self._md_head = None
             self._collect_func = None
 
-    def get_slice(self, slobj: slice, axis: int = 0) -> SingleArrayManager:
+    def get_slice(
+        self, slobj: slice, axis: int = 0, new_index: pd.Index | None = None
+    ) -> SingleArrayManager:
         """
         Returns a new SingleArrayManager with the data sliced along the given axis.
         If we don't have the data yet, and the slice is within the head, we slice the head,
@@ -573,7 +579,8 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             return SingleArrayManager(arrays, new_axes, verify_integrity=False)
 
         new_array = self.array[slobj]
-        new_index = self.index._getitem_slice(slobj)
+        if new_index is None:
+            new_index = self.index._getitem_slice(slobj)
         return type(self)([new_array], [new_index], verify_integrity=False)
 
     def __repr__(self) -> str:
