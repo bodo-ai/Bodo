@@ -77,9 +77,6 @@ def view_helper(polaris_connection, view_name, schema_name, create=True):
         destroy_view()
 
 
-@pytest.mark.skip(
-    "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-)
 @pytest_mark_one_rank
 def test_create_view(polaris_catalog, polaris_connection, memory_leak_check):
     """Tests that Bodo can create a view using a Polaris catalog."""
@@ -227,9 +224,6 @@ def view_helper_nontrivialview(bc, polaris_connection, view_name, schema, create
         destroy_view()
 
 
-@pytest.mark.skip(
-    "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-)
 @pytest_mark_one_rank
 @pytest.mark.parametrize("purge", [True, False])
 def test_iceberg_drop_table_purge_sql(
@@ -255,9 +249,6 @@ def test_iceberg_drop_table_purge_sql(
     bc.sql(query_drop_table)
 
 
-@pytest.mark.skip(
-    "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-)
 @pytest_mark_one_rank
 @pytest.mark.parametrize("purge", [True, False])
 def test_iceberg_drop_table_purge(

@@ -41,6 +41,7 @@ runs:
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
           role-session-name: BodoEnginePrCiSession
           role-skip-session-tagging: true
+          use-existing-credentials: true
 
       - name: Build Bodo
         run: |
