@@ -232,6 +232,8 @@ def visit_vars_stmt(stmt, callback, cbdata):
         stmt.value = visit_vars_inner(stmt.value, callback, cbdata)
     elif isinstance(stmt, ir.Raise):
         stmt.exception = visit_vars_inner(stmt.exception, callback, cbdata)
+    elif isinstance(stmt, (ir.DynamicRaise, ir.DynamicTryRaise)):
+        stmt.exc_args = visit_vars_inner(stmt.exc_args, callback, cbdata)
     elif isinstance(stmt, ir.Branch):
         stmt.cond = visit_vars_inner(stmt.cond, callback, cbdata)
     elif isinstance(stmt, ir.Jump):
@@ -275,7 +277,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ir_utils.visit_vars_stmt)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "52b7b645ba65c35f3cf564f936e113261db16a2dff1e80fbee2459af58844117"
+        != "b0c46738459fa01194c9cb07fe99f820095e289af8986216a25dc5db5a2adcb9"
     ):  # pragma: no cover
         warnings.warn("numba.core.ir_utils.visit_vars_stmt has changed")
 
