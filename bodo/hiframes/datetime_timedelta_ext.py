@@ -423,10 +423,10 @@ def pd_td_to_pytimedelta(td):
 
 @overload_method(PDTimeDeltaType, "total_seconds", no_unliteral=True)
 def pd_td_total_seconds(td):
-    """Total seconds in the duration. Pandas drops nanoseconds from this result"""
+    """Total seconds in the duration"""
 
     def impl(td):  # pragma: no cover
-        return (td._value // 1000) / 10**6
+        return (td._value) / 10**9
 
     return impl
 
