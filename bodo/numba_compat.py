@@ -6927,7 +6927,7 @@ def fold_arguments(pysig, args, kws, normal_handler, default_handler,
         # Normalize dict kws
         kws = dict(kws)
 
-    # deal with kwonly args
+    # deal with kwonly args that might appear as the last positional arguments
     params = pysig.parameters
     kwonly = []
     for name, p in params.items():
@@ -6941,7 +6941,7 @@ def fold_arguments(pysig, args, kws, normal_handler, default_handler,
     bind_kws = kws.copy()
     if kwonly:
         for idx, n in enumerate(kwonly):
-            bind_kws[n] = args[len(kwonly) + idx]
+            bind_kws[n] = args[-len(kwonly) + idx]
 
     # now bind
     try:
@@ -6990,7 +6990,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typing.templates.fold_arguments)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "1ace2d13ce2c1637efa0c280fedd1204cf5e2cc0ec7d14e17cad4098ca364e5c"
+        != "a3806ed4b7d18d424fba34913b96055aaa4a7db94de81750efc172bf33e65ead"
     ):
         warnings.warn("numba.core.typing.templates.fold_arguments has changed")
 
