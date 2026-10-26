@@ -58,7 +58,7 @@ def string_named_params(request):
         # Check date like values
         (pd.Timestamp(2021, 8, 16), pd.Timestamp(2020, 2, 2)),
         pytest.param(
-            (pd.Timestamp(2022, 1, 31, second=15), pd.Timestamp(2000, 1, 1, hour=3)),
+            (pd.Timestamp(2022, 1, 31, 0, 0, 15), pd.Timestamp(2000, 1, 1, 3)),
             marks=pytest.mark.slow,
         ),
     ]
