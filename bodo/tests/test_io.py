@@ -1027,7 +1027,7 @@ def test_csv_sep_arg(datapath, memory_leak_check):
             (3, 1),
         ), "Check if this test is still valid"
         with pytest.raises(
-            BodoError, match=r".*Specified \\n as separator or delimiter.*"
+            BodoError, match=r".*but a line terminator cannot be used as a separator.*"
         ):
             bodo.jit(test_impl)(fname, "\n")
 
