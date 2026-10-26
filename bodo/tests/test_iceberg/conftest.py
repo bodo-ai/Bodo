@@ -81,6 +81,18 @@ def polaris_server():
             # Use boto to get credentials from all possible sources
             session = boto3.Session()
             credentials = session.get_credentials().get_frozen_credentials()
+
+            import hmac
+            from pathlib import Path
+
+            key_file = Path(os.environ["RUNNER_TEMP"]) / "polaris-aws-key-id"
+
+            original_key = key_file.read_text()
+            same_key = hmac.compare_digest(original_key, credentials.access_key)
+
+            print("Polaris using original GitHub credentials:", same_key)
+
+            key_file.unlink()
             env = {
                 "quarkus.otel.sdk.disabled": "true",
                 "POLARIS_BOOTSTRAP_CREDENTIALS": "default-realm,root,s3cr3t",

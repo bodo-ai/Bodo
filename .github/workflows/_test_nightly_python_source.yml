@@ -99,6 +99,11 @@ jobs:
             --query 'Arn' \
             --output text
 
+      - name: Save AWS credential identity for comparison
+        run: |
+          umask 077
+          printf '%s' "$AWS_ACCESS_KEY_ID" > "$RUNNER_TEMP/polaris-aws-key-id"
+
       - name: Authenticate to ECR Public
         run: |
           aws ecr-public get-login-password --region us-east-1 \
