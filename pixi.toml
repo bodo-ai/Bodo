@@ -23,10 +23,6 @@ default-cuda =      { features = ["py314", "rcpp-openmpi", "dev", "open-mpi", "c
 platform-cuda-dev =      { features = ["py314", "rcpp", "dev", "platform-mpi", "platform-hwloc", "cudf", "mpich-build-vars"], solve-group = "platform-gpu-dev" }
 platform-cuda =      { features = ["py314", "rcpp", "platform", "platform-mpi", "platform-hwloc", "cudf", "mpich-build-vars"], solve-group = "platform-gpu" }
 
-[activation.env]
-# Avoid using system cmake during build-config step
-CMAKE_EXECUTABLE = "$CONDA_PREFIX/bin/cmake"
-
 [feature.mpich-build-vars.activation.env]
 LD_LIBRARY_PATH="/opt/mpich/lib:$LD_LIBRARY_PATH"
 PATH="/opt/mpich/bin:$PATH"
