@@ -73,13 +73,22 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        id: aws-creds
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: us-east-2
           role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
           role-session-name: BodoEnginePrCiSession
           role-skip-session-tagging: true
-          role-duration-seconds: 14400 # Max duration: 4 hours
+          role-duration-seconds: 14400
+          output-credentials: true
+
+      - name: Debug AWS credential expiration
+        env:
+          AWS_EXPIRATION: ${{ steps.aws-creds.outputs.aws-expiration }}
+        run: |
+          echo "Current time: $(date -u)"
+          echo "AWS session expiration: $AWS_EXPIRATION"
 
       - name: Debug AWS credentials
         run: |
