@@ -3,6 +3,7 @@ from ddltest_harness import DDLTestHarness
 import bodosql
 from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.utils import SparkAwsIcebergCatalog, get_spark
+from bodo.tests.utils import debug_aws_credentials
 
 
 class RestTestHarness(DDLTestHarness):
@@ -36,9 +37,14 @@ class RestTestHarness(DDLTestHarness):
 
     @run_rank0
     def create_test_table(self, table_identifier):
-        self.spark.sql(
-            f"CREATE OR REPLACE TABLE {table_identifier} AS SELECT 'testtable' as A"
-        )
+        try:
+            self.spark.sql(
+                f"CREATE OR REPLACE TABLE {table_identifier} AS SELECT 'testtable' as A"
+            )
+        except Exception:
+            print("###### DEBUG CREATE TEST TABLE FAILURE")
+            debug_aws_credentials()
+            raise
 
     @run_rank0
     def drop_test_table(self, table_identifier):

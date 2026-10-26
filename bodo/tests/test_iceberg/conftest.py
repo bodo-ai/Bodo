@@ -69,13 +69,18 @@ def polaris_server():
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.waiting_utils import wait_for_logs
 
+    from bodo.tests.utils import (
+        debug_aws_credentials,
+        save_polaris_aws_debug_credentials,
+    )
+
     # Can't use run_rank0 because containers aren't pickelable
     err = None
     if bodo.get_rank() == 0:
         try:
             # Use boto to get credentials from all possible sources
             session = boto3.Session()
-            credentials = session.get_credentials()
+            credentials = session.get_credentials().get_frozen_credentials()
             env = {
                 "quarkus.otel.sdk.disabled": "true",
                 "POLARIS_BOOTSTRAP_CREDENTIALS": "default-realm,root,s3cr3t",
@@ -97,6 +102,9 @@ def polaris_server():
             env["AZURE_TENANT_ID"] = os.environ.get(
                 "AZURE_TENANT_ID", "ac373ae0-dc77-4cbb-bbb7-deddcf6133b3"
             )
+
+            save_polaris_aws_debug_credentials(env)
+            debug_aws_credentials()
 
             n_retries = 5
             for i in range(n_retries):

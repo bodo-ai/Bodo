@@ -57,6 +57,55 @@ class NoDefault:
 no_default = NoDefault()
 
 
+from datetime import datetime
+
+_polaris_aws_debug_env = None
+
+
+def save_polaris_aws_debug_credentials(env):
+    """Save the exact AWS credentials injected into Polaris."""
+    global _polaris_aws_debug_env
+    _polaris_aws_debug_env = {
+        key: env[key]
+        for key in (
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+        )
+        if key in env
+    }
+
+
+def debug_aws_credentials():
+    """Check the original Polaris source credentials without exposing them."""
+    from datetime import datetime, timezone
+
+    import boto3
+    from botocore.exceptions import ClientError
+
+    print("AWS credential check:", datetime.now(timezone.utc).isoformat())
+
+    if _polaris_aws_debug_env is None:
+        print("Polaris source credential snapshot unavailable")
+        return
+
+    session = boto3.Session(
+        aws_access_key_id=_polaris_aws_debug_env["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=_polaris_aws_debug_env["AWS_SECRET_ACCESS_KEY"],
+        aws_session_token=_polaris_aws_debug_env.get("AWS_SESSION_TOKEN"),
+        region_name="us-east-2",
+    )
+
+    try:
+        session.client("sts").get_caller_identity()
+        print("Polaris source credentials: VALID")
+    except ClientError as e:
+        print("Polaris source credentials: FAILED")
+        print("AWS error code:", e.response["Error"]["Code"])
+    except Exception as e:
+        print("Polaris source credential check failed:", type(e).__name__)
+
+
 class InputDist(Enum):
     """
     Enum used to represent the various

@@ -81,6 +81,15 @@ jobs:
           role-skip-session-tagging: true
           role-duration-seconds: 14400 # Max duration: 4 hours
 
+      - name: Debug AWS credentials
+        run: |
+          echo "AWS credentials configured at:"
+          date -u
+
+          aws sts get-caller-identity \
+            --query 'Arn' \
+            --output text
+
       - name: Authenticate to ECR Public
         run: |
           aws ecr-public get-login-password --region us-east-1 \
