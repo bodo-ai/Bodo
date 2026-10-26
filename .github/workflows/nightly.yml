@@ -202,7 +202,7 @@ jobs:
     needs: [create-test-marker, warm-up-docker-cache]
     strategy:
       matrix:
-        batch: [1] # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
       fail-fast: false
     uses: ./.github/workflows/_test_nightly_python_source.yml
     with:
