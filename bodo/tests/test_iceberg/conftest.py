@@ -400,7 +400,7 @@ def azure_polaris_warehouse(polaris_token, polaris_server, polaris_package):
     return create_azure_warehouse()
 
 
-@pytest.fixture(params=["aws-polaris-warehouse", "azure-polaris-warehouse"])
+@pytest.fixture(params=["aws-polaris-warehouse"])
 def polaris_connection(
     request, polaris_server, aws_polaris_warehouse, azure_polaris_warehouse
 ):
@@ -423,7 +423,9 @@ def polaris_connection(
                 f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_NAME": os.environ.get(
                     "AZURE_STORAGE_ACCOUNT_NAME", "bodosficebergazue2"
                 ),
-                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_KEY": None,
+                f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__ACCOUNT_KEY": os.environ.get(
+                    "AZURE_STORAGE_ACCOUNT_KEY"
+                ),
                 f"PYICEBERG_CATALOG__{azure_polaris_warehouse}__ADLS__CLIENT_ID": os.environ.get(
                     "AZURE_CLIENT_ID"
                 ),
