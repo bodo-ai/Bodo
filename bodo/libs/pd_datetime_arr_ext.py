@@ -153,8 +153,8 @@ def get_tz_type_info(tz_type):
     elif isinstance(tz_type, pytz._FixedOffset):
         # If we have a fixed offset represent it as an integer
         # offset in ns.
-        # Note: tz_type._offset is a np.timedelta.
-        tz_val = pd.Timedelta(tz_type._offset).value
+        # Note: tz_type._utcoffset is a np.timedelta.
+        tz_val = pd.Timedelta(tz_type._utcoffset).value
     else:
         tz_val = tz_type.zone
         if tz_val not in pytz.all_timezones_set:
