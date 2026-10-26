@@ -240,7 +240,8 @@ huggingface_hub = "*"
 zstandard = "*"
 # Databases
 pymysql = "*"
-sqlalchemy = "*"
+# Restrict version for Snowflake connector compatibility (TODO: remove when unnecessary)
+sqlalchemy = "<2.1"
 # Excel
 xlrd = "*"
 xlsxwriter = "*"
