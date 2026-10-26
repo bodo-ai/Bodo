@@ -2501,7 +2501,6 @@ def test_csv_unsupported_arg_match(memory_leak_check):
         return pd.read_csv(
             fname,
             sep=",",
-            delimiter=None,
             header="infer",
             names=["A", "B", "C", "D", "E"],
             index_col=None,
