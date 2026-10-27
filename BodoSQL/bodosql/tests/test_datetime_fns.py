@@ -4207,14 +4207,12 @@ def test_tz_aware_add_sub_interval_day_case(representative_tz, memory_leak_check
     scalar_add_func = interval_day_add_func(1)
     # Function used to simulate the result of subtracting 2 days
     scalar_sub_func = interval_day_add_func(-2)
-    S = df.A.map(scalar_add_func)
-    S[~df.B] = None
+    S = df.A.map(scalar_add_func).where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(
         query1, ctx, None, expected_output=py_output, session_tz=representative_tz
     )
-    S = df.A.map(scalar_sub_func)
-    S[~df.B] = None
+    S = df.A.map(scalar_sub_func).where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(
         query2, ctx, None, expected_output=py_output, session_tz=representative_tz
