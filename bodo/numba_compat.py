@@ -232,6 +232,8 @@ def visit_vars_stmt(stmt, callback, cbdata):
         stmt.value = visit_vars_inner(stmt.value, callback, cbdata)
     elif isinstance(stmt, ir.Raise):
         stmt.exception = visit_vars_inner(stmt.exception, callback, cbdata)
+    elif isinstance(stmt, (ir.DynamicRaise, ir.DynamicTryRaise)):
+        stmt.exc_args = visit_vars_inner(stmt.exc_args, callback, cbdata)
     elif isinstance(stmt, ir.Branch):
         stmt.cond = visit_vars_inner(stmt.cond, callback, cbdata)
     elif isinstance(stmt, ir.Jump):
@@ -275,7 +277,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ir_utils.visit_vars_stmt)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "52b7b645ba65c35f3cf564f936e113261db16a2dff1e80fbee2459af58844117"
+        != "b0c46738459fa01194c9cb07fe99f820095e289af8986216a25dc5db5a2adcb9"
     ):  # pragma: no cover
         warnings.warn("numba.core.ir_utils.visit_vars_stmt has changed")
 
@@ -6925,7 +6927,7 @@ def fold_arguments(pysig, args, kws, normal_handler, default_handler,
         # Normalize dict kws
         kws = dict(kws)
 
-    # deal with kwonly args
+    # deal with kwonly args that might appear as the last positional arguments
     params = pysig.parameters
     kwonly = []
     for name, p in params.items():
@@ -6939,7 +6941,7 @@ def fold_arguments(pysig, args, kws, normal_handler, default_handler,
     bind_kws = kws.copy()
     if kwonly:
         for idx, n in enumerate(kwonly):
-            bind_kws[n] = args[len(kwonly) + idx]
+            bind_kws[n] = args[-len(kwonly) + idx]
 
     # now bind
     try:
@@ -6988,7 +6990,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typing.templates.fold_arguments)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "1ace2d13ce2c1637efa0c280fedd1204cf5e2cc0ec7d14e17cad4098ca364e5c"
+        != "a3806ed4b7d18d424fba34913b96055aaa4a7db94de81750efc172bf33e65ead"
     ):
         warnings.warn("numba.core.typing.templates.fold_arguments has changed")
 

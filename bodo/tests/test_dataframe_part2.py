@@ -916,6 +916,7 @@ g_var = [3, 1, 5]
 
 def test_df_apply_wrap_python(memory_leak_check):
     """Test wrap_python function in df.apply()"""
+    import bodo.decorators  # noqa
 
     @bodo.wrap_python(bodo.types.int64)
     def g3(r):
