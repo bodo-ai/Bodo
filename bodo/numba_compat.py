@@ -98,6 +98,13 @@ _check_numba_change = False
 # see test_join.py::test_merge_index_column_second"[df21-df10]"
 numba.core.typing.templates._IntrinsicTemplate.prefer_literal = True
 
+numba_version = tuple(int(x) for x in numba.__version__.split(".")[:2])
+
+# Numba 0.66 moved get_type_min_value and get_type_max_value to numba.parfors.parfor
+if numba_version >= (0, 66):
+    numba.cpython.builtins.get_type_min_value = numba.parfors.parfor.get_type_min_value
+    numba.cpython.builtins.get_type_max_value = numba.parfors.parfor.get_type_max_value
+
 
 # Numba 0.59 removed generated_jit so adding a limited version for our internal usage
 # from here: https://github.com/numba/numba/issues/8466#issuecomment-1274593340
@@ -308,16 +315,22 @@ from numba.core.ir_utils import (
     alias_func_extensions,
 )
 
-# immutable scalar types, no aliasing possible
-_immutable_type_class = (
-    types.Number,
-    types.scalars._NPDatetimeBase,
-    types.iterators.RangeType,
-    types.UnicodeType,
-)
-
 
 def is_immutable_type(var, typemap):
+    # Numba 0.66 moved datetime scalars
+    if numba_version < (0, 66):
+        _NPDatetimeBase = types.scalars._NPDatetimeBase
+    else:
+        from numba.np.types.datetime import _NPDatetimeBase
+
+    # immutable scalar types, no aliasing possible
+    _immutable_type_class = (
+        types.Number,
+        _NPDatetimeBase,
+        types.iterators.RangeType,
+        types.UnicodeType,
+    )
+
     # Conservatively, assume mutable if type not available
     if typemap is None or var not in typemap:
         return False
@@ -3593,7 +3606,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "2c0bba6d8d0ed5d256de98fb218ab43c3e2d8239339670d4eee3fb701eb371ab"
+        != "8f52b64a14928d137603b7952342c0e0302af23bb77d3a10be8ad96422ddae8c"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.typing.builtins.NumberClassAttribute.resolve___call__ has changed"
@@ -4716,7 +4729,7 @@ def nrt_adapt_ndarray_to_python(self, aryty, ary, dtypeptr):
         self.pyobj, [self.voidptr, self.pyobj, intty, intty, self.pyobj]
     )
     fn = self._get_function(fnty, name="NRT_adapt_ndarray_to_python_acqref")
-    fn.args[0].add_attribute("nocapture")
+    fn.args[0].add_attribute("captures(none)")
 
     ndim = self.context.get_constant(types.int32, aryty.ndim)
     writable = self.context.get_constant(types.int32, int(aryty.mutable))
@@ -4753,7 +4766,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "4291dd023268946ffe1d2a1c9f2c054164e92aaf3476ff6d08532d903f6779b4"
+        != "7cdf7786c08dac2dc9a2bfe7aa1bf29239e4797298c4c63338533eef6e4d30d3"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.pythonapi.PythonAPI.nrt_adapt_ndarray_to_python has changed"
@@ -5261,7 +5274,11 @@ def raise_on_unsupported_feature(func_ir, typemap):  # pragma: no cover
                     "compile a %s type as a constant."
                 )
                 # Bodo change: remove types.DictType, types.List
-                if isinstance(ty, types.ListType):
+                if numba_version < (0, 66):
+                    check_types = (types.ListType,)
+                else:
+                    check_types = (types.ListType, types.SetType)
+                if isinstance(ty, check_types):
                     raise TypingError(msg % (ty, stmt.value.name, ty), loc=stmt.loc)
 
             # checks for generator expressions (yield in use when func_ir has
@@ -5289,7 +5306,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ir_utils.raise_on_unsupported_feature)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "237a4fe8395a40899279c718bc3754102cd2577463ef2f48daceea78d79b2d5e"
+        != "f15d25d4ccb6cd5d498043386d3bbdd546527290b8dc344491a7c9862dcb3fb0"
     ):  # pragma: no cover
         warnings.warn("numba.core.ir_utils.raise_on_unsupported_feature has changed")
 
@@ -6662,15 +6679,18 @@ def generic(self, args, kws):
         return signature(types.int64, arg)
 
 
-if _check_numba_change:  # pragma: no cover
-    lines = inspect.getsource(numba.core.typing.builtins.Int.generic)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "23c51842905dea3a3516e54944223d76a4fe5e0719fd09a2c99e027952f2a8cb"
-    ):
-        warnings.warn("numba.core.typing.builtins.Int.generic has changed")
+# @infer_global(int) is removed in Numba 0.66 and the underlying issue is avoided
+if numba_version < (0, 66):
 
-numba.core.typing.builtins.Int.generic = generic
+    if _check_numba_change:  # pragma: no cover
+        lines = inspect.getsource(numba.core.typing.builtins.Int.generic)
+        if (
+            hashlib.sha256(lines.encode()).hexdigest()
+            != "23c51842905dea3a3516e54944223d76a4fe5e0719fd09a2c99e027952f2a8cb"
+        ):
+            warnings.warn("numba.core.typing.builtins.Int.generic has changed")
+
+    numba.core.typing.builtins.Int.generic = generic
 
 
 def _sequence_of_arrays(

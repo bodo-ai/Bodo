@@ -550,7 +550,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self._del_func(r_id)
             self._del_func = None
 
-    def get_slice(self, slobj: slice, axis: int = 0) -> SingleBlockManager:
+    def get_slice(
+        self, slobj: slice, axis: int = 0, new_index: pd.Index | None = None
+    ) -> SingleBlockManager:
         """
         Returns a new SingleBlockManager with the data sliced along the given axis.
         If we don't have the data yet, and the slice is within the head, we slice the head,
@@ -575,7 +577,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             array = tmp_block.values[slobj]
             bp = BlockPlacement(slice(0, len(array)))
             block = type(tmp_block)(array, placement=bp, ndim=1, refs=tmp_block.refs)
-            new_index = self.index._getitem_slice(slobj)
+            if new_index is None:
+                new_index = self.index._getitem_slice(slobj)
             return type(self)(block, new_index)
 
         blk = self._block

@@ -1419,7 +1419,9 @@ def _test_equal(
             ):
                 py_out = py_out.astype(bodo_out.dtype)
                 # astype converts all NaNs to NAs so need to match it here
-                bodo_out = bodo_out.map(lambda a: pd.NA if np.isnan(a) else a)
+                bodo_out = bodo_out.map(
+                    lambda a: pd.NA if isinstance(a, float) and np.isnan(a) else a
+                )
 
             # Avoid integer type mismatch due to NA/nan conversions
             if pa.types.is_integer(pa_type) and py_out.dtype in (
@@ -1569,7 +1571,7 @@ def _test_equal(
                 )
                 py_out[py_out.columns[i]] = (
                     py_out[py_out.columns[i]]
-                    .map(lambda a: pd.NA if np.isnan(a) else a)
+                    .map(lambda a: pd.NA if isinstance(a, float) and np.isnan(a) else a)
                     .astype(py_dtype)
                 )
 

@@ -112,19 +112,18 @@ else:
         )
         from pandas.core.arrays.string_arrow import (
             _check_pyarrow_available,
-            _is_string_view,
         )
 
         _check_pyarrow_available()
         if isinstance(values, (pa.Array, pa.ChunkedArray)) and (
-            pa.types.is_string(values.type) or _is_string_view(values.type)
+            pa.types.is_string(values.type) or pa.types.is_string_view(values.type)
             # Bodo change: allow dictionary-encoded string arrays
             # or (
             #     pa.types.is_dictionary(values.type)
             #     and (
             #         pa.types.is_string(values.type.value_type)
             #         or pa.types.is_large_string(values.type.value_type)
-            #         or _is_string_view(values.type.value_type)
+            #         or pa.types.is_string_view(values.type.value_type)
             #     )
             # )
         ):
@@ -144,7 +143,7 @@ else:
                 and (
                     pa.types.is_string(self._pa_array.type.value_type)
                     or pa.types.is_large_string(self._pa_array.type.value_type)
-                    or _is_string_view(self._pa_array.type.value_type)
+                    or pa.types.is_string_view(self._pa_array.type.value_type)
                 )
             )
         ):
@@ -157,7 +156,7 @@ else:
         lines = inspect.getsource(pd.core.arrays.string_arrow.ArrowStringArray.__init__)
         if (
             hashlib.sha256(lines.encode()).hexdigest()
-            != "5ca54168210292bd5d20a27b9fd40f28d54f7afb63a8468db2630ca33e84dc2c"
+            != "bef5f0a5eae2fa1434ca8ba108658ceb8fa39c17bc7bc97e1ec9a0dff27ae50f"
         ):  # pragma: no cover
             warnings.warn(
                 "pd.core.arrays.string_arrow.ArrowStringArray.__init__ has changed"
@@ -165,51 +164,144 @@ else:
 
     pd.core.arrays.string_arrow.ArrowStringArray.__init__ = ArrowStringArray__init__
 
-    def _maybe_convert_setitem_value(self, value):
-        """Maybe convert value to be pyarrow compatible."""
-        from pandas.core.dtypes.common import is_scalar
-        from pandas.core.dtypes.missing import isna
+    if pandas_version < (3, 1):
 
-        if is_scalar(value):
-            if isna(value):
-                value = None
-            elif not isinstance(value, str):
-                raise TypeError(
-                    f"Invalid value '{value}' for dtype 'str'. Value should be a "
-                    f"string or missing value, got '{type(value).__name__}' instead."
+        def _maybe_convert_setitem_value(self, value):
+            """Maybe convert value to be pyarrow compatible."""
+            from pandas.core.dtypes.common import is_scalar
+            from pandas.core.dtypes.missing import isna
+
+            if is_scalar(value):
+                if isna(value):
+                    value = None
+                elif not isinstance(value, str):
+                    raise TypeError(
+                        f"Invalid value '{value}' for dtype 'str'. Value should be a "
+                        f"string or missing value, got '{type(value).__name__}' instead."
+                    )
+            # Bodo change: avoid converting to object array to handle dict-encoded string
+            # arrays from Bodo properly
+            elif isinstance(value, pd.core.arrays.string_arrow.ArrowStringArray):
+                return value._pa_array
+            else:
+                value = np.array(value, dtype=object, copy=True)
+                value[isna(value)] = None
+                for v in value:
+                    if not (v is None or isinstance(v, str)):
+                        raise TypeError(
+                            "Invalid value for dtype 'str'. Value should be a "
+                            "string or missing value (or array of those)."
+                        )
+            return super(
+                pd.core.arrays.string_arrow.ArrowStringArray, self
+            )._maybe_convert_setitem_value(value)
+
+        if _check_pandas_change:
+            lines = inspect.getsource(
+                pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value
+            )
+            if (
+                hashlib.sha256(lines.encode()).hexdigest()
+                != "f682cc4462f98a59bc4081c972050f33eecea909444909945ba707f8b5f3dc05"
+            ):  # pragma: no cover
+                warnings.warn(
+                    "pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value has changed"
                 )
-        # Bodo change: avoid converting to object array to handle dict-encoded string
-        # arrays from Bodo properly
-        elif isinstance(value, pd.core.arrays.string_arrow.ArrowStringArray):
-            return value._pa_array
-        else:
-            value = np.array(value, dtype=object, copy=True)
-            value[isna(value)] = None
-            for v in value:
-                if not (v is None or isinstance(v, str)):
+
+        pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value = (
+            _maybe_convert_setitem_value
+        )
+    else:
+
+        def _validate_setitem_value(self, value):
+            """Maybe convert value to be pyarrow compatible."""
+            from pandas.core.dtypes.common import (
+                is_array_like_deprecate_non_pandas,
+                is_scalar,
+            )
+            from pandas.core.dtypes.missing import isna
+
+            if is_scalar(value):
+                if isna(value):
+                    value = None
+                elif not isinstance(value, str):
+                    raise TypeError(
+                        f"Invalid value '{value}' for dtype 'str'. Value should be a "
+                        f"string or missing value, got '{type(value).__name__}' instead."
+                    )
+            # Bodo change: avoid converting to object array to handle dict-encoded string
+            # arrays from Bodo properly
+            elif isinstance(value, pd.core.arrays.string_arrow.ArrowStringArray):
+                return value._pa_array
+            else:
+                if not is_array_like_deprecate_non_pandas(value):
+                    value = np.asarray(value, dtype=object)
+                else:
+                    value = np.asarray(value)
+                if len(value) and not (
+                    value.ndim == 1 and pd._libs.lib.is_string_array(value, skipna=True)
+                ):
                     raise TypeError(
                         "Invalid value for dtype 'str'. Value should be a "
                         "string or missing value (or array of those)."
                     )
-        return super(
-            pd.core.arrays.string_arrow.ArrowStringArray, self
-        )._maybe_convert_setitem_value(value)
+            return super(
+                pd.core.arrays.string_arrow.ArrowStringArray, self
+            )._validate_setitem_value(value)
 
-    if _check_pandas_change:
-        lines = inspect.getsource(
-            pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value
-        )
-        if (
-            hashlib.sha256(lines.encode()).hexdigest()
-            != "f682cc4462f98a59bc4081c972050f33eecea909444909945ba707f8b5f3dc05"
-        ):  # pragma: no cover
-            warnings.warn(
-                "pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value has changed"
+        if _check_pandas_change:
+            lines = inspect.getsource(
+                pd.core.arrays.string_arrow.ArrowStringArray._validate_setitem_value
             )
+            if (
+                hashlib.sha256(lines.encode()).hexdigest()
+                != "508068021ad58552bf3f552cf1c6a758692c9fb1d5408df838d8da4a23f840b6"
+            ):  # pragma: no cover
+                warnings.warn(
+                    "pd.core.arrays.string_arrow.ArrowStringArray._validate_setitem_value has changed"
+                )
 
-    pd.core.arrays.string_arrow.ArrowStringArray._maybe_convert_setitem_value = (
-        _maybe_convert_setitem_value
-    )
+        pd.core.arrays.string_arrow.ArrowStringArray._validate_setitem_value = (
+            _validate_setitem_value
+        )
+
+        def _from_pyarrow_array(self, pa_array):
+            """
+            Construct from a pyarrow Array/ChunkedArray result of an operation.
+
+            Avoids full __init__ overhead (type checking, pc.cast, ArrowDtype
+            construction, etc.).
+            """
+            assert isinstance(pa_array, (pa.Array, pa.ChunkedArray))
+            # Bodo change: keep dictionary-encoded arrays as is
+            if not (
+                pa.types.is_large_string(pa_array.type)
+                or pa.types.is_dictionary(pa_array.type)
+            ):
+                pa_array = pa_array.cast(pa.large_string())
+            obj = type(self).__new__(type(self))
+            if isinstance(pa_array, pa.Array):
+                pa_array = pa.chunked_array([pa_array])
+            obj._pa_array = pa_array
+            obj._dtype = self._dtype
+            obj._cache = {}
+            return obj
+
+        if _check_pandas_change:
+            lines = inspect.getsource(
+                pd.core.arrays.string_arrow.ArrowStringArray._from_pyarrow_array
+            )
+            if (
+                hashlib.sha256(lines.encode()).hexdigest()
+                != "aedd6cfae1146adc08e83ece1fdbb6d23173959fdfed50e421db57f84c71551f"
+            ):  # pragma: no cover
+                warnings.warn(
+                    "pd.core.arrays.string_arrow.ArrowStringArray._from_pyarrow_array has changed"
+                )
+
+        pd.core.arrays.string_arrow.ArrowStringArray._from_pyarrow_array = (
+            _from_pyarrow_array
+        )
 
 
 @classmethod
@@ -272,6 +364,7 @@ if _check_pandas_change:
     if hashlib.sha256(lines.encode()).hexdigest() not in (
         "179388243335db6b590d875b3ac1c249efffac4194b8bc56c9c54d956ab5f370",
         "951a1ecf005bf7e00146c61e878ff1615950c20a95b323007ee9d69271524d78",
+        "42a504ef7ddbe18737480e5aa949b9a8faec419d8785e4863e5284da38329ebe",
     ):  # pragma: no cover
         warnings.warn(
             "pd.core.arrays.arrow.array.ArrowExtensionArray._str_find has changed"

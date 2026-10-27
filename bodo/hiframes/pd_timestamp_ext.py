@@ -731,7 +731,7 @@ def overload_pd_timestamp(
 
         return impl_date
 
-    if isinstance(ts_input, numba.core.types.scalars.NPDatetime):
+    if isinstance(ts_input, numba.core.types.NPDatetime):
         nanoseconds, precision = bodo.pandas_compat.precision_from_unit_to_nanoseconds(
             ts_input.unit
         )

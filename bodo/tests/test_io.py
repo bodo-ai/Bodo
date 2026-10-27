@@ -1024,9 +1024,10 @@ def test_csv_sep_arg(datapath, memory_leak_check):
             (2, 2),
             (2, 3),
             (3, 0),
+            (3, 1),
         ), "Check if this test is still valid"
         with pytest.raises(
-            BodoError, match=r".*Specified \\n as separator or delimiter.*"
+            BodoError, match=r".*but a line terminator cannot be used as a separator.*"
         ):
             bodo.jit(test_impl)(fname, "\n")
 
@@ -1513,6 +1514,7 @@ def test_excel1(datapath, memory_leak_check):
         (2, 2),
         (2, 3),
         (3, 0),
+        (3, 1),
     ), "`name` na-filtering issue for 1.4, check if it's fixed in later versions"
     if pandas_version == (1, 3):
         check_func(test_impl3, (fname,), is_out_distributed=False)
@@ -2499,7 +2501,6 @@ def test_csv_unsupported_arg_match(memory_leak_check):
         return pd.read_csv(
             fname,
             sep=",",
-            delimiter=None,
             header="infer",
             names=["A", "B", "C", "D", "E"],
             index_col=None,

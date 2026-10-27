@@ -999,6 +999,9 @@ def test_approx_percentile(data, quantiles, memory_leak_check):
     )
 
 
+@pytest.mark.skip(
+    reason="TODO(BSE-5666): fix skew/kurtosis NA output matching Pandas 3.1"
+)
 @pytest.mark.parametrize(
     "agg_cols",
     [

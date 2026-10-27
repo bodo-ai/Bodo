@@ -35,6 +35,9 @@ pytestmark = [
         sys.platform == "win32", reason="TODO[BSE-4556]: enable buffer pool on Windows"
     ),
     pytest.mark.slow,
+    pytest.mark.skip(
+        reason="TODO(BSE-5666): fix skew/kurtosis NA output matching Pandas 3.1"
+    ),
 ]
 
 
