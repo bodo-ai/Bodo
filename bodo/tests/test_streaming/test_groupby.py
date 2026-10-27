@@ -37,13 +37,13 @@ from bodo.tests.utils import (
         pytest.param(
             "kurtosis",
             marks=pytest.mark.skip(
-                reason="TODO(ehsan): fix NA output matching Pandas 3.1"
+                reason="TODO(BSE-5666): fix NA output matching Pandas 3.1"
             ),
         ),
         pytest.param(
             "skew",
             marks=pytest.mark.skip(
-                reason="TODO(ehsan): fix NA output matching Pandas 3.1"
+                reason="TODO(BSE-5666): fix NA output matching Pandas 3.1"
             ),
         ),
         "first",

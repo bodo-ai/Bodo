@@ -36,7 +36,7 @@ pytestmark = [
     ),
     pytest.mark.slow,
     pytest.mark.skip(
-        reason="TODO(ehsan): fix skew/kurtosis NA output matching Pandas 3.1"
+        reason="TODO(BSE-5666): fix skew/kurtosis NA output matching Pandas 3.1"
     ),
 ]
 
