@@ -4003,8 +4003,7 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
     )
     ctx = {"TABLE1": df}
     scalar_func = generate_date_trunc_func(date_trunc_literal)
-    S = df["A"].map(scalar_func)
-    S[~df.B] = None
+    S = df["A"].map(scalar_func).where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query, ctx, None, expected_output=py_output, session_tz="US/Pacific")
 
