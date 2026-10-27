@@ -4061,13 +4061,13 @@ def test_tz_aware_add_sub_interval_year_case(representative_tz, memory_leak_chec
     query1 = "SELECT CASE WHEN B THEN A + Interval 1 Year END as output from table1"
     query2 = "SELECT CASE WHEN B THEN A - Interval 2 Year END as output from table1"
     S = df.A + pd.DateOffset(years=1)
-    S[~df.B] = None
+    S = S.where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(
         query1, ctx, None, expected_output=py_output, session_tz=representative_tz
     )
     S = df.A - pd.DateOffset(years=2)
-    S[~df.B] = None
+    S = S.where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(
         query2, ctx, None, expected_output=py_output, session_tz=representative_tz
@@ -4131,13 +4131,13 @@ def test_tz_aware_add_sub_interval_month_case(representative_tz, memory_leak_che
     query1 = "SELECT CASE WHEN B THEN A + Interval 1 Month END as output from table1"
     query2 = "SELECT CASE WHEN B THEN A - Interval 2 Month END as output from table1"
     S = df.A + pd.DateOffset(months=1)
-    S[~df.B] = None
+    S = S.where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(
         query1, ctx, None, expected_output=py_output, session_tz=representative_tz
     )
     S = df.A - pd.DateOffset(months=2)
-    S[~df.B] = None
+    S = S.where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(
         query2, ctx, None, expected_output=py_output, session_tz=representative_tz
@@ -4277,7 +4277,7 @@ def test_tz_aware_subdate_integer_case(memory_leak_check):
     # Function used to simulate the result of subtracting 3 days
     scalar_sub_func = interval_day_add_func(-3)
     S = df.A.map(scalar_sub_func)
-    S[~df.B] = None
+    S = S.where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
     check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
@@ -4344,8 +4344,7 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
 
     # Function used to simulate the result of subtracting 2 days
     scalar_sub_func = interval_day_add_func(-2)
-    S = df.A.map(scalar_sub_func)
-    S[~df.B] = None
+    S = df.A.map(scalar_sub_func).where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
     check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
@@ -4404,7 +4403,7 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
     query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, Interval 1 Months) END as output from table1"
 
     S = df.A - pd.DateOffset(months=1)
-    S[~df.B] = None
+    S = S.where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
     check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
     check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
