@@ -41,7 +41,8 @@ pytestmark = pytest_slow_unless_codegen
                         50782748792,
                         12379739850550389709,
                         -8454757700450211157,
-                    ]
+                    ],
+                    dtype=pd.Float64Dtype(),
                 ),
             ),
             id="large_float_array",
