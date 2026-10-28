@@ -31,7 +31,10 @@ def verify_dict_encoded_in_impl(impl, args):
     arg_typs = tuple([bodo.typeof(arg) for arg in args])
 
     dispatcher, used_sig = find_nested_dispatcher_and_args(
-        bodo_func, arg_typs, ("is_in", "bodosql.kernels")
+        bodo_func,
+        arg_typs,
+        ("is_in", "bodosql.kernels"),
+        return_type=bodo.types.boolean_array_type,
     )
 
     # Note: infrastructure doesn't handle defaults, so we need to manually add this to
@@ -45,6 +48,7 @@ def verify_dict_encoded_in_impl(impl, args):
         dispatcher,
         used_sig,
         ("is_in_util", "bodosql.kernels.special_handling_array_kernels"),
+        return_type=bodo.types.boolean_array_type,
     )
 
     # Verify we have str_arr_to_dict_str_arr in the IR. find_nested_dispatcher_and_args
@@ -54,6 +58,7 @@ def verify_dict_encoded_in_impl(impl, args):
         used_sig,
         ("str_arr_to_dict_str_arr", "bodo.libs.str_arr_ext"),
         return_dispatcher=False,
+        return_type=bodo.types.boolean_array_type,
     )
 
 
