@@ -41,7 +41,8 @@ pytestmark = pytest_slow_unless_codegen
                         50782748792,
                         12379739850550389709,
                         -8454757700450211157,
-                    ]
+                    ],
+                    dtype=pd.Float64Dtype(),
                 ),
             ),
             id="large_float_array",
@@ -443,7 +444,9 @@ def test_cast_boolean(numeric_arrays, memory_leak_check):
             lambda x: None if pd.isna(str_to_bool(x)) else str_to_bool(x)
         )
     elif is_float_dtype(args[0]) or isinstance(args[0], float):
-        to_bool_scalar_fn = lambda x: None if np.isnan(x) or np.isinf(x) else bool(x)
+        to_bool_scalar_fn = (
+            lambda x: None if pd.isna(x) or np.isnan(x) or np.isinf(x) else bool(x)
+        )
     else:
         to_bool_scalar_fn = lambda x: None if pd.isna(x) else bool(x)
 

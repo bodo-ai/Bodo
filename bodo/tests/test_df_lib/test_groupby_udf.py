@@ -130,7 +130,7 @@ def test_agg_mix_udf_builtin(groupby_df):
         pytest.param(lambda x: 1.23, id="float_ret", marks=pytest.mark.slow),
         pytest.param(lambda x: pd.Timestamp(2021, 11, 3), id="timestamp_ret"),
         pytest.param(
-            lambda x: pd.Timedelta(3), id="timedelta_ret", marks=pytest.mark.slow
+            lambda x: pd.Timedelta(3000), id="timedelta_ret", marks=pytest.mark.slow
         ),
         pytest.param(lambda x: "A", id="string_ret"),
         pytest.param(

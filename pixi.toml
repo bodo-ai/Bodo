@@ -236,7 +236,8 @@ huggingface_hub = "*"
 zstandard = "*"
 # Databases
 pymysql = "*"
-sqlalchemy = "*"
+# Restrict version for Snowflake connector compatibility (TODO: remove when unnecessary)
+sqlalchemy = "<2.1"
 # Excel
 xlrd = "*"
 xlsxwriter = "*"
@@ -246,6 +247,8 @@ pyzmq = "*"
 # Setting explicitly since Conda solve sets a newer version but PyIceberg installed from pip wants <15.0 (TODO: remove when unnecessary)
 rich = "<15.0"
 cachetools = ">=5.5,<7.0"
+# snowflake-connector-python (installed from PyPI) requires filelock<4 (TODO: remove when unnecessary)
+filelock = "<4"
 # Needed for query profiler sunburst plots
 plotly = "*"
 
@@ -323,7 +326,7 @@ cython = ">=3.0"
 scikit-build-core = "*"
 # Copied into bodo/mpi4py (pip only)
 mpi4py = ">=4.0"
-numba = ">=0.62,<0.66.0"
+numba = ">=0.62,<0.68.0"
 pyarrow = "25.0.*"
 
 # Build C++ Deps
@@ -337,8 +340,8 @@ sccache = "*"
 # BodoSQL & Iceberg Testing
 maven = "*"
 sqlglot = "*"
-# Once 1.2.2 is released, we can remove this, test_non_numeric_window_functions fails on 1.2.1
-duckdb = "!=1.2.1"
+# DuckDB 2.0 is not supported properly in sqlglot yet which is used in BodoSQL testing (TODO: remove restriction when unnecessary)
+duckdb = "<2.0"
 
 # Restricted due to Spark 4.1 error in bodo/tests/test_df_lib/test_iceberg.py::test_simple_table_read[PARTITIONS_DT_TABLE]
 pyspark = "4.0.*"

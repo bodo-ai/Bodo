@@ -19,6 +19,17 @@ class LazyArrowExtensionArray(
     A lazy ArrowExtensionArray that will collect data from workers when needed. Also functions as a normal ArrowExtensionArray.
     """
 
+    def __new__(cls, *args, **kwargs):
+        """Pandas 3.1 internals may call __new__ without calling constructor."""
+        obj = super().__new__(cls)
+        obj._md_nrows = kwargs.get("nrows", None)
+        obj._md_result_id = kwargs.get("result_id", None)
+        obj._md_head = kwargs.get("head", None)
+        obj.logger = bodo.user_logging.get_current_bodo_verbose_logger()
+        obj._collect_func = kwargs.get("collect_func", None)
+        obj._del_func = kwargs.get("del_func", None)
+        return obj
+
     def __init__(
         self,
         values: pa.Array | pa.ChunkedArray,

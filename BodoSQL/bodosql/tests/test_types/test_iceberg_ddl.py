@@ -1059,9 +1059,6 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         pytest.param(
             "rest_test_harness",
             id="rest",
-            marks=pytest.mark.skip(
-                "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-            ),
         ),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
@@ -1187,9 +1184,6 @@ def test_alter_table_rename_column(request, harness_name: str):
         pytest.param(
             "rest_test_harness",
             id="rest",
-            marks=pytest.mark.skip(
-                "TODO[BSE-5638]: Fix credentials issue on Nightly CI and re-enabled test."
-            ),
         ),
         pytest.param("filesystem_test_harness", id="filesystem"),
     ],
