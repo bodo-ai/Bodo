@@ -3194,7 +3194,7 @@ def find_funcname_in_annotation_ir(annotation, desired_callname):
 
 
 def find_nested_dispatcher_and_args(
-    dispatcher, args, func_name, return_dispatcher=True
+    dispatcher, args, func_name, return_dispatcher=True, return_type=None
 ):
     """Finds a dispatcher in the IR and the arguments with which it was
     called for the given func_name (which matches the output of find_callname).
@@ -3213,7 +3213,10 @@ def find_nested_dispatcher_and_args(
 
     Returns a tuple with the dispatcher and the arguments with which it was called.
     """
-    sig = types.void(*args)
+    if return_type is None:
+        return_type = bodo.types.none
+
+    sig = return_type(*args)
     cr = dispatcher.get_compile_result(sig)
     annotation = cr.type_annotation
     var_name, arg_names = find_funcname_in_annotation_ir(annotation, func_name)

@@ -242,8 +242,9 @@ def test_coalesce_str_array_optimized(memory_leak_check):
     bodo_func = bodo.jit(parallel=True)(impl)
     # Find the coalesce dispatcher in the IR
     arg_typs = tuple([bodo.typeof(arg) for arg in args])
+    return_type = bodo.types.SeriesType(bodo.types.string_type)
     dispatcher, used_sig = find_nested_dispatcher_and_args(
-        bodo_func, arg_typs, ("coalesce", "bodosql.kernels")
+        bodo_func, arg_typs, ("coalesce", "bodosql.kernels"), return_type=return_type
     )
     # Note: infrastructure doesn't handle defaults, so we need to manually add this to
     # the signature
@@ -253,6 +254,7 @@ def test_coalesce_str_array_optimized(memory_leak_check):
         dispatcher,
         used_sig,
         ("coalesce_util", "bodosql.kernels.variadic_array_kernels"),
+        return_type=bodo.types.string_array_type,
     )
     # Verify get_str_arr_item_copy is in the IR. find_nested_dispatcher_and_args
     # will throw an assertion error if it doesn't exist.
@@ -261,6 +263,7 @@ def test_coalesce_str_array_optimized(memory_leak_check):
         used_sig,
         ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
         return_dispatcher=False,
+        return_type=bodo.types.string_array_type,
     )
 
 

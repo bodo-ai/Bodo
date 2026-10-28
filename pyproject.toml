@@ -38,7 +38,7 @@ classifiers = [
 
 dependencies = [
     "pyarrow>=25.0,<25.1",
-    "numba>=0.62,<0.68",
+    "numba>=0.62,<0.69",
     "pandas>=2.2",
     "pytz",
     "numpy>=1.24",
