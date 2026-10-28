@@ -144,7 +144,7 @@ def get_tz_type_info(tz_type):
     type. This obtains the string name of the zone for most timezones,
     but for FixedOffsets it outputs an integer in nanoseconds.
     """
-    if tz_type is datetime.timezone.utc:
+    if tz_type is datetime.UTC:
         tz_val = "UTC"
     elif isinstance(tz_type, datetime.timezone):
         tz_val = pd.Timedelta(tz_type.utcoffset(None)).value
