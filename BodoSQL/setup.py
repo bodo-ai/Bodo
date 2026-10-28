@@ -29,6 +29,8 @@ def build_libs(obj):
             cmd_list.append("-Dstyle.color=always")
 
         if os.name == "nt":
+            # Disable Kotlin compiler daemon to avoid breaking build cleanup.
+            cmd_list.append("-Dkotlin.compiler.daemon=false")
             # Find the exact mvn executable name on Windows (example: "mvn.CMD")
             mvn = shutil.which("mvn")
             if mvn is None:
