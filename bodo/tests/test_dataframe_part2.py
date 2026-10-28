@@ -2699,7 +2699,7 @@ def test_df_type_unify_error():
     # Test as a developer
     numba.core.config.DEVELOPER_MODE = 1
 
-    if PYVERSION in ((3, 10), (3, 12), (3, 13), (3, 14)):
+    if PYVERSION in ((3, 10), (3, 12), (3, 13), (3, 14), (3, 15)):
         # In Python 3.10 this function has two returns in the bytecode
         # as opposed to a phi node
         error_type = BodoError
