@@ -168,11 +168,12 @@ def test_approx_percentile(data, memory_leak_check):
         ),
         pytest.param(
             [
-                pd.Timestamp("2023-1-1", tz="US/Pacific") + pd.Timedelta(hours=i)
+                pd.Timestamp("2023-1-1", tz="America/Los_Angeles")
+                + pd.Timedelta(hours=i)
                 for i in [0, 10000, -20000, 30000, -40000]
             ],
             None,
-            pd.Timestamp("1999-1-1", tz="US/Pacific"),
+            pd.Timestamp("1999-1-1", tz="America/Los_Angeles"),
             id="tz_timestamp",
         ),
     ],

@@ -1046,26 +1046,26 @@ def test_concat_ws_binary(memory_leak_check):
                 ),
                 pd.Series(
                     [
-                        pd.Timestamp("2018-4-14", tz="US/Pacific"),
-                        pd.Timestamp("2019-10-1", tz="US/Pacific"),
+                        pd.Timestamp("2018-4-14", tz="America/Los_Angeles"),
+                        pd.Timestamp("2019-10-1", tz="America/Los_Angeles"),
                         None,
                         None,
                         None,
-                        pd.Timestamp("2020-3-31", tz="US/Pacific"),
+                        pd.Timestamp("2020-3-31", tz="America/Los_Angeles"),
                     ],
-                    dtype="datetime64[ns, US/Pacific]",
+                    dtype="datetime64[ns, America/Los_Angeles]",
                 ),
             ),
             pd.Series(
                 [
-                    pd.Timestamp("2022-1-1", tz="US/Pacific"),
-                    pd.Timestamp("2019-10-1", tz="US/Pacific"),
-                    pd.Timestamp("2024-12-31", tz="US/Pacific"),
+                    pd.Timestamp("2022-1-1", tz="America/Los_Angeles"),
+                    pd.Timestamp("2019-10-1", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-12-31", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2020-7-4", tz="US/Pacific"),
-                    pd.Timestamp("2020-3-31", tz="US/Pacific"),
+                    pd.Timestamp("2020-7-4", tz="America/Los_Angeles"),
+                    pd.Timestamp("2020-3-31", tz="America/Los_Angeles"),
                 ],
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             id="date_col-tz_col",
         ),
@@ -1101,27 +1101,27 @@ def test_concat_ws_binary(memory_leak_check):
             (
                 pd.Series(
                     [
-                        pd.Timestamp("2018-4-14", tz="US/Pacific"),
-                        pd.Timestamp("2019-10-1", tz="US/Pacific"),
+                        pd.Timestamp("2018-4-14", tz="America/Los_Angeles"),
+                        pd.Timestamp("2019-10-1", tz="America/Los_Angeles"),
                         None,
                         None,
                         None,
-                        pd.Timestamp("2020-3-31", tz="US/Pacific"),
+                        pd.Timestamp("2020-3-31", tz="America/Los_Angeles"),
                     ],
-                    dtype="datetime64[ns, US/Pacific]",
+                    dtype="datetime64[ns, America/Los_Angeles]",
                 ),
-                pd.Timestamp("2020-01-01", tz="US/Pacific"),
+                pd.Timestamp("2020-01-01", tz="America/Los_Angeles"),
             ),
             pd.Series(
                 [
-                    pd.Timestamp("2018-4-14", tz="US/Pacific"),
-                    pd.Timestamp("2019-10-1", tz="US/Pacific"),
-                    pd.Timestamp("2020-01-01", tz="US/Pacific"),
-                    pd.Timestamp("2020-01-01", tz="US/Pacific"),
-                    pd.Timestamp("2020-01-01", tz="US/Pacific"),
-                    pd.Timestamp("2020-3-31", tz="US/Pacific"),
+                    pd.Timestamp("2018-4-14", tz="America/Los_Angeles"),
+                    pd.Timestamp("2019-10-1", tz="America/Los_Angeles"),
+                    pd.Timestamp("2020-01-01", tz="America/Los_Angeles"),
+                    pd.Timestamp("2020-01-01", tz="America/Los_Angeles"),
+                    pd.Timestamp("2020-01-01", tz="America/Los_Angeles"),
+                    pd.Timestamp("2020-3-31", tz="America/Los_Angeles"),
                 ],
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             id="pd_datetime_tz_col-ts_tz_col",
         ),
@@ -1224,13 +1224,13 @@ def test_coalesce_date_timestamp(args, answer, memory_leak_check):
         ),
         pytest.param(
             (
-                pd.Timestamp("2023-08-17", tz="Poland"),
-                pd.Timestamp("2013-08-17", tz="Poland"),
-                pd.Timestamp("2003-08-17", tz="Poland"),
+                pd.Timestamp("2023-08-17", tz="Europe/Warsaw"),
+                pd.Timestamp("2013-08-17", tz="Europe/Warsaw"),
+                pd.Timestamp("2003-08-17", tz="Europe/Warsaw"),
             ),
             (
-                pd.Timestamp("2003-08-17", tz="Poland"),
-                pd.Timestamp("2023-08-17", tz="Poland"),
+                pd.Timestamp("2003-08-17", tz="Europe/Warsaw"),
+                pd.Timestamp("2023-08-17", tz="Europe/Warsaw"),
             ),
             id="tz-aware-timestamp-scalars",
         ),
@@ -2870,34 +2870,44 @@ def test_object_construct_optional(
         ),
         pytest.param(
             (
-                pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"),
+                pd.Timestamp("2015-3-14 9:26:53.59", tz="America/Los_Angeles"),
                 pd.Series(
                     [
-                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                        pd.Timestamp("2023-1-1", tz="America/Los_Angeles"),
                         None,
-                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                        pd.Timestamp(
+                            "1999-12-31 23:59:59.999250", tz="America/Los_Angeles"
+                        ),
                         None,
-                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
+                        pd.Timestamp("2024-7-4 6:30:00", tz="America/Los_Angeles"),
                     ],
-                    dtype="datetime64[ns, US/Pacific]",
+                    dtype="datetime64[ns, America/Los_Angeles]",
                 ),
             ),
             (True, False),
             pd.Series(
                 [
                     [
-                        pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"),
-                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                        pd.Timestamp("2015-3-14 9:26:53.59", tz="America/Los_Angeles"),
+                        pd.Timestamp("2023-1-1", tz="America/Los_Angeles"),
                     ],
-                    [pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"), None],
                     [
-                        pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"),
-                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                        pd.Timestamp("2015-3-14 9:26:53.59", tz="America/Los_Angeles"),
+                        None,
                     ],
-                    [pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"), None],
                     [
-                        pd.Timestamp("2015-3-14 9:26:53.59", tz="US/Pacific"),
-                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
+                        pd.Timestamp("2015-3-14 9:26:53.59", tz="America/Los_Angeles"),
+                        pd.Timestamp(
+                            "1999-12-31 23:59:59.999250", tz="America/Los_Angeles"
+                        ),
+                    ],
+                    [
+                        pd.Timestamp("2015-3-14 9:26:53.59", tz="America/Los_Angeles"),
+                        None,
+                    ],
+                    [
+                        pd.Timestamp("2015-3-14 9:26:53.59", tz="America/Los_Angeles"),
+                        pd.Timestamp("2024-7-4 6:30:00", tz="America/Los_Angeles"),
                     ],
                 ]
             ),
@@ -2917,31 +2927,37 @@ def test_object_construct_optional(
                 ),
                 pd.Series(
                     [
-                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                        pd.Timestamp("2023-1-1", tz="America/Los_Angeles"),
                         None,
-                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                        pd.Timestamp(
+                            "1999-12-31 23:59:59.999250", tz="America/Los_Angeles"
+                        ),
                         None,
-                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
+                        pd.Timestamp("2024-7-4 6:30:00", tz="America/Los_Angeles"),
                     ],
-                    dtype="datetime64[ns, US/Pacific]",
+                    dtype="datetime64[ns, America/Los_Angeles]",
                 ),
             ),
             (False, False),
             pd.Series(
                 [
                     [
-                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
-                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                        pd.Timestamp("2024-7-4 6:30:00", tz="America/Los_Angeles"),
+                        pd.Timestamp("2023-1-1", tz="America/Los_Angeles"),
                     ],
                     [None, None],
                     [
-                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
-                        pd.Timestamp("1999-12-31 23:59:59.999250", tz="US/Pacific"),
+                        pd.Timestamp(
+                            "1999-12-31 23:59:59.999250", tz="America/Los_Angeles"
+                        ),
+                        pd.Timestamp(
+                            "1999-12-31 23:59:59.999250", tz="America/Los_Angeles"
+                        ),
                     ],
                     [None, None],
                     [
-                        pd.Timestamp("2024-7-4 6:30:00", tz="US/Pacific"),
-                        pd.Timestamp("2023-1-1", tz="US/Pacific"),
+                        pd.Timestamp("2024-7-4 6:30:00", tz="America/Los_Angeles"),
+                        pd.Timestamp("2023-1-1", tz="America/Los_Angeles"),
                     ],
                 ]
             ),

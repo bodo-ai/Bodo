@@ -1280,7 +1280,11 @@ def test_max_min_tz_aware(memory_leak_check):
     S = pd.Series(
         list(
             pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             )
         )
         + [None] * 5
@@ -1308,7 +1312,11 @@ def test_count_tz_aware(memory_leak_check):
     S = pd.Series(
         list(
             pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             )
         )
         + [None] * 5
@@ -1338,11 +1346,11 @@ def test_any_value_tz_aware(memory_leak_check):
         {
             # Any Value is not defined so keep everything in each group the same.
             "A": [
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2022/1/2", tz="Poland"),
-                pd.Timestamp("2022/1/3", tz="Poland"),
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2022/1/4", tz="Poland"),
+                pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/2", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/3", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/4", tz="Europe/Warsaw"),
             ]
             * 7,
             "ID": ["a", "b", "c", "a", "d"] * 7,
@@ -1368,11 +1376,11 @@ def test_tz_aware_key(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2022/1/2", tz="Poland"),
-                pd.Timestamp("2022/1/3", tz="Poland"),
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2022/1/4", tz="Poland"),
+                pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/2", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/3", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/4", tz="Europe/Warsaw"),
             ]
             * 7,
             "VAL": np.arange(35),
@@ -1399,20 +1407,20 @@ def test_tz_aware_having(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2022/1/2", tz="Poland"),
-                pd.Timestamp("2022/1/3", tz="Poland"),
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2022/1/4", tz="Poland"),
+                pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/2", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/3", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/1/4", tz="Europe/Warsaw"),
             ]
             * 7,
             "B": [
-                pd.Timestamp("2021/1/12", tz="Poland"),
-                pd.Timestamp("2022/2/4", tz="Poland"),
-                pd.Timestamp("2021/1/4", tz="Poland"),
+                pd.Timestamp("2021/1/12", tz="Europe/Warsaw"),
+                pd.Timestamp("2022/2/4", tz="Europe/Warsaw"),
+                pd.Timestamp("2021/1/4", tz="Europe/Warsaw"),
                 None,
-                pd.Timestamp("2022/1/1", tz="Poland"),
-                pd.Timestamp("2027/1/1", tz="Poland"),
+                pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                pd.Timestamp("2027/1/1", tz="Europe/Warsaw"),
                 None,
             ]
             * 5,

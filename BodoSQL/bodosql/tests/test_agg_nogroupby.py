@@ -655,7 +655,11 @@ def test_max_min_tz_aware(memory_leak_check):
     S = pd.Series(
         list(
             pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             )
         )
         + [None] * 4
@@ -688,7 +692,11 @@ def test_count_tz_aware(memory_leak_check):
     S = pd.Series(
         list(
             pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             )
         )
         + [None] * 4
@@ -721,7 +729,11 @@ def test_any_value_tz_aware(memory_leak_check):
     S = pd.Series(
         list(
             pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             )
         )
         + [None] * 4
@@ -753,27 +765,27 @@ def test_tz_aware_having(memory_leak_check):
         {
             "A": pd.Series(
                 [
-                    pd.Timestamp("2022/1/1", tz="Poland"),
-                    pd.Timestamp("2022/1/2", tz="Poland"),
-                    pd.Timestamp("2022/1/3", tz="Poland"),
-                    pd.Timestamp("2016/1/1", tz="Poland"),
-                    pd.Timestamp("2019/1/4", tz="Poland"),
+                    pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                    pd.Timestamp("2022/1/2", tz="Europe/Warsaw"),
+                    pd.Timestamp("2022/1/3", tz="Europe/Warsaw"),
+                    pd.Timestamp("2016/1/1", tz="Europe/Warsaw"),
+                    pd.Timestamp("2019/1/4", tz="Europe/Warsaw"),
                 ]
                 * 7,
-                dtype="datetime64[ns, Poland]",
+                dtype="datetime64[ns, Europe/Warsaw]",
             ),
             "B": pd.Series(
                 [
-                    pd.Timestamp("2021/1/12", tz="Poland"),
-                    pd.Timestamp("2022/2/4", tz="Poland"),
-                    pd.Timestamp("2021/1/4", tz="Poland"),
+                    pd.Timestamp("2021/1/12", tz="Europe/Warsaw"),
+                    pd.Timestamp("2022/2/4", tz="Europe/Warsaw"),
+                    pd.Timestamp("2021/1/4", tz="Europe/Warsaw"),
                     None,
-                    pd.Timestamp("2022/1/1", tz="Poland"),
-                    pd.Timestamp("2027/1/1", tz="Poland"),
+                    pd.Timestamp("2022/1/1", tz="Europe/Warsaw"),
+                    pd.Timestamp("2027/1/1", tz="Europe/Warsaw"),
                     None,
                 ]
                 * 5,
-                dtype="datetime64[ns, Poland]",
+                dtype="datetime64[ns, Europe/Warsaw]",
             ),
         }
     )

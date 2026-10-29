@@ -369,7 +369,7 @@ def day_data(has_tz):
         subtract_from_strings,
         subtract_strings,
         answers,
-        "Poland" if has_tz else None,
+        "Europe/Warsaw" if has_tz else None,
     )
 
 
@@ -398,7 +398,7 @@ def hour_data(has_tz):
         subtract_from_strings,
         subtract_strings,
         answers,
-        "US/Pacific" if has_tz else None,
+        "America/Los_Angeles" if has_tz else None,
     )
 
 
@@ -479,7 +479,7 @@ def microsecond_data(has_tz):
         subtract_from_strings,
         subtract_strings,
         answers,
-        "US/Arizona" if has_tz else None,
+        "America/Phoenix" if has_tz else None,
     )
 
 
@@ -522,7 +522,7 @@ def nanosecond_data(has_tz):
         subtract_from_strings,
         subtract_strings,
         answers,
-        "US/Mountain" if has_tz else None,
+        "America/Denver" if has_tz else None,
     )
 
 

@@ -643,7 +643,7 @@ def test_current_timestamp_case(
     """Tests CURRENT_TIMESTAMP and equivalents with a snowflake catalog to verify that
     the output uses the default Snowflake timezone.
     """
-    current_timestamp = pd.Timestamp.now(tz="US/Pacific")
+    current_timestamp = pd.Timestamp.now(tz="America/Los_Angeles")
     _, valid_hours, _ = compute_valid_times(current_timestamp)
 
     def impl(bc):

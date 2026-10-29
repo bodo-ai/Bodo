@@ -402,7 +402,7 @@ def test_QUALIFY_nested_queries(memory_leak_check):
 def test_qualify_tz_aware(memory_leak_check):
     """Tests that qualify is supported with tz-aware data."""
     query = "SELECT A, MIN(A) over (PARTITION BY C ORDER BY B ASC ROWS BETWEEN 1 PRECEDING and 1 FOLLOWING) as x FROM table1 QUALIFY x > A"
-    tz = "US/Pacific"
+    tz = "America/Los_Angeles"
     df = pd.DataFrame(
         {
             "A": [

@@ -157,25 +157,45 @@ def tz_aware_df():
     # Transition to Daylight Savings
     # "1D2h37min48s" --> 1 day, 2 hours, 37 minutes, 48 seconds
     to_dst_series = pd.date_range(
-        start="11/3/2021", freq="1D2h37min48s", periods=30, tz="US/Pacific", unit="ns"
+        start="11/3/2021",
+        freq="1D2h37min48s",
+        periods=30,
+        tz="America/Los_Angeles",
+        unit="ns",
     ).to_series()
 
     # Transition back from Daylight Savings
     from_dst_series = pd.date_range(
-        start="03/1/2022", freq="0D12h30min1s", periods=60, tz="US/Pacific", unit="ns"
+        start="03/1/2022",
+        freq="0D12h30min1s",
+        periods=60,
+        tz="America/Los_Angeles",
+        unit="ns",
     ).to_series()
 
     # February is weird with leap years
     feb_leap_year_series = pd.date_range(
-        start="02/20/2020", freq="1D0h30min0s", periods=20, tz="US/Pacific", unit="ns"
+        start="02/20/2020",
+        freq="1D0h30min0s",
+        periods=20,
+        tz="America/Los_Angeles",
+        unit="ns",
     ).to_series()
 
     second_quarter_series = pd.date_range(
-        start="05/01/2015", freq="2D0h1min59s", periods=20, tz="US/Pacific", unit="ns"
+        start="05/01/2015",
+        freq="2D0h1min59s",
+        periods=20,
+        tz="America/Los_Angeles",
+        unit="ns",
     ).to_series()
 
     third_quarter_series = pd.date_range(
-        start="08/17/2000", freq="10D1h1min10s", periods=20, tz="US/Pacific", unit="ns"
+        start="08/17/2000",
+        freq="10D1h1min10s",
+        periods=20,
+        tz="America/Los_Angeles",
+        unit="ns",
     ).to_series()
 
     df = pd.DataFrame(
@@ -2161,7 +2181,9 @@ def test_snowflake_dateadd_date(
             id="no_tz-with_case",
             marks=[pytest.mark.slow, pytest.mark.bodosql_cpp],
         ),
-        pytest.param("US/Pacific", False, id="with_tz-no_case", marks=pytest.mark.slow),
+        pytest.param(
+            "America/Los_Angeles", False, id="with_tz-no_case", marks=pytest.mark.slow
+        ),
         pytest.param("Europe/Berlin", True, id="with_tz-with_case"),
     ],
 )
@@ -2266,9 +2288,9 @@ def tz_dateadd_args(request):
 
 @pytest.fixture(
     params=[
-        pytest.param("US/Pacific", id="pacific"),
+        pytest.param("America/Los_Angeles", id="pacific"),
         pytest.param("GMT", id="gmt"),
-        pytest.param("US/Eastern", id="eastern", marks=pytest.mark.slow),
+        pytest.param("America/New_York", id="eastern", marks=pytest.mark.slow),
     ]
 )
 def tz_dateadd_data(request, tz_dateadd_args):
@@ -2586,17 +2608,17 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
     ]
     tz_timestamps = pd.Series(
         [
-            None if s is None else pd.Timestamp(s, tz="US/Pacific")
+            None if s is None else pd.Timestamp(s, tz="America/Los_Angeles")
             for s in timestamp_strings
         ],
-        dtype="datetime64[ns, US/Pacific]",
+        dtype="datetime64[ns, America/Los_Angeles]",
     )
     res = pd.Series(
         [
-            None if s is None else pd.Timestamp(s, tz="US/Pacific")
+            None if s is None else pd.Timestamp(s, tz="America/Los_Angeles")
             for s in adjusted_timestamp_strings
         ],
-        dtype="datetime64[ns, US/Pacific]",
+        dtype="datetime64[ns, America/Los_Angeles]",
     )
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -2611,7 +2633,7 @@ def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
         None,
         check_dtype=False,
         expected_output=expected_output,
-        session_tz="US/Pacific",
+        session_tz="America/Los_Angeles",
     )
 
 
@@ -3083,7 +3105,7 @@ def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
             "2018-11-02 6:00:00",
         ]
 
-    tz = "US/Pacific" if use_case else "Poland"
+    tz = "America/Los_Angeles" if use_case else "Europe/Warsaw"
     table1 = pd.DataFrame(
         {
             "DT": pd.Series(
@@ -3580,7 +3602,7 @@ def test_tz_aware_day_case(memory_leak_check):
                 start="1/1/2022",
                 freq="145D27h37min48s",
                 periods=30,
-                tz="Poland",
+                tz="Europe/Warsaw",
                 unit="ns",
             ).to_series(),
             "B": [True, False] * 15,
@@ -3646,7 +3668,11 @@ def test_tz_aware_month_case(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             ).to_series(),
             "B": [True, False] * 15,
         }
@@ -3660,7 +3686,7 @@ def test_tz_aware_month_case(memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pytest.param(("US/Pacific", "1/1/2023", "h"), id="pacific-by_hour"),
+        pytest.param(("America/Los_Angeles", "1/1/2023", "h"), id="pacific-by_hour"),
         pytest.param(("GMT", "1/1/2021", "49MIN"), id="gmt-by_49_minutes"),
         pytest.param(
             ("Australia/Sydney", "1/1/2027", "W"),
@@ -3668,7 +3694,7 @@ def test_tz_aware_month_case(memory_leak_check):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            ("US/Eastern", "6/12/2021", "1234567891234ns"),
+            ("America/New_York", "6/12/2021", "1234567891234ns"),
             id="eastern-by_many_ns",
             marks=pytest.mark.slow,
         ),
@@ -3810,7 +3836,11 @@ def test_tz_aware_weekofyear(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             ).to_series()
         }
     )
@@ -3826,7 +3856,11 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             ).to_series(),
             "B": [True, False] * 15,
         }
@@ -3907,7 +3941,11 @@ def test_tz_aware_previous_day(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5h", periods=30, tz="Poland", unit="ns"
+                start="1/1/2022",
+                freq="16D5h",
+                periods=30,
+                tz="Europe/Warsaw",
+                unit="ns",
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
         }
@@ -3967,7 +4005,7 @@ def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
                     start="1/1/2022",
                     freq="16D5h",
                     periods=30,
-                    tz="US/Pacific",
+                    tz="America/Los_Angeles",
                     unit="ns",
                 )
             )
@@ -3993,7 +4031,7 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
                     start="1/1/2022",
                     freq="16D5h",
                     periods=30,
-                    tz="US/Pacific",
+                    tz="America/Los_Angeles",
                     unit="ns",
                 )
             )
@@ -4005,7 +4043,9 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
     scalar_func = generate_date_trunc_func(date_trunc_literal)
     S = df["A"].map(scalar_func).where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(
+        query, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
 
 
 @pytest.mark.tz_aware
@@ -4232,7 +4272,7 @@ def test_tz_aware_subdate_integer(memory_leak_check):
                     start="1/1/2022",
                     freq="16D5h",
                     periods=30,
-                    tz="US/Pacific",
+                    tz="America/Los_Angeles",
                     unit="ns",
                 )
             )
@@ -4246,8 +4286,12 @@ def test_tz_aware_subdate_integer(memory_leak_check):
     # Function used to simulate the result of subtracting 3 days
     scalar_sub_func = interval_day_add_func(-3)
     py_output = pd.DataFrame({"OUTPUT": df.A.map(scalar_sub_func)})
-    check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
-    check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
 
 
 @pytest.mark.tz_aware
@@ -4262,7 +4306,7 @@ def test_tz_aware_subdate_integer_case(memory_leak_check):
                     start="1/1/2022",
                     freq="16D5h",
                     periods=30,
-                    tz="US/Pacific",
+                    tz="America/Los_Angeles",
                     unit="ns",
                 )
             )
@@ -4279,8 +4323,12 @@ def test_tz_aware_subdate_integer_case(memory_leak_check):
     S = df.A.map(scalar_sub_func)
     S = S.where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
-    check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
 
 
 @pytest.mark.tz_aware
@@ -4295,7 +4343,7 @@ def test_tz_aware_subdate_interval_day(memory_leak_check):
                     start="1/1/2022",
                     freq="16D5h",
                     periods=30,
-                    tz="US/Pacific",
+                    tz="America/Los_Angeles",
                     unit="ns",
                 )
             )
@@ -4326,7 +4374,7 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
                     start="1/1/2022",
                     freq="16D5h",
                     periods=30,
-                    tz="US/Pacific",
+                    tz="America/Los_Angeles",
                     unit="ns",
                 )
             )
@@ -4346,8 +4394,12 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
     scalar_sub_func = interval_day_add_func(-2)
     S = df.A.map(scalar_sub_func).where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
-    check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
 
 
 @pytest.mark.tz_aware
@@ -4362,7 +4414,7 @@ def test_tz_aware_subdate_interval_month(memory_leak_check):
                     start="1/1/2022",
                     freq="16D5h",
                     periods=30,
-                    tz="US/Pacific",
+                    tz="America/Los_Angeles",
                     unit="ns",
                 )
             )
@@ -4390,7 +4442,7 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
                     start="1/1/2022",
                     freq="16D5h",
                     periods=30,
-                    tz="US/Pacific",
+                    tz="America/Los_Angeles",
                     unit="ns",
                 )
             )
@@ -4405,8 +4457,12 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
     S = df.A - pd.DateOffset(months=1)
     S = S.where(df.B, None)
     py_output = pd.DataFrame({"OUTPUT": S})
-    check_query(query1, ctx, None, expected_output=py_output, session_tz="US/Pacific")
-    check_query(query2, ctx, None, expected_output=py_output, session_tz="US/Pacific")
+    check_query(
+        query1, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
+    check_query(
+        query2, ctx, None, expected_output=py_output, session_tz="America/Los_Angeles"
+    )
 
 
 @pytest.fixture
