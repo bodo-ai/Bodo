@@ -110,7 +110,7 @@ def test_tz_aware_pivot(memory_leak_check):
         FOR (name) IN ('John' as john, 'mike' as mike)
     )
     """
-    session_tz = "Poland"
+    session_tz = "Europe/Warsaw"
     df = pd.DataFrame(
         {
             "NAME": ["John", "mike", "Luke", "Matthew", None] * 8,

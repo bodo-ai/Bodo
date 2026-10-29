@@ -841,13 +841,13 @@ def make_add_interval_tz_test(amount, start, target, is_vector):
     or converts to a vector.
     """
     timezones = [
-        "US/Pacific",
-        "US/Mountain",
-        "US/Eastern",
+        "America/Los_Angeles",
+        "America/Denver",
+        "America/New_York",
         "Europe/Madrid",
         "Australia/Sydney",
-        "Poland",
-        "US/Alaska",
+        "Europe/Warsaw",
+        "America/Anchorage",
     ]
     tz = timezones[amount % len(timezones)]
     start_ts = pd.Timestamp(start, tz=tz)
@@ -1689,7 +1689,7 @@ def test_dayofyear(dates_scalar_vector, memory_leak_check):
         ),
         # Timezone aware timestamp tests
         pytest.param(
-            pd.Timestamp("2024-02-28T23", tz="Poland"),
+            pd.Timestamp("2024-02-28T23", tz="Europe/Warsaw"),
             (1, 1),
             (9, 2024),
             id="tz-timestamp-1",
@@ -1854,28 +1854,36 @@ def test_int_to_days(days, memory_leak_check):
         pytest.param(
             pd.Series(
                 [
-                    pd.Timestamp("2015-01-31", tz="US/Pacific"),
-                    pd.Timestamp("2016-02-29 01:36:01.737418240", tz="US/Pacific"),
-                    pd.Timestamp("2017-03-27 08:43:00", tz="US/Pacific"),
+                    pd.Timestamp("2015-01-31", tz="America/Los_Angeles"),
+                    pd.Timestamp(
+                        "2016-02-29 01:36:01.737418240", tz="America/Los_Angeles"
+                    ),
+                    pd.Timestamp("2017-03-27 08:43:00", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2018-04-25 00:00:21", tz="US/Pacific"),
-                    pd.Timestamp("2019-05-23 16:00:00", tz="US/Pacific"),
-                    pd.Timestamp("2020-06-21 05:40:01", tz="US/Pacific"),
+                    pd.Timestamp("2018-04-25 00:00:21", tz="America/Los_Angeles"),
+                    pd.Timestamp("2019-05-23 16:00:00", tz="America/Los_Angeles"),
+                    pd.Timestamp("2020-06-21 05:40:01", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2021-07-19", tz="US/Pacific"),
+                    pd.Timestamp("2021-07-19", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2022-08-17 07:48:01.254654976", tz="US/Pacific"),
-                    pd.Timestamp("2023-09-15 08:00:00", tz="US/Pacific"),
+                    pd.Timestamp(
+                        "2022-08-17 07:48:01.254654976", tz="America/Los_Angeles"
+                    ),
+                    pd.Timestamp("2023-09-15 08:00:00", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2024-10-13 00:00:45.511627776", tz="US/Pacific"),
-                    pd.Timestamp("2025-11-11 16:15:00", tz="US/Pacific"),
-                    pd.Timestamp("2026-12-09 11:16:01.467226624", tz="US/Pacific"),
+                    pd.Timestamp(
+                        "2024-10-13 00:00:45.511627776", tz="America/Los_Angeles"
+                    ),
+                    pd.Timestamp("2025-11-11 16:15:00", tz="America/Los_Angeles"),
+                    pd.Timestamp(
+                        "2026-12-09 11:16:01.467226624", tz="America/Los_Angeles"
+                    ),
                     None,
-                    pd.Timestamp("2017-02-1", tz="US/Pacific"),
-                    pd.Timestamp("2020-03-1", tz="US/Pacific"),
-                    pd.Timestamp("2024-11-1", tz="US/Pacific"),
+                    pd.Timestamp("2017-02-1", tz="America/Los_Angeles"),
+                    pd.Timestamp("2020-03-1", tz="America/Los_Angeles"),
+                    pd.Timestamp("2024-11-1", tz="America/Los_Angeles"),
                 ],
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             "year",
             id="timestamp-tzaware-vector",
@@ -1917,7 +1925,7 @@ def test_int_to_days(days, memory_leak_check):
             id="timestamp-tz-vector",
         ),
         pytest.param(
-            pd.Timestamp("2022-3-1", tz="Poland"),
+            pd.Timestamp("2022-3-1", tz="Europe/Warsaw"),
             "quarter",
             id="timestamp-tz-scalar",
         ),
@@ -2166,7 +2174,7 @@ def test_to_days(arg, memory_leak_check):
     "arg",
     [
         pd.Timestamp("2007-10-07"),
-        pd.Timestamp("2007-10-07", tz="US/Pacific"),
+        pd.Timestamp("2007-10-07", tz="America/Los_Angeles"),
         pd.Series(
             [None] * 2
             + list(pd.date_range("2020-10-01", freq="11D", periods=30, unit="ns"))
@@ -2177,11 +2185,15 @@ def test_to_days(arg, memory_leak_check):
             [None] * 2
             + list(
                 pd.date_range(
-                    "2020-10-01", freq="11D", periods=30, tz="US/Pacific", unit="ns"
+                    "2020-10-01",
+                    freq="11D",
+                    periods=30,
+                    tz="America/Los_Angeles",
+                    unit="ns",
                 )
             )
             + [None],
-            dtype="datetime64[ns, US/Pacific]",
+            dtype="datetime64[ns, America/Los_Angeles]",
         ).array,
     ],
 )
@@ -2471,16 +2483,20 @@ def test_yearofweekiso(dates_scalar_vector, memory_leak_check):
 @pytest.mark.parametrize(
     "ts_val",
     [
-        pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific"),
+        pd.Timestamp("2022-11-07 04:23:12", tz="America/Los_Angeles"),
         pd.Series(
             [None] * 4
             + list(
                 pd.date_range(
-                    "1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific", unit="ns"
+                    "1/1/2022",
+                    periods=30,
+                    freq="7D6h7s",
+                    tz="America/Los_Angeles",
+                    unit="ns",
                 )
             )
             + [None] * 2,
-            dtype="datetime64[ns, US/Pacific]",
+            dtype="datetime64[ns, America/Los_Angeles]",
         ),
     ],
 )
@@ -2523,16 +2539,20 @@ def test_tz_aware_interval_add_date_offset(ts_val, memory_leak_check):
 @pytest.mark.parametrize(
     "ts_val",
     [
-        pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific"),
+        pd.Timestamp("2022-11-07 04:23:12", tz="America/Los_Angeles"),
         pd.Series(
             [None] * 4
             + list(
                 pd.date_range(
-                    "1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific", unit="ns"
+                    "1/1/2022",
+                    periods=30,
+                    freq="7D6h7s",
+                    tz="America/Los_Angeles",
+                    unit="ns",
                 )
             )
             + [None] * 2,
-            dtype="datetime64[ns, US/Pacific]",
+            dtype="datetime64[ns, America/Los_Angeles]",
         ),
     ],
 )
@@ -2637,12 +2657,12 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
                         "2022-11-6 04:12:41.432433",
                         periods=20,
                         freq="11D3h5us",
-                        tz="US/Pacific",
+                        tz="America/Los_Angeles",
                         unit="ns",
                     )
                 )
                 + [None] * 2,
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ).array,
             id="vector-tz-aware",
         ),
@@ -3297,7 +3317,7 @@ def test_construct_timestamp(
     def impl_aware(year, month, day, hour, minute, second, nanosecond):
         return pd.Series(
             bodosql.kernels.construct_timestamp(
-                year, month, day, hour, minute, second, nanosecond, "US/Eastern"
+                year, month, day, hour, minute, second, nanosecond, "America/New_York"
             )
         )
 
@@ -3334,7 +3354,7 @@ def test_construct_timestamp(
                     minute,
                     second,
                     nanosecond,
-                    numba.literally("US/Eastern"),
+                    numba.literally("America/New_York"),
                 )
             )
         else:
@@ -3350,7 +3370,7 @@ def test_construct_timestamp(
                 )
             )
 
-    tz = "US/Eastern" if has_time_zone else None
+    tz = "America/New_York" if has_time_zone else None
 
     def construct_tz_scalar_fn(arg0, arg1):
         if pd.isna(arg0):
@@ -3610,12 +3630,12 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
             ),
             pd.array(
                 [
-                    pd.Timestamp("2022-7-11", tz="US/Pacific"),
-                    pd.Timestamp("2022-7-10 23:00:00", tz="US/Pacific"),
-                    pd.Timestamp("2022-7-11 01:00:00", tz="US/Pacific"),
+                    pd.Timestamp("2022-7-11", tz="America/Los_Angeles"),
+                    pd.Timestamp("2022-7-10 23:00:00", tz="America/Los_Angeles"),
+                    pd.Timestamp("2022-7-11 01:00:00", tz="America/Los_Angeles"),
                 ]
                 * 5,
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             pd.array([0, -1, 1] * 5),
             pd.array([0, -2, 2] * 5),
@@ -3631,7 +3651,7 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
                 * 5,
                 dtype="datetime64[ns]",
             ),
-            pd.Timestamp("2022-7-08 17:00:00", tz="Poland"),
+            pd.Timestamp("2022-7-08 17:00:00", tz="Europe/Warsaw"),
             pd.array([-3, -1, 1] * 5),
             pd.array([-55, -8, 18] * 5),
             id="vector-scalar",
@@ -3640,12 +3660,12 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
         pytest.param(
             pd.array(
                 [
-                    pd.Timestamp("2022-7-11", tz="US/Pacific"),
-                    pd.Timestamp("2022-7-10 23:00:00", tz="US/Pacific"),
-                    pd.Timestamp("2022-7-11 01:00:00", tz="US/Pacific"),
+                    pd.Timestamp("2022-7-11", tz="America/Los_Angeles"),
+                    pd.Timestamp("2022-7-10 23:00:00", tz="America/Los_Angeles"),
+                    pd.Timestamp("2022-7-11 01:00:00", tz="America/Los_Angeles"),
                 ]
                 * 5,
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             None,
             pd.array([None, None, None] * 5, dtype="Int64"),
@@ -3654,7 +3674,7 @@ def test_date_diff_upcasting(unit, arr0, arr1, answer, memory_leak_check):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Timestamp("2022-7-11", tz="US/Pacific"),
+            pd.Timestamp("2022-7-11", tz="America/Los_Angeles"),
             None,
             None,
             None,
@@ -3702,27 +3722,27 @@ def test_date_diff_tz_aware_naive(
     "arg0, arg1, answer",
     [
         pytest.param(
-            pd.Timestamp("03-12-2023 00:59:59", tz="US/Eastern"),
-            pd.Timestamp("03-12-2023 03:00:00", tz="US/Eastern"),
+            pd.Timestamp("03-12-2023 00:59:59", tz="America/New_York"),
+            pd.Timestamp("03-12-2023 03:00:00", tz="America/New_York"),
             61,
             id="spring-DST-aware",
         ),
         pytest.param(
-            pd.Timestamp("11-05-2023 00:59:59", tz="US/Eastern"),
-            pd.Timestamp("11-05-2023 03:00:00", tz="US/Eastern"),
+            pd.Timestamp("11-05-2023 00:59:59", tz="America/New_York"),
+            pd.Timestamp("11-05-2023 03:00:00", tz="America/New_York"),
             181,
             id="Fall-DST-aware",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Timestamp("03-12-2023 00:59:59"),
-            pd.Timestamp("03-12-2023 03:00:00", tz="US/Eastern"),
+            pd.Timestamp("03-12-2023 03:00:00", tz="America/New_York"),
             61,
             id="spring-DST-naive",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Timestamp("11-05-2023 00:59:59", tz="US/Eastern"),
+            pd.Timestamp("11-05-2023 00:59:59", tz="America/New_York"),
             pd.Timestamp("11-05-2023 03:00:00"),
             181,
             id="Fall-DST-naive",
@@ -3806,19 +3826,19 @@ def test_add_interval_optional(memory_leak_check):
         )
 
     A = pd.Timestamp("2018-04-01")
-    B = pd.Timestamp("2023-11-05 00:45:00", tz="US/Mountain")
+    B = pd.Timestamp("2023-11-05 00:45:00", tz="America/Denver")
     C = 240
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             a0 = pd.Timestamp("2038-04-01") if flag0 and flag1 else None
             a1 = (
-                pd.Timestamp("2024-7-02 00:45:00", tz="US/Mountain")
+                pd.Timestamp("2024-7-02 00:45:00", tz="America/Denver")
                 if flag0 and flag1
                 else None
             )
             a2 = pd.Timestamp("2018-04-11") if flag0 and flag1 else None
             a3 = (
-                pd.Timestamp("2023-11-05 04:45:00", tz="US/Mountain")
+                pd.Timestamp("2023-11-05 04:45:00", tz="America/Denver")
                 if flag0 and flag1
                 else None
             )
@@ -3948,7 +3968,7 @@ def test_option_tz_aware_interval_add_date_offset(memory_leak_check):
         arg1 = date_offset if flag1 else None
         return bodosql.kernels.tz_aware_interval_add(arg0, arg1)
 
-    ts_val = pd.Timestamp("2022-11-05", tz="US/Pacific")
+    ts_val = pd.Timestamp("2022-11-05", tz="America/Los_Angeles")
     date_offset = pd.DateOffset(months=2)
     expected_add = ts_val + date_offset
 
@@ -3974,9 +3994,9 @@ def test_option_tz_aware_interval_add_timedelta(memory_leak_check):
         arg1 = date_offset if flag1 else None
         return bodosql.kernels.tz_aware_interval_add(arg0, arg1)
 
-    ts_val = pd.Timestamp("2022-11-05 04:23:12", tz="US/Pacific")
+    ts_val = pd.Timestamp("2022-11-05 04:23:12", tz="America/Los_Angeles")
     date_offset = pd.Timedelta(days=2)
-    expected_add = pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific")
+    expected_add = pd.Timestamp("2022-11-07 04:23:12", tz="America/Los_Angeles")
 
     for flag0 in [True, False]:
         for flag1 in [True, False]:
@@ -4000,12 +4020,14 @@ def test_option_date_trunc(memory_leak_check):
         return bodosql.kernels.date_trunc(arg0, arg1)
 
     part = "day"
-    ts = pd.Timestamp("2022-11-6 12:40:45", tz="US/Pacific")
+    ts = pd.Timestamp("2022-11-6 12:40:45", tz="America/Los_Angeles")
 
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             answer = (
-                pd.Timestamp("2022-11-6", tz="US/Pacific") if flag0 and flag1 else None
+                pd.Timestamp("2022-11-6", tz="America/Los_Angeles")
+                if flag0 and flag1
+                else None
             )
             check_func(
                 impl,
@@ -4024,7 +4046,7 @@ def test_option_get_weekofyear(memory_leak_check):
         arg0 = arg if flag else None
         return bodosql.kernels.get_weekofyear(arg0)
 
-    arg = pd.Timestamp("2022-11-6 12:40:45", tz="US/Pacific")
+    arg = pd.Timestamp("2022-11-6 12:40:45", tz="America/Los_Angeles")
 
     for flag in [True, False]:
         answer = arg.weekofyear if flag else None
@@ -4181,8 +4203,8 @@ def test_date_format(expr, format_str, answer, memory_leak_check):
             id="timestamp-date-tz-naive-scalar",
         ),
         pytest.param(
-            pd.Timestamp("2020-06-27", tz="Poland"),
-            pd.Timestamp("2025-12-31", tz="Poland"),
+            pd.Timestamp("2020-06-27", tz="Europe/Warsaw"),
+            pd.Timestamp("2025-12-31", tz="Europe/Warsaw"),
             -66.129032,
             id="timestamp-date-tz-aware-scalar",
         ),
@@ -4306,9 +4328,9 @@ def test_months_between_series(arg0, arg1, answer, memory_leak_check):
             pd.Timestamp("2018-06-15"), 3, pd.Timestamp("2018-09-15"), id="basic"
         ),
         pytest.param(
-            pd.Timestamp("2020-4-28", tz="Poland"),
+            pd.Timestamp("2020-4-28", tz="Europe/Warsaw"),
             20,
-            pd.Timestamp("2021-12-28", tz="Poland"),
+            pd.Timestamp("2021-12-28", tz="Europe/Warsaw"),
             id="tz-aware",
         ),
         pytest.param(
@@ -4659,17 +4681,19 @@ def test_time_slice_columns(
         pytest.param(
             pd.array(
                 [
-                    pd.Timestamp("2023-11-05 23:21:24.32414", tz="US/Pacific"),
-                    pd.Timestamp("2018-04-01", tz="US/Pacific"),
+                    pd.Timestamp("2023-11-05 23:21:24.32414", tz="America/Los_Angeles"),
+                    pd.Timestamp("2018-04-01", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("1969-01-01 12:21:42", tz="US/Pacific"),
-                    pd.Timestamp("1970-01-01", tz="US/Pacific"),
-                    pd.Timestamp("2023-03-12 00:59:59", tz="US/Pacific"),
-                    pd.Timestamp("2023-03-12 03:00:01.324", tz="US/Pacific"),
-                    pd.Timestamp("2023-11-05 00:00:00.4314", tz="US/Pacific"),
-                    pd.Timestamp("2023-11-05 03:00:00.432423244", tz="US/Pacific"),
+                    pd.Timestamp("1969-01-01 12:21:42", tz="America/Los_Angeles"),
+                    pd.Timestamp("1970-01-01", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-03-12 00:59:59", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-03-12 03:00:01.324", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-11-05 00:00:00.4314", tz="America/Los_Angeles"),
+                    pd.Timestamp(
+                        "2023-11-05 03:00:00.432423244", tz="America/Los_Angeles"
+                    ),
                 ],
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             "us",
             pd.array(
@@ -4690,7 +4714,7 @@ def test_time_slice_columns(
             id="vector-us-tz-aware",
         ),
         pytest.param(
-            pd.Timestamp("2023-11-05 03:00:00.432423244", tz="US/Eastern"),
+            pd.Timestamp("2023-11-05 03:00:00.432423244", tz="America/New_York"),
             "ns",
             1699171200432423244,
             id="scalar-ns-tz-aware",
@@ -4754,14 +4778,14 @@ def test_get_epoch_optional(memory_leak_check):
         pytest.param(
             pd.array(
                 [
-                    pd.Timestamp("2023-03-12", tz="US/Pacific"),
-                    pd.Timestamp("2023-03-13", tz="US/Pacific"),
+                    pd.Timestamp("2023-03-12", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-03-13", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2023-11-05", tz="US/Pacific"),
-                    pd.Timestamp("2023-11-06", tz="US/Pacific"),
+                    pd.Timestamp("2023-11-05", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-11-06", tz="America/Los_Angeles"),
                 ]
                 * 3,
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             "hr",
             pd.array([-8, -7, None, -7, -8] * 3, dtype="Int32"),
@@ -4839,7 +4863,7 @@ def test_get_timezone_offset(arr, unit, answer, memory_leak_check):
 
     TIMESTAMP_NTZ: tz=None
     TIMESTAMP_LTZ without transition times for modern times: tz=Pacific/Honolulu
-    TIMESTAMP_LTZ with transition times: tz=US/Pacific
+    TIMESTAMP_LTZ with transition times: tz=America/Los_Angeles
     TIMESTAMP_LTZ with minute values: tz=Asia/Kathmandu and tz=Pacific/Marquesas
 
     In addition we also add a test for FixedOffset, although

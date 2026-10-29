@@ -684,11 +684,11 @@ def tz_aware_tz_naive_comparison_args(comparison_query_args):
     cmp_op, use_case = comparison_query_args
     data = [
         None,
-        pd.Timestamp("2010-01-17", tz="US/Pacific"),
-        pd.Timestamp("2011-02-26 03:36:01", tz="US/Pacific"),
-        pd.Timestamp("2012-05-09 16:43:16.123456", tz="US/Pacific"),
-        pd.Timestamp("2013-10-22 02:32:21.987654321", tz="US/Pacific"),
-        pd.Timestamp("2010-02-03 01:15:12.501000", tz="US/Pacific"),
+        pd.Timestamp("2010-01-17", tz="America/Los_Angeles"),
+        pd.Timestamp("2011-02-26 03:36:01", tz="America/Los_Angeles"),
+        pd.Timestamp("2012-05-09 16:43:16.123456", tz="America/Los_Angeles"),
+        pd.Timestamp("2013-10-22 02:32:21.987654321", tz="America/Los_Angeles"),
+        pd.Timestamp("2010-02-03 01:15:12.501000", tz="America/Los_Angeles"),
     ]
     A = pd.Series(data * 6)
     b = []
@@ -730,7 +730,7 @@ def tz_aware_tz_naive_comparison_args(comparison_query_args):
         ),
     }
     answer = ctx["TABLE1"].apply(row_funcs[cmp_op], axis=1)
-    return cmp_op, use_case, ctx, answer, "US/Pacific"
+    return cmp_op, use_case, ctx, answer, "America/Los_Angeles"
 
 
 # @pytest.mark.bodosql_cpp TODO: enable when we support timezone-aware/naive comparisons in C++ backend
