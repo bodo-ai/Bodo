@@ -48,6 +48,13 @@ jobs:
       contents: read
     runs-on: ${{ inputs.runner-id }}
     steps:
+      # Install legacy timezone aliases for Linux runners
+      - name: Install legacy timezone aliases
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tzdata-legacy
+
       - name: Create Test Marker
         id: set-marker
         run: |
