@@ -46,6 +46,12 @@ jobs:
     name: Build and Run Tests Helper
     runs-on: ${{ inputs.runner-id }}
     steps:
+        # Install legacy timezone aliases for Linux runners
+        - name: Install legacy timezone aliases
+          if: runner.os == 'Linux'
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y tzdata-legacy
         # Setup
         - uses: actions/checkout@v5
         - name: Build from Source
@@ -216,7 +222,7 @@ jobs:
             # Ignore streaming, caching and other tests that would
             # normally import the compiler in spawn/df_lib modes.
             PYTEST_IGNORE: >-
-              ${{ inputs.test-type == 'NORMAL' && ' ' || 
+              ${{ inputs.test-type == 'NORMAL' && ' ' ||
                   '--ignore bodo/tests/test_streaming
                   --ignore bodo/tests/caching_tests' }}
             BODO_TEST_SPAWN_MODE: ${{ inputs.test-type == 'SPAWN' && '1' || '0' }}
