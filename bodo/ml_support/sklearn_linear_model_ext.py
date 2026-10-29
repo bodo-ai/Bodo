@@ -489,56 +489,50 @@ BodoLogisticRegressionType, _ = install_py_obj_class(
 
 @overload(sklearn.linear_model.LogisticRegression, no_unliteral=True)
 def sklearn_linear_model_logistic_regression_overload(
-    penalty="l2",
+    C=1.0,
+    l1_ratio=0.0,
     dual=False,
     tol=0.0001,
-    C=1.0,
     fit_intercept=True,
     intercept_scaling=1,
     class_weight=None,
     random_state=None,
     solver="lbfgs",
     max_iter=100,
-    multi_class="auto",
     verbose=0,
     warm_start=False,
     n_jobs=None,
-    l1_ratio=None,
 ):
     def _sklearn_linear_model_logistic_regression_impl(
-        penalty="l2",
+        C=1.0,
+        l1_ratio=0.0,
         dual=False,
         tol=0.0001,
-        C=1.0,
         fit_intercept=True,
         intercept_scaling=1,
         class_weight=None,
         random_state=None,
         solver="lbfgs",
         max_iter=100,
-        multi_class="auto",
         verbose=0,
         warm_start=False,
         n_jobs=None,
-        l1_ratio=None,
     ):  # pragma: no cover
         with numba.objmode(m="logistic_regression_type"):
             m = sklearn.linear_model.LogisticRegression(
-                penalty=penalty,
+                C=C,
+                l1_ratio=l1_ratio,
                 dual=dual,
                 tol=tol,
-                C=C,
                 fit_intercept=fit_intercept,
                 intercept_scaling=intercept_scaling,
                 class_weight=class_weight,
                 random_state=random_state,
                 solver=solver,
                 max_iter=max_iter,
-                multi_class=multi_class,
                 verbose=verbose,
                 warm_start=warm_start,
                 n_jobs=n_jobs,
-                l1_ratio=l1_ratio,
             )
         return m
 
@@ -595,7 +589,7 @@ def overload_logistic_regression_fit(
                     l1_ratio = m.l1_ratio
                 clf = sklearn.linear_model.SGDClassifier(
                     loss="log_loss",
-                    penalty=m.penalty,
+                    penalty="l2",
                     tol=m.tol,
                     fit_intercept=m.fit_intercept,
                     class_weight=m.class_weight,
