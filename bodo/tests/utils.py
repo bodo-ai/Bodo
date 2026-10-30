@@ -3736,15 +3736,18 @@ pytest_mark_oracle = compose_decos(
     (
         pytest.mark.oracle,
         pytest.mark.slow,
-        pytest.mark.skipif(
-            (
-                os.name == "posix"
-                and platform.system() == "Linux"
-                and "arm" in platform.machine().lower()
-                or "aarch64" in platform.machine().lower(),
-            )
-            or platform.system() == "Windows",
-            reason="Oracle client not supported on ARM64 Linux or Windows",
+        # pytest.mark.skipif(
+        #     (
+        #         os.name == "posix"
+        #         and platform.system() == "Linux"
+        #         and "arm" in platform.machine().lower()
+        #         or "aarch64" in platform.machine().lower(),
+        #     )
+        #     or platform.system() == "Windows",
+        #     reason="Oracle client not supported on ARM64 Linux or Windows",
+        # ),
+        pytest.mark.skip(
+            reason="TODO: enable when cx_oracle is available for Python 3.15"
         ),
     )
 )

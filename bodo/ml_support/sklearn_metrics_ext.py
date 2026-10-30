@@ -41,17 +41,21 @@ def precision_recall_fscore_support_helper(MCM, average):
     # changes in scikit-learn, since we call precision_recall_fscore_support
     # with dummy values, but maybe it is easy to make more robust.
     f = sklearn.metrics._classification.multilabel_confusion_matrix
+    old_num_samples = sklearn.metrics._classification._num_samples
     result = -1.0
     try:
         sklearn.metrics._classification.multilabel_confusion_matrix = (
             multilabel_confusion_matrix
         )
+        # Avoid error in input size check
+        sklearn.metrics._classification._num_samples = lambda x: 1
 
         result = sklearn.metrics._classification.precision_recall_fscore_support(
             [], [], average=average
         )
     finally:
         sklearn.metrics._classification.multilabel_confusion_matrix = f
+        sklearn.metrics._classification._num_samples = old_num_samples
     return result
 
 

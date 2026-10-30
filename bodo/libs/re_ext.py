@@ -11,6 +11,7 @@ from numba.core.typing.templates import (
     infer_global,
     signature,
 )
+from numba.core.utils import PYVERSION
 from numba.extending import (
     NativeValue,
     box,
@@ -337,7 +338,18 @@ def re_compile_overload(pattern, flags=0):
 
 
 gen_objmode_method_overload(RePatternType, "search", re.Pattern.search, "re_match_type")
-gen_objmode_method_overload(RePatternType, "match", re.Pattern.match, "re_match_type")
+# "match" is alias for "prefixmatch" in Python 3.15
+if PYVERSION >= (3, 15):
+    gen_objmode_method_overload(
+        RePatternType, "prefixmatch", re.Pattern.prefixmatch, "re_match_type"
+    )
+    gen_objmode_method_overload(
+        RePatternType, "match", re.Pattern.prefixmatch, "re_match_type"
+    )
+else:
+    gen_objmode_method_overload(
+        RePatternType, "match", re.Pattern.match, "re_match_type"
+    )
 gen_objmode_method_overload(
     RePatternType, "fullmatch", re.Pattern.fullmatch, "re_match_type"
 )
