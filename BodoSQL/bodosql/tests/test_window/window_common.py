@@ -116,7 +116,7 @@ tz_aware_col = pd.Series(
             microsecond=((i + 1) % 21) + 300,
             # Spark drops nanoseconds so set to 0 to allow comparison
             nanosecond=0,
-            tz="US/Pacific",
+            tz="America/Los_Angeles",
         )
         for i in range(window_col_size)
     ]

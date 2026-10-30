@@ -329,9 +329,9 @@ def invalid_to_date_strings_with_format_str(request):
             (
                 pd.Series(
                     pd.date_range(
-                        "2018", "2025", periods=13, tz="US/Pacific", unit="ns"
+                        "2018", "2025", periods=13, tz="America/Los_Angeles", unit="ns"
                     ),
-                    dtype="datetime64[ns, US/Pacific]",
+                    dtype="datetime64[ns, America/Los_Angeles]",
                 ),
             ),
             id="tz_series",

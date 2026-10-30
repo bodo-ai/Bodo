@@ -107,14 +107,16 @@ def to_time_fn(request):
             (
                 pd.Series(
                     [
-                        pd.Timestamp("2020-12-31 01:15:59.995", tz="US/Pacific"),
-                        pd.Timestamp("2021-4-1 12:00:00", tz="US/Pacific"),
+                        pd.Timestamp(
+                            "2020-12-31 01:15:59.995", tz="America/Los_Angeles"
+                        ),
+                        pd.Timestamp("2021-4-1 12:00:00", tz="America/Los_Angeles"),
                         None,
-                        pd.Timestamp("2022-7-4 20:21:22", tz="US/Pacific"),
-                        pd.Timestamp("2023-8-15 8:30:00.123", tz="US/Pacific"),
-                        pd.Timestamp("2019-1-1", tz="US/Pacific"),
+                        pd.Timestamp("2022-7-4 20:21:22", tz="America/Los_Angeles"),
+                        pd.Timestamp("2023-8-15 8:30:00.123", tz="America/Los_Angeles"),
+                        pd.Timestamp("2019-1-1", tz="America/Los_Angeles"),
                     ],
-                    dtype="datetime64[ns, US/Pacific]",
+                    dtype="datetime64[ns, America/Los_Angeles]",
                 ),
                 pd.Series(
                     [

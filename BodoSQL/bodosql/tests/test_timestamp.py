@@ -304,12 +304,12 @@ def test_datediff_tz_aware_tz_naive(memory_leak_check):
         {
             "A": pd.array(
                 [
-                    pd.Timestamp("2021-09-26 01:00:13", tz="US/Pacific"),
-                    pd.Timestamp("2023-10-28 00:00:00", tz="US/Pacific"),
-                    pd.Timestamp("2023-11-05 05:15:17", tz="US/Pacific"),
+                    pd.Timestamp("2021-09-26 01:00:13", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-10-28 00:00:00", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-11-05 05:15:17", tz="America/Los_Angeles"),
                 ]
                 * 5,
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             "B": pd.array(
                 [
@@ -524,19 +524,30 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
                 {
                     "A": pd.array(
                         [
-                            pd.Timestamp("2023-11-05 23:21:24.32414", tz="US/Pacific"),
-                            pd.Timestamp("2018-04-01", tz="US/Pacific"),
-                            None,
-                            pd.Timestamp("1969-01-01 12:21:42", tz="US/Pacific"),
-                            pd.Timestamp("1970-01-01", tz="US/Pacific"),
-                            pd.Timestamp("2023-03-12 00:59:59", tz="US/Pacific"),
-                            pd.Timestamp("2023-03-12 03:00:01.324", tz="US/Pacific"),
-                            pd.Timestamp("2023-11-05 00:00:00.4314", tz="US/Pacific"),
                             pd.Timestamp(
-                                "2023-11-05 03:00:00.432423244", tz="US/Pacific"
+                                "2023-11-05 23:21:24.32414", tz="America/Los_Angeles"
+                            ),
+                            pd.Timestamp("2018-04-01", tz="America/Los_Angeles"),
+                            None,
+                            pd.Timestamp(
+                                "1969-01-01 12:21:42", tz="America/Los_Angeles"
+                            ),
+                            pd.Timestamp("1970-01-01", tz="America/Los_Angeles"),
+                            pd.Timestamp(
+                                "2023-03-12 00:59:59", tz="America/Los_Angeles"
+                            ),
+                            pd.Timestamp(
+                                "2023-03-12 03:00:01.324", tz="America/Los_Angeles"
+                            ),
+                            pd.Timestamp(
+                                "2023-11-05 00:00:00.4314", tz="America/Los_Angeles"
+                            ),
+                            pd.Timestamp(
+                                "2023-11-05 03:00:00.432423244",
+                                tz="America/Los_Angeles",
                             ),
                         ],
-                        dtype="datetime64[ns, US/Pacific]",
+                        dtype="datetime64[ns, America/Los_Angeles]",
                     ),
                 }
             ),
@@ -726,14 +737,14 @@ def test_date_part_timezone_unit_case(memory_leak_check):
         {
             "A": pd.array(
                 [
-                    pd.Timestamp("2023-03-12", tz="US/Pacific"),
-                    pd.Timestamp("2023-03-13", tz="US/Pacific"),
+                    pd.Timestamp("2023-03-12", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-03-13", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2023-11-05", tz="US/Pacific"),
-                    pd.Timestamp("2023-11-06", tz="US/Pacific"),
+                    pd.Timestamp("2023-11-05", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-11-06", tz="America/Los_Angeles"),
                 ]
                 * 3,
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
             "B": pd.array([True, False, True, True, False] * 3),
         }

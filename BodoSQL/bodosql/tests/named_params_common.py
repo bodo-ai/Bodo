@@ -74,7 +74,7 @@ def timestamp_named_params(request):
 
 @pytest.fixture(
     params=[
-        "US/Pacific",
+        "America/Los_Angeles",
     ]
 )
 def tzaware_timestamp_named_params(request):

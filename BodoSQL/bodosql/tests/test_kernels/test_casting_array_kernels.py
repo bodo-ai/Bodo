@@ -729,7 +729,7 @@ def test_cast_date_to_tz_aware_non_literal_tz_error_handling(memory_leak_check):
     tz = pd.Series(
         [
             "UTC",
-            "US/Pacific",
+            "America/Los_Angeles",
             None,
             "Europe/Berlin",
             "Africa/Casablanca",
@@ -768,11 +768,11 @@ def test_cast_date_to_tz_aware_non_literal_tz_error_handling(memory_leak_check):
                         "2022-1-1",
                         periods=21,
                         freq="40D5h4s",
-                        tz="US/Pacific",
+                        tz="America/Los_Angeles",
                         unit="ns",
                     )
                 ),
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ).array,
             id="vector",
         ),
@@ -982,7 +982,7 @@ def test_cast_date_opt(memory_leak_check):
 
 
 def test_cast_tz_naive_to_tz_aware_opt(memory_leak_check):
-    tz_literal = "US/Pacific"
+    tz_literal = "America/Los_Angeles"
 
     def impl(a, flag):
         arg0 = a if flag else None
@@ -1003,7 +1003,7 @@ def test_cast_tz_aware_to_tz_naive_opt(memory_leak_check):
         arg0 = a if flag else None
         return bodosql.kernels.cast_tz_aware_to_tz_naive(arg0)
 
-    ts = pd.Timestamp("2022-11-06 00:52:31", tz="US/Pacific")
+    ts = pd.Timestamp("2022-11-06 00:52:31", tz="America/Los_Angeles")
     localized_ts = ts.tz_localize(None)
     for flag in [True, False]:
         answer = localized_ts if flag else None
@@ -1015,7 +1015,7 @@ def test_cast_tz_aware_to_tz_naive_opt(memory_leak_check):
 
 
 def test_cast_str_to_tz_aware_opt(memory_leak_check):
-    tz_literal = "US/Pacific"
+    tz_literal = "America/Los_Angeles"
 
     def impl(a, flag):
         arg0 = a if flag else None

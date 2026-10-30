@@ -101,11 +101,11 @@ pytestmark = pytest_slow_unless_codegen
                 ),
                 pd.Series(
                     [
-                        pd.Timestamp("2020", tz="US/Pacific")
+                        pd.Timestamp("2020", tz="America/Los_Angeles")
                         + pd.Timedelta(hours=(2 ** (i % 18)))
                         for i in range(2**12)
                     ],
-                    dtype="datetime64[ns, US/Pacific]",
+                    dtype="datetime64[ns, America/Los_Angeles]",
                 ),
                 None,
             ),
@@ -272,7 +272,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
         pytest.param(
             (
                 pd.Timestamp("2023-7-4 6:00:00"),
-                pd.Timestamp("2020-4-1", tz="US/Pacific"),
+                pd.Timestamp("2020-4-1", tz="America/Los_Angeles"),
             ),
             -8057843889034702324,
             id="timestamps_baseline",
@@ -280,7 +280,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
         pytest.param(
             (
                 pd.Timestamp("2023-7-4 8:00:00", tz="Europe/Berlin"),
-                pd.Timestamp("2020-4-1 3:00:00", tz="US/Eastern"),
+                pd.Timestamp("2020-4-1 3:00:00", tz="America/New_York"),
             ),
             -8057843889034702324,
             id="timestamps_equivalent",
