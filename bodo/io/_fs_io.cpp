@@ -432,7 +432,6 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             hdfs_get_fs_t hdfs_get_fs =
                 (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, nullptr);
 
-            std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
             arrow::Status status;
             // TODO: Do I need to make this Buffer Pool aware?
             std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;

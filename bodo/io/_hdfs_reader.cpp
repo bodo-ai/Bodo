@@ -4,10 +4,10 @@
 
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/filesystem/hdfs.h>
-#include <arrow/io/hdfs.h>
 #include <arrow/io/interfaces.h>
 #include <arrow/result.h>
 #include <arrow/status.h>
+#include <arrow/util/future.h>
 
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
@@ -33,10 +33,10 @@
 // initialized the first time it is needed and reused afterwards
 // if the config does not change
 static std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
-// a global singleton instance of HdfsConnectionConfig
+// a global singleton instance of HdfsOptions
 // used to check if a different HadoopFileSystem
 // needs to be initialized
-arrow::io::HdfsConnectionConfig hdfs_config;
+static arrow::fs::HdfsOptions hdfs_config;
 bool is_hdfs_initialized = false;
 
 std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
@@ -47,7 +47,11 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
 
     // check if libhdfs exists
     if (!is_hdfs_initialized) {
+#if ARROW_VERSION_MAJOR >= 26
+        status = ::arrow::fs::HaveLibHdfs();
+#else
         status = ::arrow::io::HaveLibHdfs();
+#endif
         if (!status.ok()) {
             Bodo_PyErr_SetString(PyExc_RuntimeError, "libhdfs not found");
             return nullptr;  // TODO: use Bodo_PyErr_SetString instead
@@ -60,19 +64,12 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     CHECK_ARROW_AND_ASSIGN(result, "HdfsOptions::FromUri", options);
     // handle hdfs_config
     if (!is_hdfs_initialized) {
-        hdfs_config = options.connection_config;
+        hdfs_config = options;
+    } else if (hdfs_config.Equals(options)) {
+        return hdfs_fs;
     } else {
-        // check host, port, user to determine
-        // if new connection needs to be made
-        if ((hdfs_config.host != options.connection_config.host) ||
-            (hdfs_config.port != options.connection_config.port) ||
-            (hdfs_config.user != options.connection_config.user)) {
-            hdfs_fs =
-                nullptr;  // destructor calls Close, which calls Disconnect
-            hdfs_config = options.connection_config;
-        } else {
-            return hdfs_fs;
-        }
+        hdfs_fs = nullptr;  // destructor calls Close, which calls Disconnect
+        hdfs_config = options;
     }
     if (uri_string.starts_with("abfs://") ||
         uri_string.starts_with("abfss://")) {
@@ -207,7 +204,6 @@ void hdfs_get_fs(const std::string &uri_string,
 FileReader *init_hdfs_reader(const char *fname, const char *suffix,
                              bool csv_header, bool json_lines) {
     std::string path;
-    arrow::io::HdfsPathInfo path_info;
     std::string f_name(fname);
     std::shared_ptr<::arrow::fs::HadoopFileSystem> fs = get_hdfs_fs(f_name);
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
