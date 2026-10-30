@@ -5,7 +5,7 @@ import operator
 import re
 import zoneinfo
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -8064,7 +8064,7 @@ def java_literal_to_pyiceberg_literal(java_literal):
 
     if lit_type_name.equals(SqlTypeName.TIMESTAMP):
         # getValue2() returns an integer representing milliseconds since epoch
-        return datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(
+        return datetime(1970, 1, 1, tzinfo=UTC) + timedelta(
             milliseconds=java_literal.getValue2()
         )
 

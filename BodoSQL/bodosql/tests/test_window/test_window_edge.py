@@ -185,11 +185,11 @@ def test_tz_aware_partition_by():
     df = pd.DataFrame(
         {
             "TZ": [
-                pd.Timestamp("2022-10-1", tz="US/Pacific"),
-                pd.Timestamp("2022-1-1", tz="US/Pacific"),
-                pd.Timestamp("2022-1-11", tz="US/Pacific"),
-                pd.Timestamp("2022-2-1", tz="US/Pacific"),
-                pd.Timestamp("2020-1-1", tz="US/Pacific"),
+                pd.Timestamp("2022-10-1", tz="America/Los_Angeles"),
+                pd.Timestamp("2022-1-1", tz="America/Los_Angeles"),
+                pd.Timestamp("2022-1-11", tz="America/Los_Angeles"),
+                pd.Timestamp("2022-2-1", tz="America/Los_Angeles"),
+                pd.Timestamp("2020-1-1", tz="America/Los_Angeles"),
                 None,
             ]
             * 5,

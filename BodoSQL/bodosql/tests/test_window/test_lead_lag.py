@@ -180,13 +180,13 @@ def test_lead_lag_shift(func, shift_amt, capfd):
                 [
                     pd.Timestamp(
                         f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}",
-                        tz="US/Pacific",
+                        tz="America/Los_Angeles",
                     )
                     for i in range(1000)
                 ],
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ),
-            pd.Timestamp("2000-01-01 00:00:00", tz="US/Pacific"),
+            pd.Timestamp("2000-01-01 00:00:00", tz="America/Los_Angeles"),
             "'2000-01-01 00:00:00' :: TIMESTAMP_LTZ",
             id="timestamp_ltz",
         ),
@@ -264,7 +264,7 @@ def test_lead_lag_defaults(input_arr, default, default_str, use_default):
             check_names=False,
             check_dtype=False,
             sort_output=True,
-            session_tz="US/Pacific",
+            session_tz="America/Los_Angeles",
             enable_timestamp_tz=True,
         )
 

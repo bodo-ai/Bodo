@@ -27,10 +27,14 @@ def test_select(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                "2/2/2022", periods=12, freq="1D2h", tz="Poland", unit="ns"
+                "2/2/2022", periods=12, freq="1D2h", tz="Europe/Warsaw", unit="ns"
             ),
             "B": pd.date_range(
-                "2/25/2021", periods=12, freq="1D2h", tz="US/Pacific", unit="ns"
+                "2/25/2021",
+                periods=12,
+                freq="1D2h",
+                tz="America/Los_Angeles",
+                unit="ns",
             ),
             "C": pd.date_range(
                 "5/22/2022", periods=12, freq="1D2h", tz="UTC", unit="ns"

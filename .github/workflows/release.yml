@@ -26,7 +26,7 @@ jobs:
       # Don't cancel other jobs if one fails
       fail-fast: false
       matrix:
-        python-version: ['3.14', '3.13', '3.12', '3.11', '3.10']
+        python-version: ['3.15', '3.14', '3.13', '3.12', '3.11']
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
       python-version: ${{ matrix.python-version }}
@@ -38,8 +38,8 @@ jobs:
       # Don't cancel other jobs if one fails
       fail-fast: false
       matrix:
-        # On pull requests, only test building for 3.14
-        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.14"]' || '["3.14", "3.13", "3.12", "3.11", "3.10"]') }}
+        # On pull requests, only test building for 3.15
+        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.15"]' || '["3.15", "3.14", "3.13", "3.12", "3.11"]') }}
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
       python-version: ${{ matrix.python-version }}
@@ -51,8 +51,8 @@ jobs:
       # Don't cancel other jobs if one fails
       fail-fast: false
       matrix:
-        # On pull requests, only test building for 3.14
-        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.14"]' || '["3.14", "3.13", "3.12", "3.11", "3.10"]') }}
+        # On pull requests, only test building for 3.15
+        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.15"]' || '["3.15", "3.14", "3.13", "3.12", "3.11"]') }}
         os: ['macos-14', 'windows-2022']
     uses: ./.github/workflows/_build_bodo_conda_native.yml
     with:
@@ -64,6 +64,7 @@ jobs:
   bodo-conda-gpu:
     uses: ./.github/workflows/_build_bodo_conda_native.yml
     with:
+      # TODO: Update to 3.15 once GPU support is available
       python-version: '3.14'
       platform-build: false
       gpu-build: true
@@ -73,7 +74,7 @@ jobs:
   bodo-conda-platform:
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
-      python-version: '3.14'
+      python-version: '3.15'
       platform-build: true
       arm: false
       is-release: ${{ github.event_name == 'release' }}
@@ -81,6 +82,7 @@ jobs:
   bodo-conda-platform-gpu:
     uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
+      # TODO: Update to 3.15 once GPU support is available
       python-version: '3.14'
       platform-build: true
       gpu-build: true

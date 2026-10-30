@@ -59,14 +59,14 @@ def use_case(request):
         pytest.param(
             (
                 [
-                    pd.Timestamp(s, tz="US/Eastern")
+                    pd.Timestamp(s, tz="America/New_York")
                     for s in [
                         "2022-2-28",
                         "2021-11-12 13:14:15",
                         "2015-3-14 9:26:53",
                     ]
                 ],
-                pa.timestamp("ns", "US/Eastern"),
+                pa.timestamp("ns", "America/New_York"),
             ),
             id="timestamp_ltz",
         ),

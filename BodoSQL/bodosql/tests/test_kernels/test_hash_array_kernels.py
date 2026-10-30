@@ -49,7 +49,7 @@ pytestmark = pytest_slow_unless_codegen
                 ),
             ),
             (False, False),
-            (661 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 1308),
+            (661 if PYVERSION in ((3, 11), (3, 13), (3, 14), (3, 15)) else 1308),
             id="string-bool",
         ),
         pytest.param(
@@ -67,7 +67,7 @@ pytestmark = pytest_slow_unless_codegen
                 ),
             ),
             (False,),
-            (745 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 1479),
+            (745 if PYVERSION in ((3, 11), (3, 13), (3, 14), (3, 15)) else 1479),
             id="binary",
         ),
         pytest.param(
@@ -101,11 +101,11 @@ pytestmark = pytest_slow_unless_codegen
                 ),
                 pd.Series(
                     [
-                        pd.Timestamp("2020", tz="US/Pacific")
+                        pd.Timestamp("2020", tz="America/Los_Angeles")
                         + pd.Timedelta(hours=(2 ** (i % 18)))
                         for i in range(2**12)
                     ],
-                    dtype="datetime64[ns, US/Pacific]",
+                    dtype="datetime64[ns, America/Los_Angeles]",
                 ),
                 None,
             ),
@@ -126,7 +126,7 @@ pytestmark = pytest_slow_unless_codegen
                 datetime.date(2020, 7, 3),
             ),
             (True, False, True, True, False, False, True),
-            (1873 if PYVERSION in ((3, 11), (3, 13), (3, 14)) else 3564),
+            (1873 if PYVERSION in ((3, 11), (3, 13), (3, 14), (3, 15)) else 3564),
             id="mixed",
         ),
         pytest.param(
@@ -272,7 +272,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
         pytest.param(
             (
                 pd.Timestamp("2023-7-4 6:00:00"),
-                pd.Timestamp("2020-4-1", tz="US/Pacific"),
+                pd.Timestamp("2020-4-1", tz="America/Los_Angeles"),
             ),
             -8057843889034702324,
             id="timestamps_baseline",
@@ -280,7 +280,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
         pytest.param(
             (
                 pd.Timestamp("2023-7-4 8:00:00", tz="Europe/Berlin"),
-                pd.Timestamp("2020-4-1 3:00:00", tz="US/Eastern"),
+                pd.Timestamp("2020-4-1 3:00:00", tz="America/New_York"),
             ),
             -8057843889034702324,
             id="timestamps_equivalent",
@@ -292,7 +292,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
             ("theta",),
             (
                 -850204814874656711
-                if PYVERSION in ((3, 11), (3, 13), (3, 14))
+                if PYVERSION in ((3, 11), (3, 13), (3, 14), (3, 15))
                 else 7137812097207502893
             ),
             id="string",
@@ -301,7 +301,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
             (b"theta",),
             (
                 1852596461571890431
-                if PYVERSION in ((3, 11), (3, 13), (3, 14))
+                if PYVERSION in ((3, 11), (3, 13), (3, 14), (3, 15))
                 else -4192600820579827718
             ),
             id="binary",
@@ -309,7 +309,7 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
         pytest.param(
             (Decimal("20.31"),),
             2905488202071118327
-            if PYVERSION in ((3, 13), (3, 14))
+            if PYVERSION in ((3, 13), (3, 14), (3, 15))
             else -7665313548287772755,
             id="decimal",
         ),

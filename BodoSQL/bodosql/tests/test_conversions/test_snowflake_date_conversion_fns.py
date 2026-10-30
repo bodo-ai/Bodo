@@ -139,7 +139,11 @@ def test_date_casting_functions_tz_aware(test_fn, memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=20, freq="10D5h", tz="US/Pacific", unit="ns"
+                "1/18/2022",
+                periods=20,
+                freq="10D5h",
+                tz="America/Los_Angeles",
+                unit="ns",
             )
         }
     )
@@ -161,7 +165,11 @@ def test_date_casting_functions_tz_aware_case(test_fn, memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=30, freq="10D5h", tz="US/Pacific", unit="ns"
+                "1/18/2022",
+                periods=30,
+                freq="10D5h",
+                tz="America/Los_Angeles",
+                unit="ns",
             ),
             "B": [True, False, True, False, True] * 6,
         }
@@ -446,7 +454,11 @@ def test_date_casting_with_colon_tz_aware(memory_leak_check):
     df = pd.DataFrame(
         {
             "TIMESTAMPS": pd.date_range(
-                "1/18/2022", periods=20, freq="10D5h", tz="US/Pacific", unit="ns"
+                "1/18/2022",
+                periods=20,
+                freq="10D5h",
+                tz="America/Los_Angeles",
+                unit="ns",
             )
         }
     )

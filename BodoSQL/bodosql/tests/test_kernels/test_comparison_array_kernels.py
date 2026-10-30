@@ -53,14 +53,14 @@ def comparison_func_name(request):
         pytest.param(
             pd.Series(
                 [
-                    pd.Timestamp("2022-11-04", tz="US/Pacific"),
+                    pd.Timestamp("2022-11-04", tz="America/Los_Angeles"),
                     None,
-                    pd.Timestamp("2022-11-25 06:50:51", tz="US/Pacific"),
-                    pd.Timestamp("2022-11-25 06:50:53", tz="US/Pacific"),
-                    pd.Timestamp("2023-11-11", tz="US/Pacific"),
+                    pd.Timestamp("2022-11-25 06:50:51", tz="America/Los_Angeles"),
+                    pd.Timestamp("2022-11-25 06:50:53", tz="America/Los_Angeles"),
+                    pd.Timestamp("2023-11-11", tz="America/Los_Angeles"),
                 ]
                 * 4,
-                dtype="datetime64[ns, US/Pacific]",
+                dtype="datetime64[ns, America/Los_Angeles]",
             ).array,
             id="Timestamp-TZ-Aware",
         ),
