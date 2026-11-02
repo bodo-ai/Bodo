@@ -62,6 +62,15 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     //   host, port, user, driver, kerb_ticket
     result = arrow::fs::HdfsOptions::FromUri(uri_string);
     CHECK_ARROW_AND_ASSIGN(result, "HdfsOptions::FromUri", options);
+    if (uri_string.starts_with("abfs://") ||
+        uri_string.starts_with("abfss://")) {
+        // need to pass whole URI as host to libhdfs
+        options.ConfigureEndPoint(uri_string, 0);
+    }
+    options.ConfigureReplication(0);
+    options.ConfigureBufferSize(0);
+    options.ConfigureBlockSize(0);
+
     // handle hdfs_config
     if (!is_hdfs_initialized) {
         hdfs_config = options;
@@ -71,15 +80,7 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
         hdfs_fs = nullptr;  // destructor calls Close, which calls Disconnect
         hdfs_config = options;
     }
-    if (uri_string.starts_with("abfs://") ||
-        uri_string.starts_with("abfss://")) {
-        // need to pass whole URI as host to libhdfs
-        options.ConfigureEndPoint(uri_string, 0);
-    }
     // connect to hdfs
-    options.ConfigureReplication(0);
-    options.ConfigureBufferSize(0);
-    options.ConfigureBlockSize(0);
     hdfs_fs = arrow::fs::HadoopFileSystem::Make(
                   options, bodo::default_buffer_io_context())
                   .ValueOrDie();
