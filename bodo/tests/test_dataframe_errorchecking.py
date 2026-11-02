@@ -766,7 +766,7 @@ def test_describe_args(memory_leak_check):
                         Decimal("-0.2"),
                         Decimal("44.2"),
                         None,
-                        Decimal("0"),
+                        Decimal(0),
                     ]
                 ),
                 # timedelta
@@ -1274,7 +1274,7 @@ def test_dd_map_array_drop_all(memory_leak_check):
 @pytest.mark.slow
 def test_df_unsupported_methods():
     """tests that unsupported dataframe methods throw the expected error"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.pd_dataframe_ext import dataframe_unsupported
     from bodo.utils.typing import BodoError
 
@@ -1299,7 +1299,7 @@ def test_df_unsupported_methods():
 @pytest.mark.slow
 def test_df_unsupported_atrs():
     """tests that unsupported dataframe attributes throw the expected error"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.pd_dataframe_ext import dataframe_unsupported_attrs
     from bodo.utils.typing import BodoError
 

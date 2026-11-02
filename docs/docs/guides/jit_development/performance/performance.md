@@ -44,13 +44,15 @@ import time
 
 n = 2 * 10**8
 
+
 def calc_pi(n):
     t1 = time.time()
     x = 2 * np.random.ranf(n) - 1
     y = 2 * np.random.ranf(n) - 1
     pi = 4 * np.sum(x**2 + y**2 < 1) / n
-    print("Execution time:", time.time()-t1, "\nresult:", pi)
+    print("Execution time:", time.time() - t1, "\nresult:", pi)
     return pi
+
 
 bodo_calc_pi = bodo.jit(calc_pi)
 print("python:")
@@ -82,14 +84,16 @@ import numpy as np
 import bodo
 import time
 
+
 @bodo.jit
 def calc_pi(n):
     t1 = time.time()
     x = 2 * np.random.ranf(n) - 1
     y = 2 * np.random.ranf(n) - 1
     pi = 4 * np.sum(x**2 + y**2 < 1) / n
-    print("Execution time:", time.time()-t1, "\nresult:", pi)
+    print("Execution time:", time.time() - t1, "\nresult:", pi)
     return pi
+
 
 calc_pi(2 * 10**8)
 ```
@@ -126,16 +130,18 @@ import time
 
 n = 2 * 10**8
 
+
 def calc_pi(n):
     t1 = time.time()
     x = 2 * np.random.ranf(n) - 1
     y = 2 * np.random.ranf(n) - 1
     t2 = time.time()
-    print("Initializing x,y takes: ", t2-t1)
+    print("Initializing x,y takes: ", t2 - t1)
 
     pi = 4 * np.sum(x**2 + y**2 < 1) / n
-    print("calculation takes:", time.time()-t2, "\nresult:", pi)
+    print("calculation takes:", time.time() - t2, "\nresult:", pi)
     return pi
+
 
 bodo_calc_pi = bodo.jit(calc_pi)
 print("python: ------------------")

@@ -35,7 +35,7 @@ bdf = bd.DataFrame(
     {
         "A": [1, 3, 5, 7, 9],
         "B B": [0.6, 3.2, 0.19, 0.18, 7.4],
-        "C&C": ["DD", "EEE", "F", "EE", "E"]
+        "C&C": ["DD", "EEE", "F", "EE", "E"],
     }
 )
 
@@ -54,7 +54,10 @@ Output:
 
 ``` py
 list_var = [3.2, 0.18, 2, 10.1, 5]
-bdf_queried2 = bdf.query("A in @list_var & not (`B B` == @list_var | `C&C`.str.len() > @length)", local_dict={"length": 1})
+bdf_queried2 = bdf.query(
+    "A in @list_var & not (`B B` == @list_var | `C&C`.str.len() > @length)",
+    local_dict={"length": 1},
+)
 print(bdf_queried2)
 ```
 

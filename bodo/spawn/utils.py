@@ -12,7 +12,7 @@ import traceback
 import typing as pt
 import uuid
 from collections.abc import Callable
-from enum import Enum
+from enum import StrEnum
 from time import sleep
 
 import pandas as pd
@@ -23,7 +23,7 @@ from pandas.core.arrays.arrow import ArrowExtensionArray
 import bodo.user_logging
 
 
-class CommandType(str, Enum):
+class CommandType(StrEnum):
     """
     Enum of the different types of commands that the spawner
     can send to the workers.
@@ -68,7 +68,7 @@ def debug_msg(logger: logging.Logger, msg: str):
         logger.debug(msg)
 
 
-class ArgMetadata(str, Enum):
+class ArgMetadata(StrEnum):
     """Argument metadata to inform workers about other arguments to receive separately.
     E.g. broadcast or scatter a dataframe from spawner to workers.
     Used for DataFrame/Series/Index/array arguments.
@@ -99,8 +99,10 @@ class WorkerProcess:
     _uuid: uuid.UUID
     _rank_to_pid: dict[int, int] = {}
 
-    def __init__(self, rank_to_pid: dict[int, int] = {}):
+    def __init__(self, rank_to_pid: dict[int, int] | None = None):
         """Initialize WorkerProcess with a mapping of ranks to PIDs."""
+        if rank_to_pid is None:
+            rank_to_pid = {}
         self._uuid = uuid.uuid4()
         self._rank_to_pid = rank_to_pid
 
@@ -300,9 +302,8 @@ def _is_supported_gather_scatter_type(data) -> bool:
             if isinstance(dtype, pd.CategoricalDtype):
                 return False
 
-    if isinstance(data, pd.Series):
-        if isinstance(data.dtype, pd.CategoricalDtype):
-            return False
+    if isinstance(data, pd.Series) and isinstance(data.dtype, pd.CategoricalDtype):
+        return False
 
     return isinstance(data, (pd.DataFrame, pd.Series)) and not isinstance(
         data.index, (pd.CategoricalIndex, pd.PeriodIndex, pd.IntervalIndex)

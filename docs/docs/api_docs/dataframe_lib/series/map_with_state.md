@@ -40,14 +40,19 @@ initialization.
 ``` py
 import bodo.pandas as pd
 
+
 def init_state():
-    return {1:7}
+    return {1: 7}
+
 
 def per_row(state, row):
     return "bodo" + str(row + state[1])
 
+
 a = pd.Series(list(range(20)))
-b = a.map_with_state(init_state, per_row, output_type=pd.Series(dtype="string[pyarrow]"))
+b = a.map_with_state(
+    init_state, per_row, output_type=pd.Series(dtype="string[pyarrow]")
+)
 print(b)
 ```
 

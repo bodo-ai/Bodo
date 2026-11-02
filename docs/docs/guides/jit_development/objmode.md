@@ -105,6 +105,7 @@ independently.
 ``` py
 df_type = bodo.typeof(pd.DataFrame({"A": [1], "B": [1], "C": [1]}))
 
+
 @bodo.wrap_python(df_type)
 def f(df):
     return df.assign(C=df.apply(lambda r: r.A + r.B, axis=1))

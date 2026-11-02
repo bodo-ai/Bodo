@@ -33,9 +33,9 @@ def timeout(func, args=(), timeout_duration=300):
     signal.alarm(timeout_duration)
     try:
         result = func(*args)
-    except TimeoutError as exc:
+    except TimeoutError:
         print("REACHED A TIMEOUT")
-        raise exc
+        raise
     finally:
         signal.alarm(0)
 
@@ -55,7 +55,7 @@ def check_validation(bc, sql_text: str, filename: str):
         timeout(bc.generate_plan, (sql_text,))
         print(f"Successfully validated query file: {filename}")
     except Exception as e:
-        print(f"Encountered error: {str(e)}")
+        print(f"Encountered error: {e!s}")
         print(f"Failed to validate query file: {filename}")
 
 

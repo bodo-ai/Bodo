@@ -27,10 +27,10 @@ try:
     output = subprocess.check_output(["pytest"] + pytest_args + ["--collect-only"])
 except subprocess.CalledProcessError as e:
     if e.returncode == 5:  # pytest returns error code 5 when no tests found
-        exit()  # nothing to do
+        sys.exit()  # nothing to do
     else:
         print(e.output.decode())
-        raise e
+        raise
 
 # get the list of test modules (test file names) to run
 # excluding the test files located in the caching tests directory
@@ -87,4 +87,4 @@ for i, m in enumerate(modules):
         continue  # continue with rest of the tests
 
 if tests_failed:
-    exit(1)
+    sys.exit(1)

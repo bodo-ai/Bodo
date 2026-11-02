@@ -167,7 +167,7 @@ def generate_matplotlib_signature(return_typ, args, kws, obj_typ=None):
     arg_names = ", ".join(f"e{i}" for i in range(len(args)))
     if arg_names:
         arg_names += ", "
-    kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+    kw_names = ", ".join(f"{a} = ''" for a in kws)
     obj_name = "matplotlib_obj, " if obj_typ is not None else ""
     func_text = f"def mpl_stub({obj_name} {arg_names} {kw_names}):\n"
     func_text += "    pass\n"

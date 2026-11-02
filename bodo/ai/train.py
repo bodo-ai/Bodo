@@ -96,9 +96,9 @@ def _init_process_group():
                     world_size=pytorch_world_size,
                 )
             return
-        except Exception as e:
+        except Exception:
             if i == PROCESS_GROUP_INIT_RETRIES - 1:
-                raise e
+                raise
 
 
 def torch_train(
@@ -135,7 +135,7 @@ def torch_train(
     for arg in args:
         if isinstance(arg, BodoLazyWrapper):
             arg.execute_plan()
-    for _, kwarg in kwargs.items():
+    for kwarg in kwargs.values():
         if isinstance(kwarg, BodoLazyWrapper):
             kwarg.execute_plan()
     submit_func_to_workers(worker_func, [], args, kwargs)
@@ -181,7 +181,7 @@ def prepare_dataset(
     batch_size: int,
     shuffle: bool = True,
     dataset_func: Callable | None = None,
-    collate_fn: Callable = None,
+    collate_fn: Callable | None = None,
     pin_memory: bool = False,
     seed: int = 0,
 ):

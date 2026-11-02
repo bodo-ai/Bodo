@@ -19,10 +19,21 @@ Tokenize a series of string dtype into a series of lists of int64.
 import bodo.pandas as pd
 from transformers import AutoTokenizer
 
-a = pd.Series(["bodo.ai will improve your workflows.", "This is a professional sentence.", "I am the third entry in this series.", "May the fourth be with you."])
+a = pd.Series(
+    [
+        "bodo.ai will improve your workflows.",
+        "This is a professional sentence.",
+        "I am the third entry in this series.",
+        "May the fourth be with you.",
+    ]
+)
+
+
 def ret_tokenizer():
     # Load a pretrained tokenizer (e.g., BERT)
     return AutoTokenizer.from_pretrained("bert-base-uncased")
+
+
 b = a.ai.tokenize(ret_tokenizer)
 print(b)
 ```

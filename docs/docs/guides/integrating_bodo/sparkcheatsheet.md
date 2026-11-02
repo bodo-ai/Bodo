@@ -222,7 +222,11 @@ which are supported by Bodo.
     ```py
     base_map = {2: "{0:b}", 8: "{0:o}", 10: "{0:d}", 16: "{0:x}"}
     new_format = base_map[new_base]
-    df.col.apply(lambda x, old_base, new_format: new_format.format(int(x, old_base)), old_base=old_base, new_format=new_format)
+    df.col.apply(
+        lambda x, old_base, new_format: new_format.format(int(x, old_base)),
+        old_base=old_base,
+        new_format=new_format,
+    )
     ```
     
 ####  `pyspark.sql.functions.date_trunc`
@@ -243,7 +247,9 @@ which are supported by Bodo.
     def f(x, pat):
         res = re.search(pat, x)
         return "" if res is None else res[0]
-    df.col.apply(f, pat=pat)  
+
+
+    df.col.apply(f, pat=pat)
     ```         
     
 #### `pyspark.sql.functions.shiftLeft`
@@ -286,9 +292,11 @@ which are supported by Bodo.
 
     ```py
     def f(date, trunc_str):
-        if trunc_str == 'year':
+        if trunc_str == "year":
             return pd.Timestamp(year=date.year, month=1, day=1)
-        if trunc_str == 'month':
+        if trunc_str == "month":
             return pd.Timestamp(year=date.year, month=date.month, day=1)
+
+
     df.A.apply(f, trunc_str=trunc_str)
     ```

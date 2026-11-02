@@ -323,7 +323,7 @@ def decimal_min(lhs, rhs):
             )
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs < rhs else rhs
+            return min(rhs, lhs)
 
         return impl
 
@@ -337,7 +337,7 @@ def decimal_max(lhs, rhs):
             )
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs > rhs else rhs
+            return max(rhs, lhs)
 
         return impl
 
@@ -525,7 +525,6 @@ def decimal_scalar_to_str(arr):
     Converts a decimal scalar to a SNOWFLAKE-style string,
     preserving trailing zeros to fit the scale.
     """
-    pass
 
 
 @overload(decimal_scalar_to_str)
@@ -2669,7 +2668,7 @@ def _round_decimal_scalar(
     assert_bodo_error(is_overload_constant_int(input_s_t))
 
     def codegen(context, builder, signature, args):
-        val, round_scale, input_p, input_s, output_p, output_s = args
+        val, round_scale, input_p, input_s, _output_p, _output_s = args
         in_low, in_high = _ll_get_int128_low_high(builder, val)
         out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))
@@ -2759,7 +2758,7 @@ def _ceil_floor_decimal_scalar(
     )
 
     def codegen(context, builder, signature, args):
-        value, input_p, input_s, output_p, output_s, round_scale, is_ceil = args
+        value, input_p, input_s, _output_p, _output_s, round_scale, is_ceil = args
         in_low, in_high = _ll_get_int128_low_high(builder, value)
         out_low_ptr = cgutils.alloca_once(builder, lir.IntType(64))
         out_high_ptr = cgutils.alloca_once(builder, lir.IntType(64))

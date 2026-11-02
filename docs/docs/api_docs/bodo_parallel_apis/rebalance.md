@@ -19,6 +19,7 @@ Manually redistribute data evenly across [selected] ranks.
     import bodo
     import pandas as pd
 
+
     @bodo.jit
     def mean_power():
         df = pd.read_parquet("data/cycling_dataset.pq")
@@ -26,6 +27,7 @@ Manually redistribute data evenly across [selected] ranks.
         print(df.shape)
         df = bodo.rebalance(df, parallel=True)
         print("After rebalance: ", df.shape)
+
 
     mean_power()
     ```
@@ -58,9 +60,9 @@ Manually redistribute data evenly across [selected] ranks.
 
 
     ```py
-
     import bodo
     import pandas as pd
+
 
     @bodo.jit(spawn=False)
     def mean_power():
@@ -68,9 +70,10 @@ Manually redistribute data evenly across [selected] ranks.
         df = df.sort_values("power")[df["power"] > 400]
         return df
 
+
     df = mean_power()
     print(df.shape)
-    df = bodo.rebalance(df, dests=[1,3], parallel=True)
+    df = bodo.rebalance(df, dests=[1, 3], parallel=True)
     print("After rebalance: ", df.shape)
     ```
     Save code in ``test_rebalance.py`` file and run with 4 processes.

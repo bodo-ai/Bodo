@@ -1353,7 +1353,7 @@ def test_iceberg_middle_optional_column(iceberg_database, iceberg_table_conn):
     of a struct.
     The entire column should be filled with nulls instead of failing.
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.spawn.utils import run_rank0
 
     table_name = "SIMPLE_OPTIONAL_TABLE_MIDDLE"
@@ -1494,11 +1494,8 @@ def bucket_scalar_impl(x, y: int) -> int | None:
         res = mmh3.hash(
             struct.pack(
                 "<q",
-                int(
-                    round(
-                        (x - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds()
-                        * 1e6
-                    )
+                round(
+                    (x - datetime(1970, 1, 1, tzinfo=pytz.utc)).total_seconds() * 1e6
                 ),
             )
         )

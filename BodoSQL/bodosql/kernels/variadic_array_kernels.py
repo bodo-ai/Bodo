@@ -246,7 +246,7 @@ def overload_object_construct(values, names, scalars):
             val_arg = f"val_arg_{i}"
         else:
             val_arg = f"arg{i}"
-        scalar_text += f"  struct_arr[write_idx] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({repr(names[i])}, {val_arg}), (False, False), map_struct_names)\n"
+        scalar_text += f"  struct_arr[write_idx] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({names[i]!r}, {val_arg}), (False, False), map_struct_names)\n"
         scalar_text += "  write_idx += 1\n"
     if any(are_arrays):
         scalar_text += "res[i] = struct_arr\n"
@@ -373,7 +373,7 @@ def detect_coalesce_casting(arg_types, arg_names):
     if np.all(tz_aware | date):
         out_dtype = bodo.types.DatetimeArrayType(time_zone)
         casts = [
-            f"{arg_names[i]} = bodosql.kernels.to_timestamp({arg_names[i]}, None, {repr(time_zone)}, 0)\n"
+            f"{arg_names[i]} = bodosql.kernels.to_timestamp({arg_names[i]}, None, {time_zone!r}, 0)\n"
             for i in range(n)
             if date[i]
         ]

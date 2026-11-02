@@ -16,11 +16,12 @@
     
     For example:
     ```py
-    @bodo.jit(locals={'df':{'A': bodo.types.float64[:],
-                            'B': bodo.types.string_array_type}})
+    @bodo.jit(
+        locals={"df": {"A": bodo.types.float64[:], "B": bodo.types.string_array_type}}
+    )
     def impl(f):
-      df = pd.read_parquet(f)
-      return df
+        df = pd.read_parquet(f)
+        return df
     ```
 
 -   `_bodo_input_file_name_col` is a Bodo specific argument.
@@ -33,8 +34,8 @@
     ```py
     @bodo.jit
     def impl(f):
-      df = pd.read_parquet(f, _bodo_input_file_name_col="fname")
-      return df
+        df = pd.read_parquet(f, _bodo_input_file_name_col="fname")
+        return df
     ```
 
 -   `_bodo_read_as_dict` is a Bodo specific argument which forces 
@@ -51,8 +52,8 @@
     ```py
     @bodo.jit
     def impl(f):
-      df = pd.read_parquet(f, _bodo_read_as_dict=["A", "B", "C"])
-      return df
+        df = pd.read_parquet(f, _bodo_read_as_dict=["A", "B", "C"])
+        return df
     ```
 
         

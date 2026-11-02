@@ -9,12 +9,12 @@ Other cases will fallback to Pandas.
 import bodo.pandas as bd
 
 bdf = bd.DataFrame(
-        {
-            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
-            "B": ["A1", "B1 ", "C1", "Abc"] * 3,
-            "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
-        }
-    )
+    {
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
+        "B": ["A1", "B1 ", "C1", "Abc"] * 3,
+        "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
+    }
+)
 
 bdf["D"] = bdf["B"].str.lower()
 print(type(bdf))
@@ -44,12 +44,12 @@ Name: D, dtype: string
 import bodo.pandas as bd
 
 bdf = bd.DataFrame(
-        {
-            "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
-            "B": ["A1", "B1 ", "C1", "Abc"] * 3,
-            "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
-        }
-    )
+    {
+        "A": bd.array([1, 2, 3, 7] * 3, "Int64"),
+        "B": ["A1", "B1 ", "C1", "Abc"] * 3,
+        "C": bd.array([4, 5, 6, -1] * 3, "Int64"),
+    }
+)
 
 bdf["D"] = 11
 print(type(bdf))

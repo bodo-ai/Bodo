@@ -172,4 +172,4 @@ if __name__ == "__main__":
         create_sort_tables(list(SORT_TABLE_NAME_MAP.keys()))
     else:
         print("Invalid Number of Arguments")
-        exit(1)
+        sys.exit(1)

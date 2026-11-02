@@ -154,4 +154,4 @@ if __name__ == "__main__":
         create_partition_tables(list(PARTITION_TABLE_NAME_MAP.keys()))
     else:
         print("Invalid Number of Arguments")
-        exit(1)
+        sys.exit(1)

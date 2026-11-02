@@ -580,7 +580,7 @@ class TestSeries(unittest.TestCase):
         )
 
     def test_series_fillna_str_inplace1(self):
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.hiframes.boxing import _use_dict_str_type
 
         if _use_dict_str_type:
@@ -600,7 +600,7 @@ class TestSeries(unittest.TestCase):
         # np.testing.assert_array_equal(S1, S2)
 
     def test_series_fillna_str_inplace_empty1(self):
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.hiframes.boxing import _use_dict_str_type
 
         if _use_dict_str_type:

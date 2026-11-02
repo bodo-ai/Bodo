@@ -68,7 +68,7 @@ def _val_to_string(val):
 )
 def test_literal_argument_checkers(args, kwargs, expected_err_msg):
     """Test argument checkers check method"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         ConstantArgumentChecker,
@@ -103,10 +103,8 @@ def test_literal_argument_checkers(args, kwargs, expected_err_msg):
 
         return impl
 
-    setattr(
-        bodo.hiframes.series_impl,
-        "overload_series_do_something",
-        overload_series_do_something,
+    bodo.hiframes.series_impl.overload_series_do_something = (
+        overload_series_do_something
     )
 
     try:
@@ -173,7 +171,7 @@ def test_literal_argument_checkers(args, kwargs, expected_err_msg):
 )
 def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_constant):
     """Test argument checkers check method"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         BooleanScalarArgumentChecker,
@@ -211,10 +209,8 @@ def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_co
 
         return impl
 
-    setattr(
-        bodo.hiframes.series_impl,
-        "overload_series_do_something2",
-        overload_series_do_something2,
+    bodo.hiframes.series_impl.overload_series_do_something2 = (
+        overload_series_do_something2
     )
 
     try:
@@ -318,7 +314,7 @@ def test_numeric_series_argument_checkers(
     other, fill_value, expected_err_msg, use_constant
 ):
     """Verify that the numeric argument checkers for Series methods work as expected using Series.sub"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         NumericScalarArgumentChecker,
@@ -356,11 +352,7 @@ def test_numeric_series_argument_checkers(
 
         return impl
 
-    setattr(
-        bodo.hiframes.series_impl,
-        "overload_series_sub2",
-        overload_series_sub2,
-    )
+    bodo.hiframes.series_impl.overload_series_sub2 = overload_series_sub2
 
     try:
         S = pd.Series([1, 2, 3, 4, 5])
@@ -423,7 +415,7 @@ def test_numeric_series_argument_checkers(
 )
 def test_series_self_argument_checkers(S, arg1, arg2, expected_err_msg):
     """Verify that the numeric argument checkers for Series methods work as expected using Series.sub"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         DatetimeLikeSeriesArgumentChecker,
@@ -454,10 +446,8 @@ def test_series_self_argument_checkers(S, arg1, arg2, expected_err_msg):
 
         return impl
 
-    setattr(
-        bodo.hiframes.series_impl,
-        "overload_series_do_something3",
-        overload_series_do_something3,
+    bodo.hiframes.series_impl.overload_series_do_something3 = (
+        overload_series_do_something3
     )
 
     try:
@@ -507,7 +497,7 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
     and if S is a Series of ints then arg1 must be 'int' and if it is a Series of floats
     then arg1 must be 'float'
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         GenericArgumentChecker,
@@ -557,10 +547,8 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
 
         return impl
 
-    setattr(
-        bodo.hiframes.series_impl,
-        "overload_series_do_something4",
-        overload_series_do_something4,
+    bodo.hiframes.series_impl.overload_series_do_something4 = (
+        overload_series_do_something4
     )
 
     try:
@@ -591,7 +579,7 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
     ],
 )
 def test_overload_attr(S, expected_err_msg):
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     import bodo.hiframes.series_impl
     from bodo.ir.argument_checkers import (
         OverloadAttributeChecker,
@@ -614,11 +602,7 @@ def test_overload_attr(S, expected_err_msg):
 
         return impl
 
-    setattr(
-        bodo.hiframes.series_impl,
-        "overload_series_attr",
-        overload_series_attr,
-    )
+    bodo.hiframes.series_impl.overload_series_attr = overload_series_attr
 
     try:
 

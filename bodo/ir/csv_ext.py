@@ -2,8 +2,8 @@ import typing as pt
 from collections import defaultdict
 
 import numba
-import numpy as np  # noqa
-import pandas as pd  # noqa
+import numpy as np
+import pandas as pd
 from llvmlite import ir as lir
 from mpi4py import MPI
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
@@ -628,7 +628,7 @@ def _get_dtype_str(t):
         dtype, (StringArrayType, ArrayItemArrayType)
     ):
         # HACK add list of string and nested list type to numba.core.types for objmode
-        typ_name = f"ArrayItemArrayType{str(ir_utils.next_label())}"
+        typ_name = f"ArrayItemArrayType{ir_utils.next_label()!s}"
         setattr(types, typ_name, t)
         return typ_name
 
@@ -779,7 +779,7 @@ def _gen_csv_file_reader_init(
         storage_options = {}
     storage_options["bodo_dummy"] = "dummy"
     func_text += (
-        f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+        f"  storage_options_py = get_storage_options_pyobject({storage_options!s})\n"
     )
     func_text += "  f_reader = bodo.ir.csv_ext.csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
     # change skiprows to array

@@ -161,49 +161,50 @@ Token Tokenizer::next() {
         // We are reading a number
         case '+':
         case '-':
-        DIGIT_CASE: {
-            value_start = offset - 1;
-            Token token = Integer;
+        DIGIT_CASE:
+            {
+                value_start = offset - 1;
+                Token token = Integer;
 
-            // Check if we have -Infinity
-            if (source[offset] == 'I') {
-                return readAtom("Infinity", 8, NegInfinity);
-            }
-
-            while (!endOfInput()) {
-                b = source[offset];
-                switch (b) {
-                DIGIT_CASE:
-                    break;
-                    case '.':
-                        token = Float;
-                        break;
-                    case 'E':
-                    case 'e':
-                    case '-':
-                    case '+': {
-                        if (token != Float) {
-                            return setError(MalformedNumberLiteral);
-                        }
-                        break;
-                    }
-                    default: {
-                        // Just a + or - symbol is invalid
-                        if ((offset - value_start == 1) &&
-                            (source[value_start] == '-' ||
-                             source[value_start] == '+')) {
-                            return setError(MalformedNumberLiteral);
-                        }
-
-                        value_len = offset - value_start;
-                        return setToken(token);
-                    }
+                // Check if we have -Infinity
+                if (source[offset] == 'I') {
+                    return readAtom("Infinity", 8, NegInfinity);
                 }
-                offset++;
-            }
 
-            return setToken(End);
-        }
+                while (!endOfInput()) {
+                    b = source[offset];
+                    switch (b) {
+                    DIGIT_CASE:
+                        break;
+                        case '.':
+                            token = Float;
+                            break;
+                        case 'E':
+                        case 'e':
+                        case '-':
+                        case '+': {
+                            if (token != Float) {
+                                return setError(MalformedNumberLiteral);
+                            }
+                            break;
+                        }
+                        default: {
+                            // Just a + or - symbol is invalid
+                            if ((offset - value_start == 1) &&
+                                (source[value_start] == '-' ||
+                                 source[value_start] == '+')) {
+                                return setError(MalformedNumberLiteral);
+                            }
+
+                            value_len = offset - value_start;
+                            return setToken(token);
+                        }
+                    }
+                    offset++;
+                }
+
+                return setToken(End);
+            }
 
         default: {
             return setError(InvalidByte);

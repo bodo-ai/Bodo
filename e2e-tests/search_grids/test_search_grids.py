@@ -40,7 +40,7 @@ def test_search(tmp_path):
 
         # run on 36 cores
         num_processes = 36
-        results_file = os.path.join(tmp_path, f"df_rec{str(num_processes)}.csv")
+        results_file = os.path.join(tmp_path, f"df_rec{num_processes!s}.csv")
         cmd = [
             "python",
             "-u",

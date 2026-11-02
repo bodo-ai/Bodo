@@ -206,15 +206,9 @@ def pd_timedelta(
     # Timedelta type, just return value
     if value == pd_timedelta_type:
         return (
-            lambda value=_no_input,
-            unit="ns",
-            days=0,
-            seconds=0,
-            microseconds=0,
-            milliseconds=0,
-            minutes=0,
-            hours=0,
-            weeks=0: value
+            lambda value=_no_input, unit="ns", days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0: (
+                value
+            )
         )  # pragma: no cover
 
     if value == datetime_timedelta_type:
@@ -458,9 +452,7 @@ def timedelta_min(lhs, rhs):
                     return rhs
             elif pd.isna(lhs):
                 return rhs
-            elif pd.isna(rhs):
-                return lhs
-            elif lhs.value < rhs.value:
+            elif pd.isna(rhs) or lhs.value < rhs.value:
                 return lhs
             elif lhs.value == rhs.value:
                 if lhs.index < rhs.index:
@@ -809,7 +801,7 @@ def timedelta_min(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs < rhs else rhs
+            return min(rhs, lhs)
 
         return impl
 
@@ -819,7 +811,7 @@ def timedelta_max(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            return lhs if lhs > rhs else rhs
+            return max(rhs, lhs)
 
         return impl
 

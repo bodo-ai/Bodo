@@ -721,7 +721,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
             ret_type = f_return_type
 
         # add dummy default value for UDF kws to avoid errors
-        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws)
         func_text = f"def apply_stub(func, axis=0, raw=False, result_type=None, args=(), {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -3949,7 +3949,7 @@ def to_sql_exception_guard(
     ev = tracing.Event("to_sql_exception_guard", is_parallel=_is_parallel)
     err_msg = "all_ok"
     # Find the db_type to determine if we are using Snowflake
-    db_type, con_paswd = bodo.io.utils.parse_dbtype(con)
+    db_type, _con_paswd = bodo.io.utils.parse_dbtype(con)
 
     if _is_parallel and bodo.get_rank() == 0:
         # Default number of rows to write to create the table. This is done in case

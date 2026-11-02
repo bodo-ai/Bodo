@@ -1327,10 +1327,7 @@ def is_valid_array_get(arg0_type, arg1_type, arg0_scalar, arg1_scalar):
     # is_valid_int_arg will return true if it's an int or an int array.
     # The input is scalar, we need to disallow int array, because indexing
     # an array by an array in GET should return null.
-    if arg1_scalar and bodo.utils.utils.is_array_typ(arg1_type, True):
-        return False
-
-    return True
+    return not (arg1_scalar and bodo.utils.utils.is_array_typ(arg1_type, True))
 
 
 def is_valid_object_get(arg0_type, arg1_type, arg0_scalar, arg1_scalar):
@@ -1353,7 +1350,4 @@ def is_valid_object_get(arg0_type, arg1_type, arg0_scalar, arg1_scalar):
     # is_valid_int_arg will return true if it's an int or an int array.
     # The input is scalar, we need to disallow string array, because indexing
     # an object by an array in GET should return null.
-    if arg1_scalar and bodo.utils.utils.is_array_typ(arg1_type, True):
-        return False
-
-    return True
+    return not (arg1_scalar and bodo.utils.utils.is_array_typ(arg1_type, True))

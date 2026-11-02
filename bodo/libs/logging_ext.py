@@ -97,7 +97,7 @@ class LoggingLoggerAttribute(AttributeTemplate):
         arg_names = ", ".join(f"e{i}" for i in range(len(args)))
         if arg_names:
             arg_names += ", "
-        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws)
         func_text = f"def format_stub(string, {arg_names} {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}

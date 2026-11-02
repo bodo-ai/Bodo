@@ -21,10 +21,10 @@ try:
     output = subprocess.check_output(["pytest"] + pytest_args + ["--collect-only"])
 except subprocess.CalledProcessError as e:
     if e.returncode == 5:  # pytest returns error code 5 when no tests found
-        exit()  # nothing to do
+        sys.exit()  # nothing to do
     else:
         print(e.output.decode())
-        raise e
+        raise
 
 # get the list of test modules (test file names) to run
 # omit caching tests, as those will be run in a separate pipeline
@@ -106,7 +106,7 @@ for i, m in enumerate(modules):
         os.rename(".coverage", "./cov_files/.coverage." + str(i))
 
 if tests_failed:
-    exit(1)
+    sys.exit(1)
 
 
 if codecov:

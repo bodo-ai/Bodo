@@ -46,10 +46,12 @@ import bodo
 
 data_path = os.environ["JOB_DATA_PATH"]
 
+
 @bodo.jit
 def f(path):
     df = pd.read_parquet(path)
     print(df.A.sum())
+
 
 f(data_path)
 ```
@@ -63,10 +65,12 @@ import bodo
 
 data_root = os.environ["JOB_DATA_ROOT"]
 
+
 @bodo.jit
 def f(root):
     df = pd.read_parquet(root + "/table1.pq")
     print(df.A.sum())
+
 
 f(data_root)
 ```
@@ -101,9 +105,11 @@ dataframe), a glob pattern, list of files or list of glob patterns:
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def write_pq(df):
     df.to_parquet("s3://bucket-name/example.pq")
+
 
 @bodo.jit
 def read_pq():
@@ -128,15 +134,18 @@ not distributed, `to_parquet(name)` writes to a single file called
 ```py
 df = pd.DataFrame({"A": range(10)})
 
+
 # Only execute on a single core
 @bodo.jit(distributed=False)
 def example1_pq(df):
     df.to_parquet("example1.pq")
 
+
 # Execute on all cores
 @bodo.jit
 def example2_pq(df):
     df.to_parquet("example2.pq")
+
 
 example1_pq(df)
 example2_pq(df)
@@ -252,9 +261,11 @@ standard pandas API to read CSV files:
 import pandas as pd
 import bodo
 
+
 @bodo.jit
 def write_csv(df):
     df.to_csv("s3://my-bucket/example.csv")
+
 
 @bodo.jit
 def read_csv():
@@ -301,15 +312,18 @@ def read_test():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
+
     # Only execute on a single core
     @bodo.jit(distributed=False)
     def example1_csv(df):
         df.to_csv("example1.csv")
 
+
     # Execute on all cores
     @bodo.jit
     def example2_csv(df):
         df.to_csv("example2.csv")
+
 
     example1_csv(df)
     example2_csv(df)
@@ -336,13 +350,16 @@ def read_test():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
+
     @bodo.jit(distributed=False)
     def example1_csv(df):
         df.to_csv("s3://bucket-name/example1.csv")
 
+
     @bodo.jit
     def example2_csv(df):
         df.to_csv("s3://bucket-name/example2.csv")
+
 
     example1_csv(df)
     example2_csv(df)
@@ -379,14 +396,20 @@ Usage:
 def example_write_json(df, fname):
     df.to_json(fname)
 
+
 @bodo.jit
 def example_read_json_lines_format():
-    df = pd.read_json("example.json", orient = "records", lines = True)
+    df = pd.read_json("example.json", orient="records", lines=True)
+
 
 @bodo.jit
 def example_read_json_multi_lines():
-    df = pd.read_json("example_file.json", orient = "records", lines = False,
-        dtype={"A": float, "B": "bool", "C": int})
+    df = pd.read_json(
+        "example_file.json",
+        orient="records",
+        lines=False,
+        dtype={"A": float, "B": "bool", "C": int},
+    )
 ```
 
 !!! note
@@ -408,15 +431,18 @@ def example_read_json_multi_lines():
         ```py
         df = pd.DataFrame({"A": np.arange(n)})
 
+
         # Only execute on a single core
         @bodo.jit(distributed=False)
         def example1_json(df):
             df.to_json("example1.json", orient="records", lines=True)
 
+
         # Execute on all cores
         @bodo.jit
         def example2_json(df):
             df.to_json("example2.json", orient="records", lines=True)
+
 
         example1_json(df)
         example2_jsons(df)
@@ -446,15 +472,18 @@ def example_read_json_multi_lines():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
+
     # Only execute on a single core
     @bodo.jit(distributed=False)
     def example1_json(df):
         df.to_json("s3://bucket-name/example1.json")
 
+
     # Execute on all cores
     @bodo.jit
     def example2_json(df):
         df.to_json("s3://bucket-name/example2.json")
+
 
     example1_json(df)
     example2_json(df)
@@ -489,7 +518,10 @@ For SQL, the syntax is also the same as pandas. For reading:
 ```py
 @bodo.jit
 def example_read_sql():
-    df = pd.read_sql("select * from employees", "mysql+pymysql://<username>:<password>@<host>/<db_name>")
+    df = pd.read_sql(
+        "select * from employees",
+        "mysql+pymysql://<username>:<password>@<host>/<db_name>",
+    )
 ```
 
 See [`read_sql()`][pandas-f-in] for supported arguments.
@@ -523,6 +555,7 @@ def filter_ex(conn, int_val):
     df = df[(df["l_orderkey"] > 10) & (int_val >= df["l_linenumber"])]
     result = df["l_suppkey"]
     print(result)
+
 
 filter_ex(conn, 2)
 ```
@@ -693,7 +726,9 @@ The data path should start with `hf://`. For example:
 ```py
 @bodo.jit
 def example_hf_dataset():
-    return pd.read_parquet("hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet")
+    return pd.read_parquet(
+        "hf://datasets/openai/gsm8k/main/train-00000-of-00001.parquet"
+    )
 ```
 
 
@@ -768,7 +803,7 @@ CORE_SITE_SPEC = """
 # Write it to the temporary core-site file.
 # Do it on one rank on every node to avoid filesystem conflicts.
 if bodo.get_rank() in bodo.get_nodes_first_ranks():
-    with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+    with open(bodo.HDFS_CORE_SITE_LOC, "w") as f:
         f.write(CORE_SITE_SPEC)
 
 
@@ -831,13 +866,16 @@ follows:
 import bodo
 import pandas as pd
 
+
 @bodo.jit
 def read_snowflake(db_name, table_name):
     df = pd.read_sql(
-            f"SELECT * FROM {table_name}",
-            f"snowflake://user:password@url/{db_name}/schema?warehouse=warehouse_name",
-        )
+        f"SELECT * FROM {table_name}",
+        f"snowflake://user:password@url/{db_name}/schema?warehouse=warehouse_name",
+    )
     return df
+
+
 df = read_snowflake(db_name, temp_table_name)
 ```
 - `_bodo_read_as_dict` is a Bodo specific argument which forces
@@ -878,6 +916,7 @@ def write_to_snowflake(df, table_name):
         table_name,
         "snowflake://user:password@url/db_name/schema?warehouse=warehouse_name&role=role_name",
     )
+
 
 write_to_snowflake(df, table_name)
 ```
@@ -1076,10 +1115,7 @@ import pandas as pd
 
 @bodo.jit(distributed=["df"])
 def read_mysql(table_name, conn):
-    df = pd.read_sql(
-            f"SELECT * FROM {table_name}",
-            conn
-        )
+    df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
     return df
 
 
@@ -1156,10 +1192,7 @@ import pandas as pd
 
 @bodo.jit(distributed=["df"])
 def read_oracle(table_name, conn):
-    df = pd.read_sql(
-            f"SELECT * FROM {table_name}",
-            conn
-        )
+    df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
     return df
 
 
@@ -1216,10 +1249,7 @@ import pandas as pd
 
 @bodo.jit(distributed=["df"])
 def read_postgresql(table_name, conn):
-    df = pd.read_sql(
-            f"SELECT * FROM {table_name}",
-            conn
-        )
+    df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
     return df
 
 
@@ -1265,7 +1295,9 @@ def example_csv(fname1, fname2, flag):
         file_name = fname1
     else:
         file_name = fname2
-    return pd.read_csv(file_name, names = ["A", "B", "C"], dtype={"A": int, "B": float, "C": str})
+    return pd.read_csv(
+        file_name, names=["A", "B", "C"], dtype={"A": int, "B": float, "C": str}
+    )
 ```
 
 For other pandas read functions, the existing APIs do not

@@ -323,7 +323,7 @@ def _gen_json_reader_py(
         storage_options = {}
     storage_options["bodo_dummy"] = "dummy"
     func_text += (
-        f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+        f"  storage_options_py = get_storage_options_pyobject({storage_options!s})\n"
     )
     func_text += "  f_reader = bodo.ir.json_ext.json_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
     func_text += f"    {lines}, {parallel}, -1, bodo.libs.str_ext.unicode_to_utf8('{compression}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py )\n"

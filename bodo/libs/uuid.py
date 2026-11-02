@@ -79,7 +79,6 @@ def uuidV5_wrapper(typingctx, output, namespace, name):
 
 def uuidV4():  # pragma: no cover
     """Bodo implementation of UUIDv4"""
-    pass
 
 
 @overload(uuidV4)
@@ -97,7 +96,6 @@ def overload_uuidV4():
 def uuidV5(namespace, name):  # pragma: no cover
     """Bodo implementation of UUIDv5. If the namespace is ill-formed, returns
     the empty string"""
-    pass
 
 
 @overload(uuidV5)

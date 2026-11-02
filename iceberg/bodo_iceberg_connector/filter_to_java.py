@@ -39,7 +39,6 @@ class Filter(metaclass=abc.ABCMeta):
         """
         Converts the filter to equivalent Java objects
         """
-        pass
 
 
 class ColumnRef(Filter):
@@ -67,7 +66,7 @@ class Scalar(Filter):
         self.value = value
 
     def __repr__(self):
-        return f"scalar({str(self.value)})"
+        return f"scalar({self.value!s})"
 
     def to_java(self):
         return convert_scalar(self.value)
@@ -151,7 +150,7 @@ def convert_scalar(val):
         return convert_float64(val)
     elif isinstance(val, np.datetime64):
         return convert_dt64(val)
-    elif isinstance(val, list) or isinstance(val, np.ndarray):
+    elif isinstance(val, (list, np.ndarray)):
         converted_val = [convert_scalar(v) for v in val]
         array_const_class = get_array_const_class()
         # NOTE: Iceberg takes regular Java lists in this case, not Literal lists

@@ -191,7 +191,7 @@ def test_lateral_flatten_array(
                 ],
                 dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
             ),
-            "c": "A,BCD,A,FG,HIJKL,,MNOPQR,S,FG,U".split(","),
+            "c": ["A", "BCD", "A", "FG", "HIJKL", "", "MNOPQR", "S", "FG", "U"],
             "d": pd.Series(
                 [
                     ["A", "B"],
@@ -423,7 +423,21 @@ def test_lateral_flatten_json(
                 ],
                 dtype=pd.ArrowDtype(val_type),
             ),
-            "c": "A,BCD,A,FG,HIJKL,,MNOPQR,S,FG,U,VW,XYZ,".split(","),
+            "c": [
+                "A",
+                "BCD",
+                "A",
+                "FG",
+                "HIJKL",
+                "",
+                "MNOPQR",
+                "S",
+                "FG",
+                "U",
+                "VW",
+                "XYZ",
+                "",
+            ],
         }
     )
     answer = simulate_lateral_flatten_json(

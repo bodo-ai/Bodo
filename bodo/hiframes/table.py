@@ -135,10 +135,10 @@ class Table:
         return len(self.arrays[0]) if len(self.arrays) > 0 else 0
 
     def __str__(self) -> str:
-        return f"Table({str(self.arrays)})"
+        return f"Table({self.arrays!s})"
 
     def __repr__(self) -> str:
-        return f"Table({repr(self.arrays)})"
+        return f"Table({self.arrays!r})"
 
     def __getitem__(self, val):
         if not isinstance(val, slice):
@@ -1329,24 +1329,23 @@ def ensure_column_unboxed_codegen(context, builder, sig, args):
         builder, context.get_constant_null(sig.args[1].dtype)
     )
     is_null = is_ll_eq(builder, arr_struct_ptr, null_struct_ptr)
-    with builder.if_then(is_null):
-        with builder.if_else(has_parent) as (then, orelse):
-            with then:
-                arr_obj = get_df_obj_column_codegen(
-                    context,
-                    builder,
-                    pyapi,
-                    table.parent,
-                    arr_ind_arg,
-                    sig.args[1].dtype,
-                )
-                arr = pyapi.to_native_value(sig.args[1].dtype, arr_obj).value
-                arr_list_inst.inititem(i_arg, arr, incref=False)
-                pyapi.decref(arr_obj)
-            with orelse:
-                context.call_conv.return_user_exc(
-                    builder, BodoError, ("unexpected null table column",)
-                )
+    with builder.if_then(is_null), builder.if_else(has_parent) as (then, orelse):
+        with then:
+            arr_obj = get_df_obj_column_codegen(
+                context,
+                builder,
+                pyapi,
+                table.parent,
+                arr_ind_arg,
+                sig.args[1].dtype,
+            )
+            arr = pyapi.to_native_value(sig.args[1].dtype, arr_obj).value
+            arr_list_inst.inititem(i_arg, arr, incref=False)
+            pyapi.decref(arr_obj)
+        with orelse:
+            context.call_conv.return_user_exc(
+                builder, BodoError, ("unexpected null table column",)
+            )
 
 
 @intrinsic(prefer_literal=True)

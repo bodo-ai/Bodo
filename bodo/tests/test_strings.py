@@ -221,18 +221,18 @@ def test_re_flags(memory_leak_check):
         return re.search(pat, in_str, flags)
 
     # flags are globals
-    my_flags = re.I | re.S
+    my_flags = re.IGNORECASE | re.DOTALL
 
     def impl2(pat, in_str):
         return re.search(pat, in_str, my_flags)
 
     # flags are created inside JIT
     def impl3(pat, in_str):
-        return re.search(pat, in_str, re.I | re.S)
+        return re.search(pat, in_str, re.IGNORECASE | re.DOTALL)
 
-    args = ("ABC", "abc", re.I)
+    args = ("ABC", "abc", re.IGNORECASE)
     _assert_match_equal(impl1(*args), bodo.jit(impl1)(*args))
-    args = ("AB.C", "ab\nc", re.I | re.S)
+    args = ("AB.C", "ab\nc", re.IGNORECASE | re.DOTALL)
     _assert_match_equal(impl1(*args), bodo.jit(impl1)(*args))
 
     args = ("AB.C", "ab\nc")
@@ -1070,7 +1070,7 @@ class TestString(unittest.TestCase):
 
     # string array tests
     def test_string_array_constructor(self):
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         # create StringArray and return as list of strings
@@ -1081,7 +1081,7 @@ class TestString(unittest.TestCase):
         self.assertTrue(np.array_equal(bodo_func(), ["ABC", "BB", "CDEF"]))
 
     def test_string_array_shape(self):
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         def test_impl():
@@ -1091,7 +1091,7 @@ class TestString(unittest.TestCase):
         self.assertEqual(bodo_func(), (3,))
 
     def test_string_array_comp(self):
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         def test_impl():
@@ -1117,7 +1117,7 @@ class TestString(unittest.TestCase):
         )
 
     def test_string_array_bool_getitem(self):
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.libs.str_arr_ext import str_arr_from_sequence
 
         def test_impl():

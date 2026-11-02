@@ -47,18 +47,23 @@ from pyiceberg.partitioning import PartitionField, PartitionSpec
 from pyiceberg.table.sorting import SortField, SortOrder
 
 bdf = bd.DataFrame(
-        {
-            "one": [-1.0, 1.3, 2.5, 3.0, 4.0, 6.0, 10.0],
-            "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
-            "three": [True, False, True, True, True, False, False],
-            "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
-            "five": ["foo", "bar", "baz", None, "bar", "baz", "foo"],
-        }
-    )
+    {
+        "one": [-1.0, 1.3, 2.5, 3.0, 4.0, 6.0, 10.0],
+        "two": ["foo", "bar", "baz", "foo", "bar", "baz", "foo"],
+        "three": [True, False, True, True, True, False, False],
+        "four": [-1.0, 5.1, 2.5, 3.0, 4.0, 6.0, 11.0],
+        "five": ["foo", "bar", "baz", None, "bar", "baz", "foo"],
+    }
+)
 
 part_spec = PartitionSpec(PartitionField(2, 1001, IdentityTransform(), "id_part"))
 sort_order = SortOrder(SortField(source_id=4, transform=IdentityTransform()))
-bdf.to_iceberg("test_table", location="./iceberg_warehouse", partition_spec=part_spec, sort_order=sort_order)
+bdf.to_iceberg(
+    "test_table",
+    location="./iceberg_warehouse",
+    partition_spec=part_spec,
+    sort_order=sort_order,
+)
 
 out_df = bd.read_iceberg("test_table", location="./iceberg_warehouse")
 # Only reads Parquet files of partition "foo" from storage
@@ -78,7 +83,7 @@ Write a DataFrame to an Iceberg table in S3 Tables using the location parameter:
 ``` py
 df.to_iceberg(
     table_identifier="my_table",
-    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table"
+    location="arn:aws:s3tables:<region>:<account_number>:my-bucket/my-table",
 )
 ```
 

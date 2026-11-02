@@ -1141,7 +1141,7 @@ def _register_simple_str2str_methods():
         ),
         **dict.fromkeys(["swapcase"], False),
     }
-    for func_name in args_dict.keys():
+    for func_name in args_dict:
         func_impl = create_simple_str2str_methods(
             func_name, args_dict[func_name], can_create_unique_dict[func_name]
         )
