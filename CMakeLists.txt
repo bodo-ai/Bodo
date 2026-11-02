@@ -379,7 +379,7 @@ set(ARROW_S3_LIBS "")
 if(PYARROW_VERSION VERSION_GREATER_EQUAL "26.0.0")
     find_library(ARROW_S3_LIBRARY
         NAMES arrow_s3
-        PATHS ${PYARROW_LIBRARY_DIRS}
+        PATHS ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR}
         NO_DEFAULT_PATH
         REQUIRED
     )
@@ -501,7 +501,7 @@ python_add_library(
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow arrow_python fmt::fmt)
+target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" "${ARROW_S3_LIBS}" arrow arrow_python fmt::fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
     memory_tester
