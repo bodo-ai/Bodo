@@ -65,7 +65,7 @@ requirements:
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24
-    - libarrow ={{ pyarrow_version }}  # [not win]
+    - libarrow ={{ pyarrow_version }}
     - libarrow-s3 ={{ pyarrow_version }} 
     - pyarrow ={{ pyarrow_version }}
     - libboost-headers          # [not win]
