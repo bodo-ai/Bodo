@@ -365,19 +365,6 @@ setup_pyarrow_dirs()
 message(STATUS "PyArrow Includes: ${PYARROW_INCLUDE_DIR}")
 message(STATUS "PyArrow Lib Dirs: ${PYARROW_LIBRARY_DIRS}")
 
-message(STATUS "CONDA_PREFIX=$ENV{CONDA_PREFIX}")
-message(STATUS "PREFIX=$ENV{PREFIX}")
-message(STATUS "BUILD_PREFIX=$ENV{BUILD_PREFIX}")
-message(STATUS "CONDA_LIB_DIR=${CONDA_LIB_DIR}")
-message(STATUS "PYARROW_LIBRARY_DIRS=${PYARROW_LIBRARY_DIRS}")
-
-file(GLOB ARROW_S3_FILES
-    "$ENV{PREFIX}/lib/*arrow*s3*"
-    "${CONDA_LIB_DIR}/*arrow*s3*"
-    "${PYARROW_HOME}/*arrow*s3*"
-)
-message(STATUS "Arrow S3 files: ${ARROW_S3_FILES}")
-
 # Determine the installed PyArrow version.
 execute_process(
     COMMAND "${Python3_EXECUTABLE}" -c
