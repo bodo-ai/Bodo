@@ -389,17 +389,21 @@ execute_process(
 
 set(ARROW_S3_LIBS "")
 
-if(PYARROW_VERSION VERSION_GREATER_EQUAL "26.0.0")
-    find_library(ARROW_S3_LIBRARY
-        NAMES arrow_s3
-        PATHS ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR}
-        NO_DEFAULT_PATH
-        REQUIRED
-    )
-
-    set(ARROW_S3_LIBS "${ARROW_S3_LIBRARY}")
-    message(STATUS "Found Arrow S3: ${ARROW_S3_LIBRARY}")
+if(DEFINED ENV{PREFIX})
+    set(ARROW_HOST_LIB_DIR "$ENV{PREFIX}/lib")
+else()
+    set(ARROW_HOST_LIB_DIR "${CONDA_LIB_DIR}")
 endif()
+message(STATUS "Arrow Host Lib Dir: ${ARROW_HOST_LIB_DIR}")
+
+find_library(ARROW_S3_LIBRARY
+    NAMES arrow_s3
+    PATHS ${PYARROW_LIBRARY_DIRS} "${ARROW_HOST_LIB_DIR}"
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+set(ARROW_S3_LIBS "${ARROW_S3_LIBRARY}")
+message(STATUS "Found Arrow S3: ${ARROW_S3_LIBRARY}")
 
 # Numpy Include Directory is provided by scikit-build-core
 # through `Python_NumPy_INCLUDE_DIR`
