@@ -58,8 +58,6 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
         }
     }
     // parse hdfs options from file uri
-    // options.connection_config includes:
-    //   host, port, user, driver, kerb_ticket
     result = arrow::fs::HdfsOptions::FromUri(uri_string);
     CHECK_ARROW_AND_ASSIGN(result, "HdfsOptions::FromUri", options);
     if (uri_string.starts_with("abfs://") ||

@@ -922,6 +922,15 @@ std::shared_ptr<array_info> do_arrow_compute_case(
         src3 = ConvertExprResultToDatum(else_res, "do_arrow_compute else");
     }
 
+    // Arrow >=26 requires input data types match exactly,
+    // including the timezone for timestamp types.
+    if (!src2.type()->Equals(result_type)) {
+        src2 = arrow::compute::Cast(src2, result_type).ValueOrDie();
+    }
+    if (else_res && !src3.type()->Equals(result_type)) {
+        src3 = arrow::compute::Cast(src3, result_type).ValueOrDie();
+    }
+
     // NOTE: Arrow's "if_else" doesn't match our Python and SQL semantics since
     // it propagates nulls in the condition.
     arrow::Result<arrow::Datum> case_res = arrow::compute::CallFunction(
