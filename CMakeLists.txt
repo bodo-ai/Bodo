@@ -390,11 +390,14 @@ execute_process(
 set(ARROW_S3_LIBS "")
 
 if(DEFINED ENV{PREFIX})
-    set(ARROW_HOST_LIB_DIR "$ENV{PREFIX}/lib")
+    if(WIN32)
+        set(ARROW_HOST_LIB_DIR "$ENV{PREFIX}/Library/lib")
+    else()
+        set(ARROW_HOST_LIB_DIR "$ENV{PREFIX}/lib")
+    endif()
 else()
     set(ARROW_HOST_LIB_DIR "${CONDA_LIB_DIR}")
 endif()
-message(STATUS "Arrow Host Lib Dir: ${ARROW_HOST_LIB_DIR}")
 
 find_library(ARROW_S3_LIBRARY
     NAMES arrow_s3
