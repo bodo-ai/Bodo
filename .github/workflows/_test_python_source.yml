@@ -47,6 +47,14 @@ jobs:
     runs-on: ${{ inputs.runner-id }}
     steps:
         # Setup
+        - name: Configure AWS Credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            aws-region: us-east-2
+            role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+            role-session-name: BodoEnginePrCiSession
+            role-skip-session-tagging: true
+            role-duration-seconds: 10800
         - uses: actions/checkout@v5
         - name: Build from Source
           uses: ./.github/actions/build-source
@@ -60,14 +68,6 @@ jobs:
             # Clean Maven and Spark Ivy Cache
             rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
           shell: bash
-        - name: Configure AWS Credentials
-          uses: aws-actions/configure-aws-credentials@v4
-          with:
-            aws-region: us-east-2
-            role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
-            role-session-name: BodoEnginePrCiSession
-            role-skip-session-tagging: true
-            role-duration-seconds: 10800
         - name: Configure GCP Credentials
           uses: google-github-actions/auth@v3
           with:
