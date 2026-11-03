@@ -4731,7 +4731,11 @@ def nrt_adapt_ndarray_to_python(self, aryty, ary, dtypeptr):
         self.pyobj, [self.voidptr, self.pyobj, intty, intty, self.pyobj]
     )
     fn = self._get_function(fnty, name="NRT_adapt_ndarray_to_python_acqref")
-    fn.args[0].add_attribute("captures(none)")
+
+    if numba_version < (0, 66):
+        fn.args[0].add_attribute("nocapture")
+    else:
+        fn.args[0].add_attribute("captures(none)")
 
     ndim = self.context.get_constant(types.int32, aryty.ndim)
     writable = self.context.get_constant(types.int32, int(aryty.mutable))
