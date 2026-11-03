@@ -69,7 +69,10 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     options.ConfigureBufferSize(0);
     options.ConfigureBlockSize(0);
 
-    // handle hdfs_config
+    // Compare host, port, and user similar to older Bodo versions, but also
+    // kerb_ticket and extra_conf options to determine whether to create a new
+    // filesystem. Uses HdfsOptions::Equals to avoid a separate code path for
+    // older Arrow versions.
     if (!is_hdfs_initialized) {
         hdfs_config = options;
     } else if (hdfs_config.Equals(options)) {
