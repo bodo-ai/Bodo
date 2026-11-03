@@ -365,6 +365,36 @@ setup_pyarrow_dirs()
 message(STATUS "PyArrow Includes: ${PYARROW_INCLUDE_DIR}")
 message(STATUS "PyArrow Lib Dirs: ${PYARROW_LIBRARY_DIRS}")
 
+# Determine the installed PyArrow version.
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" -c
+        "import importlib.metadata; print(importlib.metadata.version('pyarrow'))"
+    OUTPUT_VARIABLE PYARROW_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY
+)
+
+set(ARROW_S3_LIBS "")
+
+if(DEFINED ENV{PREFIX})
+    if(WIN32)
+        set(ARROW_HOST_LIB_DIR "$ENV{PREFIX}/Library/lib")
+    else()
+        set(ARROW_HOST_LIB_DIR "$ENV{PREFIX}/lib")
+    endif()
+else()
+    set(ARROW_HOST_LIB_DIR "${CONDA_LIB_DIR}")
+endif()
+
+find_library(ARROW_S3_LIBRARY
+    NAMES arrow_s3
+    PATHS ${PYARROW_LIBRARY_DIRS} "${ARROW_HOST_LIB_DIR}"
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+set(ARROW_S3_LIBS "${ARROW_S3_LIBRARY}")
+message(STATUS "Found Arrow S3: ${ARROW_S3_LIBRARY}")
+
 # Numpy Include Directory is provided by scikit-build-core
 # through `Python_NumPy_INCLUDE_DIR`
 cmake_print_variables(Python_NumPy_INCLUDE_DIR)
@@ -478,7 +508,7 @@ python_add_library(
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIBRARY_DIRS} ${CONDA_LIB_DIR} ${MPI_LIB_DIR})
-target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" arrow arrow_python fmt::fmt)
+target_link_libraries(memory_tester PRIVATE "${MPI_LIBRARIES}" "${ARROW_S3_LIBS}" arrow arrow_python fmt::fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
     memory_tester
@@ -556,7 +586,7 @@ python_add_library(memory_cpp
 )
 target_include_directories(memory_cpp PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/")
 target_link_directories(memory_cpp PRIVATE ${CONDA_LIB_DIR} ${PYARROW_LIBRARY_DIRS} ${MPI_LIB_DIR})
-target_link_libraries(memory_cpp PRIVATE fmt::fmt arrow ${MPI_LIBRARIES})
+target_link_libraries(memory_cpp PRIVATE fmt::fmt arrow ${ARROW_S3_LIBS} ${MPI_LIBRARIES})
 install(TARGETS memory_cpp DESTINATION "bodo/")
 
 
@@ -846,6 +876,7 @@ target_link_libraries(ext PRIVATE
   fmt::fmt
   zstd
   aws-cpp-sdk-core
+  ${ARROW_S3_LIBS}
   ${MPI_LIBRARIES}
 )
 

@@ -1,8 +1,6 @@
 {% set gpu_enabled = gpu == "true" %}
 {% set platform_enabled = is_platform == "true" %}
-# Platform requires PyArrow 22 for compatibility with PyDough,
-# https://github.com/bodo-ai/PyDough/blob/85214a31a9212a9ca503751ee62a84a5eaf59f22/pyproject.toml#L24
-{% set pyarrow_version = "22.0" if platform_enabled else "25.0" %}
+{% set pyarrow_version = "26.0" %}
 {% if win %}
     {% set mpi_impl = "impi" %}
     {% set mpi_build_pkg = "impi-devel" %}
@@ -67,7 +65,8 @@ requirements:
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24
-    - libarrow ={{ pyarrow_version }}  # [not win]
+    - libarrow ={{ pyarrow_version }}
+    - libarrow-s3 ={{ pyarrow_version }} 
     - pyarrow ={{ pyarrow_version }}
     - libboost-headers          # [not win]
     - libboost-devel            # [win]

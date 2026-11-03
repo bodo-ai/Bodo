@@ -5,7 +5,6 @@
 #include <string>
 
 #include <arrow/filesystem/s3fs.h>
-#include <arrow/io/hdfs.h>
 #include <arrow/result.h>
 #include <mpi.h>
 
@@ -204,8 +203,8 @@ void file_write(const char* file_name, void* buff, int64_t size) {
                             &out_stream);
 
         CHECK_ARROW(out_stream->Write(buff, size),
-                    "arrow::io::HdfsOutputStream::Write");
-        CHECK_ARROW(out_stream->Close(), "arrow::io::HdfsOutputStream::Close");
+                    "arrow::io::OutputStream::Write");
+        CHECK_ARROW(out_stream->Close(), "arrow::io::OutputStream::Close");
 
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
