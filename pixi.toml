@@ -448,6 +448,7 @@ jupyter_client = "==8.6.1"
 uvicorn = "*"
 fastapi = "*"
 httpie = "*"
+pyarrow = "26.0.*"
 
 
 [feature.platform-hwloc.target.linux-64.dependencies]
