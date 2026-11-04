@@ -1,6 +1,8 @@
 # To test: docker build -t test_dockerhub .
 FROM mambaorg/micromamba:latest AS builder
 
+# Install PyIceberg build dependencies
+# TODO: Remove when PyIceberg has a 3.15 wheel/conda-forge package available.
 USER root
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc libc6-dev && \
