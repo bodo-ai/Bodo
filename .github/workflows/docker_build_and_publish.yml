@@ -58,7 +58,7 @@ jobs:
         file: ./buildscripts/docker/docker_release/Dockerfile
         tags: ${{ env.TEST_TAG }}
         platforms: linux/arm64
- 
+
     - name: Test Jupyter notebooks inside the Docker image
       run: |
 
@@ -91,7 +91,7 @@ jobs:
 
     - name: Build and push
       uses: docker/build-push-action@v6
-      if: ${{ inputs.is-release }}
+      if: ${{ inputs.is-release || (github.event_name == 'workflow_dispatch' && inputs.push) }}
       with:
         push: true
         file: ./buildscripts/docker/docker_release/Dockerfile
