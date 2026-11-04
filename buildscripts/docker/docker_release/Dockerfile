@@ -1,6 +1,13 @@
 # To test: docker build -t test_dockerhub .
 FROM mambaorg/micromamba:latest AS builder
 
+USER root
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libc6-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+USER $MAMBA_USER
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 ENV JUPYTER_ENABLE_LAB=yes
