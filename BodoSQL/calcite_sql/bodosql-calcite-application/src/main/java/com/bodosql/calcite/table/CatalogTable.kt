@@ -17,9 +17,11 @@ import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptTable
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.type.RelDataTypeField
+import org.apache.calcite.schema.Statistic
 import org.apache.calcite.schema.Table
 import org.apache.calcite.schema.TranslatableTable
 import org.apache.calcite.util.BodoStatic
+import org.apache.calcite.util.ImmutableBitSet
 import java.util.Locale
 
 /**
@@ -35,8 +37,47 @@ open class CatalogTable(
     columns: List<BodoSQLColumn>,
     // The catalog that holds this table's origin.
     private val catalog: BodoSQLCatalog,
+    private val primaryKeyColumns: MutableList<String>? = null,
 ) : BodoSqlTable(name, schemaPath, columns),
     TranslatableTable {
+    val primaryKeyColumnsBits: List<ImmutableBitSet>?
+
+    init {
+        val pkNames = primaryKeyColumns ?: emptyList()
+
+        if (pkNames.isEmpty()) {
+            primaryKeyColumnsBits = null
+        } else {
+            val nameToIndex: Map<String, Int> = columns.mapIndexed { idx, col -> col.getColumnName() to idx }.toMap()
+            // Convert names to ordinals; throw or skip missing names depending on policy.
+            val ordinals =
+                pkNames
+                    .map { name ->
+                        nameToIndex[name]
+                            ?: throw IllegalArgumentException("Primary key column '$name' not found in table columns")
+                    }.toIntArray()
+
+            // Create a single ImmutableBitSet representing the composite key
+            val pkBitSet = ImmutableBitSet.of(*ordinals)
+
+            // Store as a single-element immutable list
+            primaryKeyColumnsBits = ImmutableList.of(pkBitSet)
+        }
+    }
+
+    private inner class StatisticImpl(
+        private val primaryKeyColumnsBits: List<ImmutableBitSet>?,
+    ) : Statistic {
+        override fun getKeys(): List<ImmutableBitSet>? = primaryKeyColumnsBits
+
+        override fun isKey(columns: ImmutableBitSet): Boolean {
+            if (primaryKeyColumnsBits.isNullOrEmpty()) return false
+            return primaryKeyColumnsBits.any { pk -> columns.contains(pk) }
+        }
+    }
+
+    override fun getStatistic(): Statistic = StatisticImpl(primaryKeyColumnsBits)
+
     /*
      * See the design described on Confluence:
      * https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Table
@@ -158,7 +199,7 @@ open class CatalogTable(
             val newCol = BodoSQLColumnImpl(fieldName, newColType)
             extendedColumns.add(newCol)
         }
-        return CatalogTable(name, parentFullPath, extendedColumns, this.catalog)
+        return CatalogTable(name, parentFullPath, extendedColumns, this.catalog, primaryKeyColumns)
     }
 
     /**
