@@ -2,7 +2,7 @@ import numba
 
 import bodo
 
-import bodo.decorators  # isort:skip # noqa
+import bodo.decorators  # isort:skip
 from bodo.io.iceberg.theta import read_puffin_file_ndvs
 from bodo.spawn.utils import run_rank0
 from bodo.tests.iceberg_database_helpers.metadata_utils import (

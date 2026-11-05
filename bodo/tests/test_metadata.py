@@ -35,7 +35,7 @@ def metadata_supported_index_types(request):
 @pytest.mark.slow
 def test_metadata_typemaps():
     """checks that _one_to_one_enum_to_type_map, and _one_to_one_type_to_enum_map are reflections of each other"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.boxing import (
         _one_to_one_enum_to_type_map,
         _one_to_one_type_to_enum_map,
@@ -120,7 +120,7 @@ def test_dtype_converter_non_literal_values(typ_val):
         Scalar boolean, datetime date (no specific reason, but it was trivial to support them)
     """
     from numba.core import types
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.boxing import (
         _dtype_from_type_enum_list,
         _dtype_to_type_enum_list,
@@ -215,7 +215,7 @@ def check_series_typing_metadata(orig_series, output_series):
     from the metadata will be the same as the infered dtype of the original series
     (original series must contain >= 1 non null element)
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.boxing import (
         _dtype_from_type_enum_list,
         _infer_series_arr_type,
@@ -249,7 +249,7 @@ def check_dataframe_typing_metadata(orig_df, output_df):
     from the metadata will be the same as the infered dtypes of the original dataframe
     (original dataframe must contain 1 >= columns, each containing >= 1 non null element)
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.boxing import (
         _dtype_from_type_enum_list,
         _infer_series_arr_type,
@@ -275,9 +275,8 @@ def check_dataframe_typing_metadata(orig_df, output_df):
     for i in range(len(orig_df.columns)):
         cur_type_enum_list = output_df._bodo_meta["type_metadata"][1][i]
         cur_series = orig_df.iloc[:, i]
-        if not (
-            _dtype_from_type_enum_list(cur_type_enum_list)
-            == _infer_series_arr_type(cur_series)
+        if _dtype_from_type_enum_list(cur_type_enum_list) != _infer_series_arr_type(
+            cur_series
         ):
             return False
 
@@ -472,7 +471,7 @@ def test_df_return_metadata(gen_use_df_funcs):
     a dataframe that only contains data on rank 0. "use_func" is a Bodo function that uses the distributed data, in
     such a way that an error would be thrown if the dataframe's column's type was infered as the default (string).
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.boxing import _dtype_from_type_enum_list
     from bodo.tests.utils_jit import reduce_sum
 
@@ -488,12 +487,15 @@ def test_df_return_metadata(gen_use_df_funcs):
     # sanity check to insure that gen_func does actually produce a distributed output
 
     passed = 1
-    if bodo.get_rank() != 0 and len(out["A"]) != 0:
-        passed = 0
-    elif bodo.get_rank() == 0 and len(out["A"]) != 1:
+    if (
+        bodo.get_rank() != 0
+        and len(out["A"]) != 0
+        or bodo.get_rank() == 0
+        and len(out["A"]) != 1
+    ):
         passed = 0
 
-    fail_msg = f"gen_func failed to return a dataframe with only data on rank0\nDF on rank {bodo.get_rank()}:\n{str(out)}"
+    fail_msg = f"gen_func failed to return a dataframe with only data on rank0\nDF on rank {bodo.get_rank()}:\n{out!s}"
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), fail_msg
 
@@ -585,7 +587,7 @@ def test_series_return_metadata(gen_use_series_funcs):
     a series that only contains data on rank 0. "use_func" is a Bodo function that uses the distributed data, in
     such a way that an error would be thrown if the series dtype was infered as the default (string).
     """
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.boxing import _dtype_from_type_enum_list
     from bodo.tests.utils_jit import reduce_sum
 
@@ -603,7 +605,7 @@ def test_series_return_metadata(gen_use_series_funcs):
 
     n_passed = reduce_sum(passed)
 
-    fail_msg = f"gen_func failed to return a series with only data on rank0\nSeries on rank {bodo.get_rank()}:\n{str(out)}"
+    fail_msg = f"gen_func failed to return a series with only data on rank0\nSeries on rank {bodo.get_rank()}:\n{out!s}"
     assert n_passed == bodo.get_size(), fail_msg
     use_func(out)
 
@@ -673,7 +675,7 @@ def test_index_type_return(metadata_supported_index_types):
         passed = 0
 
     n_passed = reduce_sum(passed)
-    fail_msg = f"gen_func failed to return a series/dataframe with only data on rank0\nSeries on rank {bodo.get_rank()}:\n{str(series_out)}\nDatframe on rank {bodo.get_rank()}:\n{str(df_out)}"
+    fail_msg = f"gen_func failed to return a series/dataframe with only data on rank0\nSeries on rank {bodo.get_rank()}:\n{series_out!s}\nDatframe on rank {bodo.get_rank()}:\n{df_out!s}"
     assert n_passed == bodo.get_size(), fail_msg
 
     @bodo.jit(distributed=["val"])

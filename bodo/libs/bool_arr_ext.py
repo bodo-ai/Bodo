@@ -164,7 +164,7 @@ def call_func_in_unbox(func, args, arg_typs, c):
     h = func_impl(inner_builder, inner_args)
     c.context.call_conv.return_value(inner_builder, h)
 
-    status, retval = c.context.call_conv.call_function(
+    _status, retval = c.context.call_conv.call_function(
         c.builder, fn, func_sig.return_type, func_sig.args, args
     )
     # TODO: check status?
@@ -858,7 +858,7 @@ skips = [
 
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
-    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map:
         if op in skips:
             continue
         overload_impl = create_op_overload(op, 2)
@@ -873,7 +873,7 @@ _install_binary_ops()
 
 def _install_inplace_binary_ops():
     # install inplace binary ops such as iadd, isub, ...
-    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
+    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map:
         overload_impl = create_op_overload(op, 2)
         overload(op, no_unliteral=True)(overload_impl)
 

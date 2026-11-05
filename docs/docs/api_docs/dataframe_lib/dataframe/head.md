@@ -19,9 +19,7 @@ Returns the first *n* rows of the BodoDataFrame.
 ``` py
 import bodo.pandas as bd
 
-original_df = bd.DataFrame(
-    {"foo": range(15), "bar": range(15, 30)}
-   )
+original_df = bd.DataFrame({"foo": range(15), "bar": range(15, 30)})
 
 original_df.to_parquet("example.pq")
 

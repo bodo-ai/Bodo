@@ -91,9 +91,13 @@ def test_streaming_groupby_aggregate_timer(
             # Confirm that all the nodes in the plan that should
             # show up in the generated log, actually do.
             if not (
-                relNodeStr.startswith("PandasTableScan")
-                or relNodeStr.startswith("CombineStreamsExchange")
-                or relNodeStr.startswith("SeparateStreamExchange")
-                or relNodeStr.startswith("Snowflake")
+                relNodeStr.startswith(
+                    (
+                        "PandasTableScan",
+                        "CombineStreamsExchange",
+                        "SeparateStreamExchange",
+                        "Snowflake",
+                    )
+                )
             ):
                 check_logger_msg(stream, relNodeStr, check_case=False)

@@ -110,8 +110,6 @@ class _OverloadMissingOrIncorrect:
     overload template
     """
 
-    pass
-
 
 def is_attr_supported(typing_ctx: Context, typ: pt.Any, attr: str) -> bool | None:
     """Check if an specific attribute or method is supported for the given type.

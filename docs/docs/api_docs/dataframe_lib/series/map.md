@@ -44,7 +44,7 @@ bdf = bd.DataFrame(
     }
 )
 
-bodo_ser = bdf.A.map(lambda x: x ** 2)
+bodo_ser = bdf.A.map(lambda x: x**2)
 print(type(bodo_ser))
 print(bodo_ser)
 ```

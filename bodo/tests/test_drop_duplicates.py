@@ -104,12 +104,12 @@ pytestmark = pytest_pandas
                 [
                     {"A": [Decimal("1.0"), Decimal("2.2")], "B": [Decimal("4.14")]},
                     {
-                        "A": [Decimal("0"), Decimal("3.2"), Decimal("4")],
-                        "B": [Decimal("-1")],
+                        "A": [Decimal(0), Decimal("3.2"), Decimal(4)],
+                        "B": [Decimal(-1)],
                     },
                     {
-                        "A": [Decimal("5")],
-                        "B": [Decimal("644"), Decimal("9.1"), Decimal("154")],
+                        "A": [Decimal(5)],
+                        "B": [Decimal(644), Decimal("9.1"), Decimal(154)],
                     },
                     {
                         "A": [Decimal("10.0"), Decimal("13.4")],
@@ -117,10 +117,10 @@ pytestmark = pytest_pandas
                     },
                     {"A": [Decimal("15.0"), None], "B": [Decimal("2.05")]},
                     {
-                        "A": [Decimal("30"), Decimal("5.2")],
-                        "B": [Decimal("0"), Decimal("2")],
+                        "A": [Decimal(30), Decimal("5.2")],
+                        "B": [Decimal(0), Decimal(2)],
                     },
-                    {"A": [Decimal("-1"), Decimal("-2"), None], "B": [Decimal("60")]},
+                    {"A": [Decimal(-1), Decimal(-2), None], "B": [Decimal(60)]},
                 ]
                 * 2
             ),

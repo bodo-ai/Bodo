@@ -91,7 +91,7 @@ pytestmark = pytest_slow_unless_codegen
                     None,
                     Decimal("4.0"),
                     Decimal("3.14"),
-                    Decimal("1024"),
+                    Decimal(1024),
                 ]
             ),
             Decimal("999999.89"),

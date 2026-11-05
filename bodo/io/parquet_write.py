@@ -290,10 +290,9 @@ def gen_pandas_parquet_metadata_template(
             # numpy dtype is Float32/Float64 (capitalize to specify nullable array)
             pandas_type = dtype_name
             numpy_type = dtype_name.capitalize()
-        elif col_type == datetime_date_array_type:
-            pandas_type = "datetime"
-            numpy_type = "object"
-        elif isinstance(col_type, TimeArrayType):
+        elif col_type == datetime_date_array_type or isinstance(
+            col_type, TimeArrayType
+        ):
             pandas_type = "datetime"
             numpy_type = "object"
         elif isinstance(

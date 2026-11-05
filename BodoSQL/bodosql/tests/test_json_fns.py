@@ -259,7 +259,7 @@ def test_get_path(
     if use_colon_syntax:
         get_path_call = f"D:{path}"
     else:
-        get_path_call = f"GET_PATH(D, {repr(path)})"
+        get_path_call = f"GET_PATH(D, {path!r})"
 
     if use_case:
         query = f"SELECT I, CASE WHEN B THEN NULL ELSE {get_path_call} END FROM TABLE1"
@@ -336,7 +336,7 @@ def test_get_path_on_incorrect_variant_types(
     if use_colon_syntax:
         get_path_call = f"TO_VARIANT(D):{path}"
     else:
-        get_path_call = f"GET_PATH(TO_VARIANT(D), {repr(path)})"
+        get_path_call = f"GET_PATH(TO_VARIANT(D), {path!r})"
 
     if use_case:
         query = f"SELECT I, CASE WHEN B THEN NULL ELSE {get_path_call} END FROM TABLE1"

@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-import bodo.utils.aggregate_query_profiles as aggregate_query_profiles
+from bodo.utils import aggregate_query_profiles
 
 
 def test_aggregate_empty():

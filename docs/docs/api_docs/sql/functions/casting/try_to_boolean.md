@@ -9,11 +9,9 @@ _Example:_
 
 We are given `table1` with columns `a` and `b` and `c`
 ```python
-table1 = pd.DataFrame({
-    'a': [1.1, 0, np.inf],
-    'b': ['t', 'f', 'YES'],
-    'c': [None, 1, 0]
-})
+table1 = pd.DataFrame(
+    {"a": [1.1, 0, np.inf], "b": ["t", "f", "YES"], "c": [None, 1, 0]}
+)
 ```
 upon query
 ```sql

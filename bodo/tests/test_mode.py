@@ -180,8 +180,8 @@ def make_float_mode_test_params(name, dtype, format_str, is_slow):
         type based on the input number.
         is_slow [boolean]: Is this argument parameterization a slow test?
     """
-    val_from_format = (
-        lambda x: None
+    val_from_format = lambda x: (
+        None
         if x is None
         else eval(format_str.format(x), {"np": np, "Decimal": Decimal})
     )

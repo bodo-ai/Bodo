@@ -48,7 +48,7 @@ series_val_params = [
                 Decimal("-0.2"),
                 Decimal("44.2"),
                 None,
-                Decimal("0"),
+                Decimal(0),
             ]
             * 2,
             dtype=pd.ArrowDtype(pa.decimal128(38, 18)),

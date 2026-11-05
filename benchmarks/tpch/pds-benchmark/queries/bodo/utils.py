@@ -7,8 +7,8 @@ from queries.common_utils import run_query_generic
 from settings import Settings
 
 import bodo.pandas
-import bodo.spawn.spawner as spawner
 from bodo.pandas import BodoDataFrame, BodoScalar, BodoSeries
+from bodo.spawn import spawner
 
 if pt.TYPE_CHECKING:
     from collections.abc import Callable

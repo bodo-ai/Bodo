@@ -121,7 +121,6 @@ def compute_satisfiable_budgets(typingctx):
         )
         builder.call(fn_typ, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return
 
     sig = types.none()
     return sig, codegen
@@ -147,7 +146,6 @@ def reduce_operator_budget(typingctx, operator_id, new_estimate):
         )
         builder.call(fn_typ, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return
 
     sig = types.none(operator_id, new_estimate)
     return sig, codegen
@@ -167,7 +165,6 @@ def increase_operator_budget(typingctx, operator_id):
         )
         builder.call(fn_typ, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return
 
     sig = types.none(operator_id)
     return sig, codegen

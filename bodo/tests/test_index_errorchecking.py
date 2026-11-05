@@ -985,7 +985,7 @@ def impl(I):
 
 def test_index_copy_kwd_arg_err_msg(all_index_types):
     """tests that the proper errors are raised when doing Index.copy() with unsupported kwd args"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.pd_index_ext import IntervalIndexType, idx_typ_to_format_str_map
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
     from bodo.utils.typing import BodoError
@@ -1015,7 +1015,7 @@ def test_index_copy_kwd_arg_err_msg(all_index_types):
 
 def test_index_take_kwd_arg_err_msg(all_index_types):
     """tests that the proper errors are raised when doing Index.copy() with unsupported kwd args"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.pd_index_ext import IntervalIndexType, idx_typ_to_format_str_map
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
     from bodo.utils.typing import BodoError

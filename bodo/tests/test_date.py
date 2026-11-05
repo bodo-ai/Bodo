@@ -1503,7 +1503,7 @@ def series_value(request):
 
 def test_dt_extract(series_value, memory_leak_check):
     """Test Series.dt extraction"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     for date_field in bodo.hiframes.pd_timestamp_ext.date_fields:
         func_text = "def impl(S, date_fields):\n"
@@ -1516,7 +1516,7 @@ def test_dt_extract(series_value, memory_leak_check):
 
 def test_dt_date_methods(series_value, memory_leak_check):
     """Test Series.dt datetime methods"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     for date_method in bodo.hiframes.pd_timestamp_ext.date_methods:
         func_text = "def impl(S, date_methods):\n"
@@ -1666,7 +1666,7 @@ def test_dt_round_timestamp_others(series_value_no_bad_dates, memory_leak_check)
 
 def test_dt_timedelta_fields(memory_leak_check):
     """Test Series.dt for timedelta64 fields"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     for field in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
         func_text = "def impl(S, date_fields):\n"
@@ -1681,7 +1681,7 @@ def test_dt_timedelta_fields(memory_leak_check):
 
 def test_dt_timedelta_methods(memory_leak_check):
     """Test Series.dt for timedelta64 methods"""
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     for method in bodo.hiframes.pd_timestamp_ext.timedelta_methods:
         func_text = "def impl(S, timedelta_methods):\n"
@@ -2344,7 +2344,6 @@ def test_ts_map_date2(memory_leak_check):
 def test_ts_map_date_set(memory_leak_check):
     def test_impl(df):
         df["hpat_date"] = df.dt_ind.map(lambda x: x.date())
-        return
 
     bodo_func = bodo.jit(test_impl)
     dt_df["dt_ind"] = pd.DatetimeIndex(dt_df["str_date"])
@@ -2357,7 +2356,6 @@ def test_ts_map_date_set(memory_leak_check):
 def test_datetime_index_set(memory_leak_check):
     def test_impl(df):
         df["bodo"] = pd.DatetimeIndex(df["str_date"]).values
-        return
 
     bodo_func = bodo.jit(test_impl)
     bodo_func(dt_df)

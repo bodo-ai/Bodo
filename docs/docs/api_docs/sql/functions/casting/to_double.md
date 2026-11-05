@@ -14,10 +14,12 @@ _Example:_
 
 We are given `table1` with columns `a` and `b`
 ```python
-table1 = pd.DataFrame({
-    'a': [1, 0, 2],
-    'b': ['3.7', '-2.2e-1', 'nan'],
-})
+table1 = pd.DataFrame(
+    {
+        "a": [1, 0, 2],
+        "b": ["3.7", "-2.2e-1", "nan"],
+    }
+)
 ```
 upon query
 ```sql

@@ -1136,17 +1136,17 @@ def _get_flag_sign_dateoffset_pd(date_offset_value, is_sub=False):
     # normalization ignores nanoseconds so we don't need to add.
     if not date_offset_value.normalize:
         flag = True
-        if date_offset_value.n < 0:
-            if not is_sub:
-                sign = -1
+        if date_offset_value.n < 0 and not is_sub:
+            sign = -1
         # date_offset_value11 is using nanoseconds only.
         # In this case, Pandas include nanos so skip (except for series, it's not working in Pandas)
         # NOTE: date_offset_value12 is using nanosecond.
         # In this case, Pandas doesn't add so we need to include it manually.
-        if len(date_offset_value.kwds) == 1 and "nanoseconds" in date_offset_value.kwds:
-            flag = False
-        # date_offset_value0 is empty
-        elif len(date_offset_value.kwds) == 0:
+        if (
+            len(date_offset_value.kwds) == 1
+            and "nanoseconds" in date_offset_value.kwds
+            or len(date_offset_value.kwds) == 0
+        ):
             flag = False
         # date_offset_value9 with add: using both nansecond and nanseconds. It should be
         # final_nanosecond = nanosecond - nanoseconds (n is ignored)

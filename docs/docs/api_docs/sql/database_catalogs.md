@@ -16,14 +16,18 @@ catalog = bodosql.SnowflakeCatalog(
     username,
     password,
     account_name,
-    "DEMO_WH", # warehouse name
-    "SNOWFLAKE_SAMPLE_DATA", # database name
+    "DEMO_WH",  # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA",  # database name
 )
 bc = bodosql.BodoSQLContext({"LOCAL_TABLE1": df1}, catalog=catalog)
 
+
 @bodo.jit
 def run_query(bc):
-    return bc.sql("SELECT r_name, local_id FROM TPCH_SF1.REGION, local_table1 WHERE R_REGIONKEY = local_table1.region_key ORDER BY r_name")
+    return bc.sql(
+        "SELECT r_name, local_id FROM TPCH_SF1.REGION, local_table1 WHERE R_REGIONKEY = local_table1.region_key ORDER BY r_name"
+    )
+
 
 run_query(bc)
 ```
@@ -55,19 +59,20 @@ They can then access any tables of interest in their Snowflake account.
 Currently, a Snowflake Catalog requires a default `DATABASE` (e.g., `USE DATABASE`), as shown below.
 
 ```py
-
 catalog = bodosql.SnowflakeCatalog(
     username,
     password,
     account_name,
-    "DEMO_WH", # warehouse name
-    "SNOWFLAKE_SAMPLE_DATA", # default database name
+    "DEMO_WH",  # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA",  # default database name
 )
 bc = bodosql.BodoSQLContext(catalog=catalog)
+
 
 @bodo.jit
 def run_query(bc):
     return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
+
 
 run_query(bc)
 ```
@@ -79,20 +84,21 @@ accepts a `Dict[str, str]` for each session parameter. For example, users can pr
 a default schema to simplify the previous example.
 
 ```py
-
 catalog = bodosql.SnowflakeCatalog(
     username,
     password,
     account,
-    "DEMO_WH", # warehouse name
-    "SNOWFLAKE_SAMPLE_DATA", # database name
-    connection_params={"schema": "TPCH_SF1"}
+    "DEMO_WH",  # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA",  # database name
+    connection_params={"schema": "TPCH_SF1"},
 )
 bc = bodosql.BodoSQLContext(catalog=catalog)
+
 
 @bodo.jit
 def run_query(bc):
     return bc.sql("SELECT r_name FROM REGION ORDER BY r_name")
+
 
 run_query(bc)
 ```
@@ -147,13 +153,15 @@ how a user could read a table called `MY_TABLE` that is located at `s3://my_buck
 
 ```py
 catalog = bodosql.FileSystemCatalog(
-    "s3://my_bucket", # root directory
+    "s3://my_bucket",  # root directory
 )
 bc = bodosql.BodoSQLContext(catalog=catalog)
+
 
 @bodo.jit
 def run_query(bc):
     return bc.sql("SELECT * FROM MY_SCHEMA.MY_TABLE")
+
 
 run_query(bc)
 ```
@@ -168,14 +176,15 @@ For example, this code provides a default schema of `MY_SCHEMA.other_schema` for
 
 ```py
 catalog = bodosql.FileSystemCatalog(
-    "s3://my_bucket",
-    default_schema="MY_SCHEMA.\"other_schema\""
+    "s3://my_bucket", default_schema='MY_SCHEMA."other_schema"'
 )
 bc = bodosql.BodoSQLContext(catalog=catalog)
+
 
 @bodo.jit
 def run_query(bc):
     return bc.sql("SELECT * FROM OTHER_TABLE")
+
 
 run_query(bc)
 ```
@@ -279,9 +288,11 @@ catalog = bodosql.GlueCatalog(
 )
 bc = bodosql.BodoSQLContext(catalog=catalog)
 
+
 @bodo.jit
 def run_query(bc):
     return bc.sql("SELECT * FROM MY_SCHEMA.MY_TABLE")
+
 
 run_query(bc)
 ```

@@ -679,9 +679,10 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
     # in test_metadata/test_dtype_converter_literal_values
 
     # handle actually literal python values
-    if isinstance(typ, (dict, int, list, tuple, str, bool, bytes, float)):
-        return [SeriesDtypeEnum.Literal.value, typ]
-    elif typ is None:
+    if (
+        isinstance(typ, (dict, int, list, tuple, str, bool, bytes, float))
+        or typ is None
+    ):
         return [SeriesDtypeEnum.Literal.value, typ]
 
     # handle literal types
@@ -1735,7 +1736,7 @@ def _infer_ndarray_obj_dtype(val):
     elif (
         isinstance(first_val, (dict, Dict))
         and (len(first_val.keys()) <= struct_size_limit)
-        and all(isinstance(k, str) for k in first_val.keys())
+        and all(isinstance(k, str) for k in first_val)
     ):
         field_names = tuple(first_val.keys())
         # TODO: handle None value in first_val elements

@@ -63,20 +63,17 @@ import numpy as np
 
 import bodo.pandas as pd
 
-BUCKET_NAME="my-test-bucket"
-ACCOUNT_ID="111122223333"
-REGION="us-east-2"
-NAMESPACE="my_namespace"
-ARN=f"arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
+BUCKET_NAME = "my-test-bucket"
+ACCOUNT_ID = "111122223333"
+REGION = "us-east-2"
+NAMESPACE = "my_namespace"
+ARN = f"arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
 
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
 
-df = pd.DataFrame({
-    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-    "B": np.arange(NUM_ROWS)
-})
+df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
 df.to_iceberg(f"{NAMESPACE}.my_table_1", location=ARN)
 
 
@@ -93,11 +90,11 @@ You can use BodoSQL to work with S3 Tables as well. Here is a simple example:
 import pandas as pd
 import bodosql
 
-BUCKET_NAME="my-test-bucket"
-ACCOUNT_ID="111122223333"
-REGION="us-east-2"
-NAMESPACE="my_namespace"
-ARN_STR=f"arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
+BUCKET_NAME = "my-test-bucket"
+ACCOUNT_ID = "111122223333"
+REGION = "us-east-2"
+NAMESPACE = "my_namespace"
+ARN_STR = f"arn:aws:s3tables:{REGION}:{ACCOUNT_ID}:bucket/{BUCKET_NAME}"
 
 catalog = bodosql.S3TablesCatalog(ARN_STR)
 bc = bodosql.BodoSQLContext(catalog=catalog)
@@ -109,6 +106,6 @@ CREATE OR REPLACE TABLE "{NAMESPACE}"."my_table" AS SELECT * FROM __bodolocal__.
 """
 bc.sql(query)
 
-df_read = bc.sql(f"SELECT * FROM \"{NAMESPACE}\".\"my_table\"")
+df_read = bc.sql(f'SELECT * FROM "{NAMESPACE}"."my_table"')
 print(df_read)
 ```

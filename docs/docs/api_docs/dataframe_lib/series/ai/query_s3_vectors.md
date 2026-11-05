@@ -33,22 +33,21 @@ See [S3 documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-
 ``` py
 import pandas as pd
 import bodo.pandas as bd
-import boto3 
-import json 
+import boto3
+import json
 
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-2")
 
 input_text = "adventures in space"
 
 response = bedrock.invoke_model(
-    modelId="amazon.titan-embed-text-v2:0",
-    body=json.dumps({"inputText": input_text})
+    modelId="amazon.titan-embed-text-v2:0", body=json.dumps({"inputText": input_text})
 )
 
 model_response = json.loads(response["body"].read())
 embedding = model_response["embedding"]
 
-df = pd.DataFrame({"data": [embedding]*10})
+df = pd.DataFrame({"data": [embedding] * 10})
 bdf = bd.from_pandas(df)
 
 out = bdf.data.ai.query_s3_vectors(

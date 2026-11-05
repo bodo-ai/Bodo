@@ -525,7 +525,7 @@ def _groupby_apply_plan(
     from bodo.pandas.base import _empty_like
 
     # Import compiler
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
 
     bodo.spawn.utils.import_compiler_on_workers()
 
@@ -764,7 +764,7 @@ def _get_cfunc_wrapper(
     import numpy as np
 
     # Import compiler
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.decorators import _cfunc
     from bodo.hiframes.table import TableType
     from bodo.libs.array import (
@@ -854,7 +854,7 @@ def _numba_type_to_pyarrow_type(typ):
     from numba import types
 
     # Import compiler
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
     from bodo.libs.binary_arr_ext import bytes_type
     from bodo.utils.typing import get_array_getitem_scalar_type
@@ -916,7 +916,7 @@ def _get_scalar_udf_out_type(func: pt.Callable, empty_input: pd.DataFrame | pd.S
     import numba
 
     # Import compiler
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from numba.core.target_extension import dispatcher_registry
 
     from bodo.utils.transform import get_const_func_output_type
@@ -1046,7 +1046,7 @@ def _get_agg_output_type(
         new_type = pa.bool_()
     elif callable(func.func):
         # Import compiler
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.utils.utils import is_array_typ
 
         # UDF case

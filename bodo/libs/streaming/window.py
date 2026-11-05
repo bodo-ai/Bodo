@@ -202,7 +202,7 @@ class WindowStateType(StreamingStateType):
             # we potentially need to do casting...
             if func_name in ["lead", "lag"]:
                 input_arr_type = build_table_arr_types[indices[0]]
-                shift_amt, default_value = args
+                _shift_amt, default_value = args
                 common_arr_type = WindowStateType.derive_common_arr_types(
                     input_arr_type, scalar_to_arrtype(default_value)
                 )

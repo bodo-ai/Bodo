@@ -191,7 +191,6 @@ def add_agg_cfunc_sym(typingctx, func, sym):
             )
         # add cfunc library to the library of the Bodo function being compiled.
         context.add_linking_libs([gb_agg_cfunc[sym._literal_value]._library])
-        return
 
     return types.none(func, sym), codegen
 
@@ -529,20 +528,18 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 # Type checking should be handled at the overload/bound_func level.
                 # Any unknown kws at this stage should be naming the
                 # output column.
-                if func_name in list_cumulative:
-                    if erec[0] == "skipna":
-                        skip_na_data = guard(find_const, func_ir, erec[1])
-                        if not isinstance(skip_na_data, bool):  # pragma: no cover
-                            raise BodoError(
-                                f"For {func_name} argument of skipna should be a boolean"
-                            )
-                if func_name == "nunique":
-                    if erec[0] == "dropna":
-                        skip_na_data = guard(find_const, func_ir, erec[1])
-                        if not isinstance(skip_na_data, bool):  # pragma: no cover
-                            raise BodoError(
-                                "argument of dropna to nunique should be a boolean"
-                            )
+                if func_name in list_cumulative and erec[0] == "skipna":
+                    skip_na_data = guard(find_const, func_ir, erec[1])
+                    if not isinstance(skip_na_data, bool):  # pragma: no cover
+                        raise BodoError(
+                            f"For {func_name} argument of skipna should be a boolean"
+                        )
+                if func_name == "nunique" and erec[0] == "dropna":
+                    skip_na_data = guard(find_const, func_ir, erec[1])
+                    if not isinstance(skip_na_data, bool):  # pragma: no cover
+                        raise BodoError(
+                            "argument of dropna to nunique should be a boolean"
+                        )
 
         # To handle shift(2) and shift(periods=2)
         if func_name == "shift" and (len(rhs.args) > 0 or len(rhs.kws) > 0):
@@ -2496,9 +2493,9 @@ def gen_top_level_agg_func(
         ", ".join([str(supported_agg_funcs.index(f.ftype)) for f in allfuncs] + ["0"])
     )
     # TODO: pass these constant arrays as globals to make compilation faster
-    func_text += f"    func_offsets = np.array({str(func_offsets)}, dtype=np.int32)\n"
+    func_text += f"    func_offsets = np.array({func_offsets!s}, dtype=np.int32)\n"
     if len(udf_ncols) > 0:
-        func_text += f"    udf_ncols = np.array({str(udf_ncols)}, dtype=np.int32)\n"
+        func_text += f"    udf_ncols = np.array({udf_ncols!s}, dtype=np.int32)\n"
     else:
         func_text += "    udf_ncols = np.array([0], np.int32)\n"  # dummy
     # single-element numpy array to return number of rows from C++
@@ -2543,7 +2540,7 @@ def gen_top_level_agg_func(
             idx += 1
 
     offset = 0
-    for out_col_ind in agg_node.gb_info_out.keys():
+    for out_col_ind in agg_node.gb_info_out:
         # For window functions, the out_col_ind and possibly several numbers
         # immediately following since window can return multiple columns
         # for one single aggregation
@@ -2557,9 +2554,8 @@ def gen_top_level_agg_func(
         idx += 1
 
     # Index is always stored last
-    if agg_node.same_index:
-        if agg_node.out_vars[-1] is not None:
-            out_cpp_col_inds.append(agg_node.n_out_cols - 1)
+    if agg_node.same_index and agg_node.out_vars[-1] is not None:
+        out_cpp_col_inds.append(agg_node.n_out_cols - 1)
 
     # NOTE: cpp_table_to_py_data() needs a type for all logical arrays (even if None)
     # out_cpp_col_inds determines what arrays are dead
@@ -2818,7 +2814,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
     # rename all variables to avoid conflict (init and eval nodes)
     var_table = get_name_var_table(f_ir.blocks)
     new_var_dict = {}
-    for name, _ in var_table.items():
+    for name in var_table:
         new_var_dict[name] = mk_unique_var(name)
     replace_var_names(f_ir.blocks, new_var_dict)
     f_ir._definitions = build_definitions(f_ir.blocks)
@@ -3306,7 +3302,7 @@ def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
 
     dummy_f = lambda: None
     f_ir = compile_to_numba_ir(dummy_f, {})
-    block = list(f_ir.blocks.values())[0]
+    block = next(iter(f_ir.blocks.values()))
     loc = block.loc
 
     # return initialized reduce vars as tuple
@@ -3470,7 +3466,7 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
     )
 
     # TODO: support multi block eval funcs
-    block = list(f_ir.blocks.values())[0]
+    block = next(iter(f_ir.blocks.values()))
 
     # assign inputs to reduce vars used in computation
     assign_nodes = []
@@ -3564,7 +3560,7 @@ def gen_combine_func(
         calltypes=pm.calltypes,
     )
 
-    block = list(f_ir.blocks.values())[0]
+    block = next(iter(f_ir.blocks.values()))
 
     return_typ = pm.typemap[block.body[-1].value.name]
     # compile implementation to binary (Dispatcher)
