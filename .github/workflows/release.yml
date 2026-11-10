@@ -53,7 +53,7 @@ jobs:
       matrix:
         # On pull requests, only test building for 3.15
         python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.15"]' || '["3.15", "3.14", "3.13", "3.12", "3.11"]') }}
-        os: ['macos-14', 'windows-2022']
+        os: ['macos-15', 'windows-2022']
     uses: ./.github/workflows/_build_bodo_conda_native.yml
     with:
       python-version: ${{ matrix.python-version }}
