@@ -309,13 +309,9 @@ class SnowflakeCatalog(MetastoreCatalog):
         )
 
         schema_query = "SHOW ICEBERG TABLES IN SCHEMA (%s)"
-        db_query = "SHOW ICEBERG TABLES IN DATABASE (%s)"
 
         with self.connection.cursor(DictCursor) as cursor:
-            if sf_identifier.database:
-                cursor.execute(db_query, (sf_identifier.database,))
-            else:
-                cursor.execute(schema_query, (sf_identifier.schema,))
+            cursor.execute(schema_query, (sf_identifier.schema_name,))
 
             return [
                 (row["database_name"], row["schema_name"], row["table_name"])
