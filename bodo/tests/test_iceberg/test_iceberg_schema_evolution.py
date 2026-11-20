@@ -210,7 +210,7 @@ def test_filter_pushdown(
         df_schema = spark.sql(
             f"select * from hadoop_prod.{db_schema}.{table_name} LIMIT 1"
         )
-        col_name = [col for col in df_schema.columns if "B" in col][0]
+        col_name = next(col for col in df_schema.columns if "B" in col)
 
         py_out = spark.sql(
             f"""
@@ -989,9 +989,7 @@ def test_read_partition_schema_evolved_table(
         # When Spark reads TZ aware columns and converts it to
         # Pandas, the datatype is 'datetime64[ns]' whereas when
         # Bodo reads it, it's 'datetime64[ns, UTC]'.
-        check_dtype=(
-            False if ("TZ_AWARE" in table_name) or ("DT_TSZ" in table_name) else True
-        ),
+        check_dtype=(not ("TZ_AWARE" in table_name or "DT_TSZ" in table_name)),
         convert_columns_to_pandas=True,
     )
 
@@ -1102,7 +1100,7 @@ def test_partition_schema_evolved_table_filter_pushdown(
         df_schema = spark.sql(
             f"select * from hadoop_prod.{db_schema}.{table_name} LIMIT 1"
         )
-        col_name = [col for col in df_schema.columns if "B" in col][0]
+        col_name = next(col for col in df_schema.columns if "B" in col)
 
         py_out = spark.sql(
             f"""

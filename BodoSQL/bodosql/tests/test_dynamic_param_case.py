@@ -7,7 +7,7 @@ import re
 import pandas as pd
 import pytest
 
-from bodosql.tests.named_params_common import *  # noqa
+from bodosql.tests.named_params_common import *
 from bodosql.tests.utils import check_query
 
 

@@ -27,10 +27,7 @@ def remove_bodosql_calls(rhs, lives, call_list: list[pt.Any]) -> bool:
     """
     import bodosql
 
-    if call_list[-1] == bodosql:
-        return True
-
-    return False
+    return call_list[-1] == bodosql
 
 
 numba.core.ir_utils.remove_call_handlers.append(remove_bodosql_calls)

@@ -7,8 +7,8 @@ import argparse
 import os
 
 import pyarrow as pa
-import pyarrow.fs as fs
 import pyarrow.parquet as pq
+from pyarrow import fs
 
 
 def get_filesystem_and_path(path):

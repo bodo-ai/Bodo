@@ -722,7 +722,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         self,
         vector_bucket_name: str,
         index_name: str,
-        region: str = None,
+        region: str | None = None,
     ) -> None:
         """
         Write the DataFrame to S3 Vectors storage.
@@ -850,7 +850,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         storage_options=None,
     ):
         # Import compiler lazily
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.utils.typing import check_unsupported_args
         # argument defaults should match that of to_csv_overload in pd_dataframe_ext.py
 
@@ -1309,13 +1309,12 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
             and isinstance(key, str)
             and isinstance(value, BodoSeries)
             and value.is_lazy_plan()
-        ):
-            if (
-                new_plan := _get_set_column_plan(self._plan, value._plan, key)
-            ) is not None:
-                head_val = value._head_s
-                self._update_setitem_internal_state(new_plan, key, head_val)
-                return
+        ) and (
+            new_plan := _get_set_column_plan(self._plan, value._plan, key)
+        ) is not None:
+            head_val = value._head_s
+            self._update_setitem_internal_state(new_plan, key, head_val)
+            return
 
         # Match cases like df["B"] = 1
         if (
@@ -1422,7 +1421,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 followed by the errors.
         """
         # Import compiler lazily
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
         from bodo.hiframes.table import TableType
         from bodo.pandas.utils_jit import (
             cpp_table_to_df_jit,
@@ -1613,7 +1612,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         # stack you need to go to find the referenced variable.
 
         # Import compiler lazily
-        import bodo.decorators  # isort:skip # noqa
+        import bodo.decorators  # isort:skip
 
         bodo.spawn.utils.import_compiler_on_workers()
 
@@ -1822,9 +1821,8 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                 "DataFrame.sort_values(): argument na_position iterable does not contain only 'first' or 'last'"
             )
 
-        if kind is not None:
-            if bodo.dataframe_library_warn:
-                warnings.warn("sort_values() kind argument ignored")
+        if kind is not None and bodo.dataframe_library_warn:
+            warnings.warn("sort_values() kind argument ignored")
 
         # Apply singular ascending param to all columns.
         if len(by) != len(ascending):
@@ -1844,7 +1842,7 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
                     f"DataFrame.sort_values(): lengths of by {len(by)} and na_position {len(na_position)}"
                 )
         # Convert to True/False list instead of str.
-        na_position = [True if x == "first" else False for x in na_position]
+        na_position = [x == "first" for x in na_position]
 
         if any(col not in self.columns for col in by):
             raise BodoLibNotImplementedException(

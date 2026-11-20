@@ -806,7 +806,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         f_args = args[2] if len(args) > 2 else kws.pop("args", None)
 
         # add dummy default value for UDF kws to avoid errors
-        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws)
         func_text = f"def map_stub(arg, na_action=None, args=(), {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -838,7 +838,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         )
 
         # add dummy default value for UDF kws to avoid errors
-        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws)
         func_text = f"def apply_stub(func, convert_dtype=True, args=(), {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -927,7 +927,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
 # pd.Series supports all operators except << and >>
 series_binary_ops = tuple(
     op
-    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map
     if op not in (operator.lshift, operator.rshift)
 )
 
@@ -936,7 +936,7 @@ series_binary_ops = tuple(
 # a different type (output of integer division is float)
 series_inplace_binary_ops = tuple(
     op
-    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map
     if op not in (operator.ilshift, operator.irshift, operator.itruediv)
 )
 

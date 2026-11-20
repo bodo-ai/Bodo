@@ -34,7 +34,7 @@ definition or the columns of a DataFrame. For example:
 def f(filename):
     df1 = pd.read_parquet(filename)
     bc = bodosql.BodoSQLContext({"table1": df1})
-    return bc.sql("SELECT A FROM \"table1\"")
+    return bc.sql('SELECT A FROM "table1"')
 ```
 
 Similarly if you want an alias to be case sensitive then you will also need it to be wrapped in quotes:

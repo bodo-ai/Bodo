@@ -12,6 +12,7 @@ Save following code in `get_rank.py` file and run with multiple cores.
 ```py
 import bodo
 
+
 @bodo.jit
 def run_in_parallel():
     # some work only on rank 0
@@ -20,6 +21,8 @@ def run_in_parallel():
 
     # some work on every process
     print("rank", bodo.get_rank(), "here")
+
+
 run_in_parallel()
 ```
 

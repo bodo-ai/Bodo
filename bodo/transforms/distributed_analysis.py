@@ -134,7 +134,7 @@ class DistributedDiagnostics:
     def _print_dists(self, level, metadata):
         print("Data distributions:")
         if len(self.array_dists) > 0:
-            arrname_width = max(len(a) for a in self.array_dists.keys())
+            arrname_width = max(len(a) for a in self.array_dists)
             arrname_width = max(arrname_width + 3, 20)
             printed_vars = set()
             for arr, dist in self.array_dists.items():
@@ -155,7 +155,6 @@ class DistributedDiagnostics:
                 print(f"   {p:<20} {dist}")
         else:
             print("No parfors to distribute.")
-        return
 
     # NOTE: adding metadata as input instead of attribute to avoid circular dependency
     # since DistributedDiagnostics object is inside metadata
@@ -299,15 +298,14 @@ class DistributedAnalysis:
             (array_dists or parfor_dists)
             and all(is_REP(d) for d in array_dists.values())
             and all(d == Distribution.REP for d in parfor_dists.values())
-        ):
-            if bodo.get_rank() == 0:
-                warnings.warn(
-                    BodoWarning(
-                        f"No parallelism found for function "
-                        f"'{self.func_ir.func_id.func_name}'. Distributed diagnostics:"
-                        f"\n{self._get_diag_info_str()}"
-                    )
+        ) and bodo.get_rank() == 0:
+            warnings.warn(
+                BodoWarning(
+                    f"No parallelism found for function "
+                    f"'{self.func_ir.func_id.func_name}'. Distributed diagnostics:"
+                    f"\n{self._get_diag_info_str()}"
                 )
+            )
 
         self.metadata["distributed_diagnostics"] = DistributedDiagnostics(
             self.parfor_locs,
@@ -869,7 +867,6 @@ class DistributedAnalysis:
         unwrap_parfor_blocks(parfor)
         if self.in_parallel_parfor == parfor.id:
             self.in_parallel_parfor = -1
-        return
 
     def _get_parfor_reduce_dists(self, parfor, out_dist, array_dists):
         """analyze parfor reductions like concat that can affect parfor distribution
@@ -2562,20 +2559,12 @@ class DistributedAnalysis:
             in_table = rhs.args[0].name
             in_extra_arrs = rhs.args[1].name
 
-            in_table_dist = (
-                array_dists[in_table]
-                if in_table in array_dists
-                else [Distribution.OneD]
-            )
+            in_table_dist = array_dists.get(in_table, [Distribution.OneD])
             # input "table" could be a tuple of arrays (list of distributions)
             in_table_dist = (
                 in_table_dist if isinstance(in_table_dist, list) else [in_table_dist]
             )
-            in_extra_arrs_dist = (
-                array_dists[in_extra_arrs]
-                if in_extra_arrs in array_dists
-                else [Distribution.OneD]
-            )
+            in_extra_arrs_dist = array_dists.get(in_extra_arrs, [Distribution.OneD])
             in_dists = in_extra_arrs_dist + in_table_dist
 
             min_dist = Distribution(
@@ -4679,7 +4668,6 @@ def propagate_assign(array_dists: dict[str, Distribution], nodes: list[ir.Stmt])
                 array_dists[rhs] = array_dists[lhs]
             elif rhs in array_dists and lhs not in array_dists:
                 array_dists[lhs] = array_dists[rhs]
-    return
 
 
 def _is_transposed_array(func_ir, arr):

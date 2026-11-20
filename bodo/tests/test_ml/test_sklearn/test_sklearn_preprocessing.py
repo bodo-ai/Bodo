@@ -449,10 +449,6 @@ def gen_sklearn_scalers_edge_case(
             gen_sklearn_scalers_random_data(40, 5, 0.1, 3),
         ),
         (
-            gen_sklearn_scalers_random_data(20, 3),
-            gen_sklearn_scalers_random_data(100, 3),
-        ),
-        (
             csr_matrix(gen_sklearn_scalers_random_data(20, 3)),
             csr_matrix(gen_sklearn_scalers_random_data(100, 3)),
         ),

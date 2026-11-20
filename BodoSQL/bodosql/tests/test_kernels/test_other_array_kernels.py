@@ -190,10 +190,7 @@ def test_boolnot(boolean_numerical_scalar_vector, memory_leak_check):
     def boolnot_scalar_fn(A):
         if pd.isna(A):
             return None
-        if A == 0:
-            return True
-        else:
-            return False
+        return A == 0
 
     boolxor_answer_0 = vectorized_sol(
         (boolean_numerical_scalar_vector[0],), boolnot_scalar_fn, pd.BooleanDtype()

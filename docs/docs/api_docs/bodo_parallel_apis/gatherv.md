@@ -17,11 +17,13 @@ Collect distributed data manually by *gathering* them into a single rank.
 import bodo
 import pandas as pd
 
+
 @bodo.jit
 def mean_power():
     df = pd.read_parquet("data/cycling_dataset.pq")
     df = bodo.gatherv(df, root=1)
     print(df)
+
 
 mean_power()
 ```

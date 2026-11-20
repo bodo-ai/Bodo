@@ -830,10 +830,10 @@ def test_div0_scalars():
                     "B": pd.array(
                         [
                             Decimal("2.57"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                             Decimal("5.25"),
-                            Decimal("0"),
+                            Decimal(0),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
                     ),
@@ -842,8 +842,8 @@ def test_div0_scalars():
             pd.array(
                 [
                     Decimal("-0.480350194553"),
-                    Decimal("0"),
-                    Decimal("0"),
+                    Decimal(0),
+                    Decimal(0),
                     Decimal("-59.659458304762"),
                     None,
                 ],
@@ -901,10 +901,10 @@ def test_div0null_cols(df, ans, request):
                     "B": pd.array(
                         [
                             Decimal("2.57"),
-                            Decimal("0"),
+                            Decimal(0),
                             None,
                             Decimal("5.25"),
-                            Decimal("0"),
+                            Decimal(0),
                         ],
                         dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
                     ),
@@ -913,8 +913,8 @@ def test_div0null_cols(df, ans, request):
             pd.array(
                 [
                     Decimal("1.7655"),
-                    Decimal("0"),
-                    Decimal("0"),
+                    Decimal(0),
+                    Decimal(0),
                     Decimal("-310.2121561"),
                     None,
                 ],
@@ -1392,7 +1392,7 @@ def round_data(request):
     ],
 )
 def test_round(round_data, use_case, memory_leak_check):
-    ctx, scale_str, answer = round_data
+    ctx, scale_str, _answer = round_data
     if use_case:
         query = f"SELECT CASE WHEN A < -999999 THEN NULL ELSE ROUND(A{scale_str}) END FROM table1"
     else:

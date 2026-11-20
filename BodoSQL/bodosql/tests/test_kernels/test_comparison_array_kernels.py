@@ -159,10 +159,10 @@ def test_comparison_funcs_optional_types(comparison_func_name, memory_leak_check
     test_impl = loc_vars["test_impl"]
     arg0 = 27
     arg1 = 54
-    scalar_answer = (
-        True
-        if comparison_func_name in ("not_equal", "less_than", "less_than_or_equal")
-        else False
+    scalar_answer = comparison_func_name in (
+        "not_equal",
+        "less_than",
+        "less_than_or_equal",
     )
     for flag0 in [True, False]:
         for flag1 in [True, False]:

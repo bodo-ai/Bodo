@@ -14,7 +14,7 @@ def get_metadata_path(warehouse_loc: str, db_schema: str, table_name: str):
     directory = os.path.join(warehouse_loc, db_schema, table_name, "metadata")
     # We need to find all files that match v{i}.metadata.json and select the highest i
     files = os.listdir(directory)
-    pat = re.compile("v(\d+).metadata.json")
+    pat = re.compile(r"v(\d+).metadata.json")
     candidate_files = [f for f in files if pat.match(f)]
     if len(candidate_files) == 0:
         raise ValueError(f"No metadata files found in {directory}")

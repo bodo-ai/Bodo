@@ -85,7 +85,7 @@ class TestDataFrame(unittest.TestCase):
         def test_impl(n):
             df = pd.DataFrame(
                 {"A": np.zeros(n), "B": np.ones(n)},
-                index=range(0, n),
+                index=range(n),
                 columns=["A", "B"],
             )
             return df

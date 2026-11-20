@@ -137,9 +137,9 @@ def overload_series_dtype(s):
     if s.dtype == bodo.types.string_type:
         raise BodoError("Series.dtype not supported for string Series yet")
 
-    return lambda s: bodo.hiframes.pd_series_ext.get_series_data(
-        s
-    ).dtype  # pragma: no cover
+    return lambda s: (
+        bodo.hiframes.pd_series_ext.get_series_data(s).dtype
+    )  # pragma: no cover
 
 
 @overload_attribute(HeterogeneousSeriesType, "shape", jit_options={"cache": True})
@@ -182,8 +182,8 @@ def overload_series_hasnans(s):
 @overload_attribute(HeterogeneousSeriesType, "empty", jit_options={"cache": True})
 @overload_attribute(SeriesType, "empty", jit_options={"cache": True})
 def overload_series_empty(s):
-    return (
-        lambda s: len(bodo.hiframes.pd_series_ext.get_series_data(s)) == 0
+    return lambda s: (
+        len(bodo.hiframes.pd_series_ext.get_series_data(s)) == 0
     )  # pragma: no cover
 
 
@@ -579,9 +579,8 @@ def overload_series_equals(S, other):
             if (test1 and not test2) or (not test1 and test2):
                 val = 1
             else:
-                if not test1:
-                    if A1[i] != A2[i]:
-                        val = 1
+                if not test1 and A1[i] != A2[i]:
+                    val = 1
             count += val
         return count == 0
 
@@ -1679,9 +1678,9 @@ def overload_series_is_monotonic_decreasing(S):
 @overload_attribute(SeriesType, "nbytes", inline="always", jit_options={"cache": True})
 def overload_series_nbytes(S):
     """Support Series.nbytes. It returns nbytes for data only (without index)"""
-    return lambda S: bodo.hiframes.pd_series_ext.get_series_data(
-        S
-    ).nbytes  # pragma: no cover
+    return lambda S: (
+        bodo.hiframes.pd_series_ext.get_series_data(S).nbytes
+    )  # pragma: no cover
 
 
 @overload_method(
@@ -1721,12 +1720,8 @@ def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=N
     if not is_overload_bool(skipna):
         raise BodoError("Series.median(): skipna argument must be a boolean")
 
-    return (
-        lambda S,
-        axis=None,
-        skipna=True,
-        level=None,
-        numeric_only=None: bodo.libs.array_ops.array_op_median(
+    return lambda S, axis=None, skipna=True, level=None, numeric_only=None: (
+        bodo.libs.array_ops.array_op_median(
             bodo.hiframes.pd_series_ext.get_series_data(S), skipna
         )
     )  # pragma: no cover
@@ -1813,8 +1808,7 @@ def overload_series_clip(
         return (
             is_overload_constant_nan(bound)
             or is_scalar_type(bound)
-            or isinstance(bound, SeriesType)
-            or isinstance(bound, types.Array)
+            or isinstance(bound, (SeriesType, types.Array))
         )
 
     if not (bound_type_check(lower) and element_type_check(S, lower)):
@@ -3603,7 +3597,7 @@ def overload_series_fillna(
         raise BodoError('Series.fillna(): "value" parameter cannot be a list')
     # Pandas doesn't support fillna for non-scalar values as of 1.1.0
     # TODO(ehsan): revisit when supported in Pandas
-    elif is_var_size_item_array_type(S.data) and not S.dtype == bodo.types.string_type:
+    elif is_var_size_item_array_type(S.data) and S.dtype != bodo.types.string_type:
         raise BodoError(
             f"Series.fillna() with inplace=True not supported for {S.dtype} values yet."
         )
@@ -3649,14 +3643,10 @@ def overload_series_fillna(
             # optimization: just set null bit if fill is empty
             if is_overload_constant_str(value) and get_overload_const_str(value) == "":
                 return (
-                    lambda S,
-                    value=None,
-                    method=None,
-                    axis=None,
-                    inplace=False,
-                    limit=None,
-                    downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
-                        bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                    lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: (
+                        bodo.libs.str_arr_ext.set_null_bits_to_value(
+                            bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                        )
                     )
                 )
 
@@ -3672,14 +3662,10 @@ def overload_series_fillna(
                 and get_overload_const_bytes(value) == b""
             ):
                 return (
-                    lambda S,
-                    value=None,
-                    method=None,
-                    axis=None,
-                    inplace=False,
-                    limit=None,
-                    downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
-                        bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                    lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: (
+                        bodo.libs.str_arr_ext.set_null_bits_to_value(
+                            bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                        )
                     )
                 )
 
@@ -4603,11 +4589,16 @@ def _validate_self_other_mask_where(
 
     # Bodo Limitation. Where/Mask is only supported for string/binary arrays, categorical + scalar, and numpy arrays
     if not (
-        isinstance(arr, types.Array)
-        or isinstance(arr, BooleanArrayType)
-        or isinstance(arr, IntegerArrayType)
-        or isinstance(arr, FloatingArrayType)
-        or isinstance(arr, bodo.types.DatetimeArrayType)
+        isinstance(
+            arr,
+            (
+                types.Array,
+                BooleanArrayType,
+                IntegerArrayType,
+                FloatingArrayType,
+                bodo.types.DatetimeArrayType,
+            ),
+        )
         or arr == bodo.types.timedelta_array_type
         or (
             bodo.utils.utils.is_array_typ(arr, False)
@@ -5416,12 +5407,8 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
 
     # optimized path for dict-encoded string arrays
     if arg_a == bodo.types.dict_str_arr_type:
-        return (
-            lambda arg_a,
-            errors="raise",
-            downcast=None: bodo.libs.dict_arr_ext.dict_arr_to_numeric(
-                arg_a, errors, downcast
-            )
+        return lambda arg_a, errors="raise", downcast=None: (
+            bodo.libs.dict_arr_ext.dict_arr_to_numeric(arg_a, errors, downcast)
         )  # pragma: no cover
 
     _arr_typ = (
@@ -5599,13 +5586,14 @@ def overload_np_where(condition, x, y):
         out_dtype = types.Array(x_dtype, 1, "C")
     elif y_dtype in [bodo.types.timedelta64ns, bodo.types.datetime64ns]:
         out_dtype = types.Array(y_dtype, 1, "C")
-    elif isinstance(x_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+    elif isinstance(
+        x_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+    ) or isinstance(y_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
         out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
-    elif isinstance(y_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
-        out_dtype = types.Array(bodo.types.datetime64ns, 1, "C")
-    elif x_dtype == bodo.types.pd_timedelta_type:
-        out_dtype = types.Array(bodo.types.timedelta64ns, 1, "C")
-    elif y_dtype == bodo.types.pd_timedelta_type:
+    elif (
+        x_dtype == bodo.types.pd_timedelta_type
+        or y_dtype == bodo.types.pd_timedelta_type
+    ):
         out_dtype = types.Array(bodo.types.timedelta64ns, 1, "C")
     else:
         # similar to np.where typer of Numba
@@ -5770,11 +5758,16 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
     # Largely copied from bodo's np.where typechecker, which np.select depends upon.
     # Where/Mask is only supported for string/binary arrays, and numpy arrays
     if not (
-        isinstance(choicelist_array_typ, types.Array)
-        or isinstance(choicelist_array_typ, BooleanArrayType)
-        or isinstance(choicelist_array_typ, IntegerArrayType)
-        or isinstance(choicelist_array_typ, FloatingArrayType)
-        or isinstance(choicelist_array_typ, bodo.types.DatetimeArrayType)
+        isinstance(
+            choicelist_array_typ,
+            (
+                types.Array,
+                BooleanArrayType,
+                IntegerArrayType,
+                FloatingArrayType,
+                bodo.types.DatetimeArrayType,
+            ),
+        )
         or choicelist_array_typ == bodo.types.timedelta_array_type
         or (
             bodo.utils.utils.is_array_typ(choicelist_array_typ, False)

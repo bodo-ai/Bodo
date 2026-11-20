@@ -160,41 +160,41 @@ from bodo.tests.utils import (
                     [
                         {"A": [Decimal("1.0"), Decimal("2.2")], "B": [Decimal("4.14")]},
                         {
-                            "A": [Decimal("0"), Decimal("3.2"), Decimal("4")],
-                            "B": [Decimal("-1")],
+                            "A": [Decimal(0), Decimal("3.2"), Decimal(4)],
+                            "B": [Decimal(-1)],
                         },
                         {
-                            "A": [Decimal("5")],
-                            "B": [Decimal("644"), Decimal("9.1"), Decimal("154")],
+                            "A": [Decimal(5)],
+                            "B": [Decimal(644), Decimal("9.1"), Decimal(154)],
                         },
                         {
                             "A": [Decimal("10.0"), Decimal("13.4")],
                             "B": [Decimal("3.14159")],
                         },
                         {
-                            "A": [Decimal("30"), Decimal("5.2")],
-                            "B": [Decimal("0"), Decimal("2")],
+                            "A": [Decimal(30), Decimal("5.2")],
+                            "B": [Decimal(0), Decimal(2)],
                         },
                         {
-                            "A": [Decimal("-1"), None, Decimal("-3")],
-                            "B": [Decimal("60")],
+                            "A": [Decimal(-1), None, Decimal(-3)],
+                            "B": [Decimal(60)],
                         },
                     ]
                 ),
                 np.array(
                     [
                         {
-                            "A": [Decimal("2.78"), Decimal("3"), Decimal("2")],
-                            "B": [Decimal("45")],
+                            "A": [Decimal("2.78"), Decimal(3), Decimal(2)],
+                            "B": [Decimal(45)],
                         },
-                        {"A": [Decimal("-1"), Decimal("-10")], "B": [Decimal("4568")]},
+                        {"A": [Decimal(-1), Decimal(-10)], "B": [Decimal(4568)]},
                         {
-                            "A": [Decimal("11"), None, Decimal("-44.7")],
-                            "B": [Decimal("33")],
+                            "A": [Decimal(11), None, Decimal("-44.7")],
+                            "B": [Decimal(33)],
                         },
                         {"A": [Decimal("10.4")], "B": [Decimal("20.6")]},
-                        {"A": [Decimal("3.5"), Decimal("5.5")], "B": [Decimal("4")]},
-                        {"A": [Decimal("1")], "B": [Decimal("7"), None]},
+                        {"A": [Decimal("3.5"), Decimal("5.5")], "B": [Decimal(4)]},
+                        {"A": [Decimal(1)], "B": [Decimal(7), None]},
                     ]
                 ),
             ),
@@ -1150,16 +1150,16 @@ def test_interval_join_detection(memory_leak_check):
             (
                 pd.DataFrame(
                     {
-                        "P": np.array([Decimal(1.21), Decimal(2.37), None] * 3),
+                        "P": np.array([Decimal("1.21"), Decimal("2.37"), None] * 3),
                         "E": np.array(
                             [
                                 None,
-                                Decimal(-1.0),
-                                Decimal(2.4),
+                                Decimal("-1.0"),
+                                Decimal("2.4"),
                                 None,
-                                Decimal(6.0),
-                                Decimal(7.3),
-                                Decimal(1.1),
+                                Decimal("6.0"),
+                                Decimal("7.3"),
+                                Decimal("1.1"),
                                 None,
                                 None,
                             ]
@@ -1170,15 +1170,21 @@ def test_interval_join_detection(memory_leak_check):
                 pd.DataFrame(
                     {
                         "A": np.array(
-                            [Decimal(1.0), Decimal(2.0), Decimal(3.0), Decimal(4.0)] * 5
+                            [
+                                Decimal("1.0"),
+                                Decimal("2.0"),
+                                Decimal("3.0"),
+                                Decimal("4.0"),
+                            ]
+                            * 5
                         ),
                         "B": np.array(
                             [
-                                Decimal(1.1),
-                                Decimal(2.2),
-                                Decimal(3.3),
-                                Decimal(4.4),
-                                Decimal(5.5),
+                                Decimal("1.1"),
+                                Decimal("2.2"),
+                                Decimal("3.3"),
+                                Decimal("4.4"),
+                                Decimal("5.5"),
                             ]
                             * 4
                         ),
@@ -3906,7 +3912,6 @@ def test_join_deadcode_cleanup(memory_leak_check):
 
     def test_impl(df1, df2):  # pragma: no cover
         df1.merge(df2, on=["A"])
-        return
 
     def test_impl_with_join(df1, df2):  # pragma: no cover
         df3 = df1.merge(df2, on=["A"])

@@ -31,10 +31,7 @@ import bodosql
 
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
-df = pd.DataFrame({
-    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-    "B": np.arange(NUM_ROWS)
-})
+df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
 df.to_parquet("my_data.pq")
 ```
 
@@ -43,11 +40,7 @@ df.to_parquet("my_data.pq")
 Now let's create a local in-memory SQL table from the Parquet file. We can use the [`TablePATH` API][tablepath-api] to register the table into our [`BodoSQLContext`][bodosqlcontext-api].
 
 ```python
-bc = bodosql.BodoSQLContext(
-    {
-        "TABLE1": bodosql.TablePath("my_data.pq", "parquet")
-    }
-)
+bc = bodosql.BodoSQLContext({"TABLE1": bodosql.TablePath("my_data.pq", "parquet")})
 ```
 
 ## Write a SQL Query
@@ -72,18 +65,11 @@ import bodosql
 NUM_GROUPS = 30
 NUM_ROWS = 20_000_000
 
-df = pd.DataFrame({
-    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
-    "B": np.arange(NUM_ROWS)
-})
+df = pd.DataFrame({"A": np.arange(NUM_ROWS) % NUM_GROUPS, "B": np.arange(NUM_ROWS)})
 
 df.to_parquet("my_data.pq")
 
-bc = bodosql.BodoSQLContext(
-    {
-        "TABLE1": bodosql.TablePath("my_data.pq", "parquet")
-    }
-)
+bc = bodosql.BodoSQLContext({"TABLE1": bodosql.TablePath("my_data.pq", "parquet")})
 
 df1 = bc.sql("SELECT SUM(A) as SUM_OF_COLUMN_A FROM TABLE1 WHERE B > 4")
 print(df1)

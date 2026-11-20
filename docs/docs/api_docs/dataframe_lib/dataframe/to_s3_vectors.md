@@ -26,27 +26,30 @@ import json
 
 bedrock = boto3.client("bedrock-runtime", region_name="us-east-2")
 texts = [
-    "Star Wars: A farm boy joins rebels to fight an evil empire in space", 
+    "Star Wars: A farm boy joins rebels to fight an evil empire in space",
     "Jurassic Park: Scientists create dinosaurs in a theme park that goes wrong",
-    "Finding Nemo: A father fish searches the ocean to find his lost son"
+    "Finding Nemo: A father fish searches the ocean to find his lost son",
 ]
 
 embeddings = []
 for text in texts:
     response = bedrock.invoke_model(
-        modelId="amazon.titan-embed-text-v2:0",
-        body=json.dumps({"inputText": text})
+        modelId="amazon.titan-embed-text-v2:0", body=json.dumps({"inputText": text})
     )
     response_body = json.loads(response["body"].read())
     embeddings.append(response_body["embedding"])
 
-df = pd.DataFrame({"key": ["Star Wars", "Jurassic Park", "Finding Nemo"],
-                   "data": embeddings,
-                   "texts": texts})
+df = pd.DataFrame(
+    {
+        "key": ["Star Wars", "Jurassic Park", "Finding Nemo"],
+        "data": embeddings,
+        "texts": texts,
+    }
+)
 df["metadata"] = [
     {"source_text": texts[0], "genre": "scifi"},
     {"source_text": texts[1], "genre": "scifi"},
-    {"source_text": texts[2], "genre": "family"}
+    {"source_text": texts[2], "genre": "family"},
 ]
 
 
@@ -56,7 +59,6 @@ bdf.to_s3_vectors(
     index_name="my-test-ind",
     region="us-east-2",
 )
-
 ```
 
 ---

@@ -169,11 +169,13 @@ import bodo
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 @bodo.jit
 def dist_gather_test(n):
     X = np.arange(n)
     Y = 3 - np.cos(X)
     return bodo.gatherv(X[::10]), bodo.gatherv(Y[::10])  # gather every 10th element
+
 
 X_Sample, Y_Sample = dist_gather_test(1000)
 if bodo.get_rank() == 0:

@@ -18,10 +18,12 @@ Note that this example uses [SPMD launch mode][spmd].
 import bodo
 import pandas as pd
 
+
 @bodo.jit(spawn=False)
 def test_random_shuffle():
     df = pd.DataFrame({"A": range(100)})
     return df
+
 
 df = test_random_shuffle()
 print(df.head())

@@ -821,11 +821,7 @@ def determine_filter_cast(
     col_cast = ""
 
     # If we do series isin, then rhs_typ will be a list or set
-    if isinstance(rhs_typ, (types.List, types.Set)):
-        rhs_scalar_typ = rhs_typ.dtype
-    # If we do isin via the bodosql array kernel, then rhs_typ will be an array
-    # We enforce that this array is replicated, so it's safe to do pushdown
-    elif is_array_typ(rhs_typ):
+    if isinstance(rhs_typ, (types.List, types.Set)) or is_array_typ(rhs_typ):
         rhs_scalar_typ = rhs_typ.dtype
     else:
         rhs_scalar_typ = rhs_typ

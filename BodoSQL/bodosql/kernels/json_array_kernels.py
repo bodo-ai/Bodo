@@ -176,9 +176,8 @@ def parse_single_json_map(s):
                     return None
 
             # FINISH
-            elif state == 9:
-                if not char.isspace():
-                    return None
+            elif state == 9 and not char.isspace():
+                return None
 
         # Output the map so long as we ended up in the FINISH phase
         return result if state == 9 else None
@@ -696,7 +695,6 @@ def overload_get_path(data, path, is_scalar=False):  # pragma: no cover
 
 def get_path_util(data, path, is_scalar):  # pragma: no cover
     """dummy method for overload"""
-    pass
 
 
 @overload(get_path_util, no_unliteral=True)
@@ -716,7 +714,7 @@ def overload_get_path_util(data, path, is_scalar):
         if target_index >= 0:
             func_text += f"  tmp{i + 1} = bodosql.kernels.arr_get(tmp{i}, {target_index}, is_scalar_arr={is_scalar_bool})\n"
         else:
-            func_text += f"  tmp{i + 1} = bodosql.kernels.json_array_kernels.get_field(tmp{i}, {repr(target_key)}, {is_scalar_bool})\n"
+            func_text += f"  tmp{i + 1} = bodosql.kernels.json_array_kernels.get_field(tmp{i}, {target_key!r}, {is_scalar_bool})\n"
     func_text += f"  return tmp{len(path_parts)}\n"
 
     loc_vars = {}
@@ -727,7 +725,6 @@ def overload_get_path_util(data, path, is_scalar):
 
 def get_field(data, key, is_scalar, ignore_case=False):  # pragma: no cover
     """dummy method for overload"""
-    pass
 
 
 @overload(get_field, no_unliteral=True)
@@ -752,7 +749,6 @@ def overload_get_field(data, field, is_scalar, ignore_case=False):  # pragma: no
 
 def get_field_util(data, field, is_scalar, ignore_case):  # pragma: no cover
     """dummy method for overload"""
-    pass
 
 
 @overload(get_field_util, no_unliteral=True)
@@ -809,10 +805,12 @@ def overload_get_field_util(data, field, is_scalar, ignore_case):
             scalar_text += "bodo.libs.array_kernels.setna(res, i)\n"
         else:
             out_dtype = json_type.data[field_pos]
-            scalar_text += f"if bodo.libs.struct_arr_ext.is_field_value_null(arg0, {repr(key_str)}):\n"
+            scalar_text += (
+                f"if bodo.libs.struct_arr_ext.is_field_value_null(arg0, {key_str!r}):\n"
+            )
             scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
             scalar_text += "else:\n"
-            scalar_text += f"  res[i] = arg0[{repr(key_str)}]\n"
+            scalar_text += f"  res[i] = arg0[{key_str!r}]\n"
     elif map_mode:
         out_dtype = bodo.utils.typing.to_nullable_type(json_type.value_arr_type)
         scalar_text += "keys = list(arg0)\n"
@@ -916,8 +914,8 @@ def overload_object_insert_util(
 
     # If the input is null, just return it.
     if json_type == bodo.types.none or json_type == bodo.types.null_array_type:
-        return (
-            lambda data, new_field_name, new_field_value, update, is_scalar: data
+        return lambda data, new_field_name, new_field_value, update, is_scalar: (
+            data
         )  # pragma: no cover
 
     arg_names = ["data", "new_field_name", "new_field_value", "update", "is_scalar"]

@@ -279,7 +279,7 @@ def init_datetime_array(typingctx, data, null_bitmap, tz):
     """
 
     def codegen(context, builder, sig, args):
-        data, null_bitmap, tz = args
+        data, null_bitmap, _tz = args
 
         pd_dt_arr = cgutils.create_struct_proxy(sig.return_type)(context, builder)
         pd_dt_arr.data = data
@@ -516,8 +516,7 @@ def overload_setitem(A, ind, val):
 
     # Check the possible values
     if not (
-        isinstance(val, DatetimeArrayType)
-        or isinstance(val, bodo.types.PandasTimestampType)
+        isinstance(val, (DatetimeArrayType, bodo.types.PandasTimestampType))
         or val == bodo.types.datetime64ns
         or val == bodo.types.datetime_datetime_type
         or val == types.Array(bodo.types.datetime64ns, 1, "C")

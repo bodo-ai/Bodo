@@ -137,7 +137,7 @@ def test_h5_file_keys(datapath, memory_leak_check):
     def test_impl():
         f = h5py.File(fname, "r")
         s = 0
-        for gname in f.keys():
+        for gname in f:
             X = f[gname]["data"][:]
             s += X.sum()
         f.close()
@@ -157,7 +157,7 @@ def test_h5_group_keys(datapath, memory_leak_check):
         f = h5py.File(fname, "r")
         g1 = f["G"]
         s = 0
-        for dname in g1.keys():
+        for dname in g1:
             X = g1[dname][:]
             s += X.sum()
         f.close()

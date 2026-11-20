@@ -16,7 +16,7 @@ across all arrays.
 def arr_type(request):
     """Lazy fixture to avoid importing JIT in certain tests."""
     # import the compiler
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     name = request.param
     mapping = {

@@ -59,12 +59,12 @@ to `func` with fallback to Python described above. Use engine='python' to avoid 
 import bodo.pandas as bd
 
 bdf = bd.DataFrame(
-        {
-            "a": bd.array([1, 2, 3] * 4, "Int64"),
-            "b": bd.array([4, 5, 6] * 4, "Int64"),
-            "c": ["a", "b", "c"] * 4,
-        },
-    )
+    {
+        "a": bd.array([1, 2, 3] * 4, "Int64"),
+        "b": bd.array([4, 5, 6] * 4, "Int64"),
+        "c": ["a", "b", "c"] * 4,
+    },
+)
 
 out_bodo = bdf.apply(lambda x: x["a"] + 1, axis=1)
 

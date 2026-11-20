@@ -638,7 +638,6 @@ class DistributedAnalysisCallRegistry:
 
 def no_op_analysis(ctx, inst):
     """Handler that doesn't change any distributions"""
-    pass
 
 
 def meet_out_first_arg_analysis(ctx, inst):

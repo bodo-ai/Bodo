@@ -115,8 +115,7 @@ def parse_snowflake_conn_str(
     if u.path:
         # path contains "database_name/schema_name"
         path = u.path
-        if path.startswith("/"):
-            path = path[1:]
+        path = path.removeprefix("/")
         parts = path.split("/")
         if len(parts) == 2:
             database, schema = parts
@@ -190,7 +189,7 @@ def get_snowflake_connection_string(
     schema: str,
     username: str,
     account: str,
-    params: dict[str, str] = None,
+    params: dict[str, str] | None = None,
     password: str | None = None,
 ) -> str:
     if params is None:

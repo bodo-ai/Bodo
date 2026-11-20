@@ -12,9 +12,9 @@ Gather data from all ranks and send to all, effectively replicating the data.
 ### Example Usage
     
 ```py
-
 import bodo
 import pandas as pd
+
 
 @bodo.jit
 def mean_power():
@@ -22,6 +22,7 @@ def mean_power():
     df = bodo.allgatherv(df)
     print(df)
     return df
+
 
 df = mean_power()
 ```

@@ -733,7 +733,7 @@ skips = [
 
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
-    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map:
         if op in skips:
             continue
         overload_impl = create_op_overload(op, 2)
@@ -748,7 +748,7 @@ _install_binary_ops()
 
 def _install_inplace_binary_ops():
     # install inplace binary ops such as iadd, isub, ...
-    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
+    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map:
         overload_impl = create_op_overload(op, 2)
         overload(op, no_unliteral=True)(overload_impl)
 
@@ -853,9 +853,7 @@ def get_nullable_array_unary_impl(op, A):
 def get_nullable_array_binary_impl(op, lhs, rhs):
     """generate implementation for binary operation on nullable integer, float, or boolean array"""
     # TODO: 1 ** np.nan is 1. So we have to unmask those.
-    inplace = (
-        op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
-    )
+    inplace = op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map
     is_lhs_scalar = isinstance(lhs, (types.Number, types.Boolean))
     is_rhs_scalar = isinstance(rhs, (types.Number, types.Boolean))
     # use type inference to get output dtype

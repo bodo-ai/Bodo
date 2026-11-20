@@ -262,6 +262,7 @@ def example_dot(N, D):
     z = np.dot(X, w)
     return z.sum()
 
+
 example_dot(1024, 10)
 example_dot.distributed_diagnostics()
 ```

@@ -44,7 +44,7 @@ def check_table_exists(polaris_connection, table_name, schema_name) -> bool:
     # These should only be run from rank 0, but we can't mark them as
     # run_rank0 since they are used in other run_rank0 functions
     assert bodo.get_rank() == 0
-    uri, warehouse, credential = polaris_connection
+    _uri, _warehouse, _credential = polaris_connection
     spark = get_spark(get_spark_catalog_for_connection(polaris_connection))
     tables = spark.sql(f"SHOW TABLES IN {schema_name} LIKE '{table_name}'").toPandas()
     return len(tables) == 1
@@ -194,7 +194,7 @@ def test_create_view_validates(polaris_catalog, polaris_connection, memory_leak_
             # drop created table and view so that the schema can be dropped
             @run_rank0
             def cleanup():
-                uri, warehouse, credential = polaris_connection
+                _uri, _warehouse, _credential = polaris_connection
                 spark = get_spark(get_spark_catalog_for_connection(polaris_connection))
                 spark.sql(f"DROP TABLE IF EXISTS {schema_1}.TABLE1")
                 spark.sql(f"DROP VIEW IF EXISTS {schema_1}.VIEW2")

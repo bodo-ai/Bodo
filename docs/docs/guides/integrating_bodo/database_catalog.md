@@ -74,6 +74,7 @@ To view the connection data stored in a catalog first connect to a cluster and t
 
 ```python
 import bodo_platform_utils
+
 bodo_platform_utils.catalog.get_data("catalog_name")
 ```
 

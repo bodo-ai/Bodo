@@ -307,7 +307,7 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
 def a(request):
     """Lazily construct arguments for comparison tests to avoid importing at
     collection time."""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     h, m, s, us, prec = request.param
     return bodo.types.Time(h, m, s, us, precision=prec)
@@ -317,7 +317,7 @@ def a(request):
 def b(request):
     """Lazily construct arguments for comparison tests to avoid importing at
     collection time."""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     h, m, s, us, prec = request.param
     return bodo.types.Time(h, m, s, us, precision=prec)

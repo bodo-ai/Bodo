@@ -16,7 +16,7 @@ from pandas import Series
 
 import bodo
 from bodo import BodoWarning
-from bodo.tests.dataframe_common import *  # noqa
+from bodo.tests.dataframe_common import *
 from bodo.tests.utils import (
     _get_dist_arg,
     check_func,
@@ -916,7 +916,7 @@ g_var = [3, 1, 5]
 
 def test_df_apply_wrap_python(memory_leak_check):
     """Test wrap_python function in df.apply()"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     @bodo.wrap_python(bodo.types.int64)
     def g3(r):
@@ -2414,7 +2414,7 @@ def test_loc_setitem(memory_leak_check):
 
 def test_loc_setitem_str(memory_leak_check):
     """test df.iloc[idx, col_ind] setitem for string array"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -2453,7 +2453,7 @@ def test_iat_getitem(df_value, memory_leak_check):
 
 def test_iat_setitem_all_types(df_value, memory_leak_check):
     """test df.iat[] setitem (single value)"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")
@@ -2623,7 +2623,7 @@ def test_df_drop_column_check(memory_leak_check):
 
 def test_df_fillna_str_inplace(memory_leak_check):
     """Make sure inplace fillna for string columns is reflected in output"""
-    import bodo.decorators  # noqa
+    import bodo.decorators
 
     if bodo.hiframes.boxing._use_dict_str_type:
         pytest.skip("not supported for dict string type")

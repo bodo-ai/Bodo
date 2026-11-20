@@ -19,12 +19,7 @@ this code reads column A into a nullable integer array (the capital "I"
 denotes nullable integer type):
 
 ``` py
-data = (
-    "11,1.2\n"
-    "-2,\n"
-    ",3.1\n"
-    "4,-0.1\n"
-)
+data = "11,1.2\n-2,\n,3.1\n4,-0.1\n"
 
 with open("data/data.csv", "w") as f:
     f.write(data)
@@ -33,8 +28,9 @@ with open("data/data.csv", "w") as f:
 @bodo.jit(distributed=["df"])
 def f():
     dtype = {"A": "Int64", "B": "float64"}
-    df = pd.read_csv("data/data.csv", dtype = dtype, names = dtype.keys())
+    df = pd.read_csv("data/data.csv", dtype=dtype, names=dtype.keys())
     return df
+
 
 f()
 ```
@@ -54,9 +50,11 @@ propagating.
 ```py
 S = pd.Series(pd.array([1, None, None, 3, 10], dtype="Int8"))
 
+
 @bodo.jit
 def map_copy(S):
     return S.map(lambda a: a if not pd.isna(a) else None)
+
 
 print(map_copy(S))
 ```
@@ -86,10 +84,12 @@ def gen_data():
     df["hr"] = df["hr"].astype(str)
     return df
 
+
 @bodo.jit(distributed=["df", "x"])
 def mean_power(df):
     x = df.hr.str[1:]
     return x
+
 
 df = gen_data()
 res = mean_power(df)
@@ -122,16 +122,19 @@ def gen_data():
     df["hr"] = df["hr"].astype(str)
     return df
 
+
 @bodo.jit(distributed=["df", "x"])
 def mean_power(df):
     x = df.hr.str[1:]
     return x
+
 
 @bodo.jit
 def f():
     df = gen_data()
     res = mean_power(df)
     print(res)
+
 
 f()
 ```
@@ -166,8 +169,9 @@ def f():
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     s = 0
     for c in df.columns:
-     s += df[c].sum()
+        s += df[c].sum()
     return s
+
 
 f()
 ```
@@ -189,6 +193,7 @@ applications. For example, `re` can be used in user-defined functions
 ```py
 import re
 
+
 @bodo.jit
 def f(S):
     def g(a):
@@ -200,6 +205,7 @@ def f(S):
         return res
 
     return S.map(g)
+
 
 S = pd.Series(["AABCDE", "BBABCE", "1234"])
 f(S)
@@ -430,7 +436,6 @@ supported in `jitclass` yet.
     },
     distributed=["df"],
 )
-
 class MyClass:
     def init(self, n, name):
         self.df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
@@ -462,6 +467,7 @@ def f():
     print(my_instance.sum())
     print(my_instance.sum_vals)
     print(my_instance.get_name())
+
 
 f()
 ```

@@ -81,4 +81,4 @@ if __name__ == "__main__":
         failed_tests = True
 
     if failed_tests:
-        exit(1)
+        sys.exit(1)

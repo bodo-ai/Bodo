@@ -35,11 +35,9 @@ Creates a DataFrameGroupBy object representing the data in the input DataFrame g
 ``` py
 import bodo.pandas as bd
 
-bdf1 = bd.DataFrame({
-    "A": ["foo", "foo", "bar", "bar"],
-    "B": [1, 1, 1, None],
-    "C": [1, 2, 3, 4]
-})
+bdf1 = bd.DataFrame(
+    {"A": ["foo", "foo", "bar", "bar"], "B": [1, 1, 1, None], "C": [1, 2, 3, 4]}
+)
 
 bdf2 = bdf1.groupby(["A", "B"]).sum()
 print(bdf2)

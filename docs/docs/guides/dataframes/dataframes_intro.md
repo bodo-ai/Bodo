@@ -123,7 +123,7 @@ Bodo can automatically push filters down to IO, which is useful as it avoids mat
 
 
 ```python
-filt = df[(df['PULocationID'] == 1) & (df['DOLocationID'] == 148)]
+filt = df[(df["PULocationID"] == 1) & (df["DOLocationID"] == 148)]
 
 print("Before optimizing:")
 print(filt._plan.generate_duckdb().toString())
@@ -163,13 +163,9 @@ Another optimization that Bodo can do is join reordering. In this example, we wa
 
 
 ```python
-df1 = pd.DataFrame(
-    {"A": [1,2,3,4,5]}
-)
+df1 = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
 
-df2 = pd.DataFrame(
-    {"B": [1,2,3,4,5] * 1000}
-)
+df2 = pd.DataFrame({"B": [1, 2, 3, 4, 5] * 1000})
 
 jn1 = df1.merge(df2, left_on="A", right_on="B")
 
@@ -241,7 +237,16 @@ Plan execution is triggered by operations like writing to a Parquet file or Iceb
 df = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_5M_rows.pq")
 
 # Selecting lists of columns returns a lazy DataFrame result
-df = df[["PULocationID", "DOLocationID", "base_passenger_fare", "trip_time", "tips", "pickup_datetime"]]
+df = df[
+    [
+        "PULocationID",
+        "DOLocationID",
+        "base_passenger_fare",
+        "trip_time",
+        "tips",
+        "pickup_datetime",
+    ]
+]
 
 # Selecting a single column returns a lazy BodoSeries
 trip_time = df.trip_time
@@ -267,7 +272,7 @@ By default, Bodo automatically raises a warning when an unsupported operation is
 
 
 ```python
-df = pd.DataFrame({"A": range(4), "B": range(1,5)})
+df = pd.DataFrame({"A": range(4), "B": range(1, 5)})
 
 # Unsupported function: transform
 df = df.transform(lambda x: x + 1)
@@ -297,34 +302,35 @@ def expensive_computation() -> pd.DataFrame:
     taxi_df["date"] = taxi_df.pickup_datetime.dt.date
 
     central_park_weather_observations = pd.read_csv(
-            "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
-            parse_dates=["DATE"],
-        )[["DATE", "PRCP"]]
+        "s3://bodo-example-data/nyc-taxi/central_park_weather.csv",
+        parse_dates=["DATE"],
+    )[["DATE", "PRCP"]]
     central_park_weather_observations["DATE"] = central_park_weather_observations[
         "DATE"
     ].dt.date
 
     central_park_weather_observations["date_with_precipitation"] = (
-            central_park_weather_observations["PRCP"] > 0.1
-        )
+        central_park_weather_observations["PRCP"] > 0.1
+    )
 
     taxi_weather = taxi_df.merge(
-            central_park_weather_observations,
-            left_on="date",
-            right_on="DATE",
-            how="left",
-        )
+        central_park_weather_observations,
+        left_on="date",
+        right_on="DATE",
+        how="left",
+    )
 
     weather_tips = taxi_weather.groupby(
-            [
-                "PULocationID",
-                "DOLocationID",
-                "date_with_precipitation",
-            ],
-            as_index=False,
-        ).agg(average_tip=("tips", "mean"))
+        [
+            "PULocationID",
+            "DOLocationID",
+            "date_with_precipitation",
+        ],
+        as_index=False,
+    ).agg(average_tip=("tips", "mean"))
 
     return weather_tips
+
 
 expensive = expensive_computation()
 
@@ -349,6 +355,7 @@ df = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_5M_rows.pq")
 
 df["hour"] = df.pickup_datetime.dt.hour
 
+
 def get_time_bucket(t):
     bucket = "other"
     if t in (8, 9, 10):
@@ -361,8 +368,8 @@ def get_time_bucket(t):
         bucket = "evening"
     return bucket
 
-print(df.hour.map(get_time_bucket).head(5))
 
+print(df.hour.map(get_time_bucket).head(5))
 ```
 
     0    other
@@ -379,6 +386,7 @@ If compilation fails, a warning will be printed and the function will execute in
 ```python
 def apply_with_python_fallback(row):
     return get_time_bucket(row.hour)
+
 
 print(df.apply(apply_with_python_fallback, axis=1).head(5))
 ```
@@ -408,7 +416,7 @@ If you wish to avoid JIT compilation and run directly in Python mode, you can pa
 
 
 ```python
-print(df.apply(apply_with_python_fallback, axis=1, engine='python').head(5))
+print(df.apply(apply_with_python_fallback, axis=1, engine="python").head(5))
 ```
 
     0    other
@@ -428,8 +436,10 @@ import bodo
 
 get_time_bucket_jit = bodo.jit(get_time_bucket, distributed=False, spawn=False)
 
+
 def apply_get_time_bucket(row):
     return get_time_bucket_jit(row.hour)
+
 
 print(df.apply(apply_get_time_bucket, axis=1).head(5))
 ```
@@ -448,12 +458,16 @@ You can also apply custom transformations on groups of data via `groupby.agg` or
 ```python
 df = pd.read_parquet("s3://bodo-example-data/nyc-taxi/fhvhv_5M_rows.pq")
 
+
 def get_small_tip_fraction(tips):
     total_count = len(tips)
     small_tip_count = len(tips[tips < 3])
     return small_tip_count / total_count
 
-agg = df.groupby(['PULocationID', 'DOLocationID']).agg(small_tip_fraction=('tips', get_small_tip_fraction))
+
+agg = df.groupby(["PULocationID", "DOLocationID"]).agg(
+    small_tip_fraction=("tips", get_small_tip_fraction)
+)
 
 agg.head()
 ```

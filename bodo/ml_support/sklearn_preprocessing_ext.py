@@ -275,7 +275,7 @@ def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
         if "Found unknown categories" in e.args[0]:
             fit_result_or_err = e
         else:
-            raise e
+            raise
 
     # If any rank raises a ValueError for unknown categories, re-raise that
     # error on all ranks to prevent deadlock on future MPI collective ops.

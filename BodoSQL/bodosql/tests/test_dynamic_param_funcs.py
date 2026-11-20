@@ -4,7 +4,7 @@ Test that Named Parameters can be used in various functions.
 
 import pytest
 
-from bodosql.tests.named_params_common import *  # noqa
+from bodosql.tests.named_params_common import *
 from bodosql.tests.utils import check_query
 
 

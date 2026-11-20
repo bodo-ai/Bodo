@@ -348,7 +348,7 @@ def gen_snowflake_schema(
 
         elif isinstance(col_type, bodo.types.MapArrayType):
             if (
-                not col_type.key_arr_type == bodo.types.string_array_type
+                col_type.key_arr_type != bodo.types.string_array_type
                 and bodo.get_rank() == 0
             ):
                 warning = BodoWarning(
@@ -449,7 +449,7 @@ def execute_query(
         if "SQL execution canceled" in str(e):
             return None
         else:
-            raise e
+            raise
 
 
 def escape_col_name(col_name: str) -> str:
@@ -1599,10 +1599,12 @@ def _detect_column_dict_encoding(
         # filter the string col indices based on the criterion
         n_rows = max(total_rows, 1)
         col_inds_to_convert = filter(
-            lambda x: (x[0] / n_rows) <= SF_READ_DICT_ENCODE_CRITERION
-            and (
-                (not bodo.bodosql_use_streaming_plan)
-                or x[0] < SF_STREAM_READ_DICT_ENCODE_LIMIT
+            lambda x: (
+                (x[0] / n_rows) <= SF_READ_DICT_ENCODE_CRITERION
+                and (
+                    (not bodo.bodosql_use_streaming_plan)
+                    or x[0] < SF_STREAM_READ_DICT_ENCODE_LIMIT
+                )
             ),
             zip(n_uniques, string_col_ind),
         )
@@ -1672,7 +1674,7 @@ def get_schema(
         (
             name.lower() if convert_snowflake_column_names and name.isupper() else name
         ): name
-        for name in str_col_name_to_ind.keys()
+        for name in str_col_name_to_ind
     }
 
     # If user-provided list has any columns that are not string
@@ -2374,7 +2376,7 @@ def gen_flatten_sql(
     no_flatten = []
     flatten = []
     for c, data_type in column_datatypes.items():
-        if map_needs_flattened(column_datatypes[c]):
+        if map_needs_flattened(data_type):
             flatten.append(c)
         else:
             no_flatten.append(c)
@@ -2410,8 +2412,10 @@ def gen_flatten_sql(
         subqueries.append(
             (
                 c,
-                f'SELECT rn {c}_rn, {select_arg} OBJECT_AGG("{c}_bodo_flattened".value:key::string, GET("{c}_bodo_flattened".value, \'value\')) {c},'
-                f'rn from table_with_rn, LATERAL FLATTEN({c}) "{c}_bodo_flattened" GROUP BY rn, "{c}_bodo_flattened".seq {groups}',
+                (
+                    f'SELECT rn {c}_rn, {select_arg} OBJECT_AGG("{c}_bodo_flattened".value:key::string, GET("{c}_bodo_flattened".value, \'value\')) {c},'
+                    f'rn from table_with_rn, LATERAL FLATTEN({c}) "{c}_bodo_flattened" GROUP BY rn, "{c}_bodo_flattened".seq {groups}'
+                ),
             )
         )
 
@@ -2434,7 +2438,7 @@ def gen_flatten_sql(
                 if map_needs_flattened(column_datatypes[c])
                 else f"{flatten[0]}_bodo_flattened.{c}"
             )
-            for c in column_datatypes.keys()
+            for c in column_datatypes
         ]
         if needs_flatten
         else []
@@ -2490,7 +2494,7 @@ def execute_copy_into(
     # Wrap column names in quotes if they don't match Snowflake's unquoted identifier
     # rules: https://docs.snowflake.com/en/sql-reference/identifiers-syntax
     # BodoSQL matches Snowflake rules so we can always escape column names.
-    for col_name in sf_schema.keys():
+    for col_name in sf_schema:
         if always_escape_col_names or not matches_unquoted_id_rules(col_name):
             col_name = escape_col_name(col_name)
         cols_list.append(f"{col_name}")
@@ -2507,11 +2511,9 @@ def execute_copy_into(
     # https://docs.snowflake.com/en/user-guide/binary-input-output.html#file-format-option-for-loading-unloading-binary-values
     # https://docs.snowflake.com/en/sql-reference/sql/create-file-format.html#syntax
 
-    binary_mod = {
-        c: "::binary" if sf_schema[c] == "BINARY" else "" for c in sf_schema.keys()
-    }
+    binary_mod = {c: "::binary" if sf_schema[c] == "BINARY" else "" for c in sf_schema}
 
-    parquet_columns = ",".join([f'$1:"{c}"{binary_mod[c]}' for c in sf_schema.keys()])
+    parquet_columns = ",".join([f'$1:"{c}"{binary_mod[c]}' for c in sf_schema])
 
     if stage_dir is None:
         stage_name_with_dir = f'@"{stage_name}"'
@@ -2557,7 +2559,7 @@ def execute_copy_into(
         ev.add_attribute("copy_into_nrows", nrows)
 
         if int(os.environ.get("BODO_SF_DEBUG_LEVEL", "0")) >= 1:
-            print(f"[Snowflake Write] COPY INTO results:\n{repr(copy_results)}")
+            print(f"[Snowflake Write] COPY INTO results:\n{copy_results!r}")
             print(f"[Snowflake Write] Total rows: {nrows}")
             print(f"[Snowflake Write] Total files processed: {nchunks}.")
             print(f"[Snowflake Write] Total files successfully processed: {nsuccess}.")
@@ -2986,13 +2988,15 @@ def create_table_copy_into(
             )
             # No point of running COPY INTO if there are no files.
             if num_files_uploaded > 0:
-                nsuccess, nchunks, nrows, copy_results, flatten_sql = execute_copy_into(
-                    cursor,
-                    stage_name,
-                    location,
-                    sf_schema,
-                    column_datatypes,
-                    synchronous=True,
+                nsuccess, nchunks, _nrows, copy_results, flatten_sql = (
+                    execute_copy_into(
+                        cursor,
+                        stage_name,
+                        location,
+                        sf_schema,
+                        column_datatypes,
+                        synchronous=True,
+                    )
                 )
 
                 # Validate copy into results

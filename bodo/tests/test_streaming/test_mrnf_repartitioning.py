@@ -6,7 +6,7 @@ import pytest
 
 import bodo
 
-import bodo.decorators  # isort:skip # noqa
+import bodo.decorators  # isort:skip
 from mpi4py import MPI
 
 from bodo.libs.streaming.groupby import (

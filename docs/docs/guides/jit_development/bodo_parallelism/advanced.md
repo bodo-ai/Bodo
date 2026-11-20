@@ -79,7 +79,6 @@ def merge_data():
 
 
 merge_data()
-
 ```
 
 Another potential use case is when we want to parallelize computation without distributing data,
@@ -132,8 +131,8 @@ of `bodo.scatterv` is passed to a JIT function to allow for optimization and par
 
 ```py
 @bodo.jit(spawn=False, distributed_block=["A"])
-def f(A):
-    ...
+def f(A): ...
+
 
 data = bodo.scatterv(...)
 f(data)
@@ -173,11 +172,11 @@ to as *concatenation reduction*. For example:
 ```py
 @bodo.jit
 def impl(n):
-   df = pd.DataFrame()
-   for i in bodo.prange(n):
-      df = pd.concat([df, pd.DataFrame({"A": np.arange(i)})], ignore_index=True)
+    df = pd.DataFrame()
+    for i in bodo.prange(n):
+        df = pd.concat([df, pd.DataFrame({"A": np.arange(i)})], ignore_index=True)
 
-   return df
+    return df
 ```
 
 A common use case is simulation applications that generate possible
@@ -186,13 +185,13 @@ outcomes based on parameters. For example:
 ```py
 @bodo.jit
 def impl():
-   params = np.array([0.1, 0.2, 0.5, 1.0, 1.2, 1.5, ..., 100])
-   params = bodo.scatterv(params)
-   df = pd.DataFrame()
-   for i in bodo.prange(len(params)):
-      df = pd.concat([df, get_result(params[i])], ignore_index=True)
+    params = np.array([0.1, 0.2, 0.5, 1.0, 1.2, 1.5, ..., 100])
+    params = bodo.scatterv(params)
+    df = pd.DataFrame()
+    for i in bodo.prange(len(params)):
+        df = pd.concat([df, get_result(params[i])], ignore_index=True)
 
-   return df
+    return df
 ```
 
 In this example, we chose to manually parallelize the parameter array
@@ -252,6 +251,7 @@ import bodo
 from bodo import prange
 import numpy as np
 
+
 @bodo.jit
 def prange_test(n):
     A = np.random.ranf(n)
@@ -265,6 +265,7 @@ def prange_test(n):
         # write array with loop index
         B[i] = 2 * A[i]
     return s + B.sum()
+
 
 res = prange_test(10)
 print(res)
@@ -307,6 +308,7 @@ import bodo
 from bodo import prange
 import numpy as np
 
+
 @bodo.jit
 def prange_test(n):
     A = np.random.ranf(n)
@@ -317,6 +319,7 @@ def prange_test(n):
         else:
             s += A[i]
     return s
+
 
 res = prange_test(10)
 print(res)
@@ -358,12 +361,14 @@ results back to jit function.
 ``` py
 import scipy.interpolate
 
+
 @bodo.jit(distributed=["X", "Y", "X2"])
 def dist_pass_test(n):
     X = np.arange(n)
-    Y = np.exp(-X/3.0)
+    Y = np.exp(-X / 3.0)
     X2 = np.arange(0, n, 0.5)
     return X, Y, X2
+
 
 X, Y, X2 = dist_pass_test(100)
 # clip potential out-of-range values
@@ -371,9 +376,11 @@ X2 = np.minimum(np.maximum(X2, X[0]), X[-1])
 f = scipy.interpolate.interp1d(X, Y)
 Y2 = f(X2)
 
+
 @bodo.jit(distributed={"Y2"})
 def dist_pass_res(Y2):
     return Y2.sum()
+
 
 res = dist_pass_res(Y2)
 print(res)
@@ -396,9 +403,12 @@ structures:
 def f():
     to_concat = []
     for i in range(10):
-        to_concat.append(pd.DataFrame({'A': np.arange(100), 'B': np.random.random(100)}))
+        to_concat.append(
+            pd.DataFrame({"A": np.arange(100), "B": np.random.random(100)})
+        )
         df = pd.concat(to_concat)
     return df
+
 
 f()
 ```
@@ -415,6 +425,7 @@ do so as follows:
 def rm_dir():
     # Remove directory
     import os, shutil
+
     if os.path.exists("data/data.pq"):
         shutil.rmtree("data/data.pq")
 
@@ -438,6 +449,7 @@ single rank is protected even outside of JIT functions:
 if bodo.get_rank() == 0:
     # Remove directory
     import os, shutil
+
     if os.path.exists("data/data.pq"):
         shutil.rmtree("data/data.pq")
 
@@ -455,6 +467,7 @@ packages, etc., it can be done as follows from inside a JIT function:
 if bodo.get_rank() in bodo.get_nodes_first_ranks():
     # Remove directory on all nodes
     import os, shutil
+
     if os.path.exists("data/data.pq"):
         shutil.rmtree("data/data.pq")
 

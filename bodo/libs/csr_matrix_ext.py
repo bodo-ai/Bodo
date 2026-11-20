@@ -280,7 +280,7 @@ def csr_matrix_getitem(A, idx):
         # Used in conjunction with KFold / train_test_split
 
         def impl(A, idx):  # pragma: no cover
-            nrows, ncols = A.shape
+            _nrows, ncols = A.shape
 
             # based on
             # https://github.com/scipy/scipy/blob/e198e0a819a0ae89e9d161076ad5bdc8466a40bc/scipy/sparse/sparsetools/csr.h#L1249

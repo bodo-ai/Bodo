@@ -215,7 +215,7 @@ def test_lead_lag_shift(func, shift_amt, capfd):
                 [Decimal(str(f"{i + 1}{i + 2}{i + 3}")) for i in range(1000)],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
             ),
-            Decimal("-1"),
+            Decimal(-1),
             "-1::NUMBER(38,0)",
             id="decimal",
         ),

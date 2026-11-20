@@ -11,10 +11,9 @@ import pandas as pd
 
 import bodo
 
-import bodo.decorators  # isort:skip # noqa
+import bodo.decorators  # isort:skip
 from mpi4py import MPI
 
-import bodo.utils.tracing as tracing
 from bodo.io.iceberg.common import get_rest_catalog_config
 from bodo.io.iceberg.write import (
     generate_data_file_info,
@@ -26,6 +25,7 @@ from bodo.libs.array import (
     py_table_to_cpp_table,
 )
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
+from bodo.utils import tracing
 from bodo.utils.utils import BodoError
 
 

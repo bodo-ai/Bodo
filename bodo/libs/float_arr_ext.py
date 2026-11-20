@@ -664,7 +664,7 @@ skips = [
 
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
-    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map:
         if op in skips:
             continue
         overload_impl = create_op_overload(op, 2)
@@ -679,7 +679,7 @@ _install_binary_ops()
 
 def _install_inplace_binary_ops():
     # install inplace binary ops such as iadd, isub, ...
-    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
+    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map:
         overload_impl = create_op_overload(op, 2)
         overload(op, no_unliteral=True)(overload_impl)
 

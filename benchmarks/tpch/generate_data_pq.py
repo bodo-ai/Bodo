@@ -164,7 +164,7 @@ if __name__ == "__main__":
     folder = args.folder
     validate_dataset = args.validate_dataset
     num_processes = os.cpu_count() // 2
-    upload_to_s3 = True if folder.startswith("s3://") else False
+    upload_to_s3 = bool(folder.startswith("s3://"))
     # For SF1000 or more 1000
     if SCALE_FACTOR >= 1000:
         num_pieces_base = 1000

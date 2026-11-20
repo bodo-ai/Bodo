@@ -379,7 +379,7 @@ def test_float_arr_binary_ufunc(binop_args, ufunc, memory_leak_check):
     "op",
     [
         op
-        for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+        for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map
         if op
         not in (
             operator.lshift,
@@ -412,7 +412,7 @@ def test_float_arr_binary_op(binop_args, op, memory_leak_check):
     "op",
     [
         op
-        for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+        for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map
         if op
         not in (
             operator.imod,

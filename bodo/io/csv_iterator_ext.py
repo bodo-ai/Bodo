@@ -6,7 +6,7 @@ read calls instead of just a single read.
 
 import llvmlite.binding as ll
 import numba
-import numpy as np  # noqa
+import numpy as np
 import pandas as pd  # noqa
 from llvmlite import ir as lir
 from numba import objmode  # noqa

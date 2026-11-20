@@ -744,7 +744,7 @@ def pq_reader_params(
             # Track which partitions are valid to simplify filtering later
             partition_indices.add(col_indices[i])
 
-    for index_column_index in index_column_info.keys():
+    for index_column_index in index_column_info:
         selected_cols.append(index_column_index)
     selected_cols = sorted(selected_cols)
     selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
@@ -925,7 +925,7 @@ def _gen_pq_reader_py(
         )
         for i, col_num in enumerate(col_indices):
             if j < len(out_used_cols) and i == out_used_cols[j]:
-                col_idx = col_indices[i]
+                col_idx = col_num
                 if input_file_name_col_idx and col_idx == input_file_name_col_idx:
                     # input_file_name column goes at the end
                     table_idx.append(len(selected_cols) + len(sel_partition_names))
@@ -979,7 +979,9 @@ def _gen_pq_reader_py(
 
     # Add a dummy variable to the dict (empty dicts are not yet supported in Numba).
     storage_options["bodo_dummy"] = "dummy"
-    func_text += f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+    func_text += (
+        f"    storage_options_py = get_storage_options_pyobject({storage_options!s})\n"
+    )
 
     # Call pq_read_py_entry() in C++
     # single-element numpy array to return number of global rows from C++
@@ -1123,7 +1125,7 @@ def _gen_pq_reader_chunked_py(
         f'    _, filters = get_filters_pyobject("[]", "{expr_filter_str}", ({extra_args}{comma}))\n'
         f"    fname_py = get_fname_pyobject(fname)\n"
         # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
-        f"    storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+        f"    storage_options_py = get_storage_options_pyobject({storage_options!s})\n"
     )
 
     (

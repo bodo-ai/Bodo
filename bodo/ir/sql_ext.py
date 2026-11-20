@@ -268,10 +268,8 @@ def remove_iceberg_prefix(con: str) -> str:
     # For support before Python 3.9
     # TODO: Remove after deprecating Python 3.8
     if sys.version_info.minor < 9:  # pragma: no cover
-        if con.startswith("iceberg+"):
-            con = con[len("iceberg+") :]
-        if con.startswith("iceberg://"):
-            con = con[len("iceberg://") :]
+        con = con.removeprefix("iceberg+")
+        con = con.removeprefix("iceberg://")
     else:
         con = con.removeprefix("iceberg+").removeprefix("iceberg://")
     return con
@@ -973,7 +971,7 @@ def sql_distributed_run(
                     filter_source,
                     where_cond,
                 )
-            for ir_varname, arg in filter_map.items():
+            for arg in filter_map.values():
                 func_text += f"    {arg} = get_sql_literal({arg})\n"
             # Append filters via a format string. This format string is created and populated
             # at runtime because filter variables aren't necessarily constants (but they are scalars).
@@ -1223,8 +1221,8 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         # datetime.date needs to be converted to a date literal
         # Just return the string wrapped in quotes.
         # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#date
-        return (
-            lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
+        return lambda filter_value: (
+            f"date '{filter_value.strftime('%Y-%m-%d')}'"
         )  # pragma: no cover
     elif filter_type == bodo.types.datetime64ns:
         # datetime64 needs to be a Timestamp literal

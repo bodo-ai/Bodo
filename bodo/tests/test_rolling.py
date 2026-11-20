@@ -26,7 +26,7 @@ LONG_TEST = (
 
 test_funcs = ("mean", "max")
 if LONG_TEST:
-    import bodo.decorators  # isort:skip # noqa
+    import bodo.decorators  # isort:skip
     from bodo.hiframes.rolling import supported_rolling_funcs
 
     # all functions except apply, cov, corr
