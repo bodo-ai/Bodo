@@ -45,6 +45,7 @@ import org.apache.iceberg.view.View
  */
 abstract class IcebergCatalog<T>(
     private val icebergConnection: T,
+    private val tablePrimaryKeys: MutableMap<String, MutableList<String>> = mutableMapOf(),
 ) : BodoSQLCatalog where T : Catalog, T : SupportsNamespaces {
     /**
      * Load an Iceberg table from the connector via its path information.
@@ -212,7 +213,8 @@ abstract class IcebergCatalog<T>(
     ): CatalogTable? {
         try {
             val columns = getIcebergTableColumns(schemaPath, tableName)
-            return IcebergCatalogTable(tableName, schemaPath, columns, this)
+            val primaryKeys: MutableList<String>? = tablePrimaryKeys[tableName]
+            return IcebergCatalogTable(tableName, schemaPath, columns, this, primaryKeys)
         } catch (_: NoSuchTableException) {
             return null
         }
