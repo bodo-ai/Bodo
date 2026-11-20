@@ -180,27 +180,55 @@ def run_queries(
         print(f"Failed queries: {failed_queries}")
 
 
-def create_queries(queries, scale_factor, use_parquet, sql_dir="../sql"):
+def get_sql_query(query_num: int, scale_factor: int, sql_dir):
+    """
+    Gets the SQL query string for a specific query number
+    with scale_factor substituted for the actual scale factor.
+    """
+    nn = f"{query_num:02d}"
+    sql_path = os.path.join(sql_dir, f"q{nn}.sql")
+
+    with open(sql_path, encoding="utf-8") as f:
+        sql_text = f.read()
+
+    # Allow queries to have f-string expressions in them using scale_factor.
+    sql_text = f'f"""{sql_text}"""'
+    sql_text = eval(sql_text)
+
+    return sql_text
+
+
+def generate_query_plans(
+    root: str, queries: list[int], scale_factor: int, sql_dir="../sql"
+):
+    """Generate query plans for the specified TPC-H queries."""
+    catalog = FileSystemCatalog(root)
+    bc = BodoSQLContext(catalog=catalog)
+
+    plans = f"plans_sf{int(scale_factor)}"
+    os.makedirs(plans, exist_ok=True)
     for q in queries:
-        nn = f"{q:02d}"  # zero-padded two-digit string
-        sql_path = os.path.join(sql_dir, f"q{nn}.sql")
+        nn = f"{q:02d}"
+        sql_text = get_sql_query(q, scale_factor, sql_dir)
+        plan_path = os.path.join(plans, f"q{nn}.plan")
+        with open(plan_path, "w", encoding="utf-8") as f:
+            plan_string = bc.generate_plan(sql_text, show_cost=True)
+            f.write(plan_string)
 
-        # read SQL file
-        with open(sql_path, encoding="utf-8") as f:
-            sql_text = f.read()
 
+def create_queries(queries, scale_factor, use_parquet, sql_dir="../sql"):
+    """Dynamically generate functions for executing specified TPC-H queries with Bodo."""
+    for q in queries:
+        nn = f"{q:02d}"
         func_name = f"tpch_q{nn}"
+
+        sql_text = get_sql_query(q, scale_factor, sql_dir)
 
         global data_param  # noqa
         if use_parquet:
             data_param = "tpch_data"  # noqa
         else:
             data_param = "catalog=tpch_data"  # noqa
-
-        # Allow queries to have f-string expressions in them using scale_factor.
-        sql_text = f'f"""{sql_text}"""'
-        # Calculate those f-string expressions if present.
-        sql_text = eval(sql_text)
 
         # Build the function source string
         func_src = (
@@ -301,6 +329,12 @@ def main():
         required=False,
         help="Whether to use parquet instead of iceberg data.",
     )
+    parser.add_argument(
+        "--explain_first",
+        action="store_true",
+        required=False,
+        help="Generates plans with costs to ./plans directory for all queries.",
+    )
     args = parser.parse_args()
     data_set = args.folder
     scale_factor = args.scale_factor
@@ -330,8 +364,13 @@ def main():
     backend_module = bodo.pandas
 
     print("Running bodo.pandas: GPU enabled?: ", bodo.gpu_enabled)
-    # warmup GPU cluster
-    # print(backend_module.DataFrame({"A": [1, 2, 3]})["A"])
+
+    if args.explain_first:
+        generate_query_plans(
+            data_set,
+            queries=queries,
+            scale_factor=scale_factor,
+        )
 
     run_queries(
         data_set,
