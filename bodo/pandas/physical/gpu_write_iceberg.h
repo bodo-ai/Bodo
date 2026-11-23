@@ -264,8 +264,8 @@ class PhysicalGPUWriteIceberg : public PhysicalGPUSink {
         std::shared_ptr<StreamAndEvent> se);
 
     /**
-     * @brief Sort the working table by sort keys then partition-transform
-     * keys.
+     * @brief Sort by partition-transform keys, then by Iceberg sort keys
+     * within each partition.
      *
      * Builds sort-key indices, column orders, and null precedences from
      * `sort_fields` and `partition_fields`. Void partition columns are
