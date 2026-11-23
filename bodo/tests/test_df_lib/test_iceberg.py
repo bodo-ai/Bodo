@@ -650,11 +650,11 @@ def test_write(sort_dir, null_order):
         assert snapshot.summary.get("p_key") == "p_value"
 
 
-@pytest.mark.skipif(not bodo.gpu_enabled, reason="Tests GPU Iceberg file grouping")
 @pytest.mark.gpu
 def test_write_interleaved_sorted_partitions(tmp_path):
-    """Write one sorted file per partition when the sort keys interleave."""
-    # A single Parquet row group keeps all rows on one writer rank.
+    """Keep interleaved rows correctly partitioned and sorted within files."""
+    # GPU scans assign a single Parquet row group to one rank. CPU scans can
+    # split that row group across ranks, which may each write a partition file.
     input_path = tmp_path / "input.parquet"
     df = pd.DataFrame({"part": [11, 20, 10, 21], "sort_key": [2, 3, 4, 1]})
     pq.write_table(pa.Table.from_pandas(df), input_path)
@@ -676,15 +676,20 @@ def test_write_interleaved_sorted_partitions(tmp_path):
         },
     )
     table = catalog.load_table("test_table")
-    files = sorted(
-        (task.file for task in table.scan().plan_files()),
-        key=lambda file: file.partition[0],
-    )
-    assert [file.partition[0] for file in files] == [10, 20]
-    for file, expected in zip(files, [[(10, 4), (11, 2)], [(20, 3), (21, 1)]]):
+    files = [task.file for task in table.scan().plan_files()]
+    if bodo.gpu_enabled:
+        assert sorted(file.partition[0] for file in files) == [10, 20]
+
+    written_rows = []
+    for file in files:
         with table.io.new_input(file.file_path).open() as source:
-            rows = pq.ParquetFile(source).read().to_pylist()
-        assert [(row["part"], row["sort_key"]) for row in rows] == expected
+            data = pq.ParquetFile(source).read()
+        parts = data["part"].to_pylist()
+        sort_keys = data["sort_key"].to_pylist()
+        assert {part - part % 10 for part in parts} == {file.partition[0]}
+        assert sort_keys == sorted(sort_keys, reverse=True)
+        written_rows.extend(zip(parts, sort_keys))
+    assert sorted(written_rows) == sorted(df.itertuples(index=False, name=None))
 
 
 def _make_transform_write_df(n_rows=20):
