@@ -28,8 +28,8 @@ from pyiceberg.transforms import (
     YearTransform,
 )
 
-import bodo
 import bodo.pandas as bpd
+from bodo.spawn.spawner import get_num_workers
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.utils import _test_equal
 
@@ -653,11 +653,22 @@ def test_write(sort_dir, null_order):
 @pytest.mark.gpu
 def test_write_interleaved_sorted_partitions(tmp_path):
     """Keep interleaved rows correctly partitioned and sorted within files."""
-    # GPU scans assign a single Parquet row group to one rank. CPU scans can
-    # split that row group across ranks, which may each write a partition file.
+    # Align CPU row blocks with GPU row groups. Give each group distinct
+    # partitions so the expected files are unchanged when a GPU reads
+    # multiple groups or some workers have no GPU.
+    n_workers = get_num_workers()
     input_path = tmp_path / "input.parquet"
-    df = pd.DataFrame({"part": [11, 20, 10, 21], "sort_key": [2, 3, 4, 1]})
-    pq.write_table(pa.Table.from_pandas(df), input_path)
+    df = pd.DataFrame(
+        {
+            "part": [
+                20 * worker + part
+                for worker in range(n_workers)
+                for part in (11, 20, 10, 21)
+            ],
+            "sort_key": [2, 3, 4, 1] * n_workers,
+        }
+    )
+    pq.write_table(pa.Table.from_pandas(df), input_path, row_group_size=4)
     path = str(tmp_path / "warehouse")
     bpd.read_parquet(str(input_path)).to_iceberg(
         "test_table",
@@ -677,8 +688,9 @@ def test_write_interleaved_sorted_partitions(tmp_path):
     )
     table = catalog.load_table("test_table")
     files = [task.file for task in table.scan().plan_files()]
-    if bodo.gpu_enabled:
-        assert sorted(file.partition[0] for file in files) == [10, 20]
+    assert sorted(file.partition[0] for file in files) == list(
+        range(10, 20 * n_workers + 1, 10)
+    )
 
     written_rows = []
     for file in files:
