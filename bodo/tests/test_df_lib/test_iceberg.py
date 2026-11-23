@@ -10,6 +10,7 @@ import numba.core.utils  # noqa TID253
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.parquet as pq
 import pyiceberg.catalog
 import pyiceberg.expressions
 import pyiceberg.table.sorting
@@ -27,6 +28,7 @@ from pyiceberg.transforms import (
     YearTransform,
 )
 
+import bodo
 import bodo.pandas as bpd
 from bodo.tests.iceberg_database_helpers import pyiceberg_reader
 from bodo.tests.utils import _test_equal
@@ -646,6 +648,43 @@ def test_write(sort_dir, null_order):
         assert table.properties.get("p_a1") == "pvalue_a1"
         snapshot = table.current_snapshot()
         assert snapshot.summary.get("p_key") == "p_value"
+
+
+@pytest.mark.skipif(not bodo.gpu_enabled, reason="Tests GPU Iceberg file grouping")
+@pytest.mark.gpu
+def test_write_interleaved_sorted_partitions(tmp_path):
+    """Write one sorted file per partition when the sort keys interleave."""
+    # A single Parquet row group keeps all rows on one writer rank.
+    input_path = tmp_path / "input.parquet"
+    df = pd.DataFrame({"part": [11, 20, 10, 21], "sort_key": [2, 3, 4, 1]})
+    pq.write_table(pa.Table.from_pandas(df), input_path)
+    path = str(tmp_path / "warehouse")
+    bpd.read_parquet(str(input_path)).to_iceberg(
+        "test_table",
+        location=path,
+        partition_spec=PartitionSpec(
+            PartitionField(1, 1000, TruncateTransform(10), "part_trunc")
+        ),
+        sort_order=SortOrder(SortField(source_id=2, direction=SortDirection.DESC)),
+    )
+
+    catalog = pyiceberg.catalog.load_catalog(
+        None,
+        **{
+            pyiceberg.catalog.PY_CATALOG_IMPL: "bodo.io.iceberg.catalog.dir.DirCatalog",
+            pyiceberg.catalog.WAREHOUSE_LOCATION: path,
+        },
+    )
+    table = catalog.load_table("test_table")
+    files = sorted(
+        (task.file for task in table.scan().plan_files()),
+        key=lambda file: file.partition[0],
+    )
+    assert [file.partition[0] for file in files] == [10, 20]
+    for file, expected in zip(files, [[(10, 4), (11, 2)], [(20, 3), (21, 1)]]):
+        with table.io.new_input(file.file_path).open() as source:
+            rows = pq.ParquetFile(source).read().to_pylist()
+        assert [(row["part"], row["sort_key"]) for row in rows] == expected
 
 
 def _make_transform_write_df(n_rows=20):

@@ -284,6 +284,15 @@ void PhysicalGPUWriteIceberg::sort_working_table(
     std::vector<cudf::order> column_order;
     std::vector<cudf::null_order> null_precedence;
 
+    // Partition keys must be the leading keys for the sorted groupby below.
+    for (cudf::size_type pi = 0; pi < n_part; pi++) {
+        if (partition_fields[pi].transform == "void") {
+            continue;
+        }
+        sort_key_indices.push_back(n_sort + pi);
+        column_order.push_back(cudf::order::ASCENDING);
+        null_precedence.push_back(cudf::null_order::AFTER);
+    }
     for (cudf::size_type si = 0; si < n_sort; si++) {
         sort_key_indices.push_back(si);
         column_order.push_back(sort_fields[si].is_asc
@@ -292,14 +301,6 @@ void PhysicalGPUWriteIceberg::sort_working_table(
         null_precedence.push_back(sort_fields[si].nulls_last
                                       ? cudf::null_order::AFTER
                                       : cudf::null_order::BEFORE);
-    }
-    for (cudf::size_type pi = 0; pi < n_part; pi++) {
-        if (partition_fields[pi].transform == "void") {
-            continue;
-        }
-        sort_key_indices.push_back(n_sort + pi);
-        column_order.push_back(cudf::order::ASCENDING);
-        null_precedence.push_back(cudf::null_order::AFTER);
     }
 
     if (!sort_key_indices.empty()) {

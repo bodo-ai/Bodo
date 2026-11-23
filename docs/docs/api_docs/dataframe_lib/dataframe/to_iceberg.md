@@ -24,6 +24,10 @@ Refer to [`pandas.DataFrame.to_iceberg`](https://pandas.pydata.org/docs/dev/refe
 !!! note
     This function assumes that the Iceberg namespace is already created in the catalog.
 
+On GPU, each data file contains rows for a single set of transformed partition
+values. Each file follows the table's sort order independently; row order is
+not guaranteed across files.
+
 <p class="api-header">Parameters</p>
 
 : __table_identifier: *str*:__ Table identifier to write
