@@ -53,7 +53,7 @@ def verify_pyiceberg_installed():
     except ImportError:
         raise ImportError(
             "Please install the pyiceberg package to use Iceberg functionality. "
-            f"Run 'pip install \"pyiceberg>={min_version}\"'."
+            f"You can install it by running 'pip install \"pyiceberg>={min_version}\"'."
         ) from None
 
     if Version(pyiceberg.__version__) < Version(min_version):
