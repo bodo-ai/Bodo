@@ -119,7 +119,7 @@ requirements:
     - numpy >=1.24
     - s3fs >=2022.1.0
     - adlfs >=2022.1.0
-    - pyiceberg >=0.10
+    - pyiceberg >=0.12
 
 test:
   imports:

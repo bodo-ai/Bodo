@@ -406,7 +406,7 @@ openai = "*"
 # Snowflake Testing
 snowflake-sqlalchemy = "*"
 # Use PyIceberg from pip to prevent segfaults in Mac dev environment.
-pyiceberg = ">=0.11"
+pyiceberg = ">=0.12"
 # AI Function testing
 transformers = "*"
 
