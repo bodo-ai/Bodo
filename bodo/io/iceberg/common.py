@@ -9,6 +9,7 @@ import typing as pt
 from urllib.parse import parse_qs, urlparse
 
 import requests
+from packaging.version import Version
 from pyarrow.fs import FileSystem, FSSpecHandler
 
 from bodo.spawn.utils import run_rank0
@@ -43,18 +44,25 @@ class IcebergParquetInfo(pt.NamedTuple):
 
 def verify_pyiceberg_installed():
     """
-    Verify that the PyIceberg package is installed.
+    Verify that a supported version of PyIceberg is installed.
     """
+    min_version = "0.12.0"
 
     try:
-        return importlib.import_module("pyiceberg")
+        pyiceberg = importlib.import_module("pyiceberg")
     except ImportError:
-        from bodo.utils.utils import BodoError
-
-        raise BodoError(
+        raise ImportError(
             "Please install the pyiceberg package to use Iceberg functionality. "
-            "You can install it by running 'pip install pyiceberg'."
+            f"Run 'pip install \"pyiceberg>={min_version}\"'."
         ) from None
+
+    if Version(pyiceberg.__version__) < Version(min_version):
+        raise ImportError(
+            f"Unsupported PyIceberg version {pyiceberg.__version__}. "
+            f"Bodo requires pyiceberg>={min_version}."
+        )
+
+    return pyiceberg
 
 
 T = pt.TypeVar("T")
